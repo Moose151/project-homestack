@@ -10,28 +10,28 @@
 
 ## Phase 1.0 — Repo & Docker scaffold
 
-- [ ] Create repo structure (Coding Standards §2): `backend/ frontend/ docs/ docker/ scripts/ backups/`, `.env.example`, `docker-compose.yml`, `docker-compose.dev.yml`, `README.md`.
-- [ ] `docker-compose.yml` with **three** services only: `homestack-backend`, `homestack-frontend`, `homestack-postgres` (D5 — **no Redis/Celery yet**).
-- [ ] Volumes: `postgres_data`, `media_data`, `backup_data`.
-- [ ] `.env.example` with DB creds, Django secret, allowed hosts (local only).
-- [ ] Confirm stack boots: `docker compose up` serves an empty backend + frontend, Postgres healthy.
+- [x] Create repo structure (Coding Standards §2): `backend/ frontend/ docs/ docker/ scripts/ backups/`, `.env.example`, `docker-compose.yml`, `docker-compose.dev.yml`, `README.md`.
+- [x] `docker-compose.yml` with **three** services only: `homestack-backend`, `homestack-frontend`, `homestack-postgres` (D5 — **no Redis/Celery yet**).
+- [x] Volumes: `postgres_data`, `media_data`, `backup_data`.
+- [x] `.env.example` with DB creds, Django secret, allowed hosts (local only).
+- [x] Confirm stack boots: `docker compose up` serves an empty backend + frontend, Postgres healthy.
 
 ## Phase 1.1 — Django project + settings
 
-- [ ] Django + DRF installed; project at `backend/config/`.
-- [ ] Split settings: `settings/{base,dev,prod,test}.py`.
-- [ ] `urls.py`, `asgi.py`, `wsgi.py`. API base path `/api/v1/`.
-- [ ] Argon2 password hasher configured (D6) for PINs and passwords.
-- [ ] App skeletons created (empty for now): `core accounts people permissions nodes hub scheduling notifications attachments audit search backups events atlas`. (Other node apps added in later milestones.)
-- [ ] **Name the calendar app `scheduling`, not `calendar` (D16).**
+- [x] Django + DRF installed; project at `backend/config/`.
+- [x] Split settings: `settings/{base,dev,prod,test}.py`.
+- [x] `urls.py`, `asgi.py`, `wsgi.py`. API base path `/api/v1/`.
+- [x] Argon2 password hasher configured (D6) for PINs and passwords.
+- [x] App skeletons created (empty for now): `core accounts people permissions nodes hub scheduling notifications attachments audit search backups events atlas`. (Other node apps added in later milestones.)
+- [x] **Name the calendar app `scheduling`, not `calendar` (D16).**
 
 ## Phase 1.2 — Core: Household + base model (D1, D12)
 
-- [ ] `core.Household` model (single row): `name, slug, timezone, default_locale`.
-- [ ] Seed exactly one household row (data migration or management command).
-- [ ] `HouseholdBaseModel` (abstract): `household` FK, `created_at`, `updated_at`, `created_by`/`updated_by` (→ user), `deleted_at` (soft delete).
-- [ ] `HouseholdManager` default manager: filters to the active household **and** excludes soft-deleted rows.
-- [ ] Confirm: every future model inherits this and never re-implements scoping/soft-delete.
+- [x] `core.Household` model (single row): `name, slug, timezone, default_locale`.
+- [x] Seed exactly one household row (data migration or management command). *(idempotent data migration `0002_seed_household`)*
+- [x] `HouseholdBaseModel` (abstract): `household` FK, `created_at`, `updated_at`, `created_by`/`updated_by` (→ user), `deleted_at` (soft delete).
+- [x] `HouseholdManager` default manager: filters to the active household **and** excludes soft-deleted rows. *(soft-delete enforced now; household scoping lives here as the single hook — structural no-op in single-household mode, D1)*
+- [x] Confirm: every future model inherits this and never re-implements scoping/soft-delete.
 
 ## Phase 1.3 — Accounts + authentication (D6)
 

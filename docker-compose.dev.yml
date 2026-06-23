@@ -1,0 +1,21 @@
+# HomeStack — development override.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# Bind-mounts source for hot reload on backend and frontend.
+
+services:
+  homestack-backend:
+    # Run as the host user so files written by the container (migrations, __pycache__)
+    # are owned by you on the bind mount, not root. Override via UID/GID in your env.
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      - ./backend:/app
+      - media_data:/app/media
+      - backup_data:/app/backups
+    environment:
+      DJANGO_DEBUG: "1"
+
+  homestack-frontend:
+    volumes:
+      - ./frontend:/app
+      # Keep the container's own node_modules (don't let the bind mount hide it).
+      - /app/node_modules
