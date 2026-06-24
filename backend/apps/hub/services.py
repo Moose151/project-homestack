@@ -53,6 +53,9 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False) -> list[dict]:
             reminders = [r for r in reminders if r.due_at and r.due_at <= week_ahead][:10]
             content = AtlasReminderSerializer(reminders, many=True).data
 
+        elif key.startswith("meridian_"):
+            content = _meridian_widget_content(key, user)
+
         widgets.append({
             "key": key,
             "name": hw.widget.name,
@@ -62,3 +65,43 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False) -> list[dict]:
         })
 
     return widgets
+
+
+def _meridian_widget_content(key: str, user) -> list:
+    """Assemble content for a Meridian hub widget (Node Spec 8).
+
+    Mirrors the inline Atlas pattern above. A widget-provider registry is the natural
+    next refactor once a third node contributes widgets, but is deferred to keep this
+    change reviewable and consistent with the established Atlas approach.
+    """
+    from apps.meridian import selectors as m
+    from apps.meridian.serializers import (
+        MeridianRewardRequestSerializer,
+        MeridianTaskSerializer,
+        PointsSummarySerializer,
+    )
+
+    person = getattr(user, "person_profile", None)
+    person_id = person.id if person else None
+
+    if key == "meridian_my_tasks":
+        tasks = m.list_tasks(user, status="available")
+        if person_id:
+            tasks = [t for t in tasks if t.assigned_to_person_id in (None, person_id)]
+        return MeridianTaskSerializer(tasks[:20], many=True).data
+
+    if key == "meridian_hot_tasks":
+        return MeridianTaskSerializer(m.list_tasks(user, hot_only=True)[:20], many=True).data
+
+    if key == "meridian_points":
+        return PointsSummarySerializer(m.points_summary(), many=True).data
+
+    if key == "meridian_pending_approvals":
+        return MeridianTaskSerializer(m.list_pending_tasks(user)[:20], many=True).data
+
+    if key == "meridian_reward_requests":
+        return MeridianRewardRequestSerializer(
+            m.list_reward_requests(status="pending")[:20], many=True
+        ).data
+
+    return []

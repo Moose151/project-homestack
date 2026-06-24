@@ -47,6 +47,7 @@ LOCAL_APPS = [
     "apps.backups",
     "apps.events",  # thin signal interface only (D4) — no broker, no event table
     "apps.atlas",
+    "apps.meridian",  # Milestone 2 — native chores/points/rewards node (D13, D14)
 ]
 
 INSTALLED_APPS = [

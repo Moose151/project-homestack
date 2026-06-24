@@ -16,6 +16,15 @@ Future extensions hook into this function:
 """
 from __future__ import annotations
 
+# Narrow per-resource carve-out to the child-account write block (Milestone 2).
+# Children may never create/edit/delete content, but a node may declare a small set
+# of safe actions they ARE allowed to perform (still subject to the normal role grant
+# below). Meridian needs this so kids can complete tasks and request rewards on the
+# kiosk — the node's whole purpose — without weakening the global child-safety block.
+_CHILD_SAFE_ACTIONS: dict[str, frozenset[str]] = {
+    "meridian": frozenset({"complete", "request"}),
+}
+
 
 def resolve_permission(user, action: str, resource: str) -> bool:
     """Return True iff the user is allowed to perform action on resource.
@@ -35,9 +44,11 @@ def resolve_permission(user, action: str, resource: str) -> bool:
     if not getattr(user, "is_active", False):
         return False
 
-    # --- Child-account safety: children may never write anything ---
+    # --- Child-account safety: children may never write anything, except a small
+    #     allowlist of node-declared safe actions (still requires the role grant below). ---
     if getattr(user, "is_child_account", False) and action != "view":
-        return False
+        if action not in _CHILD_SAFE_ACTIONS.get(resource, frozenset()):
+            return False
 
     codename = f"{resource}.{action}"
 

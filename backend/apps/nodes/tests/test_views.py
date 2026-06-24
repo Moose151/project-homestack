@@ -78,11 +78,19 @@ class NodeListViewTests(TestCase):
         self.assertTrue(atlas["is_enabled"])
 
     def test_other_nodes_disabled(self):
+        # atlas (M1) and meridian (M2) are the built nodes; all others stay disabled.
+        _enabled_by_default = {"atlas", "meridian"}
         _login(self.client, "admin")
         resp = self.client.get(self.url)
         for node in resp.json():
-            if node["key"] != "atlas":
+            if node["key"] not in _enabled_by_default:
                 self.assertFalse(node["is_enabled"], f"{node['key']} should be disabled")
+
+    def test_meridian_is_enabled(self):
+        _login(self.client, "admin")
+        resp = self.client.get(self.url)
+        meridian = next(n for n in resp.json() if n["key"] == "meridian")
+        self.assertTrue(meridian["is_enabled"])
 
 
 class NodeEnableDisableTests(TestCase):
