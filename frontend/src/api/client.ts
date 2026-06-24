@@ -7,10 +7,23 @@ import type {
 
 const BASE = '/api/v1'
 
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE'])
+
+function getCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
+  return match ? decodeURIComponent(match[1]) : null
+}
+
 async function _fetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? 'GET').toUpperCase()
+  // Django session auth (DRF) enforces CSRF on unsafe methods; send the token the
+  // server seeded via the csrftoken cookie (set on /auth/me/ and /auth/kiosk-users/).
+  const csrfHeader: Record<string, string> =
+    SAFE_METHODS.has(method) ? {} : { 'X-CSRFToken': getCookie('csrftoken') ?? '' }
+
   const res = await fetch(`${BASE}${path}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: { 'Content-Type': 'application/json', ...csrfHeader, ...init?.headers },
     ...init,
   })
   if (!res.ok) {

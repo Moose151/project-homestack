@@ -60,6 +60,12 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    # CSRF: DRF's SessionAuthentication enforces CSRF on authenticated unsafe requests,
+    # so the cookie-issuing middleware must be present for the SPA to obtain a token.
+    # DRF APIViews are csrf_exempt at the middleware level (DRF does its own check), so
+    # this does not double-guard the login endpoints. The web/kiosk clients send the
+    # token back via the X-CSRFToken header. (Session auth, D6.)
+    "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
 ]
