@@ -16,6 +16,32 @@ ALLOWED_HOSTS: list[str] = [
     h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if h
 ]
 
+# --- CSRF trusted origins (Django 4+) ---
+# Authenticated writes are CSRF-checked by DRF's SessionAuthentication, which verifies the
+# browser's Origin header. The frontend dev proxy uses changeOrigin, so the backend's Host
+# never equals the browser Origin — meaning the Origin must be trusted explicitly or every
+# write 403s with "Origin checking failed". We derive the http/https origins (on the
+# frontend port and the default port) for each allowed host, so adding your LAN address to
+# DJANGO_ALLOWED_HOSTS is enough — no separate origin list to maintain. Extra full origins
+# (incl. scheme) can still be supplied via DJANGO_CSRF_TRUSTED_ORIGINS.
+_FRONTEND_PORT = os.environ.get("FRONTEND_PORT", "5173")
+_CSRF_HOSTS = [
+    h
+    for h in os.environ.get(
+        "DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,0.0.0.0,homestack-backend"
+    ).split(",")
+    if h and h != "*"
+]
+_derived_origins: list[str] = []
+for _host in _CSRF_HOSTS:
+    for _scheme in ("http", "https"):
+        _derived_origins.append(f"{_scheme}://{_host}:{_FRONTEND_PORT}")
+        _derived_origins.append(f"{_scheme}://{_host}")
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(
+    [o for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if o]
+    + _derived_origins
+))
+
 # --- Applications ---
 DJANGO_APPS = [
     "django.contrib.auth",

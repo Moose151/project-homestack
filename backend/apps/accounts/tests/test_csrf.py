@@ -57,6 +57,30 @@ class CsrfFlowTests(TestCase):
         )
         self.assertEqual(resp.status_code, 201)
 
+    def test_write_succeeds_with_trusted_browser_origin(self):
+        # Simulates the real browser-through-Vite-proxy request, which carries an Origin
+        # header. localhost:5173 is auto-trusted from the default allowed hosts.
+        token = self._bootstrap_and_login()
+        resp = self.client.post(
+            reverse("atlas-note-list"),
+            {"title": "Hello"},
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=token,
+            HTTP_ORIGIN="http://localhost:5173",
+        )
+        self.assertEqual(resp.status_code, 201)
+
+    def test_write_rejected_from_untrusted_origin(self):
+        token = self._bootstrap_and_login()
+        resp = self.client.post(
+            reverse("atlas-note-list"),
+            {"title": "Hello"},
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=token,
+            HTTP_ORIGIN="http://evil.example.com",
+        )
+        self.assertEqual(resp.status_code, 403)
+
     def test_authenticated_write_rejected_without_token(self):
         self._bootstrap_and_login()
         resp = self.client.post(
