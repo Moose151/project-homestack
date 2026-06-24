@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { ToastHost } from './components/Toast'
 import { AuthProvider, useAuth } from './features/auth/AuthContext'
 import { LoginPage } from './features/auth/LoginPage'
 import { AppShell } from './features/web/AppShell'
@@ -37,16 +38,19 @@ function WebApp() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/kiosk/*" element={<KioskApp />} />
-      <Route
-        path="/*"
-        element={
-          <AuthProvider>
-            <WebApp />
-          </AuthProvider>
-        }
-      />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/kiosk/*" element={<KioskApp />} />
+        <Route
+          path="/*"
+          element={
+            <AuthProvider>
+              <WebApp />
+            </AuthProvider>
+          }
+        />
+      </Routes>
+      <ToastHost />
+    </>
   )
 }

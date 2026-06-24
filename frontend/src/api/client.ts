@@ -5,6 +5,8 @@ import type {
   MeridianRewardRequest, MeridianTask,
 } from './types'
 
+import { pushToast } from '../components/Toast'
+
 const BASE = '/api/v1'
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE'])
@@ -14,37 +16,71 @@ function getCookie(name: string): string | null {
   return match ? decodeURIComponent(match[1]) : null
 }
 
-async function _fetch<T>(path: string, init?: RequestInit): Promise<T> {
+interface FetchOpts {
+  // Skip the automatic error toast (for flows that show their own message, e.g. auth).
+  silent?: boolean
+}
+
+// Pull a human-friendly message out of a DRF error response.
+async function _errorMessage(res: Response): Promise<string> {
+  try {
+    const data = await res.clone().json()
+    if (typeof data === 'string') return data
+    if (data?.detail) return String(data.detail)
+    const firstKey = data && Object.keys(data)[0]
+    if (firstKey) {
+      const val = data[firstKey]
+      const msg = Array.isArray(val) ? val[0] : val
+      return firstKey === 'detail' || /^\d/.test(firstKey) ? String(msg) : `${firstKey}: ${msg}`
+    }
+  } catch {
+    /* response body was not JSON */
+  }
+  if (res.status === 403) return 'You don’t have permission to do that.'
+  if (res.status === 401) return 'Please sign in again.'
+  return `Something went wrong (${res.status}).`
+}
+
+async function _fetch<T>(path: string, init?: RequestInit, opts?: FetchOpts): Promise<T> {
   const method = (init?.method ?? 'GET').toUpperCase()
   // Django session auth (DRF) enforces CSRF on unsafe methods; send the token the
   // server seeded via the csrftoken cookie (set on /auth/me/ and /auth/kiosk-users/).
   const csrfHeader: Record<string, string> =
     SAFE_METHODS.has(method) ? {} : { 'X-CSRFToken': getCookie('csrftoken') ?? '' }
 
-  const res = await fetch(`${BASE}${path}`, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...csrfHeader, ...init?.headers },
-    ...init,
-  })
+  let res: Response
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...csrfHeader, ...init?.headers },
+      ...init,
+    })
+  } catch {
+    // Network/connection failure — never silent, the user needs to know.
+    const msg = 'Network error — could not reach the server.'
+    pushToast(msg, 'error')
+    throw new Error(msg)
+  }
   if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`${res.status} ${res.statusText}: ${text}`)
+    const message = await _errorMessage(res)
+    if (!opts?.silent) pushToast(message, 'error')
+    throw new Error(message)
   }
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
 }
 
 export const api = {
-  // --- Auth ---
+  // --- Auth --- (silent: these flows surface their own inline messages)
   getKioskUsers: (): Promise<KioskUser[]> => _fetch('/auth/kiosk-users/'),
   pinLogin: (username: string, pin: string): Promise<AuthUser> =>
-    _fetch('/auth/pin-login/', { method: 'POST', body: JSON.stringify({ username, pin }) }),
+    _fetch('/auth/pin-login/', { method: 'POST', body: JSON.stringify({ username, pin }) }, { silent: true }),
   passwordLogin: (username: string, password: string): Promise<AuthUser> =>
-    _fetch('/auth/password-login/', { method: 'POST', body: JSON.stringify({ username, password }) }),
+    _fetch('/auth/password-login/', { method: 'POST', body: JSON.stringify({ username, password }) }, { silent: true }),
   logout: (): Promise<void> => _fetch('/auth/logout/', { method: 'POST' }),
-  me: (): Promise<AuthUser> => _fetch('/auth/me/'),
+  me: (): Promise<AuthUser> => _fetch('/auth/me/', undefined, { silent: true }),
   reauth: (password: string): Promise<void> =>
-    _fetch('/auth/reauth/', { method: 'POST', body: JSON.stringify({ password }) }),
+    _fetch('/auth/reauth/', { method: 'POST', body: JSON.stringify({ password }) }, { silent: true }),
 
   // --- Hub ---
   hub: (): Promise<HubResponse> => _fetch('/hub/'),

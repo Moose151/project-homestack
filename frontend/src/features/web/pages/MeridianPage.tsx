@@ -5,6 +5,7 @@ import type {
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
+import { pushToast } from '../../../components/Toast'
 import { useAuth } from '../../auth/AuthContext'
 
 // ---------------------------------------------------------------------------
@@ -145,7 +146,6 @@ function RewardsTab({ canManage }: { canManage: boolean }) {
   const [name, setName] = useState('')
   const [cost, setCost] = useState('20')
   const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
 
   const reload = async () => {
     const [r, q] = await Promise.all([
@@ -172,12 +172,11 @@ function RewardsTab({ canManage }: { canManage: boolean }) {
   }
 
   const request = async (reward: MeridianReward) => {
-    setMsg(null)
     try {
       await api.requestMeridianReward(reward.id)
-      setMsg(`Requested "${reward.name}" — awaiting approval.`)
-    } catch (err) {
-      setMsg(err instanceof Error ? 'Could not request: not enough points.' : 'Could not request.')
+      pushToast(`Requested "${reward.name}" — awaiting approval.`, 'success')
+    } catch {
+      /* failure already surfaced as an error toast by the api client */
     }
   }
 
@@ -224,8 +223,6 @@ function RewardsTab({ canManage }: { canManage: boolean }) {
           </ul>
         </Card>
       )}
-
-      {msg && <p className="text-sm text-primary text-center">{msg}</p>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {rewards.map(reward => (
