@@ -1,41 +1,50 @@
-import { useEffect, useState } from 'react'
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { AuthProvider, useAuth } from './features/auth/AuthContext'
+import { LoginPage } from './features/auth/LoginPage'
+import { AppShell } from './features/web/AppShell'
+import { HubPage } from './features/web/pages/HubPage'
+import { AtlasPage } from './features/web/pages/AtlasPage'
+import { CalendarPage } from './features/web/pages/CalendarPage'
+import { KioskApp } from './features/kiosk/KioskApp'
 
-// Relative path — proxied to the backend container by the Vite dev server (see vite.config.ts).
-const BACKEND_HEALTH_URL = '/api/v1/health/'
+function WebApp() {
+  const { user, loading } = useAuth()
 
-type Health = { status: string; service: string; phase: string }
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
 
-export default function App() {
-  const [health, setHealth] = useState<Health | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetch(BACKEND_HEALTH_URL)
-      .then((res) => res.json())
-      .then(setHealth)
-      .catch(() => setError('backend unreachable'))
-  }, [])
+  if (!user) return <LoginPage />
 
   return (
-    <main
-      style={{
-        fontFamily: 'system-ui, sans-serif',
-        maxWidth: 640,
-        margin: '4rem auto',
-        padding: '0 1.5rem',
-        lineHeight: 1.5,
-      }}
-    >
-      <h1>HomeStack</h1>
-      <p>Phase 1.0 — walking-skeleton scaffold. The stack is up.</p>
-      <p>
-        Backend health:{' '}
-        {health ? (
-          <strong>{`${health.status} (${health.service}, phase ${health.phase})`}</strong>
-        ) : (
-          <em>{error ?? 'checking…'}</em>
-        )}
-      </p>
-    </main>
+    <Routes>
+      <Route element={<AppShell />}>
+        <Route path="/" element={<Navigate to="/hub" replace />} />
+        <Route path="/hub" element={<HubPage />} />
+        <Route path="/atlas" element={<AtlasPage />} />
+        <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="*" element={<Navigate to="/hub" replace />} />
+      </Route>
+    </Routes>
+  )
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/kiosk/*" element={<KioskApp />} />
+      <Route
+        path="/*"
+        element={
+          <AuthProvider>
+            <WebApp />
+          </AuthProvider>
+        }
+      />
+    </Routes>
   )
 }

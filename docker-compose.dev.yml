@@ -4,11 +4,10 @@
 
 services:
   homestack-backend:
-    # Run as the host user so files written by the container (migrations, __pycache__)
-    # are owned by you on the bind mount, not root. Override via UID/GID in your env.
-    user: "${UID:-1000}:${GID:-1000}"
+    # Podman rootless: container root maps to your host UID — no user: override needed.
+    # Docker: add `user: "${UID:-1000}:${GID:-1000}"` here to avoid root-owned files.
     volumes:
-      - ./backend:/app
+      - ./backend:/app:z
       - media_data:/app/media
       - backup_data:/app/backups
     environment:
@@ -16,6 +15,6 @@ services:
 
   homestack-frontend:
     volumes:
-      - ./frontend:/app
+      - ./frontend:/app:z
       # Keep the container's own node_modules (don't let the bind mount hide it).
       - /app/node_modules

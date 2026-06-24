@@ -3,11 +3,6 @@ Base settings shared by every environment.
 
 Environment-specific overrides live in dev.py / prod.py / test.py. Select one with
 DJANGO_SETTINGS_MODULE (defaults to config.settings.dev — see manage.py / wsgi / asgi).
-
-NOTE (D6 / custom user): Django's contrib auth, sessions, messages and admin apps are
-deliberately NOT installed yet. They are added in Phase 1.3 together with the custom
-`accounts.User`, so that AUTH_USER_MODEL is in place BEFORE the first migration and we
-never have to swap away from Django's default user model. No migrations are run in 1.1.
 """
 import os
 from pathlib import Path
@@ -22,6 +17,15 @@ ALLOWED_HOSTS: list[str] = [
 ]
 
 # --- Applications ---
+DJANGO_APPS = [
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "django.contrib.admin",
+]
+
 THIRD_PARTY_APPS = [
     "rest_framework",
 ]
@@ -46,16 +50,32 @@ LOCAL_APPS = [
 ]
 
 INSTALLED_APPS = [
-    "django.contrib.staticfiles",
+    *DJANGO_APPS,
     *THIRD_PARTY_APPS,
     *LOCAL_APPS,
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
-    # SessionMiddleware + AuthenticationMiddleware are added with auth in Phase 1.3.
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
 ]
+
+# --- Custom user model (D6) — set before any migration runs ---
+AUTH_USER_MODEL = "accounts.User"
+
+# --- Auth backends (D6): PIN first, password second ---
+AUTHENTICATION_BACKENDS = [
+    "apps.accounts.backends.PinBackend",
+    "apps.accounts.backends.PasswordBackend",
+]
+
+# --- Session security ---
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_ENGINE = "django.contrib.sessions.backends.db"
 
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
@@ -70,6 +90,8 @@ TEMPLATES = [
             "context_processors": [
                 "django.template.context_processors.request",
                 "django.template.context_processors.debug",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
@@ -123,3 +145,8 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# --- Backups (D17) ---
+# Docker maps backup_data volume to /app/backups; dev/test fall back to BASE_DIR/backups.
+BACKUP_DIR = BASE_DIR / "backups"
+MEDIA_ROOT = BASE_DIR / "media"
