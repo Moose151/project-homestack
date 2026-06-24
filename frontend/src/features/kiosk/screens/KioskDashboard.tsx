@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../../api/client'
-import type { AuthUser, HubWidget, AtlasListItem as ListItem, AtlasReminder as Reminder } from '../../../api/types'
+import type {
+  AuthUser, HubWidget, AtlasListItem as ListItem, AtlasReminder as Reminder,
+  MeridianTask, PointsSummaryRow,
+} from '../../../api/types'
 import { useInactivityTimeout } from '../hooks/useInactivityTimeout'
 
 interface Props {
@@ -54,9 +57,101 @@ function RemindersWidget({ widget }: { widget: HubWidget }) {
   )
 }
 
+// --- Meridian kiosk widgets (kid-facing, interactive) ---
+
+function Celebration({ label, onDone }: { label: string; onDone: () => void }) {
+  useEffect(() => {
+    const id = setTimeout(onDone, 2200)
+    return () => clearTimeout(id)
+  }, [onDone])
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/70 animate-[fadeIn_0.2s_ease]">
+      <div className="text-7xl animate-bounce">🎉</div>
+      <p className="mt-4 text-2xl font-bold text-white">{label}</p>
+      <p className="mt-1 text-amber-300 text-lg">Great job!</p>
+    </div>
+  )
+}
+
+function MeridianTasksWidget({ widget }: { widget: HubWidget }) {
+  const [tasks, setTasks] = useState<MeridianTask[]>(widget.items as MeridianTask[])
+  const [busy, setBusy] = useState<number | null>(null)
+  const [celebrate, setCelebrate] = useState<string | null>(null)
+
+  const complete = async (task: MeridianTask) => {
+    setBusy(task.id)
+    try {
+      await api.completeMeridianTask(task.id)
+      setTasks(prev => prev.filter(t => t.id !== task.id))
+      setCelebrate(`+${task.points} points!`)
+    } catch {
+      /* ignore — card stays */
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className="bg-gray-800 rounded-2xl p-6 flex-1 min-w-[280px]">
+      <h2 className="text-lg font-semibold text-gray-200 mb-4">{widget.name}</h2>
+      {celebrate && <Celebration label={celebrate} onDone={() => setCelebrate(null)} />}
+      {tasks.length === 0 ? (
+        <p className="text-gray-500 text-sm">All done — nice! 🎉</p>
+      ) : (
+        <ul className="space-y-3">
+          {tasks.map(task => (
+            <li key={task.id}>
+              <button
+                onClick={() => complete(task)}
+                disabled={busy === task.id || task.status === 'pending'}
+                className="w-full flex items-center justify-between gap-3 rounded-xl bg-gray-700 hover:bg-gray-600 disabled:opacity-60 px-4 py-4 text-left transition-colors min-h-[64px]"
+              >
+                <span className="flex items-center gap-2 text-gray-100 text-lg">
+                  {task.is_hot && <span>🔥</span>}
+                  {task.title}
+                </span>
+                <span className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-amber-300 font-bold">★ {task.points}</span>
+                  {task.status === 'pending'
+                    ? <span className="text-xs text-gray-400">Waiting…</span>
+                    : <span className="text-2xl text-gray-400">○</span>}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function MeridianPointsWidget({ widget }: { widget: HubWidget }) {
+  const rows = widget.items as PointsSummaryRow[]
+  return (
+    <div className="bg-gray-800 rounded-2xl p-6 flex-1 min-w-[280px]">
+      <h2 className="text-lg font-semibold text-gray-200 mb-4">{widget.name}</h2>
+      {rows.length === 0 ? (
+        <p className="text-gray-500 text-sm">No points yet — complete a task!</p>
+      ) : (
+        <ul className="space-y-3">
+          {rows.map(row => (
+            <li key={row.person_id} className="flex items-center justify-between">
+              <span className="text-gray-200">{row.display_name || `Person ${row.person_id}`}</span>
+              <span className="text-2xl font-bold text-amber-300">★ {row.balance}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 const WIDGET_COMPONENTS: Record<string, React.ComponentType<{ widget: HubWidget }>> = {
   atlas_todos: TodosWidget,
   atlas_reminders: RemindersWidget,
+  meridian_my_tasks: MeridianTasksWidget,
+  meridian_hot_tasks: MeridianTasksWidget,
+  meridian_points: MeridianPointsWidget,
 }
 
 export function KioskDashboard({ authUser, onLogout }: Props) {

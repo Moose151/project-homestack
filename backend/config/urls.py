@@ -5,10 +5,12 @@ from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
 
+from apps.meridian.views import KioskMeridianView
+
 
 def health(_request):
     return JsonResponse(
-        {"status": "ok", "service": "homestack-backend", "phase": "1.10"}
+        {"status": "ok", "service": "homestack-backend", "phase": "2.0"}
     )
 
 
@@ -22,6 +24,8 @@ urlpatterns = [
     path("api/v1/audit-logs/", include("apps.audit.urls")),
     path("api/v1/calendar/", include("apps.scheduling.urls")),
     path("api/v1/atlas/", include("apps.atlas.urls")),
+    path("api/v1/meridian/", include("apps.meridian.urls")),
+    path("api/v1/kiosk/meridian/", KioskMeridianView.as_view(), name="kiosk-meridian"),
     path("api/v1/hub/", include("apps.hub.urls")),
     path("api/v1/backups/", include("apps.backups.urls")),
 ]

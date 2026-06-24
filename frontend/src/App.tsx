@@ -4,6 +4,7 @@ import { LoginPage } from './features/auth/LoginPage'
 import { AppShell } from './features/web/AppShell'
 import { HubPage } from './features/web/pages/HubPage'
 import { AtlasPage } from './features/web/pages/AtlasPage'
+import { MeridianPage } from './features/web/pages/MeridianPage'
 import { CalendarPage } from './features/web/pages/CalendarPage'
 import { KioskApp } from './features/kiosk/KioskApp'
 
@@ -26,6 +27,7 @@ function WebApp() {
         <Route path="/" element={<Navigate to="/hub" replace />} />
         <Route path="/hub" element={<HubPage />} />
         <Route path="/atlas" element={<AtlasPage />} />
+        <Route path="/meridian" element={<MeridianPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="*" element={<Navigate to="/hub" replace />} />
       </Route>

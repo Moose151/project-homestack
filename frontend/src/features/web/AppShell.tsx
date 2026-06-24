@@ -6,6 +6,7 @@ import { useDarkMode } from '../../hooks/useDarkMode'
 const NAV = [
   { to: '/hub',      label: 'Hub',      icon: '⊙' },
   { to: '/atlas',    label: 'Atlas',    icon: '☰' },
+  { to: '/meridian', label: 'Meridian', icon: '★' },
   { to: '/calendar', label: 'Calendar', icon: '◫' },
 ]
 
