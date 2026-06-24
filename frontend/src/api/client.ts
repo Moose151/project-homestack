@@ -1,6 +1,8 @@
 import type {
   AtlasList, AtlasListItem, AtlasNote, AtlasReminder,
   AuthUser, CalendarEvent, HubResponse, KioskUser,
+  KioskMeridian, MeridianPointsResponse, MeridianReward,
+  MeridianRewardRequest, MeridianTask,
 } from './types'
 
 const BASE = '/api/v1'
@@ -67,4 +69,56 @@ export const api = {
 
   // --- Calendar ---
   getEvents: (): Promise<CalendarEvent[]> => _fetch('/calendar/events/'),
+
+  // --- Meridian: tasks ---
+  getMeridianTasks: (params?: { status?: string; hot?: boolean }): Promise<MeridianTask[]> => {
+    const q = new URLSearchParams()
+    if (params?.status) q.set('status', params.status)
+    if (params?.hot) q.set('hot', '1')
+    const s = q.toString()
+    return _fetch(`/meridian/tasks/${s ? `?${s}` : ''}`)
+  },
+  createMeridianTask: (data: {
+    title: string; points: number; description?: string
+    assigned_to_person_id?: number | null; is_hot?: boolean; due_at?: string
+  }): Promise<MeridianTask> =>
+    _fetch('/meridian/tasks/', { method: 'POST', body: JSON.stringify(data) }),
+  deleteMeridianTask: (id: number): Promise<void> =>
+    _fetch(`/meridian/tasks/${id}/`, { method: 'DELETE' }),
+  completeMeridianTask: (id: number, personId?: number): Promise<MeridianTask> =>
+    _fetch(`/meridian/tasks/${id}/complete/`, {
+      method: 'POST', body: JSON.stringify(personId ? { person_id: personId } : {}),
+    }),
+  approveMeridianTask: (id: number): Promise<MeridianTask> =>
+    _fetch(`/meridian/tasks/${id}/approve/`, { method: 'POST' }),
+  rejectMeridianTask: (id: number, reason?: string): Promise<MeridianTask> =>
+    _fetch(`/meridian/tasks/${id}/reject/`, { method: 'POST', body: JSON.stringify({ reason }) }),
+
+  // --- Meridian: points ---
+  getMeridianPoints: (): Promise<MeridianPointsResponse> => _fetch('/meridian/points/'),
+
+  // --- Meridian: rewards ---
+  getMeridianRewards: (activeOnly?: boolean): Promise<MeridianReward[]> =>
+    _fetch(`/meridian/rewards/${activeOnly ? '?active=1' : ''}`),
+  createMeridianReward: (data: {
+    name: string; cost_points: number; description?: string
+  }): Promise<MeridianReward> =>
+    _fetch('/meridian/rewards/', { method: 'POST', body: JSON.stringify(data) }),
+  deleteMeridianReward: (id: number): Promise<void> =>
+    _fetch(`/meridian/rewards/${id}/`, { method: 'DELETE' }),
+  requestMeridianReward: (id: number, personId?: number): Promise<MeridianRewardRequest> =>
+    _fetch(`/meridian/rewards/${id}/request/`, {
+      method: 'POST', body: JSON.stringify(personId ? { person_id: personId } : {}),
+    }),
+
+  // --- Meridian: reward requests ---
+  getMeridianRewardRequests: (status?: string): Promise<MeridianRewardRequest[]> =>
+    _fetch(`/meridian/reward-requests/${status ? `?status=${status}` : ''}`),
+  approveMeridianRewardRequest: (id: number): Promise<MeridianRewardRequest> =>
+    _fetch(`/meridian/reward-requests/${id}/approve/`, { method: 'POST' }),
+  rejectMeridianRewardRequest: (id: number, reason?: string): Promise<MeridianRewardRequest> =>
+    _fetch(`/meridian/reward-requests/${id}/reject/`, { method: 'POST', body: JSON.stringify({ reason }) }),
+
+  // --- Meridian: kiosk ---
+  kioskMeridian: (): Promise<KioskMeridian> => _fetch('/kiosk/meridian/'),
 }

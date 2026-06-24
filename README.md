@@ -11,8 +11,9 @@ opt-in **nodes** (areas of household life), and a touchscreen **kiosk** for the 
 
 ## Status
 
-Milestone 1 (Walking Skeleton) — **Phase 1.0 complete**: repo + Docker scaffold boots.
-Next: Phase 1.1 (real Django project with split settings, DRF, app skeletons).
+Milestone 1 (Walking Skeleton) — **complete**. Milestone 2 (Native Meridian) — **complete**:
+the chores/points/rewards node runs natively on shared users, permissions, calendar, Hub
+and kiosk, with a dry-runnable data importer. Next: Milestone 3 (Home Wiki, Pets, Education).
 
 ## Tech stack
 
