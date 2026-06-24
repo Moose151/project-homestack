@@ -40,19 +40,19 @@ function ItemRow({
         disabled={busy}
         className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
           item.is_complete
-            ? 'bg-green-500 border-green-500 text-white'
-            : 'border-gray-300 dark:border-gray-600 hover:border-green-400'
+            ? 'bg-success border-success text-white'
+            : 'border-line-strong hover:border-success'
         }`}
         aria-label={item.is_complete ? 'Uncheck' : 'Check'}
       >
         {item.is_complete && <span className="text-xs">✓</span>}
       </button>
-      <span className={`flex-1 text-sm ${item.is_complete ? 'line-through text-gray-400' : 'text-gray-800 dark:text-gray-200'}`}>
+      <span className={`flex-1 text-sm ${item.is_complete ? 'line-through text-muted' : 'text-ink'}`}>
         {item.title}
       </span>
       <button
         onClick={() => onDelete(item)}
-        className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 transition-all text-lg leading-none"
+        className="opacity-0 group-hover:opacity-100 text-muted hover:text-danger transition-all text-lg leading-none"
         aria-label="Delete"
       >
         ×
@@ -107,19 +107,19 @@ function ListCard({ list, onDeleted }: { list: AtlasList; onDeleted: (id: number
     <Card>
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h3 className="font-semibold text-gray-900 dark:text-white">{list.title}</h3>
-          <span className="text-xs text-gray-400 capitalize">{list.list_type}</span>
+          <h3 className="font-bold text-ink">{list.title}</h3>
+          <span className="text-xs text-muted capitalize">{list.list_type}</span>
         </div>
         <button
           onClick={deleteList}
-          className="text-gray-300 hover:text-red-400 transition-colors text-xl leading-none"
+          className="text-muted hover:text-danger transition-colors text-xl leading-none"
           aria-label="Delete list"
         >
           ×
         </button>
       </div>
 
-      <ul className="divide-y divide-gray-50 dark:divide-gray-700/50">
+      <ul className="divide-y divide-line/60">
         {pending.map(item => (
           <ItemRow key={item.id} item={item} listId={list.id} onToggle={handleToggle} onDelete={handleDelete} />
         ))}
@@ -128,13 +128,13 @@ function ListCard({ list, onDeleted }: { list: AtlasList; onDeleted: (id: number
         ))}
       </ul>
 
-      <form onSubmit={addItem} className="flex gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+      <form onSubmit={addItem} className="flex gap-2 mt-3 pt-3 border-t border-line">
         <input
           ref={inputRef}
           value={newTitle}
           onChange={e => setNewTitle(e.target.value)}
           placeholder="Add item…"
-          className="flex-1 text-sm bg-transparent text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none min-h-[36px]"
+          className="flex-1 text-sm bg-transparent text-ink placeholder-muted outline-none min-h-[36px]"
         />
         <Button type="submit" size="sm" loading={adding} disabled={!newTitle.trim()}>
           Add
@@ -178,7 +178,7 @@ function RemindersTab() {
     setReminders(prev => prev.filter(r => r.id !== id))
   }
 
-  if (loading) return <div className="h-32 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
+  if (loading) return <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
 
   return (
     <div className="flex flex-col gap-4">
@@ -188,14 +188,14 @@ function RemindersTab() {
             value={title}
             onChange={e => setTitle(e.target.value)}
             placeholder="Reminder title"
-            className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-transparent text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2.5 rounded-xl border border-line bg-raised text-sm text-ink placeholder-muted outline-none focus:ring-2 focus:ring-primary"
           />
           <div className="flex gap-2">
             <input
               type="datetime-local"
               value={dueAt}
               onChange={e => setDueAt(e.target.value)}
-              className="flex-1 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-transparent text-sm text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 px-3 py-2 rounded-xl border border-line bg-raised text-sm text-muted-strong outline-none focus:ring-2 focus:ring-primary"
             />
             <Button type="submit" loading={saving} disabled={!title.trim()}>
               Save
@@ -205,24 +205,24 @@ function RemindersTab() {
       </Card>
 
       {reminders.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-6">No reminders yet.</p>
+        <p className="text-sm text-muted text-center py-6">No reminders yet.</p>
       ) : (
         <div className="flex flex-col gap-3">
           {reminders.map(r => (
             <Card key={r.id}>
               <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-800 dark:text-gray-200">{r.title}</p>
-                  {r.body && <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{r.body}</p>}
+                  <p className="font-medium text-ink">{r.title}</p>
+                  {r.body && <p className="text-sm text-muted mt-0.5">{r.body}</p>}
                   {r.due_at && (
-                    <p className="text-xs text-blue-500 mt-1">
+                    <p className="text-xs text-primary mt-1">
                       {new Date(r.due_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
                     </p>
                   )}
                 </div>
                 <button
                   onClick={() => remove(r.id)}
-                  className="text-gray-300 hover:text-red-400 transition-colors text-xl leading-none flex-shrink-0"
+                  className="text-muted hover:text-danger transition-colors text-xl leading-none flex-shrink-0"
                   aria-label="Delete"
                 >
                   ×
@@ -270,18 +270,18 @@ export function AtlasPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Atlas</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink">Atlas</h1>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit">
+      <div className="flex gap-1 bg-sunken p-1 rounded-xl w-fit">
         {(['lists', 'reminders'] as Tab[]).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize ${
+            className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors capitalize ${
               tab === t
-                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                ? 'bg-raised text-ink shadow-soft'
+                : 'text-muted hover:text-ink'
             }`}
           >
             {t}
@@ -296,7 +296,7 @@ export function AtlasPage() {
               value={newTitle}
               onChange={e => setNewTitle(e.target.value)}
               placeholder="New list name…"
-              className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 px-4 py-2.5 rounded-xl border border-line bg-surface text-sm text-ink placeholder-muted outline-none focus:ring-2 focus:ring-primary"
             />
             <Button type="submit" loading={creating} disabled={!newTitle.trim()}>
               Create
@@ -304,9 +304,9 @@ export function AtlasPage() {
           </form>
 
           {loading ? (
-            <div className="h-32 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
+            <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
           ) : lists.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-8">No lists yet. Create one above.</p>
+            <p className="text-sm text-muted text-center py-8">No lists yet. Create one above.</p>
           ) : (
             lists.map(list => (
               <ListCard

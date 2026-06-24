@@ -1,3 +1,67 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* =========================================================
+   HomeStack UI — shared design tokens (warm neutrals).
+   Ported from project-meridian/app/static/css/homestack.css
+   and project-solace/docs/HOMESTACK_UI.md so every node shares
+   one visual language. Variables flip on `.dark`, so semantic
+   Tailwind colours (bg-surface, text-muted, bg-primary, …)
+   theme automatically with no per-element dark: variants.
+   ========================================================= */
+
+@layer base {
+  :root {
+    --hs-bg: #f6f1e8;
+    --hs-bg-soft: #fbf7ef;
+    --hs-surface: #fffaf2;
+    --hs-surface-raised: #ffffff;
+    --hs-surface-muted: #f1e9dc;
+    --hs-border: #ded4c5;
+    --hs-border-strong: #cdbfaa;
+
+    --hs-text: #252525;
+    --hs-muted: #6f6a61;
+    --hs-muted-strong: #514d47;
+
+    --hs-primary: #3f6f8f;
+    --hs-primary-hover: #315a75;
+    --hs-primary-soft: #e7f0f4;
+    --hs-success: #5f8f6b;
+    --hs-success-soft: #e8f3ea;
+    --hs-warning: #c98a3d;
+    --hs-warning-soft: #f7ead7;
+    --hs-danger: #b85c50;
+    --hs-danger-soft: #f5e2df;
+  }
+
+  .dark {
+    --hs-bg: #1a1a1f;
+    --hs-bg-soft: #1e1e24;
+    --hs-surface: #23232a;
+    --hs-surface-raised: #2a2a32;
+    --hs-surface-muted: #202028;
+    --hs-border: #3a3a46;
+    --hs-border-strong: #4a4a58;
+
+    --hs-text: #ede8e0;
+    --hs-muted: #8a8590;
+    --hs-muted-strong: #b0adb5;
+
+    --hs-primary: #83a9bd;
+    --hs-primary-hover: #9bbccd;
+    --hs-primary-soft: #1e203a;
+    --hs-success-soft: #1a2a22;
+    --hs-warning-soft: #2a2210;
+    --hs-danger-soft: #2a1818;
+  }
+
+  body {
+    background:
+      radial-gradient(circle at top left, rgb(201 138 61 / 0.10), transparent 24rem),
+      linear-gradient(180deg, var(--hs-bg-soft) 0%, var(--hs-bg) 18rem, var(--hs-bg) 100%);
+    background-attachment: fixed;
+    color: var(--hs-text);
+  }
+}

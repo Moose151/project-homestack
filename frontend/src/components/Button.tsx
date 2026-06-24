@@ -7,10 +7,10 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses = {
-  primary: 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white',
-  secondary: 'bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100',
-  ghost: 'hover:bg-gray-100 active:bg-gray-200 text-gray-700 dark:hover:bg-gray-700 dark:text-gray-300',
-  danger: 'bg-red-600 hover:bg-red-700 active:bg-red-800 text-white',
+  primary: 'bg-primary hover:bg-primary-hover text-white shadow-soft',
+  secondary: 'bg-sunken hover:bg-line text-ink',
+  ghost: 'hover:bg-sunken text-muted-strong',
+  danger: 'bg-danger hover:opacity-90 text-white shadow-soft',
 }
 
 const sizeClasses = {
@@ -31,7 +31,7 @@ export function Button({
   return (
     <button
       disabled={disabled || loading}
-      className={`inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-all select-none
+      className={`inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-all select-none
         disabled:opacity-50 disabled:cursor-not-allowed
         ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
       {...props}

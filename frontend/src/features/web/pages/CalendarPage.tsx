@@ -51,21 +51,21 @@ export function CalendarPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Calendar</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink">Calendar</h1>
 
       {loading && (
         <div className="flex flex-col gap-3">
           {[1, 2, 3].map(i => (
-            <div key={i} className="h-20 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
+            <div key={i} className="h-20 rounded-2xl bg-sunken animate-pulse" />
           ))}
         </div>
       )}
 
-      {error && <p className="text-red-500 text-sm">{error}</p>}
+      {error && <p className="text-danger text-sm">{error}</p>}
 
       {!loading && events.length === 0 && !error && (
         <Card>
-          <p className="text-gray-400 text-sm text-center py-6">
+          <p className="text-muted text-sm text-center py-6">
             No upcoming events. Add a reminder with a date in Atlas to see it here.
           </p>
         </Card>
@@ -73,7 +73,7 @@ export function CalendarPage() {
 
       {[...grouped.entries()].map(([dateStr, dayEvents]) => (
         <div key={dateStr}>
-          <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+          <h2 className="text-sm font-semibold text-muted uppercase tracking-wide mb-2">
             {formatDateHeader(dateStr)}
           </h2>
           <div className="flex flex-col gap-2">
@@ -81,14 +81,14 @@ export function CalendarPage() {
               <Card key={event.id} className="!p-0">
                 <div className="flex items-start gap-4 p-4">
                   <div className="flex flex-col items-center justify-center w-12 flex-shrink-0">
-                    <span className="text-xs text-blue-500 font-medium">
+                    <span className="text-xs text-primary font-semibold">
                       {formatTime(event.start_at, event.all_day)}
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-800 dark:text-gray-200 truncate">{event.title}</p>
+                    <p className="font-medium text-ink truncate">{event.title}</p>
                     {event.source_node && (
-                      <span className="text-xs text-gray-400 capitalize">{event.source_node}</span>
+                      <span className="text-xs text-muted capitalize">{event.source_node}</span>
                     )}
                   </div>
                 </div>

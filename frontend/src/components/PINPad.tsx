@@ -13,7 +13,7 @@ function PadButton({ label, onClick }: { label: string; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="w-16 h-16 rounded-full bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-white text-2xl font-light transition-all select-none"
+      className="w-16 h-16 rounded-full bg-sunken hover:bg-line active:scale-95 text-ink text-2xl font-light transition-all select-none"
     >
       {label}
     </button>
@@ -45,15 +45,13 @@ export function PINPad({ length = 4, onComplete, loading = false, error, onClear
           <div
             key={i}
             className={`w-4 h-4 rounded-full border-2 transition-all ${
-              i < digits.length
-                ? 'bg-blue-600 border-blue-600'
-                : 'border-gray-300 dark:border-gray-600'
+              i < digits.length ? 'bg-primary border-primary' : 'border-line-strong'
             }`}
           />
         ))}
       </div>
 
-      {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+      {error && <p className="text-danger text-sm text-center">{error}</p>}
 
       <div className="grid grid-cols-3 gap-3">
         {['1','2','3','4','5','6','7','8','9'].map(d => (
@@ -64,7 +62,7 @@ export function PINPad({ length = 4, onComplete, loading = false, error, onClear
         <button
           type="button"
           onClick={pop}
-          className="w-16 h-16 rounded-full text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 text-2xl transition-all"
+          className="w-16 h-16 rounded-full text-muted hover:bg-sunken text-2xl transition-all"
           aria-label="Delete"
         >
           ⌫
