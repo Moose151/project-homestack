@@ -18,5 +18,10 @@ ALLOWED_HOSTS = [
 
 # Trust the reverse proxy's X-Forwarded-Proto once TLS terminates there (M4).
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+
+# Secure cookies require HTTPS to be sent at all. Until TLS lands (M4) the home
+# server runs plain HTTP on the LAN, where secure cookies would silently break login.
+# Defaults to secure; set DJANGO_SECURE_COOKIES=0 for a plain-HTTP LAN deployment.
+_SECURE_COOKIES = os.environ.get("DJANGO_SECURE_COOKIES", "1") != "0"
+SESSION_COOKIE_SECURE = _SECURE_COOKIES
+CSRF_COOKIE_SECURE = _SECURE_COOKIES
