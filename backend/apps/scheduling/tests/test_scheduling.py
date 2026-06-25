@@ -237,3 +237,30 @@ class CalendarEventCRUDTests(TestCase):
         titles = [e["title"] for e in resp.json()]
         self.assertNotIn("Past", titles)
         self.assertIn("Future", titles)
+
+    def test_date_window_filter(self):
+        now = timezone.now()
+        create_event(self.admin, title="InWindow", start_at=now + timezone.timedelta(days=2))
+        create_event(self.admin, title="OutWindow", start_at=now + timezone.timedelta(days=20))
+        start = (now).date().isoformat()
+        end = (now + timezone.timedelta(days=7)).date().isoformat()
+        resp = self.client.get(f"{self.list_url}?start={start}&end={end}")
+        titles = [e["title"] for e in resp.json()]
+        self.assertIn("InWindow", titles)
+        self.assertNotIn("OutWindow", titles)
+
+    def test_person_filter(self):
+        from apps.people.services import create_person
+        p1 = create_person(self.admin, display_name="Ana")
+        p2 = create_person(self.admin, display_name="Bo")
+        create_event(self.admin, title="Ana event", start_at=timezone.now(), assigned_to_person_id=p1.id)
+        create_event(self.admin, title="Bo event", start_at=timezone.now(), assigned_to_person_id=p2.id)
+        resp = self.client.get(f"{self.list_url}?person={p1.id}")
+        titles = [e["title"] for e in resp.json()]
+        self.assertEqual(titles, ["Ana event"])
+
+    def test_serializer_includes_source_node_key(self):
+        create_event(self.admin, title="Standalone", start_at=timezone.now())
+        resp = self.client.get(self.list_url)
+        event = next(e for e in resp.json() if e["title"] == "Standalone")
+        self.assertIsNone(event["source_node"])

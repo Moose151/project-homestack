@@ -63,7 +63,7 @@
 - [x] Ambient **clock** widget (`source_node = null`, kiosk-safe, seeded enabled via hub migration
       `0004`) — rendered client-side on web (`ClockWidget`) and kiosk (registry). Demonstrates the
       ambient/non-node widget path. **Weather stays parked** (external fetch + caching, D5).
-- [ ] Wire the Calendar "upcoming events" widget once Workstream C lands.
+- [x] Calendar "upcoming events" widget wired once Workstream C landed — see Phase 2.5C.6.
 
 ---
 
@@ -100,32 +100,39 @@
 
 ## Workstream C — Calendar: build the core
 
-## Phase 2.5C.1 — List/query API hardening
-- [ ] `GET /calendar/events/` date-window query (month/week/day ranges) + filters (source/node,
-      `assigned_to_person`, visibility) — all permission-filtered through the resolver (D10).
-- [ ] Synced (node-derived) events stay read-only via the API; standalone CRUD unaffected (D7).
+## Phase 2.5C.1 — List/query API hardening ✅ (2026-06-25)
+- [x] `GET /calendar/events/` accepts `start`/`end` window + `node` (source key) + `person`
+      filters (`_parse_dt` handles ISO datetime or date); all permission-filtered (D10). Serializer
+      now exposes `source_node` (key) for display/filter/colour.
+- [x] Synced events stay read-only via the API (existing 400 guard, D7); standalone CRUD intact.
+      Tests: window, person filter, source_node key (**23 scheduling tests**).
 
-## Phase 2.5C.2 — Calendar views (web)
-- [ ] Month / week / day / agenda(list) views beyond today's "upcoming" list.
-- [ ] Per-person colour coding (`assigned_to_person` + per-event `colour`); always-visible legend.
-- [ ] Clear today marker; calm empty-states; dark-mode; shared design system ("nice to look at").
+## Phase 2.5C.2 — Calendar views (web) ✅ (2026-06-25)
+- [x] Month grid + week (7-day columns) + day (timed list) + agenda views, prev/today/next nav,
+      period label. Per-person colour coding (`colour` → person colour → node colour → default) with
+      an always-visible people **legend**. Today marker, calm empty-states, dark-mode tokens.
 
-## Phase 2.5C.3 — Accessible from every page (owner requirement)
-- [ ] Persistent Calendar entry point in the global shell on every authenticated page.
-- [ ] Lightweight peek / mini-calendar (month strip or "next up" popover) openable from any page,
-      with quick-add — no full navigation required.
-- [ ] Deep-links: dated node items link straight to their day/event in the Calendar.
+## Phase 2.5C.3 — Accessible from every page (owner requirement) ✅ (2026-06-25)
+- [x] `CalendarPeek` popover in the global shell header (every authenticated page): next 5 events +
+      **quick-add** + "Open calendar". Persistent Calendar nav entry already existed.
+- [~] Deep-links from individual node items → their calendar day are a small follow-up (the peek +
+      nav cover day-to-day use).
 
-## Phase 2.5C.4 — Configurable (owner requirement)
-- [ ] Saved default view; toggleable filter layers (by node/person/visibility).
-- [ ] User prefs: start-of-week, time format, default view, default filters; household-level
-      defaults an admin can set. Permission-aware (children never see sensitive layers).
+## Phase 2.5C.4 — Configurable (owner requirement) 🟡 (2026-06-25)
+- [x] Saved **default view** + **start-of-week** + **12/24h** persisted per device (localStorage);
+      filter layers by **source/node** and **person** (visibility already enforced server-side, D10).
+- [ ] Household-level defaults an admin can set — deferred (would need a prefs store; per-device
+      localStorage covers V1).
 
-## Phase 2.5C.5 — Standalone events + recurrence
-- [ ] Standalone event create/edit/delete UI (title, start/end, all-day, person, colour, location,
-      visibility/sensitivity).
-- [ ] RRULE: decide expand-now vs defer per `24_Core_Calendar.md` (D8). If expanding, render a
-      window of occurrences; otherwise display the rule and keep storage as-is.
+## Phase 2.5C.5 — Standalone events + recurrence ✅ (2026-06-25)
+- [x] Event modal: create/edit/delete standalone events (title, start/end, all-day, person, colour,
+      location, visibility). Synced events open read-only with an "edit in <node>" note (D7).
+- [x] RRULE: **deferred** per `24_Core_Calendar.md` (D8) — events store/display the rule; no
+      occurrence expansion engine yet (recurring events render once at their start).
+
+## Phase 2.5C.6 — Calendar Hub widget (closes A.4 leftover) ✅ (2026-06-25)
+- [x] `calendar_upcoming` widget seeded (hub migration `0005`, `source_node=null`, kiosk-safe),
+      content from scheduling selectors; rendered on web Hub (`UpcomingWidget`) + kiosk registry.
 
 ---
 

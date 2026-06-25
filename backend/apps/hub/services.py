@@ -63,6 +63,12 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False) -> list[dict]:
             reminders = [r for r in reminders if r.due_at and r.due_at <= week_ahead][:10]
             content = AtlasReminderSerializer(reminders, many=True).data
 
+        elif key == "calendar_upcoming":
+            from apps.scheduling.selectors import list_events
+            from apps.scheduling.serializers import CalendarEventSerializer
+            upcoming = list_events(user, upcoming_only=True)[:8]
+            content = CalendarEventSerializer(upcoming, many=True).data
+
         elif key.startswith("meridian_"):
             content = _meridian_widget_content(key, user)
 

@@ -8,6 +8,7 @@ import type {
   MeridianTask,
   PointsSummaryRow,
   MeridianRewardRequest,
+  CalendarEvent,
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { HubConfig } from './HubConfig'
@@ -155,10 +156,32 @@ function ClockWidget() {
   )
 }
 
+function UpcomingWidget({ items }: { items: CalendarEvent[] }) {
+  if (items.length === 0) return <p className="text-sm text-muted">Nothing upcoming</p>
+  return (
+    <ul className="flex flex-col gap-2">
+      {items.slice(0, 6).map(e => {
+        const d = new Date(e.start_at)
+        const label = e.is_all_day
+          ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+          : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+        return (
+          <li key={e.id} className="flex items-center justify-between gap-3 text-sm">
+            <span className="text-ink truncate">{e.title}</span>
+            <span className="text-xs text-muted flex-shrink-0">{label}</span>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
 function renderWidget(w: HubWidget) {
   switch (w.key) {
     case 'clock':
       return <ClockWidget />
+    case 'calendar_upcoming':
+      return <UpcomingWidget items={w.items as CalendarEvent[]} />
     case 'atlas_todos':
       return <TodoWidget items={w.items as AtlasListItem[]} />
     case 'atlas_reminders':

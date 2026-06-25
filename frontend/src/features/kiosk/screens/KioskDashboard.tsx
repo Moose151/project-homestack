@@ -3,7 +3,7 @@ import { api } from '../../../api/client'
 import type {
   AuthUser, HubWidget, AtlasListItem as ListItem, AtlasReminder as Reminder,
   MeridianTask, PointsSummaryRow, MeridianReward, MeridianRoutine,
-  MeridianGoal, MeridianWishlistItem, PersonBadge,
+  MeridianGoal, MeridianWishlistItem, PersonBadge, CalendarEvent,
 } from '../../../api/types'
 import { useInactivityTimeout } from '../hooks/useInactivityTimeout'
 
@@ -352,8 +352,36 @@ function ClockWidget({ widget }: { widget: HubWidget }) {
   )
 }
 
+function UpcomingWidget({ widget }: { widget: HubWidget }) {
+  const items = widget.items as CalendarEvent[]
+  const fmt = (dt: string, allDay: boolean) => {
+    const d = new Date(dt)
+    return allDay
+      ? d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+      : d.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  }
+  return (
+    <div className="bg-gray-800 rounded-2xl p-6 flex-1 min-w-[280px]">
+      <h2 className="text-lg font-semibold text-gray-200 mb-4">{widget.name}</h2>
+      {items.length === 0 ? (
+        <p className="text-gray-500 text-sm">Nothing upcoming</p>
+      ) : (
+        <ul className="space-y-3">
+          {items.map((e) => (
+            <li key={e.id} className="flex flex-col gap-0.5">
+              <span className="text-gray-200">{e.title}</span>
+              <span className="text-xs text-gray-500">{fmt(e.start_at, e.is_all_day)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 const WIDGET_COMPONENTS: Record<string, React.ComponentType<{ widget: HubWidget }>> = {
   clock: ClockWidget,
+  calendar_upcoming: UpcomingWidget,
   atlas_todos: TodosWidget,
   atlas_reminders: RemindersWidget,
   meridian_my_tasks: MeridianTasksWidget,

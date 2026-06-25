@@ -8,6 +8,7 @@ from apps.scheduling.models import CalendarEvent
 
 class CalendarEventSerializer(serializers.ModelSerializer):
     is_synced = serializers.BooleanField(read_only=True)
+    source_node = serializers.SerializerMethodField()
 
     class Meta:
         model = CalendarEvent
@@ -20,6 +21,7 @@ class CalendarEventSerializer(serializers.ModelSerializer):
             "is_all_day",
             "timezone",
             "recurrence_rule",
+            "source_node",
             "source_node_id",
             "source_record_type",
             "source_record_id",
@@ -34,6 +36,7 @@ class CalendarEventSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "source_node",
             "source_node_id",
             "source_record_type",
             "source_record_id",
@@ -41,6 +44,10 @@ class CalendarEventSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def get_source_node(self, obj) -> str | None:
+        """The source node's key (e.g. 'atlas') for display/filtering, or None for standalone."""
+        return obj.source_node.key if obj.source_node_id else None
 
 
 class CalendarEventWriteSerializer(serializers.ModelSerializer):

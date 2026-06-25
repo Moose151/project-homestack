@@ -104,14 +104,35 @@ export interface AtlasReminder {
 export interface CalendarEvent {
   id: number
   title: string
+  description: string
   start_at: string
   end_at: string | null
-  all_day: boolean
+  is_all_day: boolean
+  timezone: string
+  recurrence_rule: string
   source_node: string | null
   source_record_type: string
+  assigned_to_person_id: number | null
+  colour: string
+  location: string
   visibility: string
-  recurrence_rule: string
+  sensitivity: string
+  is_synced: boolean
   created_at: string
+  updated_at: string
+}
+
+export interface CalendarEventWrite {
+  title: string
+  description?: string
+  start_at: string
+  end_at?: string | null
+  is_all_day?: boolean
+  recurrence_rule?: string
+  assigned_to_person_id?: number | null
+  colour?: string
+  location?: string
+  visibility?: string
 }
 
 // --- Meridian (Milestone 2) ---
@@ -340,7 +361,7 @@ export interface HubWidget {
   name: string
   size: string
   supports_kiosk: boolean
-  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[]
+  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[]
 }
 
 export interface HubResponse {
