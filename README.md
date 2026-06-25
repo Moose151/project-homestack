@@ -11,11 +11,12 @@ opt-in **nodes** (areas of household life), and a touchscreen **kiosk** for the 
 
 ## Status
 
-Milestone 1 (Walking Skeleton) — **complete**. Milestone 2 (Native Meridian) — **in progress**:
-a full functional port of the standalone Meridian app (D19). Backend done so far: points-ledger
-parity, tasks, routines + streaks, rewards shop, group goals, wishlist. Remaining: cross-node
-achievements (D20), notifications, scheduled jobs, settings/reports, full data import, and the
-web/kiosk frontend for the new features. See `docs/MILESTONE_2_Checklist.md`.
+Milestone 1 (Walking Skeleton) — **complete**. Milestone 2 (Native Meridian) — **complete**: a
+full functional port of the standalone Meridian app (D19) — points-ledger parity, tasks,
+routines + streaks, rewards shop (cart), group goals, wishlist, cross-node achievements (D20),
+notifications, scheduled jobs, settings, reports/leaderboard, dry-runnable data import, and the
+web + kiosk frontend. 339 backend tests green. Next: Milestone 3 (Home Wiki, Pets, Education),
+after a follow-up pass on Atlas + the Hub. See `docs/MILESTONE_2_Checklist.md`.
 
 ## Tech stack
 

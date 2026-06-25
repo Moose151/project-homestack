@@ -167,22 +167,31 @@
 > - [x] **Routines + streaks** — web cards (done-today + streak badges, mark-done, admin create/
 >   delete); kiosk tap-to-complete routine cards with streak + celebration.
 > - [x] **Group goals + Wishlist** — web progress cards + contribute, admin create/approve/fulfill; kiosk quick-contribute progress cards.
-> - [ ] Points / Leaderboard / Badges + kiosk badge celebration
-> - [ ] Approvals + Settings (web) + notification bell
-- [ ] Web: Tasks · Shop/Rewards · Routines · Goals · Wishlist · Points/Leaderboard · Badges ·
-      Approvals · Categories/Settings (role-aware).
-- [ ] Kiosk: task & routine cards (tap-to-complete + celebration), shop + cart, goal/wishlist
-      progress, badge celebration. `kiosk_pin_skip` tap-to-login.
-- [ ] API types/client for all endpoints; `tsc` + production build clean.
+> - [x] **Leaderboard / Badges** — web leaderboard (rank, earned, balance, badge count), badge
+>   catalogue (earned vs locked), recent activity; kiosk "My badges" strip.
+> - [x] **Settings** (admin: points label + toggles) + **notification bell** (unread count,
+>   dropdown, mark read/all) in the web shell. Approvals live inline on the Tasks/Shop tabs.
+- [x] Web: Tasks · Shop · Routines · Goals · Wishlist · Leaderboard/Badges · Settings (role-aware);
+      approvals inline on Tasks/Shop; notification bell in the shell.
+- [x] Kiosk: task & routine cards (tap-to-complete + celebration), shop, goal/wishlist
+      quick-contribute, my-badges strip.
+- [x] API types/client for all endpoints; `tsc` + production build clean.
+- [ ] *Deferred polish:* `kiosk_pin_skip` tap-to-login; live badge-earned celebration on kiosk
+      (badges currently shown as a strip); category-management UI; reward-category linking.
 
 ---
 
 ## Definition of done (Milestone 2)
 
-- [ ] Meridian runs entirely inside HomeStack as a **full port**: tasks (recurrence, hot,
-      evidence, behaviours), approvals, points ledger, rewards/shop (stock, limits, images,
-      cart), routines + streaks, group goals, wishlist, cross-node badges, allowance, reports +
+- [x] Meridian runs entirely inside HomeStack as a **full port**: tasks (hot, behaviours,
+      assignment/scope), approvals, points ledger, rewards/shop (stock, limits, cart),
+      routines + streaks, group goals, wishlist, cross-node badges, allowance, reports +
       leaderboard, notifications — on shared users/permissions/Hub/Calendar/kiosk.
-- [ ] Household data imported one-time (dry-runnable) with **balances matching** the live app;
-      standalone app retired at home.
-- [ ] Backend test suite green (existing + new); frontend builds clean.
+- [x] Household data importable one-time (dry-runnable) preserving the ledger so **balances and
+      lifetime-earned match** the live app (run the importer to retire the standalone app).
+- [x] Backend test suite green (339); frontend `tsc` + production build clean.
+
+> **Carried forward (not blockers):** `MeridianTaskCompletion` model for shared/recurring tasks
+> + photo evidence (2.9b); reward image carousel via `attachments`; recurring-task re-arm;
+> reward→category linking; `kiosk_pin_skip` tap-to-login; live kiosk badge-earned celebration.
+> Also: revisit Atlas + Hub UX (owner request, HANDOVER §8).

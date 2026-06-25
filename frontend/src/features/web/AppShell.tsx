@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Avatar } from '../../components/Avatar'
+import { NotificationBell } from '../../components/NotificationBell'
 import { useDarkMode } from '../../hooks/useDarkMode'
 
 const NAV = [
@@ -70,6 +71,9 @@ export function AppShell() {
 
       {/* Main content */}
       <div className="flex-1 md:ml-56 flex flex-col min-h-screen">
+        <header className="flex items-center justify-end px-4 md:px-8 py-3 border-b border-line bg-surface/60 backdrop-blur sticky top-0 z-10">
+          <NotificationBell />
+        </header>
         <main className="flex-1 px-4 py-6 md:px-8 md:py-8 max-w-4xl w-full mx-auto pb-24 md:pb-8">
           <Outlet />
         </main>

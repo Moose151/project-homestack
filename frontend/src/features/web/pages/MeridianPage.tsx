@@ -1,74 +1,13 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../../api/client'
-import type { MeridianPointsResponse } from '../../../api/types'
-import { Card } from '../../../components/Card'
 import { useAuth } from '../../auth/AuthContext'
 import { TasksTab } from './meridian/TasksTab'
 import { ShopTab } from './meridian/ShopTab'
 import { RoutinesTab } from './meridian/RoutinesTab'
 import { GoalsTab, WishlistTab } from './meridian/GoalsWishlistTabs'
+import { LeaderboardTab, SettingsTab } from './meridian/ReportsSettingsTabs'
 
-function PointsPill({ points, label = '' }: { points: number; label?: string }) {
-  return (
-    <span className="inline-flex items-center gap-1 text-sm font-bold text-primary">
-      ★ {points}{label ? ` ${label}` : ''}
-    </span>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Points tab
-// ---------------------------------------------------------------------------
-
-function PointsTab({ pointsLabel }: { pointsLabel: string }) {
-  const [data, setData] = useState<MeridianPointsResponse | null>(null)
-
-  useEffect(() => {
-    api.getMeridianPoints().then(setData).catch(() => setData({ summary: [], entries: [] }))
-  }, [])
-
-  if (!data) return <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
-
-  return (
-    <div className="flex flex-col gap-4">
-      <Card title={`${pointsLabel} by person`}>
-        {data.summary.length === 0 ? (
-          <p className="text-sm text-muted text-center py-4">No points earned yet.</p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {data.summary.map(row => (
-              <li key={row.person_id} className="flex items-center justify-between py-1">
-                <span className="font-semibold text-ink">{row.display_name || `Person ${row.person_id}`}</span>
-                <PointsPill points={row.balance} label={pointsLabel} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      {data.entries.length > 0 && (
-        <Card title="Recent activity">
-          <ul className="divide-y divide-line/60">
-            {data.entries.map(e => (
-              <li key={e.id} className="flex items-center justify-between py-2 text-sm">
-                <span className="text-muted-strong">{e.reason || 'Adjustment'}</span>
-                <span className={e.points >= 0 ? 'text-success font-semibold' : 'text-danger font-semibold'}>
-                  {e.points >= 0 ? '+' : ''}{e.points}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Meridian page
-// ---------------------------------------------------------------------------
-
-type Tab = 'tasks' | 'routines' | 'shop' | 'goals' | 'wishlist' | 'points'
+type Tab = 'tasks' | 'routines' | 'shop' | 'goals' | 'wishlist' | 'leaderboard' | 'settings'
 
 export function MeridianPage() {
   const { user } = useAuth()
@@ -80,12 +19,15 @@ export function MeridianPage() {
     api.getMeridianSettings().then(s => setPointsLabel(s.points_label || 'points')).catch(() => {})
   }, [])
 
+  const tabs: Tab[] = ['tasks', 'routines', 'shop', 'goals', 'wishlist', 'leaderboard']
+  if (canManage) tabs.push('settings')
+
   return (
     <div className="flex flex-col gap-5">
       <h1 className="text-2xl font-extrabold tracking-tight text-ink">Meridian</h1>
 
-      <div className="flex gap-1 bg-sunken p-1 rounded-xl w-fit">
-        {(['tasks', 'routines', 'shop', 'goals', 'wishlist', 'points'] as Tab[]).map(t => (
+      <div className="flex flex-wrap gap-1 bg-sunken p-1 rounded-xl w-fit">
+        {tabs.map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -103,7 +45,8 @@ export function MeridianPage() {
       {tab === 'shop' && <ShopTab canManage={canManage} pointsLabel={pointsLabel} />}
       {tab === 'goals' && <GoalsTab canManage={canManage} pointsLabel={pointsLabel} />}
       {tab === 'wishlist' && <WishlistTab canManage={canManage} pointsLabel={pointsLabel} />}
-      {tab === 'points' && <PointsTab pointsLabel={pointsLabel} />}
+      {tab === 'leaderboard' && <LeaderboardTab pointsLabel={pointsLabel} />}
+      {tab === 'settings' && canManage && <SettingsTab />}
     </div>
   )
 }

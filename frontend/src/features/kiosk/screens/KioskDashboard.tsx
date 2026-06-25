@@ -3,7 +3,7 @@ import { api } from '../../../api/client'
 import type {
   AuthUser, HubWidget, AtlasListItem as ListItem, AtlasReminder as Reminder,
   MeridianTask, PointsSummaryRow, MeridianReward, MeridianRoutine,
-  MeridianGoal, MeridianWishlistItem,
+  MeridianGoal, MeridianWishlistItem, PersonBadge,
 } from '../../../api/types'
 import { useInactivityTimeout } from '../hooks/useInactivityTimeout'
 
@@ -143,6 +143,26 @@ function MeridianPointsWidget({ widget }: { widget: HubWidget }) {
           ))}
         </ul>
       )}
+    </div>
+  )
+}
+
+// Kiosk badges — a celebratory strip of what the child has earned.
+function KioskBadges() {
+  const [badges, setBadges] = useState<PersonBadge[]>([])
+  useEffect(() => { api.getMyBadges().then(setBadges).catch(() => {}) }, [])
+  if (badges.length === 0) return null
+  return (
+    <div className="bg-gray-800 rounded-2xl p-6 w-full">
+      <h2 className="text-lg font-semibold text-gray-200 mb-4">My badges</h2>
+      <div className="flex flex-wrap gap-4">
+        {badges.map(b => (
+          <div key={b.id} title={b.badge.description} className="flex flex-col items-center w-20 text-center">
+            <span className="text-4xl">{b.badge.icon}</span>
+            <span className="text-xs text-gray-300 mt-1 leading-tight">{b.badge.name}</span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -390,6 +410,7 @@ export function KioskDashboard({ authUser, onLogout }: Props) {
           <KioskRoutines />
           <KioskShop />
           <KioskGoalsWishlist />
+          <KioskBadges />
         </div>
       </main>
     </div>
