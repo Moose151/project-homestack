@@ -164,7 +164,8 @@
 >   client-side cart + checkout, admin create (stock/limits/image) + pending approvals; kiosk:
 >   tap-to-request reward cards + celebration. *(reward→category link not in backend; no category
 >   filter on shop)*
-> - [ ] Routines + streaks + kiosk routine cards
+> - [x] **Routines + streaks** — web cards (done-today + streak badges, mark-done, admin create/
+>   delete); kiosk tap-to-complete routine cards with streak + celebration.
 > - [ ] Group goals + Wishlist (+ progress) + kiosk
 > - [ ] Points / Leaderboard / Badges + kiosk badge celebration
 > - [ ] Approvals + Settings (web) + notification bell

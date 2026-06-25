@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../../../api/client'
 import type {
   AuthUser, HubWidget, AtlasListItem as ListItem, AtlasReminder as Reminder,
-  MeridianTask, PointsSummaryRow, MeridianReward,
+  MeridianTask, PointsSummaryRow, MeridianReward, MeridianRoutine,
 } from '../../../api/types'
 import { useInactivityTimeout } from '../hooks/useInactivityTimeout'
 
@@ -146,6 +146,52 @@ function MeridianPointsWidget({ widget }: { widget: HubWidget }) {
   )
 }
 
+// Kiosk routines — daily habits, tap to mark done, shows streak (mirrors legacy kiosk_routines).
+function KioskRoutines() {
+  const [routines, setRoutines] = useState<MeridianRoutine[]>([])
+  const [busy, setBusy] = useState<number | null>(null)
+  const [celebrate, setCelebrate] = useState<string | null>(null)
+
+  const load = () => api.getMeridianRoutines().then(setRoutines).catch(() => {})
+  useEffect(() => { load() }, [])
+
+  const complete = async (r: MeridianRoutine) => {
+    setBusy(r.id)
+    try {
+      await api.completeMeridianRoutine(r.id)
+      setCelebrate(`+${r.points} points!`)
+      await load()
+    } catch { /* ignore */ } finally { setBusy(null) }
+  }
+
+  if (routines.length === 0) return null
+
+  return (
+    <div className="bg-gray-800 rounded-2xl p-6 w-full">
+      {celebrate && <Celebration label={celebrate} onDone={() => setCelebrate(null)} />}
+      <h2 className="text-lg font-semibold text-gray-200 mb-4">Routines</h2>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {routines.map(r => (
+          <button
+            key={r.id}
+            onClick={() => complete(r)}
+            disabled={busy === r.id || !!r.done_today}
+            className={`flex flex-col rounded-xl px-4 py-4 text-left transition-colors min-h-[96px] disabled:opacity-60
+              ${r.done_today ? 'bg-green-900/40' : 'bg-gray-700 hover:bg-gray-600'}`}
+          >
+            <span className="text-gray-100 text-lg font-medium">{r.done_today && '✅ '}{r.title}</span>
+            <span className="mt-auto pt-2 flex items-center gap-2">
+              <span className="text-amber-300 font-bold">+{r.points}</span>
+              {(r.streak ?? 0) > 0 && <span className="text-orange-300 text-sm">🔥 {r.streak}</span>}
+              {r.done_today && <span className="text-green-300 text-sm ml-auto">Done</span>}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // Kiosk reward shop — big tap-to-request cards (mirrors legacy kiosk_rewards).
 function KioskShop() {
   const [rewards, setRewards] = useState<MeridianReward[]>([])
@@ -274,7 +320,8 @@ export function KioskDashboard({ authUser, onLogout }: Props) {
             <p className="text-gray-500">Loading…</p>
           )}
         </div>
-        <div className="mt-6">
+        <div className="mt-6 flex flex-col gap-6">
+          <KioskRoutines />
           <KioskShop />
         </div>
       </main>
