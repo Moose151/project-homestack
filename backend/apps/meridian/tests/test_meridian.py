@@ -818,3 +818,66 @@ class ImportCommandTests(TestCase):
         call_command("import_meridian", file=path)
         self.assertEqual(MeridianTask.objects.count(), 1)
         self.assertEqual(MeridianReward.objects.count(), 1)
+
+
+class FullImportCommandTests(TestCase):
+    """The extended importer (Phase 2.18): routines, goals, wishlist, badges, allowances."""
+
+    _EXPORT = {
+        "users": [{"meridian_id": 1, "display_name": "Finn"}],
+        "points_entries": [
+            {"user_meridian_id": 1, "points": 100, "reason": "earned",
+             "transaction_type": "task_approved"},
+        ],
+        "routines": [{"title": "Brush teeth", "points": 2, "assigned_user_meridian_id": 1}],
+        "routine_completions": [
+            {"routine_title": "Brush teeth", "user_meridian_id": 1, "completed_date": "2026-06-01"},
+        ],
+        "group_goals": [{"title": "Family trip", "target_points": 500}],
+        "group_goal_contributions": [
+            {"goal_title": "Family trip", "user_meridian_id": 1, "amount": 20},
+        ],
+        "wishlist_items": [{"user_meridian_id": 1, "name": "Lego", "point_cost": 80}],
+        "wishlist_contributions": [
+            {"item_name": "Lego", "user_meridian_id": 1, "amount": 15},
+        ],
+        "badges": [{"user_meridian_id": 1, "badge_code": "first_task"}],
+        "allowances": [{"user_meridian_id": 1, "amount": 10, "weekday": 0}],
+    }
+
+    def _write_export(self) -> str:
+        import json
+        import tempfile
+        fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+        json.dump(self._EXPORT, fh)
+        fh.close()
+        return fh.name
+
+    def test_full_import_creates_all_entities(self):
+        from django.core.management import call_command
+        from apps.achievements.models import PersonBadge
+        from apps.meridian.models import (
+            MeridianAllowance, MeridianGroupGoal, MeridianRoutine, MeridianWishlistItem,
+        )
+        call_command("import_meridian", file=self._write_export())
+        person = Person.objects.get(display_name="Finn")
+        self.assertEqual(services.get_points_balance(person.id), 100)
+        self.assertEqual(services.get_total_earned(person.id), 100)  # task_approved counts
+        self.assertEqual(MeridianRoutine.objects.count(), 1)
+        self.assertTrue(services.completed_today(
+            MeridianRoutine.objects.first(), person.id, on=__import__("datetime").date(2026, 6, 1)
+        ))
+        self.assertEqual(MeridianGroupGoal.objects.first().total_contributed(), 20)
+        self.assertEqual(MeridianWishlistItem.objects.first().total_saved(), 15)
+        self.assertTrue(PersonBadge.objects.filter(person=person, badge__code="first_task").exists())
+        self.assertEqual(MeridianAllowance.objects.get(person=person).amount, 10)
+
+    def test_full_import_idempotent_entities(self):
+        from django.core.management import call_command
+        from apps.meridian.models import MeridianRoutine, MeridianGroupGoal, MeridianWishlistItem
+        path = self._write_export()
+        call_command("import_meridian", file=path)
+        call_command("import_meridian", file=path)
+        self.assertEqual(MeridianRoutine.objects.count(), 1)
+        self.assertEqual(MeridianGroupGoal.objects.count(), 1)
+        self.assertEqual(MeridianWishlistItem.objects.count(), 1)

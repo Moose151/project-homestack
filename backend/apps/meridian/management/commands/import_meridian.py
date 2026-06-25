@@ -34,13 +34,24 @@ import json
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
+from datetime import date
+
+from apps.achievements.models import Badge, PersonBadge
 from apps.core.models import get_active_household
 from apps.meridian.models import (
+    MeridianAllowance,
     MeridianCategory,
+    MeridianGroupGoal,
+    MeridianGroupGoalContribution,
     MeridianPointsEntry,
     MeridianReward,
     MeridianRewardRequest,
+    MeridianRoutine,
+    MeridianRoutineCompletion,
     MeridianTask,
+    MeridianWishlistContribution,
+    MeridianWishlistItem,
+    MeridianWishlistRequest,
 )
 from apps.people.models import Person
 
@@ -87,7 +98,10 @@ class Command(BaseCommand):
 
     def _import(self, household, data: dict) -> dict:
         stats = {k: 0 for k in (
-            "people", "categories", "tasks", "rewards", "points_entries", "reward_requests"
+            "people", "categories", "tasks", "rewards", "points_entries", "reward_requests",
+            "routines", "routine_completions", "group_goals", "group_goal_contributions",
+            "wishlist_items", "wishlist_contributions", "wishlist_requests",
+            "badges", "allowances",
         )}
 
         # users -> people (by display_name)
@@ -108,6 +122,7 @@ class Command(BaseCommand):
         for c in data.get("categories", []):
             cat, created = MeridianCategory.objects.get_or_create(
                 household=household, name=c["name"],
+                kind=c.get("kind", MeridianCategory.Kind.TASK),
                 defaults={"colour": c.get("colour", ""), "icon": c.get("icon", "")},
             )
             cats_by_mid[c.get("meridian_id")] = cat
@@ -144,7 +159,7 @@ class Command(BaseCommand):
             rewards_by_name[r["name"]] = reward
             stats["rewards"] += int(created)
 
-        # points ledger (import as opening balances/history)
+        # points ledger (import faithfully so balances AND lifetime-earned match)
         for p in data.get("points_entries", []):
             person = people_by_mid.get(p.get("user_meridian_id"))
             if not person:
@@ -152,6 +167,9 @@ class Command(BaseCommand):
             MeridianPointsEntry.objects.create(
                 household=household, person=person,
                 points=p["points"], reason=p.get("reason", "Imported from Meridian"),
+                transaction_type=p.get(
+                    "transaction_type", MeridianPointsEntry.TransactionType.MANUAL_ADJUSTMENT
+                ),
             )
             stats["points_entries"] += 1
 
@@ -167,5 +185,127 @@ class Command(BaseCommand):
                 points_spent=rr.get("points_spent", 0),
             )
             stats["reward_requests"] += 1
+
+        # routines (idempotent by title)
+        routines_by_title: dict = {}
+        for r in data.get("routines", []):
+            routine, created = MeridianRoutine.objects.get_or_create(
+                household=household, title=r["title"],
+                defaults={
+                    "description": r.get("description", ""),
+                    "points": r.get("points", 1),
+                    "assigned_to_person": people_by_mid.get(r.get("assigned_user_meridian_id")),
+                    "is_active": r.get("is_active", True),
+                },
+            )
+            routines_by_title[r["title"]] = routine
+            stats["routines"] += int(created)
+
+        # routine completions (idempotent by routine+person+date)
+        for rc in data.get("routine_completions", []):
+            routine = routines_by_title.get(rc.get("routine_title"))
+            person = people_by_mid.get(rc.get("user_meridian_id"))
+            if not routine or not person or not rc.get("completed_date"):
+                continue
+            _, created = MeridianRoutineCompletion.objects.get_or_create(
+                household=household, routine=routine, person=person,
+                completed_date=date.fromisoformat(rc["completed_date"]),
+                defaults={"voided": rc.get("voided", False)},
+            )
+            stats["routine_completions"] += int(created)
+
+        # group goals (idempotent by title)
+        goals_by_title: dict = {}
+        for g in data.get("group_goals", []):
+            goal, created = MeridianGroupGoal.objects.get_or_create(
+                household=household, title=g["title"],
+                defaults={
+                    "description": g.get("description", ""),
+                    "target_points": g.get("target_points", 0),
+                    "status": g.get("status", MeridianGroupGoal.Status.ACTIVE),
+                },
+            )
+            goals_by_title[g["title"]] = goal
+            stats["group_goals"] += int(created)
+
+        for gc in data.get("group_goal_contributions", []):
+            goal = goals_by_title.get(gc.get("goal_title"))
+            person = people_by_mid.get(gc.get("user_meridian_id"))
+            if not goal or not person:
+                continue
+            MeridianGroupGoalContribution.objects.create(
+                household=household, goal=goal, person=person,
+                amount=gc.get("amount", 0),
+                status=gc.get("status", MeridianGroupGoalContribution.Status.ACTIVE),
+            )
+            stats["group_goal_contributions"] += 1
+
+        # wishlist items (idempotent by person+name)
+        items_by_key: dict = {}
+        for w in data.get("wishlist_items", []):
+            person = people_by_mid.get(w.get("user_meridian_id"))
+            if not person:
+                continue
+            item, created = MeridianWishlistItem.objects.get_or_create(
+                household=household, person=person, name=w["name"],
+                defaults={
+                    "description": w.get("description", ""),
+                    "point_cost": w.get("point_cost", 0),
+                    "status": w.get("status", MeridianWishlistItem.Status.ACTIVE),
+                },
+            )
+            items_by_key[(person.id, w["name"])] = item
+            stats["wishlist_items"] += int(created)
+
+        for wc in data.get("wishlist_contributions", []):
+            person = people_by_mid.get(wc.get("user_meridian_id"))
+            item = items_by_key.get((person.id, wc.get("item_name"))) if person else None
+            if not item:
+                continue
+            MeridianWishlistContribution.objects.create(
+                household=household, item=item, person=person,
+                amount=wc.get("amount", 0),
+                status=wc.get("status", MeridianWishlistContribution.Status.ACTIVE),
+            )
+            stats["wishlist_contributions"] += 1
+
+        for wr in data.get("wishlist_requests", []):
+            person = people_by_mid.get(wr.get("user_meridian_id"))
+            if not person:
+                continue
+            MeridianWishlistRequest.objects.create(
+                household=household, person=person,
+                requested_name=wr.get("requested_name", ""),
+                requested_description=wr.get("requested_description", ""),
+                status=wr.get("status", MeridianWishlistRequest.Status.REQUESTED),
+            )
+            stats["wishlist_requests"] += 1
+
+        # earned badges (idempotent by person+badge)
+        for b in data.get("badges", []):
+            person = people_by_mid.get(b.get("user_meridian_id"))
+            badge = Badge.objects.filter(code=b.get("badge_code")).first()
+            if not person or not badge:
+                continue
+            _, created = PersonBadge.objects.get_or_create(
+                household=household, person=person, badge=badge,
+                defaults={"source": badge.source},
+            )
+            stats["badges"] += int(created)
+
+        # allowances (idempotent — one per person)
+        for a in data.get("allowances", []):
+            person = people_by_mid.get(a.get("user_meridian_id"))
+            if not person:
+                continue
+            _, created = MeridianAllowance.objects.update_or_create(
+                household=household, person=person,
+                defaults={
+                    "amount": a.get("amount", 0),
+                    "weekday": a.get("weekday", 0),
+                    "is_active": a.get("is_active", True),
+                },
+            )
+            stats["allowances"] += int(created)
 
         return stats

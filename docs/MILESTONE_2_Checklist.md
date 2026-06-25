@@ -142,11 +142,13 @@
 - [x] `GET /meridian/reports/`: leaderboard (balance, lifetime earned, badge count) + recent
       activity feed.
 
-## Phase 2.18 — Data import (D14) — full
-- [ ] Extend `import_meridian` to a complete, **dry-runnable, idempotent** import: users →
-      people/users; tasks/completions/rewards/purchases/point-ledger/routines/goals/wishlist/
-      badges → new tables, preserving the ledger so **balances match the live app**.
-- [ ] `scripts/import_meridian.py` runs it from the repo root with a `--dry-run`.
+## Phase 2.18 — Data import (D14) — full ✅ (2026-06-25)
+- [x] Extended `import_meridian` (dry-runnable) to the full set: users→people, categories (kind),
+      tasks, rewards, point-ledger (with `transaction_type` so **balance AND lifetime-earned
+      match**), reward requests, routines + completions, group goals + contributions, wishlist
+      items/contributions/requests, earned badges, allowances. Entities idempotent via natural
+      keys; ledger/contribution history is append-only (run once or after a wipe).
+- [x] `scripts/import_meridian.py` wrapper runs it from the repo root (supports `--dry-run`).
 
 ## Phase 2.19 — Frontend (web + kiosk) for the full set
 - [ ] Web: Tasks · Shop/Rewards · Routines · Goals · Wishlist · Points/Leaderboard · Badges ·
