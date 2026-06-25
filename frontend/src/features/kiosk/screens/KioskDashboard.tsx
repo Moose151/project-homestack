@@ -5,6 +5,8 @@ import type {
   MeridianTask, PointsSummaryRow, MeridianReward, MeridianRoutine,
   MeridianGoal, MeridianWishlistItem, PersonBadge, CalendarEvent,
 } from '../../../api/types'
+import { isImageAvatar } from '../../../components/Avatar'
+import { KioskThemeToggle } from '../components/KioskThemeToggle'
 import { useInactivityTimeout } from '../hooks/useInactivityTimeout'
 
 interface Props {
@@ -12,19 +14,25 @@ interface Props {
   onLogout: () => void
 }
 
+const panelClass = 'rounded-2xl border border-line bg-raised p-6 shadow-soft'
+const itemButtonClass = 'rounded-xl border border-line bg-surface px-4 py-4 text-left shadow-soft transition-colors hover:border-primary hover:bg-primary-soft disabled:opacity-60'
+const headingClass = 'mb-4 text-lg font-bold text-muted-strong'
+const emptyClass = 'text-sm text-muted'
+const pointsClass = 'font-extrabold text-warning'
+
 function TodosWidget({ widget }: { widget: HubWidget }) {
   const items = widget.items as ListItem[]
   return (
-    <div className="bg-gray-800 rounded-2xl p-6 flex-1 min-w-[280px]">
-      <h2 className="text-lg font-semibold text-gray-200 mb-4">{widget.name}</h2>
+    <div className={`${panelClass} flex-1 min-w-[280px]`}>
+      <h2 className={headingClass}>{widget.name}</h2>
       {items.length === 0 ? (
-        <p className="text-gray-500 text-sm">Nothing to do 🎉</p>
+        <p className={emptyClass}>Nothing to do 🎉</p>
       ) : (
         <ul className="space-y-3">
           {items.map((item) => (
             <li key={item.id} className="flex items-start gap-3">
-              <span className="mt-1 w-4 h-4 rounded border border-gray-500 flex-shrink-0" />
-              <span className="text-gray-200">{item.title}</span>
+              <span className="mt-1 w-4 h-4 rounded border border-line-strong flex-shrink-0" />
+              <span>{item.title}</span>
             </li>
           ))}
         </ul>
@@ -40,16 +48,16 @@ function RemindersWidget({ widget }: { widget: HubWidget }) {
     new Date(dt).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
 
   return (
-    <div className="bg-gray-800 rounded-2xl p-6 flex-1 min-w-[280px]">
-      <h2 className="text-lg font-semibold text-gray-200 mb-4">{widget.name}</h2>
+    <div className={`${panelClass} flex-1 min-w-[280px]`}>
+      <h2 className={headingClass}>{widget.name}</h2>
       {items.length === 0 ? (
-        <p className="text-gray-500 text-sm">No upcoming reminders</p>
+        <p className={emptyClass}>No upcoming reminders</p>
       ) : (
         <ul className="space-y-3">
           {items.map((item) => (
             <li key={item.id} className="flex flex-col gap-0.5">
-              <span className="text-gray-200">{item.title}</span>
-              {item.due_at && <span className="text-xs text-gray-500">{fmt(item.due_at)}</span>}
+              <span>{item.title}</span>
+              {item.due_at && <span className="text-xs text-muted">{fmt(item.due_at)}</span>}
             </li>
           ))}
         </ul>
@@ -69,7 +77,7 @@ function Celebration({ label, onDone }: { label: string; onDone: () => void }) {
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/70 animate-[fadeIn_0.2s_ease]">
       <div className="text-7xl animate-bounce">🎉</div>
       <p className="mt-4 text-2xl font-bold text-white">{label}</p>
-      <p className="mt-1 text-amber-300 text-lg">Great job!</p>
+      <p className="mt-1 text-lg text-warning">Great job!</p>
     </div>
   )
 }
@@ -93,11 +101,11 @@ function MeridianTasksWidget({ widget }: { widget: HubWidget }) {
   }
 
   return (
-    <div className="bg-gray-800 rounded-2xl p-6 flex-1 min-w-[280px]">
-      <h2 className="text-lg font-semibold text-gray-200 mb-4">{widget.name}</h2>
+    <div className={`${panelClass} flex-1 min-w-[280px]`}>
+      <h2 className={headingClass}>{widget.name}</h2>
       {celebrate && <Celebration label={celebrate} onDone={() => setCelebrate(null)} />}
       {tasks.length === 0 ? (
-        <p className="text-gray-500 text-sm">All done — nice! 🎉</p>
+        <p className={emptyClass}>All done — nice! 🎉</p>
       ) : (
         <ul className="space-y-3">
           {tasks.map(task => (
@@ -105,17 +113,17 @@ function MeridianTasksWidget({ widget }: { widget: HubWidget }) {
               <button
                 onClick={() => complete(task)}
                 disabled={busy === task.id || task.status === 'pending'}
-                className="w-full flex items-center justify-between gap-3 rounded-xl bg-gray-700 hover:bg-gray-600 disabled:opacity-60 px-4 py-4 text-left transition-colors min-h-[64px]"
+                className={`${itemButtonClass} w-full flex items-center justify-between gap-3 min-h-[64px]`}
               >
-                <span className="flex items-center gap-2 text-gray-100 text-lg">
+                <span className="flex items-center gap-2 text-lg font-semibold">
                   {task.is_hot && <span>🔥</span>}
                   {task.title}
                 </span>
                 <span className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-amber-300 font-bold">★ {task.award_value ?? task.points}</span>
+                  <span className={pointsClass}>★ {task.award_value ?? task.points}</span>
                   {task.status === 'pending'
-                    ? <span className="text-xs text-gray-400">Waiting…</span>
-                    : <span className="text-2xl text-gray-400">○</span>}
+                    ? <span className="text-xs text-muted">Waiting...</span>
+                    : <span className="text-2xl text-muted">○</span>}
                 </span>
               </button>
             </li>
@@ -129,16 +137,16 @@ function MeridianTasksWidget({ widget }: { widget: HubWidget }) {
 function MeridianPointsWidget({ widget }: { widget: HubWidget }) {
   const rows = widget.items as PointsSummaryRow[]
   return (
-    <div className="bg-gray-800 rounded-2xl p-6 flex-1 min-w-[280px]">
-      <h2 className="text-lg font-semibold text-gray-200 mb-4">{widget.name}</h2>
+    <div className={`${panelClass} flex-1 min-w-[280px]`}>
+      <h2 className={headingClass}>{widget.name}</h2>
       {rows.length === 0 ? (
-        <p className="text-gray-500 text-sm">No points yet — complete a task!</p>
+        <p className={emptyClass}>No points yet — complete a task!</p>
       ) : (
         <ul className="space-y-3">
           {rows.map(row => (
             <li key={row.person_id} className="flex items-center justify-between">
-              <span className="text-gray-200">{row.display_name || `Person ${row.person_id}`}</span>
-              <span className="text-2xl font-bold text-amber-300">★ {row.balance}</span>
+              <span>{row.display_name || `Person ${row.person_id}`}</span>
+              <span className="text-2xl font-extrabold text-warning">★ {row.balance}</span>
             </li>
           ))}
         </ul>
@@ -153,13 +161,13 @@ function KioskBadges() {
   useEffect(() => { api.getMyBadges().then(setBadges).catch(() => {}) }, [])
   if (badges.length === 0) return null
   return (
-    <div className="bg-gray-800 rounded-2xl p-6 w-full">
-      <h2 className="text-lg font-semibold text-gray-200 mb-4">My badges</h2>
+    <div className={`${panelClass} w-full`}>
+      <h2 className={headingClass}>My badges</h2>
       <div className="flex flex-wrap gap-4">
         {badges.map(b => (
           <div key={b.id} title={b.badge.description} className="flex flex-col items-center w-20 text-center">
             <span className="text-4xl">{b.badge.icon}</span>
-            <span className="text-xs text-gray-300 mt-1 leading-tight">{b.badge.name}</span>
+            <span className="text-xs text-muted-strong mt-1 leading-tight">{b.badge.name}</span>
           </div>
         ))}
       </div>
@@ -170,8 +178,8 @@ function KioskBadges() {
 // Kiosk goals + wishlist — progress bars with quick-contribute buttons.
 function KioskBar({ pct }: { pct: number }) {
   return (
-    <div className="h-2 rounded-full bg-gray-600 overflow-hidden mt-2">
-      <div className="h-full bg-amber-400" style={{ width: `${Math.min(100, pct)}%` }} />
+    <div className="h-3 rounded-full bg-sunken overflow-hidden mt-2 border border-line">
+      <div className="h-full bg-warning" style={{ width: `${Math.min(100, pct)}%` }} />
     </div>
   )
 }
@@ -203,15 +211,15 @@ function KioskGoalsWishlist() {
   const amounts = [5, 10]
 
   const row = (key: string, title: string, pct: number, saved: number, target: number, contribute: (n: number) => Promise<unknown>) => (
-    <div key={key} className="bg-gray-700 rounded-xl p-4">
-      <p className="text-gray-100 font-medium">{title}</p>
+    <div key={key} className="rounded-xl border border-line bg-surface p-4 shadow-soft">
+      <p className="font-semibold">{title}</p>
       <KioskBar pct={pct} />
-      <p className="text-xs text-gray-400 mt-1">★ {saved} / {target}</p>
+      <p className="text-xs text-muted mt-1">★ {saved} / {target}</p>
       <div className="flex gap-2 mt-2">
         {amounts.map(n => (
           <button key={n} disabled={busy === key || balance < n}
             onClick={() => give(key, () => contribute(n))}
-            className="px-3 py-1 rounded-lg bg-amber-500/80 hover:bg-amber-500 disabled:opacity-40 text-sm font-semibold text-gray-900">
+            className="rounded-lg bg-warning px-3 py-1 text-sm font-bold text-white transition-colors hover:bg-warning/90 disabled:opacity-40">
             +{n}
           </button>
         ))}
@@ -220,8 +228,8 @@ function KioskGoalsWishlist() {
   )
 
   return (
-    <div className="bg-gray-800 rounded-2xl p-6 w-full">
-      <h2 className="text-lg font-semibold text-gray-200 mb-4">Goals &amp; Wishlist · ★ {balance}</h2>
+    <div className={`${panelClass} w-full`}>
+      <h2 className={headingClass}>Goals &amp; Wishlist · ★ {balance}</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {goals.map(g => row(`g${g.id}`, `🎯 ${g.title}`, g.progress_percentage, g.total_contributed, g.target_points,
           n => api.contributeToGoal(g.id, n)))}
@@ -253,23 +261,23 @@ function KioskRoutines() {
   if (routines.length === 0) return null
 
   return (
-    <div className="bg-gray-800 rounded-2xl p-6 w-full">
+    <div className={`${panelClass} w-full`}>
       {celebrate && <Celebration label={celebrate} onDone={() => setCelebrate(null)} />}
-      <h2 className="text-lg font-semibold text-gray-200 mb-4">Routines</h2>
+      <h2 className={headingClass}>Routines</h2>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {routines.map(r => (
           <button
             key={r.id}
             onClick={() => complete(r)}
             disabled={busy === r.id || !!r.done_today}
-            className={`flex flex-col rounded-xl px-4 py-4 text-left transition-colors min-h-[96px] disabled:opacity-60
-              ${r.done_today ? 'bg-green-900/40' : 'bg-gray-700 hover:bg-gray-600'}`}
+            className={`flex min-h-[96px] flex-col rounded-xl border px-4 py-4 text-left shadow-soft transition-colors disabled:opacity-60
+              ${r.done_today ? 'border-success bg-success-soft' : 'border-line bg-surface hover:border-primary hover:bg-primary-soft'}`}
           >
-            <span className="text-gray-100 text-lg font-medium">{r.done_today && '✅ '}{r.title}</span>
+            <span className="text-lg font-semibold">{r.done_today && '✅ '}{r.title}</span>
             <span className="mt-auto pt-2 flex items-center gap-2">
-              <span className="text-amber-300 font-bold">+{r.points}</span>
-              {(r.streak ?? 0) > 0 && <span className="text-orange-300 text-sm">🔥 {r.streak}</span>}
-              {r.done_today && <span className="text-green-300 text-sm ml-auto">Done</span>}
+              <span className={pointsClass}>+{r.points}</span>
+              {(r.streak ?? 0) > 0 && <span className="text-warning text-sm">🔥 {r.streak}</span>}
+              {r.done_today && <span className="text-success text-sm ml-auto">Done</span>}
             </span>
           </button>
         ))}
@@ -306,9 +314,9 @@ function KioskShop() {
   if (rewards.length === 0) return null
 
   return (
-    <div className="bg-gray-800 rounded-2xl p-6 w-full">
+    <div className={`${panelClass} w-full`}>
       {celebrate && <Celebration label={celebrate} onDone={() => setCelebrate(null)} />}
-      <h2 className="text-lg font-semibold text-gray-200 mb-4">Reward shop · ★ {balance}</h2>
+      <h2 className={headingClass}>Reward shop · ★ {balance}</h2>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {rewards.map(r => {
           const cant = balance < r.cost_points || (r.remaining_stock !== null && r.remaining_stock <= 0)
@@ -317,13 +325,13 @@ function KioskShop() {
               key={r.id}
               onClick={() => request(r)}
               disabled={busy === r.id || cant}
-              className="flex flex-col rounded-xl bg-gray-700 hover:bg-gray-600 disabled:opacity-50 overflow-hidden text-left transition-colors"
+              className="flex flex-col overflow-hidden rounded-xl border border-line bg-surface text-left shadow-soft transition-colors hover:border-primary hover:bg-primary-soft disabled:opacity-50"
             >
               {r.image_url && <img src={r.image_url} alt="" className="h-24 w-full object-cover" />}
               <div className="p-3">
-                <p className="text-gray-100 font-medium leading-tight">{r.name}</p>
-                <p className="text-amber-300 font-bold mt-1">★ {r.cost_points}</p>
-                {cant && <p className="text-xs text-gray-400 mt-1">{balance < r.cost_points ? 'Not enough' : 'Out of stock'}</p>}
+                <p className="font-semibold leading-tight">{r.name}</p>
+                <p className="font-extrabold text-warning mt-1">★ {r.cost_points}</p>
+                {cant && <p className="text-xs text-muted mt-1">{balance < r.cost_points ? 'Not enough' : 'Out of stock'}</p>}
               </div>
             </button>
           )
@@ -340,12 +348,12 @@ function ClockWidget({ widget }: { widget: HubWidget }) {
     return () => clearInterval(id)
   }, [])
   return (
-    <div className="bg-gray-800 rounded-2xl p-6 flex-1 min-w-[280px] text-center">
-      <h2 className="text-lg font-semibold text-gray-200 mb-2">{widget.name}</h2>
-      <p className="text-5xl font-thin tabular-nums text-white">
+    <div className={`${panelClass} flex-1 min-w-[280px] text-center`}>
+      <h2 className="text-lg font-bold text-muted-strong mb-2">{widget.name}</h2>
+      <p className="text-5xl font-thin tabular-nums text-ink">
         {now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
       </p>
-      <p className="text-gray-400 mt-2">
+      <p className="text-muted mt-2">
         {now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
       </p>
     </div>
@@ -361,16 +369,16 @@ function UpcomingWidget({ widget }: { widget: HubWidget }) {
       : d.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
   }
   return (
-    <div className="bg-gray-800 rounded-2xl p-6 flex-1 min-w-[280px]">
-      <h2 className="text-lg font-semibold text-gray-200 mb-4">{widget.name}</h2>
+    <div className={`${panelClass} flex-1 min-w-[280px]`}>
+      <h2 className={headingClass}>{widget.name}</h2>
       {items.length === 0 ? (
-        <p className="text-gray-500 text-sm">Nothing upcoming</p>
+        <p className={emptyClass}>Nothing upcoming</p>
       ) : (
         <ul className="space-y-3">
           {items.map((e) => (
             <li key={e.id} className="flex flex-col gap-0.5">
-              <span className="text-gray-200">{e.title}</span>
-              <span className="text-xs text-gray-500">{fmt(e.start_at, e.is_all_day)}</span>
+              <span>{e.title}</span>
+              <span className="text-xs text-muted">{fmt(e.start_at, e.is_all_day)}</span>
             </li>
           ))}
         </ul>
@@ -410,6 +418,7 @@ export function KioskDashboard({ authUser, onLogout }: Props) {
 
   const pad = (n: number) => String(n).padStart(2, '0')
   const timeStr = `${pad(time.getHours())}:${pad(time.getMinutes())}`
+  const avatarIsImage = !!authUser.avatar && isImageAvatar(authUser.avatar)
 
   const handleLogout = async () => {
     try { await api.logout() } catch { /* ignore */ }
@@ -417,41 +426,44 @@ export function KioskDashboard({ authUser, onLogout }: Props) {
   }
 
   return (
-    <div className="flex flex-col w-full h-full bg-gray-900 text-white">
+    <div className="flex h-full w-full flex-col bg-paper text-ink">
       {/* Header */}
-      <header className="flex items-center justify-between px-8 py-5 border-b border-gray-800">
+      <header className="flex items-center justify-between gap-4 border-b border-line bg-raised px-8 py-4 shadow-soft">
         <div className="flex items-center gap-3">
-          {authUser.avatar ? (
+          {avatarIsImage ? (
             <img src={authUser.avatar} alt="" className="w-10 h-10 rounded-full object-cover" />
           ) : (
             <div
-              className="w-10 h-10 rounded-full flex items-center justify-center font-semibold text-sm"
+              className="flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold text-white shadow-soft"
               style={{ backgroundColor: authUser.colour || '#4B5563' }}
             >
-              {authUser.display_name.slice(0, 2).toUpperCase()}
+              {authUser.avatar || authUser.display_name.slice(0, 2).toUpperCase()}
             </div>
           )}
-          <span className="text-lg font-medium">{authUser.display_name}</span>
+          <span className="text-lg font-bold">{authUser.display_name}</span>
         </div>
-        <span className="text-3xl font-thin tabular-nums text-gray-300">{timeStr}</span>
-        <button
-          onClick={handleLogout}
-          className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm text-gray-300 transition-colors"
-        >
-          Sign out
-        </button>
+        <span className="text-3xl font-thin tabular-nums text-muted-strong">{timeStr}</span>
+        <div className="flex items-center gap-3">
+          <KioskThemeToggle />
+          <button
+            onClick={handleLogout}
+            className="min-h-11 rounded-lg border border-line bg-primary-soft px-4 py-2 text-sm font-bold text-primary transition-colors hover:bg-primary hover:text-white"
+          >
+            Switch user
+          </button>
+        </div>
       </header>
 
       {/* Widgets */}
       <main className="flex-1 overflow-auto p-8">
-        {loadError && <p className="text-red-400 mb-4">{loadError}</p>}
+        {loadError && <p className="mb-4 rounded-xl border border-danger bg-danger-soft px-4 py-3 text-danger">{loadError}</p>}
         <div className="flex flex-wrap gap-6">
           {widgets.map((w) => {
             const Component = WIDGET_COMPONENTS[w.key]
             return Component ? <Component key={w.key} widget={w} /> : null
           })}
           {widgets.length === 0 && !loadError && (
-            <p className="text-gray-500">Loading…</p>
+            <p className="text-muted">Loading...</p>
           )}
         </div>
         <div className="mt-6 flex flex-col gap-6">

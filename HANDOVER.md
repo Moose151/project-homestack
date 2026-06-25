@@ -96,7 +96,7 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: Milestones 1 & 2 DONE; Milestone 2.5 (Core surfaces) ~90% done — only kiosk restyle (D.6) left.**
+**Phase: Milestones 1 & 2 DONE; Milestone 2.5 (Core surfaces) code complete — cross-cutting smoke/deploy checks remain.**
 
 > **Deploy gotcha (read this):** the home server runs **Docker** (not Podman). After every
 > `git pull` + rebuild, run **`docker exec homestack-backend python manage.py migrate`** — the
@@ -128,9 +128,10 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
     per-person colour + legend, nav; every-page `CalendarPeek` + quick-add; prefs (view/week-start/
     12-24h in localStorage); event create/edit/delete modal; `calendar_upcoming` Hub widget.
     *(RRULE expansion deferred D8; household-default prefs + node→day deep-links deferred.)*
-  - **(D) UX fixes — D.1–D.5 DONE** (kiosk enter/exit, admin-only price, keyboard PIN, login
-    tiles, emoji avatars). **D.6 REMAINING:** restyle kiosk to the original Meridian look + kiosk
-    light/dark toggle — **needs the legacy reference at `~/Documents/new/project-meridian`.**
+  - **(D) UX fixes — DONE** (kiosk enter/exit, admin-only price, keyboard PIN, login tiles, emoji
+    avatars, kiosk restyle + light/dark toggle). D.6 used the legacy reference at
+    `/home/moose/Documents/project-meridian`; the handover's older
+    `~/Documents/new/project-meridian` path did not exist.
 - [ ] Milestone 3: Home Wiki, Pets, Education. (After M2.5 D.6. **New rule from A.3: each node must
   ship its Hub widget(s) as part of "done"** — add to each node's completion criteria.)
 - [ ] Milestone 4: security maturation.
@@ -139,15 +140,14 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 6. Active task — Milestone 2.5 (finish), then Milestone 3
 
-**Tracking doc:** `MILESTONE_2.5_Checklist.md` (canonical, tick boxes as you go). A/B/C complete;
-only **Phase 2.5D.6** remains.
+**Tracking doc:** `MILESTONE_2.5_Checklist.md` (canonical, tick boxes as you go). A/B/C/D are code
+complete. Cross-cutting verification remains: permission smoke checks across Hub/Atlas/Calendar,
+`tsc` + production build, backend suite, and home-server run-through.
 
-**Immediate next concrete step — Phase 2.5D.6 (kiosk look & feel):**
-1. Read the legacy kiosk reference at `~/Documents/new/project-meridian` (templates/CSS) — **ask
-   the owner to confirm the path exists** before starting.
-2. Restyle the kiosk (`frontend/src/features/kiosk/`) to match it; today it uses hardcoded
-   `bg-gray-*` — move onto the shared design tokens so it can theme.
-3. Add a light/dark toggle to the kiosk.
+**Immediate next concrete step — Phase 2.5X (verify & wire together):**
+1. Smoke-test Atlas reminders in Hub + Calendar with no double-write.
+2. Smoke-test Meridian Hub widgets and Calendar deadlines under admin/adult/child roles.
+3. Run the full backend suite, then deploy/run on the home server.
 
 **After D.6 → Milestone 3** (Home Wiki, Pets, Education), each node end-to-end
 (models → API → permissions → FTS → calendar via the helper → **Hub widget** → kiosk → tests).
@@ -225,6 +225,8 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-06-25 | Assistant | M2.5 | **Workstream B (Atlas) complete.** **B.1 FTS:** `atlas/selectors._search` uses Postgres `SearchVector`/`SearchQuery` in prod, `icontains` fallback on SQLite (tests); applied to notes/lists/items/reminders. **Fixed a visibility leak** in `search_atlas` (lists/reminders now permission-filtered; item hits restricted to visible lists). New `GET /atlas/search/?q=`. **B.2 fields:** `AtlasListItem` gained `due_at` + `quantity` (migration `0002`) + `atlas_list_id` in serializer; services allow-list updated. **B.3 UX:** web Atlas error banner, item due-date badges + quantity prefix, debounced Atlas-wide search box. Kiosk Atlas ticking intentionally **not** added — children can't complete items (resolver blocks child non-view actions, D10). +6 atlas tests (47). **362 backend tests green; tsc + build clean.** Committed + pushed. | **Remaining M2.5:** D.6 (kiosk restyle to original Meridian — needs `~/Documents/new/project-meridian` + kiosk light/dark), A.4 Calendar "upcoming" widget, and **Workstream C — Calendar core** (the big one: month/week/day/agenda, every-page access, configurable). Tags/categories + templates for Atlas remain parked. |
 
 | 2026-06-25 | Assistant | M2.5 | **Workstream C (Calendar core) complete.** **C.1:** `GET /calendar/events/` now takes `start`/`end` window + `node`/`person` filters (permission-filtered, D10); serializer exposes `source_node` key; synced events stay read-only (D7). **C.2:** new `CalendarPage` — month grid / week / day / agenda views, prev-today-next nav, per-person colour coding + legend, today marker. **C.3:** `CalendarPeek` popover in the shell header on every page (next events + quick-add + open-calendar). **C.4:** saved default view + start-of-week + 12/24h (localStorage); source/person filters. **C.5:** event create/edit/delete modal; synced events read-only with "edit in node" note; RRULE expansion deferred (D8). **C.6 / A.4 leftover:** `calendar_upcoming` Hub widget (migration `0005`, web + kiosk). Fixed a latent frontend bug (type used `all_day`/`source_node` vs API `is_all_day`). +4 scheduling tests. **365 backend tests green; tsc + build clean.** Committed + pushed. | **M2.5 nearly done.** Remaining: **D.6** kiosk restyle to original Meridian (needs `~/Documents/new/project-meridian` ref + kiosk light/dark). Optional follow-ups: calendar household-default prefs, RRULE expansion, deep-links from node items, Atlas tags/categories. |
+
+| 2026-06-25 | Assistant | M2.5 | **D.6 kiosk look & feel complete.** The expected legacy path `~/Documents/new/project-meridian` was missing, so used `/home/moose/Documents/project-meridian` (`app/static/css/homestack.css`, kiosk templates) as the reference. Restyled React kiosk screens (`AmbientScreen`, `AvatarSelect`, `PINEntry`, `KioskDashboard`) from hardcoded gray/dark styling to shared HomeStack tokens: warm paper background, raised cards, primary/warning/success accents, larger child-friendly cards/buttons. Added kiosk light/dark toggle via `KioskThemeToggle` using shared `hs-dark` preference. Fixed dashboard header emoji avatars by distinguishing emoji from image URLs. `npm run build` clean; `DJANGO_SETTINGS_MODULE=config.settings.test python manage.py test` green (365 tests). | Start **2.5X verification**: role/permission smoke checks across Hub/Atlas/Calendar, then home-server run-through/deploy. |
 
 ### Session notes (free-form, optional)
 

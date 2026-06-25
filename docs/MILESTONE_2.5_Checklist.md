@@ -173,10 +173,12 @@ A batch of usability fixes raised by the owner. Small but high-touch; do alongsi
       screens. **352 backend tests green; `tsc` + build clean.**
 
 ## Phase 2.5D.6 — Kiosk look & feel + light/dark toggle
-- [ ] Restyle the kiosk to match the **original Meridian kiosk** (needs the legacy reference:
-      `~/Documents/new/project-meridian`). Currently hardcoded `bg-gray-*`; move onto the shared
-      design tokens so it can theme.
-- [ ] Light/dark mode toggle on the kiosk.
+- [x] Restyled the kiosk toward the **original Meridian kiosk** using the legacy reference found at
+      `/home/moose/Documents/project-meridian` (the handover path `~/Documents/new/project-meridian`
+      did not exist): warm HomeStack surfaces, raised cards, primary/warning/success accents, and no
+      hardcoded `bg-gray-*`/`text-gray-*` kiosk styling.
+- [x] Light/dark mode toggle on the kiosk (ambient, avatar select, PIN, dashboard) using the shared
+      `hs-dark` preference and semantic design tokens.
 
 ---
 
