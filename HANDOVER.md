@@ -96,7 +96,12 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: Milestone 1 functionally complete; Milestone 2 in progress (foundation only).**
+**Phase: Milestones 1 & 2 DONE; Milestone 2.5 (Core surfaces) ~90% done — only kiosk restyle (D.6) left.**
+
+> **Deploy gotcha (read this):** the home server runs **Docker** (not Podman). After every
+> `git pull` + rebuild, run **`docker exec homestack-backend python manage.py migrate`** — the
+> running Postgres schema is separate from the image. Forgetting it causes `column ... does not
+> exist` 500s (this bit us on the Hub page after `atlas.0002` added `quantity`/`due_at`).
 
 - [x] Documentation consolidated to one canonical set (docs 00–22 + Milestone 1/2 checklists).
 - [x] All architectural decisions made (D1–D20).
@@ -110,30 +115,48 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
   importer. *Carried forward (non-blocking): `MeridianTaskCompletion`/2.9b (shared & recurring
   tasks + photo evidence), reward image carousel, reward→category link, `kiosk_pin_skip`, live
   kiosk badge celebration.* Run the importer to retire the standalone app.
-- [ ] **Milestone 2.5: Core surfaces — Hub, Atlas, Calendar. ← next.** (Owner request, 2026-06-25,
-  inserted before M3.) Three workstreams: **(A) Hub** — widget config (household + per-user) UI +
-  endpoints, and the "every node ships its Hub widget" pattern, starting by building the
-  **Meridian Hub widget**; **(B) Atlas** — UX/functionality gap pass + Postgres FTS (D9);
-  **(C) Calendar** — build the real core (month/week/day/agenda views, every-page access,
-  configurable, nice to look at). Specs: `23_Core_Hub.md`, `11_Node_Atlas.md`, `24_Core_Calendar.md`.
-- [ ] Milestone 3: Home Wiki, Pets, Education.
+- [~] **Milestone 2.5: Core surfaces — Hub, Atlas, Calendar. ← active (almost done).** Full detail
+  in `MILESTONE_2.5_Checklist.md` + the Progress Log below. Status by workstream:
+  - **(A) Hub — DONE.** Web renders Meridian widgets; widget-config API (`/hub/widgets/…`,
+    `hub.edit` perm) + "Customise" UI (household enable/order/size, per-user hide/reorder);
+    "every node ships its widget" pattern; ambient **clock** widget; size-aware grid.
+  - **(B) Atlas — DONE.** Postgres FTS w/ SQLite fallback (`_search`) + fixed a search visibility
+    leak; unified `/atlas/search/`; item `due_at`+`quantity`; web error banner, due badges,
+    quantity, search box. *(Tags/categories + templates parked; kiosk ticking blocked for kids by
+    D10, by design.)*
+  - **(C) Calendar — DONE.** Query API window + node/person filters; month/week/day/agenda views,
+    per-person colour + legend, nav; every-page `CalendarPeek` + quick-add; prefs (view/week-start/
+    12-24h in localStorage); event create/edit/delete modal; `calendar_upcoming` Hub widget.
+    *(RRULE expansion deferred D8; household-default prefs + node→day deep-links deferred.)*
+  - **(D) UX fixes — D.1–D.5 DONE** (kiosk enter/exit, admin-only price, keyboard PIN, login
+    tiles, emoji avatars). **D.6 REMAINING:** restyle kiosk to the original Meridian look + kiosk
+    light/dark toggle — **needs the legacy reference at `~/Documents/new/project-meridian`.**
+- [ ] Milestone 3: Home Wiki, Pets, Education. (After M2.5 D.6. **New rule from A.3: each node must
+  ship its Hub widget(s) as part of "done"** — add to each node's completion criteria.)
 - [ ] Milestone 4: security maturation.
 - [ ] Milestone 5: native Solace.
 - [ ] Milestone 6: Inventory, Assets, Hearth, Travel, Projects, Health.
 
-## 6. Active task — Milestone 1
+## 6. Active task — Milestone 2.5 (finish), then Milestone 3
 
-Build the vertical slice in `MILESTONE_1_Checklist.md`, in order:
-Docker scaffold → Django + settings → Household + base model → Accounts/auth → People →
-**Permissions (tests first)** → Settings/audit → Scheduling + helper → Atlas → Hub → Kiosk shell
-→ Backups + restore → Frontend slice.
+**Tracking doc:** `MILESTONE_2.5_Checklist.md` (canonical, tick boxes as you go). A/B/C complete;
+only **Phase 2.5D.6** remains.
 
-**Definition of done:** family logs in (web + kiosk), uses Atlas lists/reminders, sees them on
-Hub and Calendar, permissions enforced and tested, backup **and restore** work, runs in Docker,
-used daily.
+**Immediate next concrete step — Phase 2.5D.6 (kiosk look & feel):**
+1. Read the legacy kiosk reference at `~/Documents/new/project-meridian` (templates/CSS) — **ask
+   the owner to confirm the path exists** before starting.
+2. Restyle the kiosk (`frontend/src/features/kiosk/`) to match it; today it uses hardcoded
+   `bg-gray-*` — move onto the shared design tokens so it can theme.
+3. Add a light/dark toggle to the kiosk.
 
-**Suggested next concrete step if nothing exists yet:** Phase 1.0 — scaffold the repo and a
-3-service `docker-compose.yml` (backend, frontend, postgres), confirm it boots.
+**After D.6 → Milestone 3** (Home Wiki, Pets, Education), each node end-to-end
+(models → API → permissions → FTS → calendar via the helper → **Hub widget** → kiosk → tests).
+
+**Working rhythm (proven this milestone):** small workstream → backend (models/migration/services/
+selectors/serializers/views/urls) → tests → frontend (types/client → UI) → `tsc` + `npm run build`
++ `python manage.py test` (SQLite) → tick checklist → Progress Log row → commit + push to `main`.
+Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only features (see Atlas
+`_search`).
 
 ## 7. Guardrails — common ways to get this wrong
 
@@ -144,6 +167,10 @@ used daily.
 - Don't add a second auth system for Meridian/Solace — they use shared Users/People.
 - Don't hardcode anything specific to this household.
 - Don't skip permission tests — they come first.
+- **Don't forget `migrate` after a deploy** — `docker exec homestack-backend python manage.py
+  migrate` after every pull+rebuild, or you get `column ... does not exist` 500s.
+- Don't use Postgres-only ORM features without a SQLite fallback — tests run on SQLite (e.g. Atlas
+  `_search` branches on `connection.vendor`).
 
 ## 8. Open questions / decisions still pending
 
