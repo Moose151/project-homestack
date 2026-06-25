@@ -19,18 +19,28 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False) -> list[dict]:
     from apps.atlas.selectors import list_items_for_list, list_reminders, list_atlas_lists
     from apps.atlas.serializers import AtlasListItemSerializer, AtlasReminderSerializer
 
-    qs = HouseholdHubWidget.objects.filter(is_enabled=True).select_related("widget")
+    qs = HouseholdHubWidget.objects.filter(
+        household=user.household, is_enabled=True
+    ).select_related("widget")
     if kiosk_mode:
         qs = qs.filter(widget__supports_kiosk=True)
 
-    # Check user-level overrides (disable only — no enable above household default)
-    hidden_keys: set[str] = set()
+    # Per-user overrides: hide widgets, and reorder (user order wins over household order).
     from apps.hub.models import UserHubWidget
-    for uw in UserHubWidget.objects.filter(user=user, is_enabled=False).select_related("widget"):
-        hidden_keys.add(uw.widget.key)
+    hidden_keys: set[str] = set()
+    user_order: dict[str, int] = {}
+    for uw in UserHubWidget.objects.filter(user=user).select_related("widget"):
+        if not uw.is_enabled:
+            hidden_keys.add(uw.widget.key)
+        else:
+            user_order[uw.widget.key] = uw.display_order
+
+    ordered = sorted(
+        qs, key=lambda hw: (user_order.get(hw.widget.key, hw.display_order), hw.widget.key)
+    )
 
     widgets = []
-    for hw in qs.order_by("display_order"):
+    for hw in ordered:
         key = hw.widget.key
         if key in hidden_keys:
             continue
@@ -105,3 +115,48 @@ def _meridian_widget_content(key: str, user) -> list:
         ).data
 
     return []
+
+
+class HubError(Exception):
+    """Domain error for hub configuration (e.g. unknown widget key)."""
+
+
+def _get_widget(key: str):
+    from apps.hub.models import HubWidget
+    widget = HubWidget.objects.filter(key=key).first()
+    if widget is None:
+        raise HubError("Unknown widget.")
+    return widget
+
+
+def set_household_widget(user, key: str, *, is_enabled=None, display_order=None, size=None):
+    """Configure a widget for the whole household (admin/manager). Upserts the row."""
+    from apps.hub.models import HouseholdHubWidget
+    widget = _get_widget(key)
+    config, _ = HouseholdHubWidget.objects.get_or_create(
+        household=user.household, widget=widget,
+        defaults={"display_order": widget.display_order},
+    )
+    if is_enabled is not None:
+        config.is_enabled = is_enabled
+    if display_order is not None:
+        config.display_order = display_order
+    if size is not None:
+        if size not in {"small", "medium", "large"}:
+            raise HubError("Invalid size.")
+        config.size = size
+    config.save()
+    return config
+
+
+def set_user_widget(user, key: str, *, is_enabled=None, display_order=None):
+    """Per-user override — hide/show or reorder a widget on this user's own Hub. Upserts."""
+    from apps.hub.models import UserHubWidget
+    widget = _get_widget(key)
+    config, _ = UserHubWidget.objects.get_or_create(user=user, widget=widget)
+    if is_enabled is not None:
+        config.is_enabled = is_enabled
+    if display_order is not None:
+        config.display_order = display_order
+    config.save()
+    return config

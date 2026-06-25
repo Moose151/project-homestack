@@ -152,3 +152,60 @@ class KioskUsersTests(TestCase):
         entries = {p["display_name"]: p for p in resp.json()}
         self.assertIn("Admin Person", entries)
         self.assertEqual(entries["Admin Person"]["username"], "admin")
+
+
+class HubWidgetConfigTests(TestCase):
+    """M2.5 A.1 — widget configuration endpoints."""
+
+    def setUp(self):
+        self.admin = _make_user("admin", role=User.Role.ADMIN)
+        self.user = _make_user("parentuser", role=User.Role.USER)
+
+    def _config(self):
+        return {w["key"]: w for w in self.client.get(reverse("hub-widget-config")).json()["widgets"]}
+
+    def test_config_lists_catalogue_with_state(self):
+        _login(self.client, "admin")
+        cfg = self._config()
+        self.assertIn("atlas_todos", cfg)
+        self.assertIn("household_enabled", cfg["atlas_todos"])
+        self.assertIn("user_hidden", cfg["atlas_todos"])
+
+    def test_admin_can_configure_household_widget(self):
+        _login(self.client, "admin")
+        resp = self.client.patch(
+            reverse("hub-widget-household", args=["atlas_todos"]),
+            {"size": "large", "is_enabled": True},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self._config()["atlas_todos"]["size"], "large")
+
+    def test_non_admin_cannot_configure_household_widget(self):
+        _login(self.client, "parentuser")
+        resp = self.client.patch(
+            reverse("hub-widget-household", args=["atlas_todos"]),
+            {"size": "large"},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_user_can_hide_own_widget(self):
+        _login(self.client, "parentuser")
+        resp = self.client.patch(
+            reverse("hub-widget-user", args=["atlas_todos"]),
+            {"is_enabled": False},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        keys = [w["key"] for w in self.client.get(reverse("hub")).json()["widgets"]]
+        self.assertNotIn("atlas_todos", keys)
+
+    def test_unknown_widget_key_rejected(self):
+        _login(self.client, "admin")
+        resp = self.client.patch(
+            reverse("hub-widget-household", args=["nope_widget"]),
+            {"size": "small"},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)

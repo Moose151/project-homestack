@@ -1,6 +1,6 @@
 import type {
   AtlasList, AtlasListItem, AtlasNote, AtlasReminder,
-  AuthUser, CalendarEvent, HubResponse, KioskUser,
+  AuthUser, CalendarEvent, HubResponse, HubWidgetConfig, KioskUser,
   KioskMeridian, MeridianPointsResponse, MeridianReward,
   MeridianRewardRequest, MeridianTask,
   MeridianCategory, MeridianRoutine, MeridianGoal,
@@ -73,6 +73,13 @@ export const api = {
   // --- Hub ---
   hub: (): Promise<HubResponse> => _fetch('/hub/'),
   kioskHub: (): Promise<HubResponse> => _fetch('/hub/kiosk/'),
+  getHubWidgetConfig: (): Promise<{ widgets: HubWidgetConfig[] }> => _fetch('/hub/widgets/'),
+  setHouseholdWidget: (key: string, data: Partial<{ is_enabled: boolean; display_order: number; size: string }>):
+    Promise<{ widgets: HubWidgetConfig[] }> =>
+    _fetch(`/hub/widgets/${key}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  setUserWidget: (key: string, data: Partial<{ is_enabled: boolean; display_order: number }>):
+    Promise<{ widgets: HubWidgetConfig[] }> =>
+    _fetch(`/hub/widgets/${key}/me/`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   // --- Atlas lists ---
   getLists: (): Promise<AtlasList[]> => _fetch('/atlas/lists/'),

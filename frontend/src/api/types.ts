@@ -336,3 +336,16 @@ export interface HubWidget {
 export interface HubResponse {
   widgets: HubWidget[]
 }
+
+export interface HubWidgetConfig {
+  key: string
+  name: string
+  description: string
+  source_node: string | null
+  supports_kiosk: boolean
+  household_enabled: boolean
+  household_order: number
+  size: 'small' | 'medium' | 'large'
+  user_hidden: boolean
+  user_order: number | null
+}

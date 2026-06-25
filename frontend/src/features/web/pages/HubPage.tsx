@@ -10,6 +10,14 @@ import type {
   MeridianRewardRequest,
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
+import { HubConfig } from './HubConfig'
+import { useAuth } from '../../auth/AuthContext'
+
+const SIZE_SPAN: Record<string, string> = {
+  small: 'sm:col-span-1',
+  medium: 'sm:col-span-2',
+  large: 'sm:col-span-2',
+}
 
 function formatDue(iso: string | null) {
   if (!iso) return null
@@ -129,8 +137,28 @@ function RewardRequestsWidget({ items }: { items: MeridianRewardRequest[] }) {
   )
 }
 
+function ClockWidget() {
+  const [now, setNow] = useState(new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  return (
+    <div className="text-center py-2">
+      <p className="text-4xl font-thin tabular-nums text-ink">
+        {now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+      </p>
+      <p className="text-sm text-muted mt-1">
+        {now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+      </p>
+    </div>
+  )
+}
+
 function renderWidget(w: HubWidget) {
   switch (w.key) {
+    case 'clock':
+      return <ClockWidget />
     case 'atlas_todos':
       return <TodoWidget items={w.items as AtlasListItem[]} />
     case 'atlas_reminders':
@@ -149,14 +177,13 @@ function renderWidget(w: HubWidget) {
 }
 
 export function HubPage() {
+  const { user } = useAuth()
   const [data, setData] = useState<HubResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [configuring, setConfiguring] = useState(false)
 
-  useEffect(() => {
-    api.hub()
-      .then(setData)
-      .catch(e => setError(e.message))
-  }, [])
+  const loadHub = () => api.hub().then(setData).catch(e => setError(e.message))
+  useEffect(() => { loadHub() }, [])
 
   const now = new Date()
   const greeting =
@@ -166,29 +193,45 @@ export function HubPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-ink">{greeting}</h1>
-        <p className="text-muted text-sm mt-0.5">
-          {now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-ink">{greeting}</h1>
+          <p className="text-muted text-sm mt-0.5">
+            {now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+          </p>
+        </div>
+        <button
+          onClick={() => setConfiguring(c => !c)}
+          className="text-sm text-muted hover:text-ink transition-colors px-3 py-1.5 rounded-xl hover:bg-sunken whitespace-nowrap"
+        >
+          {configuring ? 'Done' : '⚙ Customise'}
+        </button>
       </div>
 
+      {configuring && (
+        <HubConfig isAdmin={user?.role === 'admin'} onChanged={loadHub} />
+      )}
+
       {!data ? (
-        <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[1, 2].map(i => (
-            <div key={i} className="h-32 rounded-2xl bg-sunken animate-pulse" />
+            <div key={i} className="h-32 rounded-2xl bg-sunken animate-pulse sm:col-span-2" />
           ))}
         </div>
       ) : data.widgets.length === 0 ? (
         <Card>
-          <p className="text-muted text-sm text-center py-4">No widgets configured yet.</p>
+          <p className="text-muted text-sm text-center py-4">
+            No widgets on your Hub yet. Use <span className="font-medium text-ink">Customise</span> to add some.
+          </p>
         </Card>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {data.widgets.map(w => (
-            <Card key={w.key} title={w.name}>
-              {renderWidget(w)}
-            </Card>
+            <div key={w.key} className={SIZE_SPAN[w.size] ?? 'sm:col-span-2'}>
+              <Card title={w.name}>
+                {renderWidget(w)}
+              </Card>
+            </div>
           ))}
         </div>
       )}

@@ -333,7 +333,27 @@ function KioskShop() {
   )
 }
 
+function ClockWidget({ widget }: { widget: HubWidget }) {
+  const [now, setNow] = useState(new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  return (
+    <div className="bg-gray-800 rounded-2xl p-6 flex-1 min-w-[280px] text-center">
+      <h2 className="text-lg font-semibold text-gray-200 mb-2">{widget.name}</h2>
+      <p className="text-5xl font-thin tabular-nums text-white">
+        {now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+      </p>
+      <p className="text-gray-400 mt-2">
+        {now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+      </p>
+    </div>
+  )
+}
+
 const WIDGET_COMPONENTS: Record<string, React.ComponentType<{ widget: HubWidget }>> = {
+  clock: ClockWidget,
   atlas_todos: TodosWidget,
   atlas_reminders: RemindersWidget,
   meridian_my_tasks: MeridianTasksWidget,

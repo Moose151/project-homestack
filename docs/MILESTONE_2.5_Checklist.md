@@ -25,18 +25,22 @@
 
 ## Workstream A — Hub: functionality & usability
 
-## Phase 2.5A.1 — Widget config API
-- [ ] `GET /api/v1/hub/widgets/` — catalogue + this household's enable/order/size state.
-- [ ] Household config endpoint (admin/manager): enable/disable a widget, set `display_order`,
-      set `size` (writes `HouseholdHubWidget`).
-- [ ] Per-user override endpoint: hide/show + reorder for the current user (writes `UserHubWidget`).
-- [ ] Resolution already layers catalogue → household → user → kiosk filter; add tests for the
-      config write paths + permission gating (config = `hub.edit`; per-user = self only).
+## Phase 2.5A.1 — Widget config API ✅ (2026-06-25)
+- [x] `GET /api/v1/hub/widgets/` — catalogue + household enable/order/size + per-user state
+      (`hub/selectors.list_widget_config` + `HubWidgetConfigSerializer`).
+- [x] `PATCH /hub/widgets/<key>/` — household config (enable/disable, `display_order`, `size`);
+      gated `hub.edit` (new perms migration `0013`; admin/manager).
+- [x] `PATCH /hub/widgets/<key>/me/` — per-user hide/show + reorder (`permission_action = "view"`,
+      applies to self only).
+- [x] `get_hub_widgets` now scopes to `user.household` and applies per-user **reorder** (user order
+      wins) + hide. Tests: config list, admin-configures, non-admin 403, user-hides-own, bad key 400
+      (**20 hub tests green**).
 
-## Phase 2.5A.2 — Hub configuration UI (web)
-- [ ] Settings surface to enable/disable, reorder (drag or up/down), and resize widgets.
-- [ ] Per-user "my Hub" hide/reorder, distinct from household defaults.
-- [ ] Permission- and kiosk-aware (children/guests never see config for widgets they can't view).
+## Phase 2.5A.2 — Hub configuration UI (web) ✅ (2026-06-25)
+- [x] `HubConfig` panel toggled from the Hub header ("⚙ Customise"). "Your Hub" section: show/hide
+      + up/down reorder (per-user). "Household defaults" section (admin only): enable/disable + size.
+- [x] Permission-aware (household controls only render for admins); each change re-fetches and
+      refreshes the live Hub. *(Drag-and-drop deferred; up/down reorder shipped.)*
 
 ## Phase 2.5A.3 — Per-node Hub-widget pattern + Meridian widget
 - [ ] **Establish the rule:** a node is not "done" until it ships its Hub widget(s) — a seeded
@@ -53,11 +57,13 @@
       widget-provider registry is the natural refactor once a third node contributes — deferred,
       consistent with the existing code comment.
 
-## Phase 2.5A.4 — Usability polish
-- [ ] Calm, glanceable defaults; clear empty-states; size-aware responsive grid; dark-mode.
+## Phase 2.5A.4 — Usability polish 🟡 (2026-06-25 — Calendar widget pending C)
+- [x] Size-aware responsive grid (small = 1 col, medium/large = full width on `sm+`); clearer
+      empty-state pointing at Customise; dark-mode aware (shared tokens).
+- [x] Ambient **clock** widget (`source_node = null`, kiosk-safe, seeded enabled via hub migration
+      `0004`) — rendered client-side on web (`ClockWidget`) and kiosk (registry). Demonstrates the
+      ambient/non-node widget path. **Weather stays parked** (external fetch + caching, D5).
 - [ ] Wire the Calendar "upcoming events" widget once Workstream C lands.
-- [ ] *(Optional, low-effort)* ambient clock / greeting widget (`source_node = null`). **Weather
-      stays parked** — external fetch + caching, deferred per D5 (`23_Core_Hub.md` §6/§19).
 
 ---
 
