@@ -160,7 +160,10 @@
 > - [x] **Tasks** — web board matches legacy (filters, hot/behaviour/category/assignee badges,
 >   base+bonus points, role-aware actions, full create form); kiosk tap-to-complete cards +
 >   celebration (uses `award_value`).
-> - [ ] Shop / rewards (stock, cart, images) + kiosk shop
+> - [x] **Shop / rewards** — web: balance banner, product cards (image/cost/stock/price/store),
+>   client-side cart + checkout, admin create (stock/limits/image) + pending approvals; kiosk:
+>   tap-to-request reward cards + celebration. *(reward→category link not in backend; no category
+>   filter on shop)*
 > - [ ] Routines + streaks + kiosk routine cards
 > - [ ] Group goals + Wishlist (+ progress) + kiosk
 > - [ ] Points / Leaderboard / Badges + kiosk badge celebration

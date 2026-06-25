@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../../../api/client'
 import type {
   AuthUser, HubWidget, AtlasListItem as ListItem, AtlasReminder as Reminder,
-  MeridianTask, PointsSummaryRow,
+  MeridianTask, PointsSummaryRow, MeridianReward,
 } from '../../../api/types'
 import { useInactivityTimeout } from '../hooks/useInactivityTimeout'
 
@@ -146,6 +146,61 @@ function MeridianPointsWidget({ widget }: { widget: HubWidget }) {
   )
 }
 
+// Kiosk reward shop — big tap-to-request cards (mirrors legacy kiosk_rewards).
+function KioskShop() {
+  const [rewards, setRewards] = useState<MeridianReward[]>([])
+  const [balance, setBalance] = useState(0)
+  const [busy, setBusy] = useState<number | null>(null)
+  const [celebrate, setCelebrate] = useState<string | null>(null)
+
+  const load = () => api.kioskMeridian()
+    .then(d => { setRewards(d.rewards); setBalance(d.points_balance) })
+    .catch(() => {})
+  useEffect(() => { load() }, [])
+
+  const request = async (r: MeridianReward) => {
+    setBusy(r.id)
+    try {
+      await api.requestMeridianReward(r.id)
+      setCelebrate(`Requested ${r.name}!`)
+      await load()
+    } catch {
+      /* not enough points / out of stock — ignore */
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  if (rewards.length === 0) return null
+
+  return (
+    <div className="bg-gray-800 rounded-2xl p-6 w-full">
+      {celebrate && <Celebration label={celebrate} onDone={() => setCelebrate(null)} />}
+      <h2 className="text-lg font-semibold text-gray-200 mb-4">Reward shop · ★ {balance}</h2>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {rewards.map(r => {
+          const cant = balance < r.cost_points || (r.remaining_stock !== null && r.remaining_stock <= 0)
+          return (
+            <button
+              key={r.id}
+              onClick={() => request(r)}
+              disabled={busy === r.id || cant}
+              className="flex flex-col rounded-xl bg-gray-700 hover:bg-gray-600 disabled:opacity-50 overflow-hidden text-left transition-colors"
+            >
+              {r.image_url && <img src={r.image_url} alt="" className="h-24 w-full object-cover" />}
+              <div className="p-3">
+                <p className="text-gray-100 font-medium leading-tight">{r.name}</p>
+                <p className="text-amber-300 font-bold mt-1">★ {r.cost_points}</p>
+                {cant && <p className="text-xs text-gray-400 mt-1">{balance < r.cost_points ? 'Not enough' : 'Out of stock'}</p>}
+              </div>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 const WIDGET_COMPONENTS: Record<string, React.ComponentType<{ widget: HubWidget }>> = {
   atlas_todos: TodosWidget,
   atlas_reminders: RemindersWidget,
@@ -218,6 +273,9 @@ export function KioskDashboard({ authUser, onLogout }: Props) {
           {widgets.length === 0 && !loadError && (
             <p className="text-gray-500">Loading…</p>
           )}
+        </div>
+        <div className="mt-6">
+          <KioskShop />
         </div>
       </main>
     </div>

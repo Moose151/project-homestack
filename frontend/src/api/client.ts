@@ -128,6 +128,13 @@ export const api = {
     name: string; cost_points: number; description?: string
   }): Promise<MeridianReward> =>
     _fetch('/meridian/rewards/', { method: 'POST', body: JSON.stringify(data) }),
+  updateMeridianReward: (id: number, data: Partial<{
+    name: string; description: string; cost_points: number; icon: string; colour: string
+    image_url: string; is_active: boolean; is_archived: boolean; price_estimate: string
+    store_url: string; quantity: number | null; allow_multiple_in_cart: boolean
+    disappear_when_empty: boolean; daily_limit_per_user: number | null
+  }>): Promise<MeridianReward> =>
+    _fetch(`/meridian/rewards/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteMeridianReward: (id: number): Promise<void> =>
     _fetch(`/meridian/rewards/${id}/`, { method: 'DELETE' }),
   requestMeridianReward: (id: number, personId?: number): Promise<MeridianRewardRequest> =>
