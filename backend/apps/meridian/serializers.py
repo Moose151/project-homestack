@@ -8,6 +8,7 @@ from apps.meridian.models import (
     MeridianPointsEntry,
     MeridianReward,
     MeridianRewardRequest,
+    MeridianRoutine,
     MeridianTask,
 )
 
@@ -26,20 +27,24 @@ class MeridianCategorySerializer(serializers.ModelSerializer):
 
 class MeridianTaskSerializer(serializers.ModelSerializer):
     is_complete = serializers.BooleanField(read_only=True)
+    award_value = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = MeridianTask
         fields = [
             "id", "title", "description", "points",
             "category_id", "assigned_to_person_id",
-            "status", "is_hot", "is_complete",
+            "status", "is_hot", "is_complete", "award_value",
+            "hot_bonus_points", "hot_label",
+            "completion_behavior", "completion_scope", "availability_window",
+            "is_active", "is_archived",
             "due_at", "recurrence_rule", "calendar_event_id",
             "completed_at", "completed_by_person_id",
             "approved_at", "approved_by_id", "rejection_reason",
             "visibility", "created_at", "updated_at",
         ]
         read_only_fields = [
-            "id", "status", "is_complete", "calendar_event_id",
+            "id", "status", "is_complete", "award_value", "calendar_event_id",
             "completed_at", "completed_by_person_id",
             "approved_at", "approved_by_id", "rejection_reason",
             "created_at", "updated_at",
@@ -51,9 +56,31 @@ class MeridianTaskWriteSerializer(serializers.ModelSerializer):
         model = MeridianTask
         fields = [
             "title", "description", "points", "category_id",
-            "assigned_to_person_id", "is_hot",
+            "assigned_to_person_id", "is_hot", "hot_bonus_points", "hot_label",
+            "completion_behavior", "completion_scope", "availability_window",
+            "is_active", "is_archived",
             "due_at", "recurrence_rule", "visibility",
         ]
+
+    def validate_title(self, value: str) -> str:
+        if not value.strip():
+            raise serializers.ValidationError("Title may not be blank.")
+        return value
+
+
+class MeridianRoutineSerializer(serializers.ModelSerializer):
+    # Per-person context, supplied by the view for the requesting person (optional).
+    streak = serializers.IntegerField(read_only=True, required=False)
+    done_today = serializers.BooleanField(read_only=True, required=False)
+
+    class Meta:
+        model = MeridianRoutine
+        fields = [
+            "id", "title", "description", "points", "assigned_to_person_id",
+            "is_active", "visibility", "streak", "done_today",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "streak", "done_today", "created_at", "updated_at"]
 
     def validate_title(self, value: str) -> str:
         if not value.strip():

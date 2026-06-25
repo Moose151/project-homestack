@@ -13,7 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import User
-from apps.meridian import services
+from apps.meridian import selectors, services
 from apps.meridian.models import (
     MeridianPointsEntry,
     MeridianReward,
@@ -203,6 +203,35 @@ class TaskLifecycleTests(TestCase):
             services.approve_task(self.admin, task)
         self.assertEqual(services.get_points_balance(self.person.id), 15)
 
+    def test_hot_task_awards_bonus_points(self):
+        task = services.create_task(
+            self.admin, title="Big clean", points=10, is_hot=True, hot_bonus_points=5,
+            assigned_to_person_id=self.person.id,
+        )
+        self.assertEqual(task.award_value, 15)
+        services.complete_task(self.admin, task, person_id=self.person.id)
+        services.approve_task(self.admin, task)
+        self.assertEqual(services.get_points_balance(self.person.id), 15)
+
+    def test_hide_after_approval_deactivates_task(self):
+        task = services.create_task(
+            self.admin, title="One-off", points=5,
+            completion_behavior=MeridianTask.CompletionBehavior.HIDE_AFTER_APPROVAL,
+            assigned_to_person_id=self.person.id,
+        )
+        services.complete_task(self.admin, task, person_id=self.person.id)
+        services.approve_task(self.admin, task)
+        task.refresh_from_db()
+        self.assertFalse(task.is_active)
+
+    def test_archived_task_hidden_from_default_list(self):
+        services.create_task(self.admin, title="Old chore", points=5)
+        archived = services.create_task(self.admin, title="Retired chore", points=5)
+        services.update_task(self.admin, archived, is_archived=True)
+        titles = {t.title for t in selectors.list_tasks(self.admin)}
+        self.assertIn("Old chore", titles)
+        self.assertNotIn("Retired chore", titles)
+
     def test_approve_via_api(self):
         task = services.create_task(
             self.admin, title="Dishes", points=8, assigned_to_person_id=self.person.id
@@ -238,21 +267,119 @@ class RewardTests(TestCase):
         with self.assertRaises(services.MeridianError):
             services.request_reward(self.admin, reward, person_id=self.person.id)
 
-    def test_reject_request_keeps_points(self):
+    def test_request_reserves_points_immediately(self):
+        services.adjust_points(self.admin, person_id=self.person.id, points=100)
+        reward = services.create_reward(self.admin, name="Ice cream", cost_points=30)
+        services.request_reward(self.admin, reward, person_id=self.person.id)
+        # Points are held (reserved) the moment the request is made.
+        self.assertEqual(services.get_points_balance(self.person.id), 70)
+
+    def test_reject_request_refunds_points(self):
         services.adjust_points(self.admin, person_id=self.person.id, points=100)
         reward = services.create_reward(self.admin, name="Ice cream", cost_points=30)
         req = services.request_reward(self.admin, reward, person_id=self.person.id)
         services.reject_reward_request(self.admin, req, reason="Maybe next week")
         self.assertEqual(services.get_points_balance(self.person.id), 100)
 
-    def test_approve_blocked_if_points_spent_elsewhere(self):
+    def test_cancel_request_refunds_points_once(self):
+        services.adjust_points(self.admin, person_id=self.person.id, points=100)
+        reward = services.create_reward(self.admin, name="Ice cream", cost_points=30)
+        req = services.request_reward(self.admin, reward, person_id=self.person.id)
+        services.cancel_reward_request(self.admin, req)
+        self.assertEqual(services.get_points_balance(self.person.id), 100)
+        # Re-cancelling a non-pending request is rejected; balance stays correct.
+        with self.assertRaises(services.MeridianError):
+            services.cancel_reward_request(self.admin, req)
+        self.assertEqual(services.get_points_balance(self.person.id), 100)
+
+    def test_cannot_reserve_points_already_held(self):
         services.adjust_points(self.admin, person_id=self.person.id, points=40)
         reward = services.create_reward(self.admin, name="Toy", cost_points=30)
-        req1 = services.request_reward(self.admin, reward, person_id=self.person.id)
-        req2 = services.request_reward(self.admin, reward, person_id=self.person.id)
-        services.approve_reward_request(self.admin, req1)  # spends 30, leaves 10
+        services.request_reward(self.admin, reward, person_id=self.person.id)  # reserves 30
+        # Only 10 left — a second request cannot be made.
         with self.assertRaises(services.MeridianError):
-            services.approve_reward_request(self.admin, req2)
+            services.request_reward(self.admin, reward, person_id=self.person.id)
+
+    def test_total_earned_ignores_spending(self):
+        services.adjust_points(self.admin, person_id=self.person.id, points=100)
+        reward = services.create_reward(self.admin, name="Toy", cost_points=30)
+        req = services.request_reward(self.admin, reward, person_id=self.person.id)
+        services.approve_reward_request(self.admin, req)
+        # Balance drops to 70, but lifetime "total earned" stays at 100.
+        self.assertEqual(services.get_points_balance(self.person.id), 70)
+        self.assertEqual(services.get_total_earned(self.person.id), 100)
+
+
+# ---------------------------------------------------------------------------
+# Routines + streaks
+# ---------------------------------------------------------------------------
+
+class RoutineTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("admin", role=User.Role.ADMIN)
+        self.child_user = _make_user("kid", role=User.Role.USER, is_child=True)
+        self.person = _make_person("Finn", linked_user=self.child_user)
+
+    def test_complete_routine_awards_points_immediately(self):
+        routine = services.create_routine(self.admin, title="Brush teeth", points=2)
+        services.complete_routine(self.admin, routine, person_id=self.person.id)
+        self.assertEqual(services.get_points_balance(self.person.id), 2)
+
+    def test_complete_routine_is_idempotent_per_day(self):
+        routine = services.create_routine(self.admin, title="Brush teeth", points=2)
+        services.complete_routine(self.admin, routine, person_id=self.person.id)
+        services.complete_routine(self.admin, routine, person_id=self.person.id)
+        self.assertEqual(services.get_points_balance(self.person.id), 2)
+        self.assertTrue(services.completed_today(routine, self.person.id))
+
+    def test_streak_counts_consecutive_days(self):
+        from datetime import timedelta
+        from apps.core.models import get_active_household
+        from apps.meridian.models import MeridianRoutineCompletion
+        routine = services.create_routine(self.admin, title="Read", points=1)
+        today = timezone.localdate()
+        for offset in (2, 1, 0):  # three consecutive days incl. today
+            MeridianRoutineCompletion.objects.create(
+                household=get_active_household(), routine=routine,
+                person_id=self.person.id, completed_date=today - timedelta(days=offset),
+            )
+        self.assertEqual(services.current_streak(routine, self.person.id), 3)
+
+    def test_streak_breaks_on_gap(self):
+        from datetime import timedelta
+        from apps.core.models import get_active_household
+        from apps.meridian.models import MeridianRoutineCompletion
+        routine = services.create_routine(self.admin, title="Read", points=1)
+        today = timezone.localdate()
+        for offset in (5, 0):  # a gap → streak is just today
+            MeridianRoutineCompletion.objects.create(
+                household=get_active_household(), routine=routine,
+                person_id=self.person.id, completed_date=today - timedelta(days=offset),
+            )
+        self.assertEqual(services.current_streak(routine, self.person.id), 1)
+
+    def test_void_completion_claws_back_points(self):
+        routine = services.create_routine(self.admin, title="Brush teeth", points=2)
+        completion = services.complete_routine(self.admin, routine, person_id=self.person.id)
+        services.void_routine_completion(self.admin, completion)
+        self.assertEqual(services.get_points_balance(self.person.id), 0)
+        self.assertFalse(services.completed_today(routine, self.person.id))
+
+    def test_child_can_complete_routine_via_api(self):
+        routine = services.create_routine(self.admin, title="Tidy", points=3)
+        _login(self.client, "kid")
+        resp = self.client.post(reverse("meridian-routine-complete", args=[routine.id]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["done_today"])
+        self.assertEqual(services.get_points_balance(self.person.id), 3)
+
+    def test_child_cannot_create_routine(self):
+        _login(self.client, "kid")
+        resp = self.client.post(
+            reverse("meridian-routine-list"),
+            {"title": "x", "points": 1}, content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 403)
 
 
 # ---------------------------------------------------------------------------

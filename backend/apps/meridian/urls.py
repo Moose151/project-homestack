@@ -10,6 +10,9 @@ from apps.meridian.views import (
     RewardRequestListView,
     RewardRequestRejectView,
     RewardRequestView,
+    RoutineCompleteView,
+    RoutineDetailView,
+    RoutineListView,
     TaskApproveView,
     TaskCompleteView,
     TaskDetailView,
@@ -28,6 +31,11 @@ urlpatterns = [
     # Categories
     path("categories/", CategoryListView.as_view(), name="meridian-category-list"),
     path("categories/<int:category_id>/", CategoryDetailView.as_view(), name="meridian-category-detail"),
+
+    # Routines
+    path("routines/", RoutineListView.as_view(), name="meridian-routine-list"),
+    path("routines/<int:routine_id>/", RoutineDetailView.as_view(), name="meridian-routine-detail"),
+    path("routines/<int:routine_id>/complete/", RoutineCompleteView.as_view(), name="meridian-routine-complete"),
 
     # Points
     path("points/", PointsView.as_view(), name="meridian-points"),

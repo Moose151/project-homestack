@@ -4,7 +4,7 @@
 `.docx` files in the project, including the previous Doc 00 update pack and the original
 standalone documents. Archive the old files; do not edit them further.
 
-**Last revised:** 2026-06-23
+**Last revised:** 2026-06-25
 **Owner:** Solo developer (single household: two adults, two children)
 **Deployment target:** Always-on home server, self-hosted, Docker Compose.
 
@@ -123,11 +123,31 @@ a first-class feature.
 The first milestone is a complete vertical slice (auth + People + Atlas + Hub + Calendar,
 in Docker, with permissions and tests), used daily, before any other node is started.
 
+### D19 — Meridian is a full functional port of the standalone app
+The native Meridian node carries the **complete** feature set of the existing standalone app
+(`~/Documents/new/project-meridian`): a signed points ledger (balance vs. lifetime "total
+earned", reservation/refund), tasks with completion behaviours / recurrence / photo evidence /
+assignment & scope / hot bonuses, a rewards shop with stock / daily limits / image carousel /
+cart, routines with streaks, group goals, wishlist, allowance, separate task & reward
+categories, reports / leaderboard / activity feed, and notifications. The earlier reduced M2
+scope ("tasks · approvals · points · rewards · Hot Tasks · categories") is **superseded**.
+Reason: the household uses the standalone app daily; a partial port is not a usable replacement,
+and D14 ("reuse the proven logic") presupposes bringing the logic across, not a subset.
+
+### D20 — Achievements/badges are a shared cross-node system
+Badges live in a household-scoped, **cross-node** `achievements` app, not inside Meridian.
+Nodes **publish events** (D4) and the achievements app consumes them and awards badges — no node
+calls another node's models. The Hub surfaces a person's badges; any node (Education, Pets, …)
+can register its own badges later with no Meridian changes. Meridian is the first producer
+(seeding the 15 existing badges). Reason: recognition should span all of a child's activity, and
+this keeps the awarding logic decoupled per D4/D10.
+
 ---
 
 ## Change history
 
 | Date | Change |
 |------|--------|
+| 2026-06-25 | Added **D19** (Meridian = full functional port of the standalone app) and **D20** (achievements/badges as a shared cross-node system). Rewrote `15_Node_Meridian.md` and `MILESTONE_2_Checklist.md` to the full-port scope after an audit found only a thin subset had been built. |
 | 2026-06-23 | Consolidated all prior docs into this set. Baked in decisions D1–D18. Dropped multi-household behaviour (kept tenant column). Switched to session auth, signal-based decoupling, Postgres FTS. Reordered roadmap for solo dev. Set Meridian/Solace to native rebuild-shell/reuse-logic/migrate-data, no iframe layer. |
 | *(earlier)* | Prior "Doc 00" update pack revised originals around the confirmed node model. Now superseded. |

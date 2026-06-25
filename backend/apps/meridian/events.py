@@ -32,6 +32,12 @@ def task_rejected(task_id: int, household_id: int) -> None:
     publish("meridian.task_rejected", payload={"task_id": task_id, "household_id": household_id})
 
 
+def routine_completed(routine_id: int, household_id: int, person_id: int | None) -> None:
+    publish("meridian.routine_completed", payload={
+        "routine_id": routine_id, "household_id": household_id, "person_id": person_id,
+    })
+
+
 def reward_requested(request_id: int, household_id: int, person_id: int) -> None:
     publish("meridian.reward_requested", payload={
         "request_id": request_id, "household_id": household_id, "person_id": person_id,

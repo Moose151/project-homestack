@@ -12,6 +12,7 @@ from apps.meridian.models import (
     MeridianPointsEntry,
     MeridianReward,
     MeridianRewardRequest,
+    MeridianRoutine,
     MeridianTask,
 )
 from apps.people.models import Person
@@ -24,9 +25,13 @@ from apps.permissions.visibility import apply_visibility
 
 def list_tasks(
     user=None, *, status: str | None = None, assigned_to_person_id: int | None = None,
-    hot_only: bool = False,
+    hot_only: bool = False, include_archived: bool = False, active_only: bool = False,
 ) -> list[MeridianTask]:
     qs = MeridianTask.objects.all()
+    if not include_archived:
+        qs = qs.filter(is_archived=False)
+    if active_only:
+        qs = qs.filter(is_active=True)
     if status:
         qs = qs.filter(status=status)
     if assigned_to_person_id is not None:
@@ -57,6 +62,39 @@ def list_categories() -> list[MeridianCategory]:
 
 def get_category(pk: int) -> MeridianCategory | None:
     return MeridianCategory.objects.filter(pk=pk).first()
+
+
+# ---------------------------------------------------------------------------
+# Routines
+# ---------------------------------------------------------------------------
+
+def list_routines(
+    user=None, *, person_id: int | None = None, active_only: bool = False,
+) -> list[MeridianRoutine]:
+    """Routines visible to a person.
+
+    A routine assigned to someone is hidden from others; unassigned routines are shown to all.
+    When ``person_id`` is given, each routine is annotated with that person's ``streak`` and
+    ``done_today`` (read by the serializer).
+    """
+    qs = MeridianRoutine.objects.all()
+    if active_only:
+        qs = qs.filter(is_active=True)
+    if person_id is not None:
+        qs = qs.filter(Q(assigned_to_person_id=person_id) | Q(assigned_to_person__isnull=True))
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    routines = list(qs)
+    if person_id is not None:
+        from apps.meridian import services
+        for r in routines:
+            r.streak = services.current_streak(r, person_id)
+            r.done_today = services.completed_today(r, person_id)
+    return routines
+
+
+def get_routine(pk: int) -> MeridianRoutine | None:
+    return MeridianRoutine.objects.filter(pk=pk).first()
 
 
 # ---------------------------------------------------------------------------

@@ -7,10 +7,26 @@ import type {
 
 const BASE = '/api/v1'
 
+// Django/DRF SessionAuthentication enforces CSRF on unsafe methods. The token is
+// delivered in the `csrftoken` cookie (set by the GET /auth/me/ call on app load)
+// and must be echoed back in the X-CSRFToken header on every write.
+function getCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
+  return match ? decodeURIComponent(match[1]) : null
+}
+
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE'])
+
 async function _fetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? 'GET').toUpperCase()
+  const csrfHeader: Record<string, string> = {}
+  if (!SAFE_METHODS.has(method)) {
+    const token = getCookie('csrftoken')
+    if (token) csrfHeader['X-CSRFToken'] = token
+  }
   const res = await fetch(`${BASE}${path}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: { 'Content-Type': 'application/json', ...csrfHeader, ...init?.headers },
     ...init,
   })
   if (!res.ok) {

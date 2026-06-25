@@ -20,6 +20,7 @@ from apps.meridian.serializers import (
     MeridianPointsEntrySerializer,
     MeridianRewardRequestSerializer,
     MeridianRewardSerializer,
+    MeridianRoutineSerializer,
     MeridianTaskSerializer,
     MeridianTaskWriteSerializer,
     PointsSummarySerializer,
@@ -180,6 +181,69 @@ class TaskRejectView(APIView):
 
 
 # ---------------------------------------------------------------------------
+# Routines
+# ---------------------------------------------------------------------------
+
+class RoutineListView(APIView):
+    permission_classes = [_Perm]
+
+    def get(self, request: Request) -> Response:
+        person_id = _acting_person_id(request, request.query_params.get("person_id"))
+        routines = selectors.list_routines(
+            request.user, person_id=person_id,
+            active_only=request.query_params.get("active") == "1",
+        )
+        return Response(MeridianRoutineSerializer(routines, many=True).data)
+
+    def post(self, request: Request) -> Response:
+        serializer = MeridianRoutineSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        routine = services.create_routine(request.user, **serializer.validated_data)
+        return Response(MeridianRoutineSerializer(routine).data, status=status.HTTP_201_CREATED)
+
+
+class RoutineDetailView(APIView):
+    permission_classes = [_Perm]
+
+    def _get(self, pk: int):
+        obj = selectors.get_routine(pk)
+        if obj is None:
+            raise NotFound()
+        return obj
+
+    def patch(self, request: Request, routine_id: int) -> Response:
+        routine = self._get(routine_id)
+        serializer = MeridianRoutineSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        routine = services.update_routine(request.user, routine, **serializer.validated_data)
+        return Response(MeridianRoutineSerializer(routine).data)
+
+    def delete(self, request: Request, routine_id: int) -> Response:
+        services.delete_routine(request.user, self._get(routine_id))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class RoutineCompleteView(APIView):
+    """Child-safe action: a person completes a routine (immediate points, no approval)."""
+
+    permission_classes = [_Perm]
+    permission_action = "complete"
+
+    def post(self, request: Request, routine_id: int) -> Response:
+        routine = selectors.get_routine(routine_id)
+        if routine is None:
+            raise NotFound()
+        person_id = _acting_person_id(request, request.data.get("person_id"))
+        if person_id is None:
+            raise ValidationError({"detail": "No person to complete on behalf of."})
+        _domain_guard(services.complete_routine, request.user, routine, person_id=person_id)
+        # Return the routine with fresh per-person streak/done-today context.
+        routine.streak = services.current_streak(routine, person_id)
+        routine.done_today = services.completed_today(routine, person_id)
+        return Response(MeridianRoutineSerializer(routine).data)
+
+
+# ---------------------------------------------------------------------------
 # Points
 # ---------------------------------------------------------------------------
 
@@ -307,8 +371,8 @@ class KioskMeridianView(APIView):
         person = getattr(request.user, "person_profile", None)
         person_id = person.id if person else None
 
-        my_tasks = selectors.list_tasks(request.user, assigned_to_person_id=person_id) \
-            if person_id else selectors.list_tasks(request.user)
+        my_tasks = selectors.list_tasks(request.user, assigned_to_person_id=person_id, active_only=True) \
+            if person_id else selectors.list_tasks(request.user, active_only=True)
         # Only show actionable cards on the kiosk: available or pending mine.
         my_tasks = [t for t in my_tasks if t.status in ("available", "pending")]
 

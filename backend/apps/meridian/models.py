@@ -62,6 +62,14 @@ class MeridianTask(CalendarSyncMixin, HouseholdBaseModel):
         APPROVED = "approved", "Approved"
         REJECTED = "rejected", "Rejected"
 
+    class CompletionBehavior(models.TextChoices):
+        STAY_ACTIVE = "stay_active", "Stay active (repeatable)"
+        HIDE_AFTER_APPROVAL = "hide_after_approval", "Hide after approval (one-off)"
+
+    class CompletionScope(models.TextChoices):
+        PER_PERSON = "per_person", "Each person separately"
+        HOUSEHOLD = "household", "Household (first to complete)"
+
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     points = models.PositiveIntegerField(default=0)
@@ -82,7 +90,22 @@ class MeridianTask(CalendarSyncMixin, HouseholdBaseModel):
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.AVAILABLE
     )
-    is_hot = models.BooleanField(default=False)  # "Hot Tasks" — boosted/featured
+
+    # Definition / behaviour (legacy parity, D19)
+    completion_behavior = models.CharField(
+        max_length=30, choices=CompletionBehavior.choices, default=CompletionBehavior.STAY_ACTIVE
+    )
+    completion_scope = models.CharField(
+        max_length=20, choices=CompletionScope.choices, default=CompletionScope.PER_PERSON
+    )
+    availability_window = models.CharField(max_length=30, blank=True, default="always")
+    is_active = models.BooleanField(default=True)  # published / shown to completers
+    is_archived = models.BooleanField(default=False)  # hidden without soft-deleting
+
+    # "Hot Tasks" — boosted/featured, optionally with bonus points on approval.
+    is_hot = models.BooleanField(default=False)
+    hot_bonus_points = models.PositiveIntegerField(default=0)
+    hot_label = models.CharField(max_length=120, blank=True, default="")
 
     due_at = models.DateTimeField(null=True, blank=True)
     recurrence_rule = models.CharField(max_length=512, blank=True, default="")
@@ -126,6 +149,14 @@ class MeridianTask(CalendarSyncMixin, HouseholdBaseModel):
     def is_complete(self) -> bool:
         return self.status in (self.Status.PENDING, self.Status.APPROVED)
 
+    @property
+    def award_value(self) -> int:
+        """Points awarded on approval, including any hot-task bonus (legacy parity)."""
+        total = self.points or 0
+        if self.is_hot:
+            total += self.hot_bonus_points or 0
+        return total
+
     # --- CalendarSyncMixin contract (D7) ---
 
     def get_calendar_data(self) -> dict | None:
@@ -145,16 +176,47 @@ class MeridianTask(CalendarSyncMixin, HouseholdBaseModel):
 
 
 class MeridianPointsEntry(HouseholdBaseModel):
-    """A single signed movement in a person's points ledger.
+    """A single signed movement in a person's points ledger (the source of truth).
 
-    Positive entries are awards (approved tasks, manual adjustments); negative entries
-    are spends (approved reward requests). A person's balance is the sum of their entries.
+    Positive entries are awards (approved tasks, completed routines, allowance, manual
+    adjustments); negative entries are spends/reservations (reward requests, goal/wishlist
+    contributions). A person's **balance** is the sum of all their entries; their lifetime
+    **total earned** is the sum of positive *earning* entries only (see services). Points are
+    reserved when a reward/contribution is made and refunded if it is rejected or cancelled
+    (legacy parity, D19).
     """
+
+    class TransactionType(models.TextChoices):
+        TASK_APPROVED = "task_approved", "Task approved"
+        ROUTINE_COMPLETED = "routine_completed", "Routine completed"
+        ALLOWANCE = "allowance", "Allowance"
+        MANUAL_ADJUSTMENT = "manual_adjustment", "Manual adjustment"
+        REWARD_REQUESTED = "reward_requested", "Reward requested (reserved)"
+        REWARD_REFUNDED = "reward_refunded", "Reward refunded"
+        REWARD_CANCELLED_REFUND = "reward_cancelled_refund", "Reward cancelled (refund)"
+        GROUP_GOAL_CONTRIBUTION = "group_goal_contribution", "Group goal contribution"
+        GROUP_GOAL_REFUND = "group_goal_refund", "Group goal refund"
+        WISHLIST_CONTRIBUTION = "wishlist_contribution", "Wishlist contribution"
+        WISHLIST_REFUND = "wishlist_refund", "Wishlist refund"
+
+    #: Transaction types that count toward lifetime "total earned" (positive only).
+    EARNING_TYPES = (
+        TransactionType.TASK_APPROVED,
+        TransactionType.ROUTINE_COMPLETED,
+        TransactionType.ALLOWANCE,
+        TransactionType.MANUAL_ADJUSTMENT,
+    )
 
     person = models.ForeignKey(
         "people.Person", on_delete=models.CASCADE, related_name="meridian_points"
     )
     points = models.IntegerField()  # signed: + award, - spend
+    transaction_type = models.CharField(
+        max_length=40,
+        choices=TransactionType.choices,
+        default=TransactionType.MANUAL_ADJUSTMENT,
+        db_index=True,
+    )
     reason = models.CharField(max_length=255, blank=True, default="")
     source_task = models.ForeignKey(
         MeridianTask,
@@ -165,6 +227,13 @@ class MeridianPointsEntry(HouseholdBaseModel):
     )
     source_reward_request = models.ForeignKey(
         "meridian.MeridianRewardRequest",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="points_entries",
+    )
+    source_routine = models.ForeignKey(
+        "meridian.MeridianRoutine",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -182,6 +251,65 @@ class MeridianPointsEntry(HouseholdBaseModel):
     def __str__(self) -> str:
         sign = "+" if self.points >= 0 else ""
         return f"{self.person}: {sign}{self.points}"
+
+
+class MeridianRoutine(HouseholdBaseModel):
+    """A daily habit (e.g. brush teeth). Points are awarded immediately on completion —
+    no approval — and consecutive-day completions build a streak (legacy parity, D19).
+    """
+
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="")
+    points = models.PositiveIntegerField(default=1)
+    assigned_to_person = models.ForeignKey(
+        "people.Person",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="assigned_meridian_routines",
+        help_text="If set, only this person sees/completes the routine; null = everyone.",
+    )
+    is_active = models.BooleanField(default=True)
+    visibility = models.CharField(
+        max_length=20, choices=Visibility.choices, default=Visibility.HOUSEHOLD
+    )
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "meridian routine"
+        ordering = ["title"]
+
+    def __str__(self) -> str:
+        return self.title
+
+
+class MeridianRoutineCompletion(HouseholdBaseModel):
+    """One completion of a routine by a person on a calendar date.
+
+    At most one non-voided completion per person/routine/date. Voided completions are
+    excluded from streaks and the today-check (admin reset/rejection).
+    """
+
+    routine = models.ForeignKey(
+        MeridianRoutine, on_delete=models.CASCADE, related_name="completions"
+    )
+    person = models.ForeignKey(
+        "people.Person", on_delete=models.CASCADE, related_name="meridian_routine_completions"
+    )
+    completed_date = models.DateField(db_index=True)
+    voided = models.BooleanField(default=False, db_index=True)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "meridian routine completion"
+        ordering = ["-completed_date", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.person} · {self.routine} · {self.completed_date}"
 
 
 class MeridianReward(HouseholdBaseModel):

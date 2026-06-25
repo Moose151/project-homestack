@@ -9,6 +9,8 @@ Calendar entries for dated tasks are maintained ONLY via the scheduling helper (
 """
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
@@ -21,6 +23,8 @@ from apps.meridian.models import (
     MeridianPointsEntry,
     MeridianReward,
     MeridianRewardRequest,
+    MeridianRoutine,
+    MeridianRoutineCompletion,
     MeridianTask,
 )
 from apps.scheduling.helpers import delete_event_for, sync_event_for
@@ -34,22 +38,46 @@ class MeridianError(Exception):
 # Points ledger
 # ---------------------------------------------------------------------------
 
+_TxType = MeridianPointsEntry.TransactionType
+
+
 def get_points_balance(person_id: int) -> int:
+    """Current spendable balance — the sum of every ledger entry for the person."""
     agg = MeridianPointsEntry.objects.filter(person_id=person_id).aggregate(total=Sum("points"))
     return agg["total"] or 0
 
 
+def get_total_earned(person_id: int) -> int:
+    """Lifetime points earned — positive *earning* entries only (legacy parity).
+
+    Spending, reservations, refunds and contributions never reduce this figure; it is used
+    for earning-milestone badges and reports.
+    """
+    agg = (
+        MeridianPointsEntry.objects.filter(
+            person_id=person_id,
+            transaction_type__in=MeridianPointsEntry.EARNING_TYPES,
+            points__gt=0,
+        )
+        .aggregate(total=Sum("points"))
+    )
+    return agg["total"] or 0
+
+
 def _record_points(
-    acting_user: User, *, person_id: int, points: int, reason: str,
-    source_task=None, source_reward_request=None,
+    acting_user: User | None, *, person_id: int, points: int, reason: str,
+    transaction_type: str = _TxType.MANUAL_ADJUSTMENT,
+    source_task=None, source_reward_request=None, source_routine=None,
 ) -> MeridianPointsEntry:
     entry = MeridianPointsEntry(
         household=get_active_household(),
         person_id=person_id,
         points=points,
+        transaction_type=transaction_type,
         reason=reason,
         source_task=source_task,
         source_reward_request=source_reward_request,
+        source_routine=source_routine,
         created_by=acting_user,
         updated_by=acting_user,
     )
@@ -60,7 +88,11 @@ def _record_points(
 
 def adjust_points(acting_user: User, *, person_id: int, points: int, reason: str = "") -> MeridianPointsEntry:
     """Manual points adjustment by an admin/manager (signed)."""
-    return _record_points(acting_user, person_id=person_id, points=points, reason=reason or "Manual adjustment")
+    return _record_points(
+        acting_user, person_id=person_id, points=points,
+        reason=reason or "Manual adjustment",
+        transaction_type=_TxType.MANUAL_ADJUSTMENT,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +140,9 @@ def create_task(acting_user: User, **data) -> MeridianTask:
 def update_task(acting_user: User, task: MeridianTask, **data) -> MeridianTask:
     allowed = {
         "title", "description", "points", "category_id", "assigned_to_person_id",
-        "is_hot", "due_at", "recurrence_rule", "visibility",
+        "is_hot", "hot_bonus_points", "hot_label", "due_at", "recurrence_rule", "visibility",
+        "completion_behavior", "completion_scope", "availability_window",
+        "is_active", "is_archived",
     }
     for key, val in data.items():
         if key in allowed:
@@ -156,16 +190,21 @@ def approve_task(acting_user: User, task: MeridianTask) -> MeridianTask:
     task.approved_at = timezone.now()
     task.approved_by = acting_user
     task.rejection_reason = ""
+    # One-off tasks are hidden once approved; repeatable tasks stay active (legacy parity).
+    if task.completion_behavior == MeridianTask.CompletionBehavior.HIDE_AFTER_APPROVAL:
+        task.is_active = False
     task.updated_by = acting_user
     task.save()
 
     person_id = task.completed_by_person_id or task.assigned_to_person_id
-    if person_id and task.points:
+    awarded = task.award_value
+    if person_id and awarded:
         _record_points(
-            acting_user, person_id=person_id, points=task.points,
+            acting_user, person_id=person_id, points=awarded,
             reason=f"Task approved: {task.title}", source_task=task,
+            transaction_type=_TxType.TASK_APPROVED,
         )
-    events.task_approved(task.id, task.household_id, person_id, task.points)
+    events.task_approved(task.id, task.household_id, person_id, awarded)
     return task
 
 
@@ -183,6 +222,123 @@ def reject_task(acting_user: User, task: MeridianTask, *, reason: str = "") -> M
     task.save()
     events.task_rejected(task.id, task.household_id)
     return task
+
+
+# ---------------------------------------------------------------------------
+# Routines + streaks
+# ---------------------------------------------------------------------------
+
+def create_routine(acting_user: User, **data) -> MeridianRoutine:
+    routine = MeridianRoutine(
+        household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
+    )
+    routine.save()
+    return routine
+
+
+def update_routine(acting_user: User, routine: MeridianRoutine, **data) -> MeridianRoutine:
+    allowed = {"title", "description", "points", "assigned_to_person_id", "is_active", "visibility"}
+    for key, val in data.items():
+        if key in allowed:
+            setattr(routine, key, val)
+    routine.updated_by = acting_user
+    routine.save()
+    return routine
+
+
+def delete_routine(acting_user: User, routine: MeridianRoutine) -> None:
+    routine.updated_by = acting_user
+    routine.save(update_fields=["updated_by", "updated_at"])
+    routine.soft_delete()
+
+
+def completed_today(routine: MeridianRoutine, person_id: int, *, on: date | None = None) -> bool:
+    day = on or timezone.localdate()
+    return MeridianRoutineCompletion.objects.filter(
+        routine=routine, person_id=person_id, completed_date=day, voided=False
+    ).exists()
+
+
+def current_streak(routine: MeridianRoutine, person_id: int, *, auto_end: bool = True) -> int:
+    """Consecutive-day streak for a person on a routine (legacy parity).
+
+    With ``auto_end=False`` the streak is the total count of distinct completion days and never
+    resets automatically (split-household mode); otherwise a gap of more than one day breaks it.
+    """
+    dates = sorted(
+        {
+            c.completed_date
+            for c in MeridianRoutineCompletion.objects.filter(
+                routine=routine, person_id=person_id, voided=False
+            )
+        },
+        reverse=True,
+    )
+    if not dates:
+        return 0
+    if not auto_end:
+        return len(dates)
+    today = timezone.localdate()
+    if dates[0] < today - timedelta(days=1):
+        return 0
+    streak = 1
+    for i in range(1, len(dates)):
+        if dates[i] == dates[i - 1] - timedelta(days=1):
+            streak += 1
+        else:
+            break
+    return streak
+
+
+@transaction.atomic
+def complete_routine(acting_user: User, routine: MeridianRoutine, *, person_id: int) -> MeridianRoutineCompletion:
+    """Record a routine completion for today and award its points immediately (no approval).
+
+    Idempotent per person/day: completing an already-done routine today is a no-op that returns
+    the existing completion without awarding points again.
+    """
+    if not routine.is_active:
+        raise MeridianError("This routine is not active.")
+    today = timezone.localdate()
+    existing = MeridianRoutineCompletion.objects.filter(
+        routine=routine, person_id=person_id, completed_date=today, voided=False
+    ).first()
+    if existing:
+        return existing
+    completion = MeridianRoutineCompletion(
+        household=get_active_household(),
+        routine=routine,
+        person_id=person_id,
+        completed_date=today,
+        created_by=acting_user,
+        updated_by=acting_user,
+    )
+    completion.save()
+    if routine.points:
+        _record_points(
+            acting_user, person_id=person_id, points=routine.points,
+            reason=f"Routine completed: {routine.title}", source_routine=routine,
+            transaction_type=_TxType.ROUTINE_COMPLETED,
+        )
+    events.routine_completed(routine.id, routine.household_id, person_id)
+    return completion
+
+
+@transaction.atomic
+def void_routine_completion(acting_user: User, completion: MeridianRoutineCompletion) -> MeridianRoutineCompletion:
+    """Admin voids a completion (streak reset / rejection) and claws back its points."""
+    if completion.voided:
+        return completion
+    completion.voided = True
+    completion.updated_by = acting_user
+    completion.save(update_fields=["voided", "updated_by", "updated_at"])
+    if completion.routine and completion.routine.points:
+        _record_points(
+            acting_user, person_id=completion.person_id, points=-completion.routine.points,
+            reason=f"Routine completion voided: {completion.routine.title}",
+            source_routine=completion.routine, transaction_type=_TxType.MANUAL_ADJUSTMENT,
+        )
+    return completion
 
 
 # ---------------------------------------------------------------------------
@@ -213,53 +369,97 @@ def delete_reward(acting_user: User, reward: MeridianReward) -> None:
     reward.soft_delete()
 
 
+@transaction.atomic
 def request_reward(acting_user: User, reward: MeridianReward, *, person_id: int) -> MeridianRewardRequest:
-    """A person requests to redeem a reward. Balance is verified now and again on approval."""
+    """A person requests to redeem a reward.
+
+    Points are **reserved** (deducted) immediately (legacy parity, D19): the cost is held as a
+    negative ledger entry so it cannot be double-spent on a parallel request. The hold is
+    refunded if the request is later rejected or cancelled; approval does not deduct again.
+    """
     if not reward.is_active:
         raise MeridianError("This reward is not available.")
-    if get_points_balance(person_id) < reward.cost_points:
+    cost = reward.cost_points
+    if get_points_balance(person_id) < cost:
         raise MeridianError("Not enough points for this reward.")
     req = MeridianRewardRequest(
         household=get_active_household(),
         reward=reward,
         requested_by_person_id=person_id,
         status=MeridianRewardRequest.Status.PENDING,
+        points_spent=cost,
         created_by=acting_user,
         updated_by=acting_user,
     )
     req.save()
+    if cost:
+        _record_points(
+            acting_user, person_id=person_id, points=-cost,
+            reason=f"Requested reward: {reward.name}", source_reward_request=req,
+            transaction_type=_TxType.REWARD_REQUESTED,
+        )
     events.reward_requested(req.id, req.household_id, person_id)
     return req
 
 
+def _refund_reservation(acting_user: User, req: MeridianRewardRequest, *, transaction_type: str, reason: str) -> None:
+    """Refund a reward's reserved points once, guarding against double refunds."""
+    reserved = MeridianPointsEntry.all_objects.filter(
+        source_reward_request=req, transaction_type=_TxType.REWARD_REQUESTED
+    ).exists()
+    already_refunded = MeridianPointsEntry.all_objects.filter(
+        source_reward_request=req,
+        transaction_type__in=(_TxType.REWARD_REFUNDED, _TxType.REWARD_CANCELLED_REFUND),
+    ).exists()
+    if reserved and not already_refunded and req.points_spent:
+        _record_points(
+            acting_user, person_id=req.requested_by_person_id, points=req.points_spent,
+            reason=reason, source_reward_request=req, transaction_type=transaction_type,
+        )
+
+
 @transaction.atomic
 def approve_reward_request(acting_user: User, req: MeridianRewardRequest) -> MeridianRewardRequest:
-    """Approve a reward request, deducting its cost from the person's balance."""
+    """Approve a reward request. Points were already reserved at request time, so no further
+    deduction happens (legacy parity)."""
     if req.status != MeridianRewardRequest.Status.PENDING:
         raise MeridianError("Only pending reward requests can be approved.")
-    cost = req.reward.cost_points
-    if get_points_balance(req.requested_by_person_id) < cost:
-        raise MeridianError("Not enough points to fulfil this reward.")
     req.status = MeridianRewardRequest.Status.APPROVED
-    req.points_spent = cost
     req.approved_at = timezone.now()
     req.approved_by = acting_user
     req.updated_by = acting_user
     req.save()
-    if cost:
-        _record_points(
-            acting_user, person_id=req.requested_by_person_id, points=-cost,
-            reason=f"Reward redeemed: {req.reward.name}", source_reward_request=req,
-        )
-    events.reward_approved(req.id, req.household_id, req.requested_by_person_id, cost)
+    events.reward_approved(req.id, req.household_id, req.requested_by_person_id, req.points_spent)
     return req
 
 
+@transaction.atomic
 def reject_reward_request(acting_user: User, req: MeridianRewardRequest, *, reason: str = "") -> MeridianRewardRequest:
+    """Reject a pending request and refund the reserved points."""
     if req.status != MeridianRewardRequest.Status.PENDING:
         raise MeridianError("Only pending reward requests can be rejected.")
+    _refund_reservation(
+        acting_user, req, transaction_type=_TxType.REWARD_REFUNDED,
+        reason=f"Refunded rejected reward: {req.reward.name}",
+    )
     req.status = MeridianRewardRequest.Status.REJECTED
     req.rejection_reason = reason
+    req.updated_by = acting_user
+    req.save()
+    return req
+
+
+@transaction.atomic
+def cancel_reward_request(acting_user: User, req: MeridianRewardRequest) -> MeridianRewardRequest:
+    """A person cancels their own pending request; reserved points are refunded."""
+    if req.status != MeridianRewardRequest.Status.PENDING:
+        raise MeridianError("Only pending reward requests can be cancelled.")
+    _refund_reservation(
+        acting_user, req, transaction_type=_TxType.REWARD_CANCELLED_REFUND,
+        reason=f"Refunded cancelled reward: {req.reward.name}",
+    )
+    req.status = MeridianRewardRequest.Status.REJECTED
+    req.rejection_reason = "Cancelled by requester."
     req.updated_by = acting_user
     req.save()
     return req

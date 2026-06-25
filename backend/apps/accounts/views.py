@@ -8,6 +8,8 @@ Endpoints (API spec §2):
   GET  /api/v1/auth/me/
   POST /api/v1/auth/reauth/
 """
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -62,6 +64,7 @@ class LogoutView(APIView):
         return Response({"detail": "Logged out."})
 
 
+@method_decorator(ensure_csrf_cookie, name="get")
 class MeView(APIView):
     def get(self, request: Request) -> Response:
         if not request.user.is_authenticated:
