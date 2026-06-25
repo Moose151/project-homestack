@@ -32,9 +32,10 @@ def task_rejected(task_id: int, household_id: int) -> None:
     publish("meridian.task_rejected", payload={"task_id": task_id, "household_id": household_id})
 
 
-def routine_completed(routine_id: int, household_id: int, person_id: int | None) -> None:
+def routine_completed(routine_id: int, household_id: int, person_id: int | None, streak: int = 0) -> None:
     publish("meridian.routine_completed", payload={
-        "routine_id": routine_id, "household_id": household_id, "person_id": person_id,
+        "routine_id": routine_id, "household_id": household_id,
+        "person_id": person_id, "streak": streak,
     })
 
 
@@ -51,10 +52,11 @@ def reward_approved(request_id: int, household_id: int, person_id: int, points_s
     })
 
 
-def points_awarded(person_id: int, household_id: int, points: int, reason: str) -> None:
+def points_awarded(person_id: int, household_id: int, points: int, reason: str,
+                   transaction_type: str = "") -> None:
     publish("meridian.points_awarded", payload={
         "person_id": person_id, "household_id": household_id,
-        "points": points, "reason": reason,
+        "points": points, "reason": reason, "transaction_type": transaction_type,
     })
 
 
@@ -68,4 +70,11 @@ def goal_contributed(goal_id: int, household_id: int, person_id: int, amount: in
 def wishlist_funded(item_id: int, household_id: int, person_id: int) -> None:
     publish("meridian.wishlist_funded", payload={
         "item_id": item_id, "household_id": household_id, "person_id": person_id,
+    })
+
+
+def wishlist_contributed(item_id: int, household_id: int, person_id: int, amount: int) -> None:
+    publish("meridian.wishlist_contributed", payload={
+        "item_id": item_id, "household_id": household_id,
+        "person_id": person_id, "amount": amount,
     })

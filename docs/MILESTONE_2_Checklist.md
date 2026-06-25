@@ -105,12 +105,16 @@
 > Group goals (2.12) and wishlist (2.13) are listed above, before 2.11 (built same day).
 > Their `group_goals_enabled` / `wishlist_requests_enabled` toggles land with settings in 2.17.
 
-## Phase 2.14 — Achievements / badges (cross-node, D20)
-- [ ] New shared `achievements` app: `Badge` (code/name/description/icon/criteria) +
-      `PersonBadge` (household-scoped, per person).
-- [ ] Awarding interface consumes the **events bus** (D4); nodes never call it directly.
-- [ ] Seed the 15 Meridian badges; Meridian emits the relevant events; Hub surfaces a person's
-      badges; kiosk celebrates a newly earned badge.
+## Phase 2.14 — Achievements / badges (cross-node, D20) 🟡 (2026-06-25 — perfect_month + UI deferred)
+- [x] New shared `apps/achievements`: `Badge` (global catalogue), `PersonBadge`
+      (household-scoped), `AchievementCounter` (app-owned per-person tallies → stays decoupled).
+- [x] Awarding via the **events bus** only (`handlers.connect()` in AppConfig.ready); the app
+      never imports Meridian models (D4). Meridian events enriched (routine `streak`, points
+      `transaction_type`, new `wishlist_contributed`).
+- [x] 15 Meridian badges seeded; awarded on task/routine/goal/wishlist/points events; idempotent.
+      `GET /achievements/badges/` + `/achievements/my-badges/`; `achievements.view` for all roles.
+- [ ] `routine_perfect_month` evaluated in the scheduled command (2.16); Hub badge widget +
+      kiosk celebration land with the frontend (2.19).
 
 ## Phase 2.15 — Notifications
 - [ ] Wire the `notifications` app: task approved/rejected, reward approved/rejected, badge

@@ -87,7 +87,7 @@ def _record_points(
         updated_by=acting_user,
     )
     entry.save()
-    events.points_awarded(person_id, entry.household_id, points, reason)
+    events.points_awarded(person_id, entry.household_id, points, reason, transaction_type)
     return entry
 
 
@@ -325,7 +325,9 @@ def complete_routine(acting_user: User, routine: MeridianRoutine, *, person_id: 
             reason=f"Routine completed: {routine.title}", source_routine=routine,
             transaction_type=_TxType.ROUTINE_COMPLETED,
         )
-    events.routine_completed(routine.id, routine.household_id, person_id)
+    events.routine_completed(
+        routine.id, routine.household_id, person_id, current_streak(routine, person_id)
+    )
     return completion
 
 
@@ -517,6 +519,7 @@ def contribute_to_wishlist(
         reason=f"Wishlist saving: {item.name}",
         transaction_type=_TxType.WISHLIST_CONTRIBUTION,
     )
+    events.wishlist_contributed(item.id, item.household_id, person_id, amount)
     if item.is_funded() and item.status == MeridianWishlistItem.Status.ACTIVE:
         item.status = MeridianWishlistItem.Status.FUNDED
         item.updated_by = acting_user

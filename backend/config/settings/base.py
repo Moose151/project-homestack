@@ -60,6 +60,7 @@ LOCAL_APPS = [
     "apps.events",  # thin signal interface only (D4) — no broker, no event table
     "apps.atlas",
     "apps.meridian",  # Milestone 2 — native chores/points/rewards node (D13, D14)
+    "apps.achievements",  # Milestone 2 — cross-node badges, event-driven (D20)
 ]
 
 INSTALLED_APPS = [
