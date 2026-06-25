@@ -11,9 +11,11 @@ opt-in **nodes** (areas of household life), and a touchscreen **kiosk** for the 
 
 ## Status
 
-Milestone 1 (Walking Skeleton) — **complete**. Milestone 2 (Native Meridian) — **complete**:
-the chores/points/rewards node runs natively on shared users, permissions, calendar, Hub
-and kiosk, with a dry-runnable data importer. Next: Milestone 3 (Home Wiki, Pets, Education).
+Milestone 1 (Walking Skeleton) — **complete**. Milestone 2 (Native Meridian) — **in progress**:
+a full functional port of the standalone Meridian app (D19). Backend done so far: points-ledger
+parity, tasks, routines + streaks, rewards shop, group goals, wishlist. Remaining: cross-node
+achievements (D20), notifications, scheduled jobs, settings/reports, full data import, and the
+web/kiosk frontend for the new features. See `docs/MILESTONE_2_Checklist.md`.
 
 ## Tech stack
 
@@ -55,6 +57,32 @@ Then:
 - Postgres: `localhost:5432` (healthcheck via `pg_isready`)
 
 Stop with `docker compose down`. Add `-v` to also drop the data volumes.
+
+## Updating a running server
+
+⚠️ **The base `docker-compose.yml` bakes the backend and frontend source into their images at
+build time — there is no source bind mount.** A plain `git pull` + restart keeps running the
+**old** code. After pulling you must **rebuild the changed image(s)**, e.g.:
+
+```bash
+git pull
+docker compose build homestack-backend homestack-frontend
+docker compose up -d
+docker exec homestack-backend python manage.py migrate   # if the pull added migrations
+```
+Then hard-refresh the browser (Ctrl-Shift-R) so it drops cached JS.
+
+**Recommended while iterating:** run with the dev override, which bind-mounts the source so
+pulls take effect on a restart with **no rebuild** (the backend also auto-reloads):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+# thereafter: git pull && docker compose -f docker-compose.yml -f docker-compose.dev.yml restart
+```
+
+> **CSRF / LAN access:** add your server's hostname/IP to `DJANGO_ALLOWED_HOSTS` in `.env`. The
+> dev settings derive the browser's trusted CSRF origin (`http://<host>:5173`) from it, so saving
+> (POST/PATCH/DELETE) works. Without it, writes fail with *"CSRF Failed: Origin checking failed"*.
 
 ## Services
 
