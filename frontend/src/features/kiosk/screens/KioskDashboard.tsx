@@ -83,7 +83,7 @@ function MeridianTasksWidget({ widget }: { widget: HubWidget }) {
     try {
       await api.completeMeridianTask(task.id)
       setTasks(prev => prev.filter(t => t.id !== task.id))
-      setCelebrate(`+${task.points} points!`)
+      setCelebrate(`+${task.award_value ?? task.points} points!`)
     } catch {
       /* ignore — card stays */
     } finally {
@@ -111,7 +111,7 @@ function MeridianTasksWidget({ widget }: { widget: HubWidget }) {
                   {task.title}
                 </span>
                 <span className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-amber-300 font-bold">★ {task.points}</span>
+                  <span className="text-amber-300 font-bold">★ {task.award_value ?? task.points}</span>
                   {task.status === 'pending'
                     ? <span className="text-xs text-gray-400">Waiting…</span>
                     : <span className="text-2xl text-gray-400">○</span>}
