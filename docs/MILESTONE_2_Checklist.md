@@ -151,6 +151,10 @@
 - [x] `scripts/import_meridian.py` wrapper runs it from the repo root (supports `--dry-run`).
 
 ## Phase 2.19 — Frontend (web + kiosk) for the full set
+> **Approach (owner, 2026-06-25):** rebuild each screen to **match the legacy Meridian HTML
+> templates** (`~/Documents/new/project-meridian/app/templates/`), adapted to HomeStack's warm
+> design system. Build **each feature on web + kiosk together**, feature by feature.
+> Part 1 (API types + client for every endpoint) — done. Screens in progress below.
 - [ ] Web: Tasks · Shop/Rewards · Routines · Goals · Wishlist · Points/Leaderboard · Badges ·
       Approvals · Categories/Settings (role-aware).
 - [ ] Kiosk: task & routine cards (tap-to-complete + celebration), shop + cart, goal/wishlist
