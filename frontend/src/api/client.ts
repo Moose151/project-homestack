@@ -3,6 +3,9 @@ import type {
   AuthUser, CalendarEvent, HubResponse, KioskUser,
   KioskMeridian, MeridianPointsResponse, MeridianReward,
   MeridianRewardRequest, MeridianTask,
+  MeridianCategory, MeridianRoutine, MeridianGoal,
+  MeridianWishlistItem, MeridianWishlistRequest, MeridianSettings,
+  MeridianReports, Badge, PersonBadge, NotificationList,
 } from './types'
 
 const BASE = '/api/v1'
@@ -135,6 +138,98 @@ export const api = {
   rejectMeridianRewardRequest: (id: number, reason?: string): Promise<MeridianRewardRequest> =>
     _fetch(`/meridian/reward-requests/${id}/reject/`, { method: 'POST', body: JSON.stringify({ reason }) }),
 
+  updateMeridianTask: (id: number, data: Partial<{
+    title: string; description: string; points: number; category_id: number | null
+    assigned_to_person_id: number | null; is_hot: boolean; hot_bonus_points: number
+    hot_label: string; completion_behavior: string; due_at: string | null
+    recurrence_rule: string; visibility: string; is_active: boolean; is_archived: boolean
+  }>): Promise<MeridianTask> =>
+    _fetch(`/meridian/tasks/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  // --- Meridian: routines ---
+  getMeridianRoutines: (personId?: number): Promise<MeridianRoutine[]> =>
+    _fetch(`/meridian/routines/${personId ? `?person_id=${personId}` : ''}`),
+  createMeridianRoutine: (data: {
+    title: string; points: number; description?: string; assigned_to_person_id?: number | null
+  }): Promise<MeridianRoutine> =>
+    _fetch('/meridian/routines/', { method: 'POST', body: JSON.stringify(data) }),
+  deleteMeridianRoutine: (id: number): Promise<void> =>
+    _fetch(`/meridian/routines/${id}/`, { method: 'DELETE' }),
+  completeMeridianRoutine: (id: number, personId?: number): Promise<MeridianRoutine> =>
+    _fetch(`/meridian/routines/${id}/complete/`, {
+      method: 'POST', body: JSON.stringify(personId ? { person_id: personId } : {}),
+    }),
+
+  // --- Meridian: categories ---
+  getMeridianCategories: (kind?: 'task' | 'reward'): Promise<MeridianCategory[]> =>
+    _fetch(`/meridian/categories/${kind ? `?kind=${kind}` : ''}`),
+  createMeridianCategory: (data: { name: string; kind: string; colour?: string; icon?: string }): Promise<MeridianCategory> =>
+    _fetch('/meridian/categories/', { method: 'POST', body: JSON.stringify(data) }),
+  deleteMeridianCategory: (id: number): Promise<void> =>
+    _fetch(`/meridian/categories/${id}/`, { method: 'DELETE' }),
+
+  // --- Meridian: shop cart ---
+  checkoutCart: (rewardIds: number[], personId?: number): Promise<MeridianRewardRequest[]> =>
+    _fetch('/meridian/rewards/checkout/', {
+      method: 'POST',
+      body: JSON.stringify({ reward_ids: rewardIds, ...(personId ? { person_id: personId } : {}) }),
+    }),
+
+  // --- Meridian: group goals ---
+  getMeridianGoals: (activeOnly?: boolean): Promise<MeridianGoal[]> =>
+    _fetch(`/meridian/goals/${activeOnly ? '?active=1' : ''}`),
+  createMeridianGoal: (data: { title: string; target_points: number; description?: string }): Promise<MeridianGoal> =>
+    _fetch('/meridian/goals/', { method: 'POST', body: JSON.stringify(data) }),
+  deleteMeridianGoal: (id: number): Promise<void> =>
+    _fetch(`/meridian/goals/${id}/`, { method: 'DELETE' }),
+  contributeToGoal: (id: number, amount: number, personId?: number): Promise<MeridianGoal> =>
+    _fetch(`/meridian/goals/${id}/contribute/`, {
+      method: 'POST', body: JSON.stringify({ amount, ...(personId ? { person_id: personId } : {}) }),
+    }),
+
+  // --- Meridian: wishlist ---
+  getWishlistItems: (personId?: number): Promise<MeridianWishlistItem[]> =>
+    _fetch(`/meridian/wishlist/${personId ? `?person_id=${personId}` : ''}`),
+  createWishlistItem: (data: {
+    person_id: number; name: string; point_cost: number; description?: string
+  }): Promise<MeridianWishlistItem> =>
+    _fetch('/meridian/wishlist/', { method: 'POST', body: JSON.stringify(data) }),
+  deleteWishlistItem: (id: number): Promise<void> =>
+    _fetch(`/meridian/wishlist/${id}/`, { method: 'DELETE' }),
+  contributeToWishlist: (id: number, amount: number, personId?: number): Promise<MeridianWishlistItem> =>
+    _fetch(`/meridian/wishlist/${id}/contribute/`, {
+      method: 'POST', body: JSON.stringify({ amount, ...(personId ? { person_id: personId } : {}) }),
+    }),
+  fulfillWishlistItem: (id: number): Promise<MeridianWishlistItem> =>
+    _fetch(`/meridian/wishlist/${id}/fulfill/`, { method: 'POST' }),
+  getWishlistRequests: (status?: string): Promise<MeridianWishlistRequest[]> =>
+    _fetch(`/meridian/wishlist-requests/${status ? `?status=${status}` : ''}`),
+  requestWishlistItem: (data: { requested_name: string; requested_description?: string; person_id?: number }): Promise<MeridianWishlistRequest> =>
+    _fetch('/meridian/wishlist-requests/', { method: 'POST', body: JSON.stringify(data) }),
+  approveWishlistRequest: (id: number, pointCost: number): Promise<MeridianWishlistItem> =>
+    _fetch(`/meridian/wishlist-requests/${id}/approve/`, { method: 'POST', body: JSON.stringify({ point_cost: pointCost }) }),
+  rejectWishlistRequest: (id: number, reason?: string): Promise<MeridianWishlistRequest> =>
+    _fetch(`/meridian/wishlist-requests/${id}/reject/`, { method: 'POST', body: JSON.stringify({ reason }) }),
+
+  // --- Meridian: settings + reports ---
+  getMeridianSettings: (): Promise<MeridianSettings> => _fetch('/meridian/settings/'),
+  updateMeridianSettings: (data: Partial<MeridianSettings>): Promise<MeridianSettings> =>
+    _fetch('/meridian/settings/', { method: 'PATCH', body: JSON.stringify(data) }),
+  getMeridianReports: (): Promise<MeridianReports> => _fetch('/meridian/reports/'),
+
   // --- Meridian: kiosk ---
   kioskMeridian: (): Promise<KioskMeridian> => _fetch('/kiosk/meridian/'),
+
+  // --- Achievements ---
+  getBadges: (): Promise<Badge[]> => _fetch('/achievements/badges/'),
+  getMyBadges: (personId?: number): Promise<PersonBadge[]> =>
+    _fetch(`/achievements/my-badges/${personId ? `?person_id=${personId}` : ''}`),
+
+  // --- Notifications ---
+  getNotifications: (unreadOnly?: boolean): Promise<NotificationList> =>
+    _fetch(`/notifications/${unreadOnly ? '?unread=1' : ''}`),
+  markNotificationRead: (id: number): Promise<unknown> =>
+    _fetch(`/notifications/${id}/read/`, { method: 'POST' }),
+  markAllNotificationsRead: (): Promise<unknown> =>
+    _fetch('/notifications/read-all/', { method: 'POST' }),
 }

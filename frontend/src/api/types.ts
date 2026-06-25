@@ -91,6 +91,14 @@ export interface MeridianTask {
   status: MeridianTaskStatus
   is_hot: boolean
   is_complete: boolean
+  award_value: number
+  hot_bonus_points: number
+  hot_label: string
+  completion_behavior: 'stay_active' | 'hide_after_approval'
+  completion_scope: 'per_person' | 'household'
+  availability_window: string
+  is_active: boolean
+  is_archived: boolean
   due_at: string | null
   recurrence_rule: string
   calendar_event_id: number | null
@@ -111,9 +119,144 @@ export interface MeridianReward {
   cost_points: number
   icon: string
   colour: string
+  image_url: string
   is_active: boolean
+  is_archived: boolean
+  price_estimate: string
+  store_url: string
+  quantity: number | null
+  allow_multiple_in_cart: boolean
+  disappear_when_empty: boolean
+  daily_limit_per_user: number | null
+  remaining_stock: number | null
   created_at: string
   updated_at: string
+}
+
+export interface MeridianCategory {
+  id: number
+  name: string
+  kind: 'task' | 'reward'
+  colour: string
+  icon: string
+  position: number
+}
+
+export interface MeridianRoutine {
+  id: number
+  title: string
+  description: string
+  points: number
+  assigned_to_person_id: number | null
+  is_active: boolean
+  visibility: string
+  streak?: number
+  done_today?: boolean
+}
+
+export interface MeridianGoal {
+  id: number
+  title: string
+  description: string
+  target_points: number
+  price_estimate: string
+  store_url: string
+  image_url: string
+  status: 'active' | 'funded' | 'archived'
+  is_active: boolean
+  total_contributed: number
+  remaining_points: number
+  progress_percentage: number
+}
+
+export interface MeridianWishlistItem {
+  id: number
+  person_id: number
+  name: string
+  description: string
+  point_cost: number
+  status: 'active' | 'funded' | 'fulfilled'
+  is_active: boolean
+  price_estimate: string
+  store_url: string
+  image_url: string
+  total_saved: number
+  remaining_points: number
+  progress_percentage: number
+}
+
+export interface MeridianWishlistRequest {
+  id: number
+  person_id: number
+  requested_name: string
+  requested_description: string
+  status: 'requested' | 'approved' | 'rejected'
+  rejection_reason: string
+  created_at: string
+}
+
+export interface MeridianSettings {
+  points_label: string
+  group_goals_enabled: boolean
+  wishlist_requests_enabled: boolean
+  auto_end_streaks: boolean
+}
+
+export interface LeaderboardRow {
+  person_id: number
+  display_name: string
+  balance: number
+  total_earned: number
+  badge_count: number
+}
+
+export interface ActivityRow {
+  id: number
+  person_id: number
+  display_name: string
+  points: number
+  transaction_type: string
+  reason: string
+  created_at: string
+}
+
+export interface MeridianReports {
+  leaderboard: LeaderboardRow[]
+  recent_activity: ActivityRow[]
+}
+
+export interface Badge {
+  id: number
+  code: string
+  name: string
+  description: string
+  icon: string
+  source: string
+  position: number
+}
+
+export interface PersonBadge {
+  id: number
+  person_id: number
+  badge: Badge
+  earned_at: string
+  source: string
+}
+
+export interface AppNotification {
+  id: number
+  title: string
+  message: string
+  level: 'info' | 'success' | 'warning' | 'danger'
+  source_node: string
+  action_url: string
+  is_read: boolean
+  created_at: string
+}
+
+export interface NotificationList {
+  unread_count: number
+  results: AppNotification[]
 }
 
 export interface MeridianRewardRequest {
