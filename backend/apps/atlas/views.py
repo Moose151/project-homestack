@@ -75,7 +75,7 @@ class ListListView(APIView):
     permission_classes = [_AtlasPerm]
 
     def get(self, request: Request) -> Response:
-        return Response(AtlasListWriteSerializer(
+        return Response(AtlasListSerializer(
             selectors.list_atlas_lists(request.user), many=True
         ).data)
 

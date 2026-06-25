@@ -260,6 +260,19 @@ class AtlasListTests(TestCase):
         self.assertEqual(resp.status_code, 201)
         self.assertEqual(resp.json()["title"], "Shopping")
 
+    def test_list_endpoint_returns_id_and_items(self):
+        # Regression: GET /atlas/lists/ must use the read serializer (id + nested items),
+        # not the write serializer — the frontend renders list.items and would crash otherwise.
+        atlas_list = create_atlas_list(self.admin, title="Chores", list_type="checklist")
+        create_list_item(self.admin, atlas_list, title="Sweep")
+        resp = self.client.get(self.list_url)
+        self.assertEqual(resp.status_code, 200)
+        row = resp.json()[0]
+        self.assertIn("id", row)
+        self.assertIn("items", row)
+        self.assertEqual(len(row["items"]), 1)
+        self.assertEqual(row["items"][0]["title"], "Sweep")
+
     def test_add_item_and_list(self):
         atlas_list = create_atlas_list(self.admin, title="Chores", list_type="checklist")
         item_url = reverse("atlas-list-item-list", kwargs={"list_id": atlas_list.pk})

@@ -66,7 +66,7 @@ function ItemRow({
 // ---------------------------------------------------------------------------
 
 function ListCard({ list, onDeleted }: { list: AtlasList; onDeleted: (id: number) => void }) {
-  const [items, setItems] = useState<AtlasListItem[]>(list.items)
+  const [items, setItems] = useState<AtlasListItem[]>(list.items ?? [])
   const [newTitle, setNewTitle] = useState('')
   const [adding, setAdding] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
