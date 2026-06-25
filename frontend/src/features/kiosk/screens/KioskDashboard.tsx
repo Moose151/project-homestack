@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../../api/client'
 import type {
   AuthUser, HubWidget, AtlasListItem as ListItem, AtlasReminder as Reminder,
@@ -15,6 +15,7 @@ interface Props {
 }
 
 type DashboardView = 'home' | 'calendar'
+type KioskCalendarMode = 'month' | 'week' | 'day' | 'agenda'
 
 const panelClass = 'rounded-2xl border-2 border-line-strong bg-raised p-6 shadow-card'
 const itemButtonClass = 'rounded-xl border-2 border-line bg-surface px-4 py-4 text-left shadow-soft transition-colors hover:border-primary hover:bg-primary-soft disabled:opacity-60'
@@ -28,18 +29,40 @@ const addDays = (d: Date, days: number) => {
   next.setDate(next.getDate() + days)
   return next
 }
+const addMonths = (d: Date, months: number) => {
+  const next = new Date(d)
+  next.setMonth(next.getMonth() + months)
+  return next
+}
 const sameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 const eventStartsOn = (event: CalendarEvent, day: Date) => sameDay(new Date(event.start_at), day)
-const dayTitle = (day: Date, today: Date) => {
-  if (sameDay(day, today)) return 'Today'
-  if (sameDay(day, addDays(today, 1))) return 'Tomorrow'
-  return day.toLocaleDateString(undefined, { weekday: 'short' })
+const startOfWeek = (d: Date) => {
+  const day = startOfDay(d)
+  const diff = (day.getDay() + 6) % 7
+  return addDays(day, -diff)
+}
+const monthGrid = (anchor: Date) => {
+  const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
+  const gridStart = startOfWeek(first)
+  return Array.from({ length: 42 }, (_, i) => addDays(gridStart, i))
+}
+const periodTitle = (mode: KioskCalendarMode, anchor: Date) => {
+  if (mode === 'month') return anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+  if (mode === 'day') return anchor.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+  if (mode === 'week') {
+    const start = startOfWeek(anchor)
+    const end = addDays(start, 6)
+    return `${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+  }
+  return 'Upcoming'
 }
 const eventTime = (event: CalendarEvent) => {
   if (event.is_all_day) return 'All day'
   return new Date(event.start_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 }
+const sourceLabel = (event: CalendarEvent) =>
+  event.source_node ? event.source_node.replace(/_/g, ' ') : 'Household'
 
 function TodosWidget({ widget }: { widget: HubWidget }) {
   const items = widget.items as ListItem[]
@@ -409,78 +432,178 @@ function UpcomingWidget({ widget }: { widget: HubWidget }) {
 }
 
 function KioskCalendarView() {
+  const [mode, setMode] = useState<KioskCalendarMode>('week')
+  const [anchor, setAnchor] = useState(() => new Date())
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [error, setError] = useState<string | null>(null)
-  const today = startOfDay(new Date())
-  const days = Array.from({ length: 7 }, (_, i) => addDays(today, i))
+
+  const windowRange = useMemo(() => {
+    if (mode === 'month') {
+      const grid = monthGrid(anchor)
+      return { start: grid[0], end: addDays(grid[41], 1) }
+    }
+    if (mode === 'week') {
+      const start = startOfWeek(anchor)
+      return { start, end: addDays(start, 7) }
+    }
+    if (mode === 'day') {
+      const start = startOfDay(anchor)
+      return { start, end: addDays(start, 1) }
+    }
+    const start = startOfDay(new Date())
+    return { start, end: addDays(start, 60) }
+  }, [anchor, mode])
+
+  const windowStart = windowRange.start.getTime()
+  const windowEnd = windowRange.end.getTime()
 
   useEffect(() => {
-    const start = today.toISOString()
-    const end = addDays(today, 8).toISOString()
-    api.getEvents({ start, end })
+    api.getEvents({ start: new Date(windowStart).toISOString(), end: new Date(windowEnd).toISOString() })
       .then((data) => {
         setEvents(data.sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime()))
         setError(null)
       })
       .catch(() => setError('Could not load calendar.'))
-  }, [])
+  }, [windowStart, windowEnd])
 
-  const sourceLabel = (event: CalendarEvent) =>
-    event.source_node ? event.source_node.replace(/_/g, ' ') : 'Household'
+  const today = startOfDay(new Date())
+  const daysForMode = mode === 'month'
+    ? monthGrid(anchor)
+    : mode === 'week'
+      ? Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(anchor), i))
+      : [startOfDay(anchor)]
+  const eventCount = events.length
+
+  const step = (dir: -1 | 1) => {
+    if (mode === 'month') setAnchor(prev => addMonths(prev, dir))
+    else if (mode === 'week') setAnchor(prev => addDays(prev, 7 * dir))
+    else if (mode === 'day') setAnchor(prev => addDays(prev, dir))
+  }
+
+  const eventCard = (event: CalendarEvent, compact = false) => (
+    <article
+      key={event.id}
+      className={`rounded-xl border-2 border-line bg-surface shadow-soft ${compact ? 'p-3' : 'p-4'}`}
+      style={{ borderLeftColor: event.colour || '#3f6f8f', borderLeftWidth: 8 }}
+    >
+      <p className="text-sm font-extrabold text-primary">{eventTime(event)}</p>
+      <h3 className={`${compact ? 'text-base' : 'text-lg'} mt-1 font-bold leading-tight`}>{event.title}</h3>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-muted">
+        <span className="rounded-full bg-sunken px-2 py-1 capitalize">{sourceLabel(event)}</span>
+        {event.location && <span className="rounded-full bg-sunken px-2 py-1">{event.location}</span>}
+      </div>
+    </article>
+  )
 
   return (
     <section className="space-y-6">
       <div className={`${panelClass} flex flex-wrap items-center justify-between gap-4`}>
         <div>
           <h1 className="text-3xl font-extrabold">Calendar</h1>
-          <p className="mt-1 text-muted">{today.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+          <p className="mt-1 text-muted">{periodTitle(mode, anchor)}</p>
         </div>
-        <div className="rounded-2xl border-2 border-primary/40 bg-primary-soft px-5 py-3 text-center">
-          <p className="text-sm font-bold uppercase tracking-wide text-primary">Next 7 days</p>
-          <p className="text-2xl font-extrabold text-primary">{events.length}</p>
+        <div className="flex flex-wrap items-center gap-3">
+          {mode !== 'agenda' && (
+            <div className="flex rounded-xl border border-line-strong bg-sunken p-1">
+              <button onClick={() => step(-1)} className="min-h-11 rounded-lg px-4 text-2xl font-bold text-muted-strong hover:bg-surface" aria-label="Previous period">‹</button>
+              <button onClick={() => setAnchor(new Date())} className="min-h-11 rounded-lg px-4 text-sm font-bold text-muted-strong hover:bg-surface">Today</button>
+              <button onClick={() => step(1)} className="min-h-11 rounded-lg px-4 text-2xl font-bold text-muted-strong hover:bg-surface" aria-label="Next period">›</button>
+            </div>
+          )}
+          <div className="flex rounded-xl border border-line-strong bg-sunken p-1">
+            {(['month', 'week', 'day', 'agenda'] as KioskCalendarMode[]).map(v => (
+              <button
+                key={v}
+                onClick={() => setMode(v)}
+                className={`min-h-11 rounded-lg px-4 text-sm font-bold capitalize transition-colors ${
+                  mode === v ? 'bg-raised text-primary shadow-soft' : 'text-muted-strong hover:bg-surface'
+                }`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+          <div className="rounded-2xl border-2 border-primary/40 bg-primary-soft px-5 py-3 text-center">
+            <p className="text-sm font-bold uppercase tracking-wide text-primary">Events</p>
+            <p className="text-2xl font-extrabold text-primary">{eventCount}</p>
+          </div>
         </div>
       </div>
 
       {error && <p className="rounded-xl border border-danger bg-danger-soft px-4 py-3 text-danger">{error}</p>}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {days.map(day => {
-          const dayEvents = events.filter(event => eventStartsOn(event, day))
-          return (
-            <section key={day.toISOString()} className={`${panelClass} min-h-[220px]`}>
-              <div className="mb-4 flex items-baseline justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-extrabold">{dayTitle(day, today)}</h2>
-                  <p className="text-sm text-muted">{day.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>
-                </div>
-                <span className="rounded-full bg-sunken px-3 py-1 text-sm font-bold text-muted-strong">
-                  {dayEvents.length}
-                </span>
+      {mode === 'agenda' ? (
+        <div className="space-y-4">
+          {events.length === 0 ? (
+            <div className={`${panelClass} text-center text-muted`}>Nothing upcoming.</div>
+          ) : events.map(event => (
+            <div key={event.id} className="grid grid-cols-[8rem_1fr] gap-4">
+              <div className="pt-4 text-right">
+                <p className="text-sm font-extrabold text-muted-strong">
+                  {new Date(event.start_at).toLocaleDateString(undefined, { weekday: 'short' })}
+                </p>
+                <p className="text-2xl font-extrabold text-ink">{new Date(event.start_at).getDate()}</p>
+                <p className="text-xs font-semibold text-muted">
+                  {new Date(event.start_at).toLocaleDateString(undefined, { month: 'short' })}
+                </p>
               </div>
-              {dayEvents.length === 0 ? (
-                <p className={emptyClass}>Nothing booked</p>
-              ) : (
-                <div className="space-y-3">
-                  {dayEvents.map(event => (
-                    <article
-                      key={event.id}
-                      className="rounded-xl border-2 border-line bg-surface p-4 shadow-soft"
-                      style={{ borderLeftColor: event.colour || '#3f6f8f', borderLeftWidth: 8 }}
-                    >
-                      <p className="text-sm font-extrabold text-primary">{eventTime(event)}</p>
-                      <h3 className="mt-1 text-lg font-bold leading-tight">{event.title}</h3>
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-muted">
-                        <span className="rounded-full bg-sunken px-2 py-1 capitalize">{sourceLabel(event)}</span>
-                        {event.location && <span className="rounded-full bg-sunken px-2 py-1">{event.location}</span>}
-                      </div>
-                    </article>
-                  ))}
+              {eventCard(event)}
+            </div>
+          ))}
+        </div>
+      ) : mode === 'month' ? (
+        <div className="grid grid-cols-7 gap-3">
+          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+            <div key={day} className="px-2 text-center text-sm font-extrabold uppercase tracking-wide text-muted">{day}</div>
+          ))}
+          {daysForMode.map(day => {
+            const dayEvents = events.filter(event => eventStartsOn(event, day))
+            const inMonth = day.getMonth() === anchor.getMonth()
+            return (
+              <section key={day.toISOString()} className={`${panelClass} min-h-[150px] ${inMonth ? '' : 'opacity-55'}`}>
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <span className={`grid h-10 w-10 place-items-center rounded-full text-lg font-extrabold ${
+                    sameDay(day, today) ? 'bg-primary text-white' : 'bg-sunken text-ink'
+                  }`}>
+                    {day.getDate()}
+                  </span>
+                  {dayEvents.length > 0 && <span className="rounded-full bg-warning-soft px-2 py-1 text-xs font-bold text-warning">{dayEvents.length}</span>}
                 </div>
-              )}
-            </section>
-          )
-        })}
-      </div>
+                <div className="space-y-2">
+                  {dayEvents.slice(0, 2).map(event => eventCard(event, true))}
+                  {dayEvents.length > 2 && <p className="text-xs font-bold text-muted">+{dayEvents.length - 2} more</p>}
+                </div>
+              </section>
+            )
+          })}
+        </div>
+      ) : (
+        <div className={`grid grid-cols-1 gap-4 ${mode === 'week' ? 'md:grid-cols-2 xl:grid-cols-4' : ''}`}>
+          {daysForMode.map(day => {
+            const dayEvents = events.filter(event => eventStartsOn(event, day))
+            return (
+              <section key={day.toISOString()} className={`${panelClass} min-h-[260px]`}>
+                <div className="mb-4 flex items-baseline justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-extrabold">
+                      {sameDay(day, today) ? 'Today' : day.toLocaleDateString(undefined, { weekday: 'long' })}
+                    </h2>
+                    <p className="text-sm text-muted">{day.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>
+                  </div>
+                  <span className="rounded-full bg-sunken px-3 py-1 text-sm font-bold text-muted-strong">
+                    {dayEvents.length}
+                  </span>
+                </div>
+                {dayEvents.length === 0 ? (
+                  <p className={emptyClass}>Nothing booked</p>
+                ) : (
+                  <div className="space-y-3">{dayEvents.map(event => eventCard(event))}</div>
+                )}
+              </section>
+            )
+          })}
+        </div>
+      )}
     </section>
   )
 }
@@ -557,6 +680,12 @@ export function KioskDashboard({ authUser, onLogout }: Props) {
             ))}
           </div>
           <KioskThemeToggle />
+          <a
+            href="/"
+            className="flex min-h-11 items-center rounded-lg border border-line-strong bg-raised px-4 py-2 text-sm font-bold text-muted-strong transition-colors hover:bg-primary-soft hover:text-primary"
+          >
+            Web mode
+          </a>
           <button
             onClick={handleLogout}
             className="min-h-11 rounded-lg border border-primary bg-primary-soft px-4 py-2 text-sm font-bold text-primary transition-colors hover:bg-primary hover:text-white"

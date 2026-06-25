@@ -145,6 +145,8 @@ A batch of usability fixes raised by the owner. Small but high-touch; do alongsi
       separate kiosk route tree).
 - [x] "Exit kiosk" affordance on the kiosk ambient screen (corner link → `/`, stops propagation
       so it doesn't trigger "tap to start").
+- [x] "Web mode" affordance on the kiosk dashboard header (link → `/`) so an authenticated kiosk
+      user can return to the normal web UI.
 
 ## Phase 2.5D.2 — Hide estimated cost from non-admins (shop + wishlist) ✅ (2026-06-25)
 - [x] `price_estimate` visible to **admins only** — `AdminOnlyPriceMixin` on the reward, wishlist-
@@ -191,7 +193,7 @@ A batch of usability fixes raised by the owner. Small but high-touch; do alongsi
 - [x] Kiosk light-theme contrast pass: current light kiosk UI feels too washed/flushed; improve
       contrast between the background and widgets/tiles while staying on shared design tokens.
 - [x] Add a kiosk Calendar view/surface (beyond the existing `calendar_upcoming` Hub widget) so the
-      household timeline is directly usable from kiosk mode.
+      household timeline is directly usable from kiosk mode, including month/week/day/agenda modes.
 - [ ] `tsc` + production build clean; backend suite green; run the stack on the home server.
 
 ---
