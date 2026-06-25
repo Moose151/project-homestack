@@ -6,7 +6,13 @@ import type {
   MeridianCategory, MeridianRoutine, MeridianGoal,
   MeridianWishlistItem, MeridianWishlistRequest, MeridianSettings,
   MeridianReports, Badge, PersonBadge, NotificationList, Person, AdminUser,
+  AtlasSearchResults,
 } from './types'
+
+type ItemWrite = Partial<{
+  title: string; notes: string; quantity: string; position: number
+  due_at: string | null; assigned_to_person_id: number | null
+}>
 
 type UserWrite = Partial<{
   username: string; display_name: string; role: string; email: string; colour: string
@@ -89,14 +95,20 @@ export const api = {
   deleteList: (id: number): Promise<void> => _fetch(`/atlas/lists/${id}/`, { method: 'DELETE' }),
 
   // --- Atlas list items ---
-  createItem: (listId: number, data: { title: string }): Promise<AtlasListItem> =>
+  createItem: (listId: number, data: ItemWrite): Promise<AtlasListItem> =>
     _fetch(`/atlas/lists/${listId}/items/`, { method: 'POST', body: JSON.stringify(data) }),
+  updateItem: (listId: number, itemId: number, data: ItemWrite): Promise<AtlasListItem> =>
+    _fetch(`/atlas/lists/${listId}/items/${itemId}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   completeItem: (listId: number, itemId: number): Promise<AtlasListItem> =>
     _fetch(`/atlas/lists/${listId}/items/${itemId}/complete/`, { method: 'POST' }),
   uncompleteItem: (listId: number, itemId: number): Promise<AtlasListItem> =>
     _fetch(`/atlas/lists/${listId}/items/${itemId}/uncomplete/`, { method: 'POST' }),
   deleteItem: (listId: number, itemId: number): Promise<void> =>
     _fetch(`/atlas/lists/${listId}/items/${itemId}/`, { method: 'DELETE' }),
+
+  // --- Atlas search ---
+  searchAtlas: (q: string): Promise<AtlasSearchResults> =>
+    _fetch(`/atlas/search/?q=${encodeURIComponent(q)}`),
 
   // --- Atlas notes ---
   getNotes: (): Promise<AtlasNote[]> => _fetch('/atlas/notes/'),

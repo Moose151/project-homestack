@@ -47,15 +47,25 @@ export interface AuthUser {
 
 export interface AtlasListItem {
   id: number
+  atlas_list_id: number
   title: string
   notes: string
+  quantity: string
   position: number
+  due_at: string | null
   assigned_to_person_id: number | null
   completed_at: string | null
   completed_by_id: number | null
   is_complete: boolean
   created_at: string
   updated_at: string
+}
+
+export interface AtlasSearchResults {
+  notes: AtlasNote[]
+  lists: AtlasList[]
+  items: AtlasListItem[]
+  reminders: AtlasReminder[]
 }
 
 export interface AtlasList {

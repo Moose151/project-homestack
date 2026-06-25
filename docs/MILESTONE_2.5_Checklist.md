@@ -69,22 +69,32 @@
 
 ## Workstream B — Atlas: improve functionality & usability
 
-## Phase 2.5B.1 — Search → Postgres FTS (D9)
-- [ ] Replace SQLite-safe `icontains` in Atlas selectors with Postgres FTS (`SearchVector`) over
-      note title/body, list title, list-item text, tags, categories — permission-filtered.
-- [ ] Children never see restricted notes in results; tests for the visibility filter.
+## Phase 2.5B.1 — Search → Postgres FTS (D9) ✅ (2026-06-25)
+- [x] `atlas/selectors._search` helper: Postgres `SearchVector`/`SearchQuery` when
+      `connection.vendor == "postgresql"`, else `icontains` fallback (SQLite tests). Applied to
+      `search_notes` + `search_atlas` over note title/body, list title, list-item title/notes,
+      reminder title/body. *(Tags/categories not modelled in Atlas V1 — parked.)*
+- [x] **Fixed a visibility leak:** `search_atlas` now permission-filters lists + reminders, and
+      restricts item hits to lists the user may see. New unified `GET /atlas/search/?q=`.
+- [x] Tests: search spans notes/lists/items/reminders; child never sees a sensitive note; items
+      from a private list don't surface to a child; blank query returns empty (**47 atlas tests**).
 
-## Phase 2.5B.2 — Functionality gap pass (vs `11_Node_Atlas.md`)
-- [ ] Lists/items: due dates, `assigned_to_person`, display order, clearer completed states.
-- [ ] Grocery/shopping mode: quantity, category sort, kiosk-friendly ticking, mobile shopping view.
-- [ ] Checklists: reusable lists for repeated routines (templates/reset/duplicate stay parked).
-- [ ] Quick-add / quick capture (note / list-item / reminder / to-do) from Hub + mobile + kiosk.
+## Phase 2.5B.2 — Functionality gap pass (vs `11_Node_Atlas.md`) 🟡 (2026-06-25)
+- [x] Items gained `due_at` + `quantity` (migration `0002`); `assigned_to_person` + `position`
+      already existed. Serializers expose them + `atlas_list_id`; services allow-list updated.
+- [x] Grocery/shopping mode: per-item `quantity` (web shows a Qty input on grocery/shopping lists,
+      renders `2× Milk`). *(Category sort parked — items have no category field; templates parked.)*
+- [~] Quick-add lives on the Hub (Atlas widgets) + the Atlas page; richer cross-surface quick
+      capture still to come. Item-level calendar sync stays out (only reminders sync, D7).
 
-## Phase 2.5B.3 — Atlas UX (web + kiosk)
-- [ ] Tighten the web Atlas pages (lists/reminders tabs) — clearer states, faster add/tick, error
-      surfacing.
-- [ ] Kiosk: large list cards, simple checklists, shopping-list ticking, minimal typing.
-- [ ] Dated Atlas items render correctly on the new Calendar (they already sync via the helper, D7).
+## Phase 2.5B.3 — Atlas UX (web + kiosk) 🟡 (2026-06-25)
+- [x] Web Atlas: page-level **error banner** (mutations no longer swallow failures), due-date
+      badges on items, quantity prefix, plus an **Atlas-wide search box** (debounced → `/atlas/search/`,
+      grouped results).
+- [x] Dated reminders already sync to the calendar via the helper (D7) — verified unchanged.
+- [ ] Kiosk Atlas: large list cards / shopping ticking deferred — **by design**, children cannot
+      complete items (resolver blocks child non-view actions, D10); the kiosk Atlas widgets stay
+      read-only. Revisit if an adult-facing kiosk browse view is wanted.
 
 ---
 

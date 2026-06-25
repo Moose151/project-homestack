@@ -454,3 +454,65 @@ class ReminderAPITests(TestCase):
             self.list_url, {"title": "Guest reminder"}, content_type="application/json"
         )
         self.assertIn(resp.status_code, [401, 403])
+
+
+# ---------------------------------------------------------------------------
+# Unified search (B.1) + item fields (B.2)
+# ---------------------------------------------------------------------------
+
+class AtlasSearchTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("admin", User.Role.ADMIN)
+        self.child = _make_user("child", User.Role.USER, is_child=True)
+        self.url = reverse("atlas-search")
+
+    def test_search_spans_notes_lists_items_reminders(self):
+        create_note(self.admin, title="Camping note", body="tent and torch")
+        lst = create_atlas_list(self.admin, title="Camping list", list_type="checklist")
+        create_list_item(self.admin, lst, title="Pack the camping stove")
+        create_reminder(self.admin, title="Book camping site", due_at=_future())
+        _login(self.client, "admin")
+        data = self.client.get(self.url + "?q=camping").json()
+        self.assertTrue(data["notes"])
+        self.assertTrue(data["lists"])
+        self.assertTrue(data["items"])
+        self.assertTrue(data["reminders"])
+
+    def test_blank_query_returns_empty(self):
+        _login(self.client, "admin")
+        data = self.client.get(self.url + "?q=").json()
+        self.assertEqual(data, {"notes": [], "lists": [], "items": [], "reminders": []})
+
+    def test_search_hides_sensitive_note_from_child(self):
+        create_note(self.admin, title="Secret stuff", body="private", sensitivity="sensitive")
+        _login(self.client, "child")
+        data = self.client.get(self.url + "?q=secret").json()
+        self.assertEqual(data["notes"], [])
+
+    def test_search_excludes_items_from_private_lists_for_other_users(self):
+        # A private list owned by admin; its items must not surface for a child.
+        private = create_atlas_list(self.admin, title="Hidden", visibility="private")
+        create_list_item(self.admin, private, title="Secret widget")
+        _login(self.client, "child")
+        data = self.client.get(self.url + "?q=widget").json()
+        self.assertEqual(data["items"], [])
+
+
+class AtlasListItemFieldTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("admin", User.Role.ADMIN)
+        _login(self.client, "admin")
+        self.list = create_atlas_list(self.admin, title="Groceries", list_type="grocery")
+
+    def test_create_item_with_quantity_and_due(self):
+        url = reverse("atlas-list-item-list", kwargs={"list_id": self.list.pk})
+        resp = self.client.post(
+            url,
+            {"title": "Milk", "quantity": "2 L", "due_at": _future().isoformat()},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201)
+        body = resp.json()
+        self.assertEqual(body["quantity"], "2 L")
+        self.assertIsNotNone(body["due_at"])
+        self.assertEqual(body["atlas_list_id"], self.list.pk)

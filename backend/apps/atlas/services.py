@@ -85,7 +85,7 @@ def create_list_item(acting_user: User, atlas_list: AtlasList, **data) -> AtlasL
 
 
 def update_list_item(acting_user: User, item: AtlasListItem, **data) -> AtlasListItem:
-    allowed = {"title", "notes", "position", "assigned_to_person_id"}
+    allowed = {"title", "notes", "quantity", "position", "due_at", "assigned_to_person_id"}
     for key, val in data.items():
         if key in allowed:
             setattr(item, key, val)

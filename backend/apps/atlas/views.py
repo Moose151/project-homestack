@@ -22,6 +22,28 @@ _AtlasPerm = HomeStackPermission.for_resource("atlas")
 
 
 # ---------------------------------------------------------------------------
+# Search
+# ---------------------------------------------------------------------------
+
+class AtlasSearchView(APIView):
+    """GET /atlas/search/?q= — permission-filtered FTS across notes/lists/items/reminders (D9)."""
+
+    permission_classes = [_AtlasPerm]
+
+    def get(self, request: Request) -> Response:
+        query = (request.query_params.get("q") or "").strip()
+        if not query:
+            return Response({"notes": [], "lists": [], "items": [], "reminders": []})
+        results = selectors.search_atlas(request.user, query)
+        return Response({
+            "notes": AtlasNoteSerializer(results["notes"], many=True).data,
+            "lists": AtlasListSerializer(results["lists"], many=True).data,
+            "items": AtlasListItemSerializer(results["items"], many=True).data,
+            "reminders": AtlasReminderSerializer(results["reminders"], many=True).data,
+        })
+
+
+# ---------------------------------------------------------------------------
 # Notes
 # ---------------------------------------------------------------------------
 

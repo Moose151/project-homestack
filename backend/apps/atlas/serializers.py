@@ -27,12 +27,12 @@ class AtlasListItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = AtlasListItem
         fields = [
-            "id", "title", "notes", "position",
+            "id", "atlas_list_id", "title", "notes", "quantity", "position", "due_at",
             "assigned_to_person_id",
             "completed_at", "completed_by_id", "is_complete",
             "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "completed_at", "completed_by_id", "is_complete", "created_at", "updated_at"]
+        read_only_fields = ["id", "atlas_list_id", "completed_at", "completed_by_id", "is_complete", "created_at", "updated_at"]
 
 
 class AtlasListSerializer(serializers.ModelSerializer):
@@ -66,7 +66,7 @@ class AtlasListWriteSerializer(serializers.ModelSerializer):
 class AtlasListItemWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = AtlasListItem
-        fields = ["title", "notes", "position", "assigned_to_person_id"]
+        fields = ["title", "notes", "quantity", "position", "due_at", "assigned_to_person_id"]
 
     def validate_title(self, value: str) -> str:
         if not value.strip():

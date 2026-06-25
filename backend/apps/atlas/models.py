@@ -90,7 +90,9 @@ class AtlasListItem(HouseholdBaseModel):
     )
     title = models.CharField(max_length=255)
     notes = models.TextField(blank=True, default="")
+    quantity = models.CharField(max_length=50, blank=True, default="")  # grocery/shopping (e.g. "2", "500g")
     position = models.PositiveIntegerField(default=0)
+    due_at = models.DateTimeField(null=True, blank=True)
     assigned_to_person = models.ForeignKey(
         "people.Person",
         null=True,

@@ -1,6 +1,7 @@
 from django.urls import path
 
 from apps.atlas.views import (
+    AtlasSearchView,
     ListDetailView,
     ListItemCompleteView,
     ListItemDetailView,
@@ -14,6 +15,9 @@ from apps.atlas.views import (
 )
 
 urlpatterns = [
+    # Search
+    path("search/", AtlasSearchView.as_view(), name="atlas-search"),
+
     # Notes
     path("notes/", NoteListView.as_view(), name="atlas-note-list"),
     path("notes/<int:note_id>/", NoteDetailView.as_view(), name="atlas-note-detail"),
