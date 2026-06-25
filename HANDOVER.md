@@ -228,6 +228,8 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 
 | 2026-06-25 | Assistant | M2.5 | **D.6 kiosk look & feel complete.** The expected legacy path `~/Documents/new/project-meridian` was missing, so used `/home/moose/Documents/project-meridian` (`app/static/css/homestack.css`, kiosk templates) as the reference. Restyled React kiosk screens (`AmbientScreen`, `AvatarSelect`, `PINEntry`, `KioskDashboard`) from hardcoded gray/dark styling to shared HomeStack tokens: warm paper background, raised cards, primary/warning/success accents, larger child-friendly cards/buttons. Added kiosk light/dark toggle via `KioskThemeToggle` using shared `hs-dark` preference. Fixed dashboard header emoji avatars by distinguishing emoji from image URLs. `npm run build` clean; `DJANGO_SETTINGS_MODULE=config.settings.test python manage.py test` green (365 tests). | Start **2.5X verification**: role/permission smoke checks across Hub/Atlas/Calendar, then home-server run-through/deploy. |
 
+| 2026-06-25 | Assistant | M2.5 | **2.5X kiosk follow-ups shipped.** Improved kiosk light-theme contrast by moving kiosk screens to the stronger `sunken` background and using `raised` panels with stronger borders/shadows. Added a direct kiosk Calendar surface in `KioskDashboard`: Home/Calendar switch, read-only next-7-days grid, event cards with time/source/location, using the existing permission-filtered `/calendar/events/` API. `npm run build` clean. | Continue **2.5X verification**: Atlas reminders Hub+Calendar no double-write, Meridian Hub/Calendar role smoke checks, backend suite, home-server run-through/deploy. |
+
 ### Session notes (free-form, optional)
 
 *(Use this space for anything that doesn't fit the table — gotchas, decisions made mid-session,

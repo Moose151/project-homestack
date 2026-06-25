@@ -16,7 +16,7 @@ function AvatarCard({ user, onClick }: { user: KioskUser; onClick: () => void })
   return (
     <button
       onClick={onClick}
-      className="flex min-h-[180px] min-w-[160px] cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-line bg-raised p-6 text-ink shadow-soft transition-all hover:-translate-y-0.5 hover:border-primary hover:shadow-card active:scale-95"
+      className="flex min-h-[180px] min-w-[160px] cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-line-strong bg-raised p-6 text-ink shadow-card transition-all hover:-translate-y-0.5 hover:border-primary active:scale-95"
     >
       {isImage ? (
         <img src={user.avatar} alt={user.display_name} className="w-24 h-24 rounded-full object-cover" />
@@ -44,7 +44,7 @@ export function AvatarSelect({ onSelect }: Props) {
   }, [])
 
   return (
-    <div className="relative flex h-full w-full flex-col items-center justify-center gap-10 bg-paper px-8 text-ink">
+    <div className="relative flex h-full w-full flex-col items-center justify-center gap-10 bg-sunken px-8 text-ink">
       <div className="absolute right-6 top-5">
         <KioskThemeToggle />
       </div>

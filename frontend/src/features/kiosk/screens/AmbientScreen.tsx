@@ -23,7 +23,7 @@ export function AmbientScreen({ onStart }: Props) {
 
   return (
     <div
-      className="relative flex h-full w-full cursor-pointer select-none flex-col items-center justify-center bg-paper text-ink"
+      className="relative flex h-full w-full cursor-pointer select-none flex-col items-center justify-center bg-sunken text-ink"
       onClick={onStart}
     >
       <div className="absolute right-6 top-5 flex items-center gap-3">

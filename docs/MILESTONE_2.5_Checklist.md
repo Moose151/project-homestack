@@ -188,6 +188,10 @@ A batch of usability fixes raised by the owner. Small but high-touch; do alongsi
 - [ ] Atlas reminders → appear on Hub widget **and** Calendar with no double-writing (D7).
 - [ ] Meridian Hub widget + Calendar Meridian deadlines render for the right roles only.
 - [ ] Permissions enforced across all three surfaces (no leaks to children/guests); tests added.
+- [x] Kiosk light-theme contrast pass: current light kiosk UI feels too washed/flushed; improve
+      contrast between the background and widgets/tiles while staying on shared design tokens.
+- [x] Add a kiosk Calendar view/surface (beyond the existing `calendar_upcoming` Hub widget) so the
+      household timeline is directly usable from kiosk mode.
 - [ ] `tsc` + production build clean; backend suite green; run the stack on the home server.
 
 ---

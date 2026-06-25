@@ -17,7 +17,7 @@ function PINButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="h-20 w-20 select-none rounded-2xl border-2 border-line bg-raised text-3xl font-bold text-ink shadow-soft transition-all hover:border-primary hover:bg-primary-soft active:scale-95"
+      className="h-20 w-20 select-none rounded-2xl border-2 border-line-strong bg-raised text-3xl font-bold text-ink shadow-card transition-all hover:border-primary hover:bg-primary-soft active:scale-95"
     >
       {label}
     </button>
@@ -85,7 +85,7 @@ export function PINEntry({ kioskUser, onSuccess, onCancel }: Props) {
   ))
 
   return (
-    <div className="relative flex h-full w-full flex-col items-center justify-center gap-8 bg-paper px-6 text-ink">
+    <div className="relative flex h-full w-full flex-col items-center justify-center gap-8 bg-sunken px-6 text-ink">
       <div className="absolute right-6 top-5">
         <KioskThemeToggle />
       </div>

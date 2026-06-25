@@ -14,11 +14,32 @@ interface Props {
   onLogout: () => void
 }
 
-const panelClass = 'rounded-2xl border border-line bg-raised p-6 shadow-soft'
-const itemButtonClass = 'rounded-xl border border-line bg-surface px-4 py-4 text-left shadow-soft transition-colors hover:border-primary hover:bg-primary-soft disabled:opacity-60'
+type DashboardView = 'home' | 'calendar'
+
+const panelClass = 'rounded-2xl border-2 border-line-strong bg-raised p-6 shadow-card'
+const itemButtonClass = 'rounded-xl border-2 border-line bg-surface px-4 py-4 text-left shadow-soft transition-colors hover:border-primary hover:bg-primary-soft disabled:opacity-60'
 const headingClass = 'mb-4 text-lg font-bold text-muted-strong'
 const emptyClass = 'text-sm text-muted'
 const pointsClass = 'font-extrabold text-warning'
+
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
+const addDays = (d: Date, days: number) => {
+  const next = new Date(d)
+  next.setDate(next.getDate() + days)
+  return next
+}
+const sameDay = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+const eventStartsOn = (event: CalendarEvent, day: Date) => sameDay(new Date(event.start_at), day)
+const dayTitle = (day: Date, today: Date) => {
+  if (sameDay(day, today)) return 'Today'
+  if (sameDay(day, addDays(today, 1))) return 'Tomorrow'
+  return day.toLocaleDateString(undefined, { weekday: 'short' })
+}
+const eventTime = (event: CalendarEvent) => {
+  if (event.is_all_day) return 'All day'
+  return new Date(event.start_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+}
 
 function TodosWidget({ widget }: { widget: HubWidget }) {
   const items = widget.items as ListItem[]
@@ -178,7 +199,7 @@ function KioskBadges() {
 // Kiosk goals + wishlist — progress bars with quick-contribute buttons.
 function KioskBar({ pct }: { pct: number }) {
   return (
-    <div className="h-3 rounded-full bg-sunken overflow-hidden mt-2 border border-line">
+    <div className="h-3 rounded-full bg-sunken overflow-hidden mt-2 border border-line-strong">
       <div className="h-full bg-warning" style={{ width: `${Math.min(100, pct)}%` }} />
     </div>
   )
@@ -211,7 +232,7 @@ function KioskGoalsWishlist() {
   const amounts = [5, 10]
 
   const row = (key: string, title: string, pct: number, saved: number, target: number, contribute: (n: number) => Promise<unknown>) => (
-    <div key={key} className="rounded-xl border border-line bg-surface p-4 shadow-soft">
+    <div key={key} className="rounded-xl border-2 border-line bg-surface p-4 shadow-soft">
       <p className="font-semibold">{title}</p>
       <KioskBar pct={pct} />
       <p className="text-xs text-muted mt-1">★ {saved} / {target}</p>
@@ -271,7 +292,7 @@ function KioskRoutines() {
             onClick={() => complete(r)}
             disabled={busy === r.id || !!r.done_today}
             className={`flex min-h-[96px] flex-col rounded-xl border px-4 py-4 text-left shadow-soft transition-colors disabled:opacity-60
-              ${r.done_today ? 'border-success bg-success-soft' : 'border-line bg-surface hover:border-primary hover:bg-primary-soft'}`}
+              ${r.done_today ? 'border-success bg-success-soft' : 'border-line-strong bg-surface hover:border-primary hover:bg-primary-soft'}`}
           >
             <span className="text-lg font-semibold">{r.done_today && '✅ '}{r.title}</span>
             <span className="mt-auto pt-2 flex items-center gap-2">
@@ -325,7 +346,7 @@ function KioskShop() {
               key={r.id}
               onClick={() => request(r)}
               disabled={busy === r.id || cant}
-              className="flex flex-col overflow-hidden rounded-xl border border-line bg-surface text-left shadow-soft transition-colors hover:border-primary hover:bg-primary-soft disabled:opacity-50"
+              className="flex flex-col overflow-hidden rounded-xl border-2 border-line bg-surface text-left shadow-soft transition-colors hover:border-primary hover:bg-primary-soft disabled:opacity-50"
             >
               {r.image_url && <img src={r.image_url} alt="" className="h-24 w-full object-cover" />}
               <div className="p-3">
@@ -387,6 +408,83 @@ function UpcomingWidget({ widget }: { widget: HubWidget }) {
   )
 }
 
+function KioskCalendarView() {
+  const [events, setEvents] = useState<CalendarEvent[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const today = startOfDay(new Date())
+  const days = Array.from({ length: 7 }, (_, i) => addDays(today, i))
+
+  useEffect(() => {
+    const start = today.toISOString()
+    const end = addDays(today, 8).toISOString()
+    api.getEvents({ start, end })
+      .then((data) => {
+        setEvents(data.sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime()))
+        setError(null)
+      })
+      .catch(() => setError('Could not load calendar.'))
+  }, [])
+
+  const sourceLabel = (event: CalendarEvent) =>
+    event.source_node ? event.source_node.replace(/_/g, ' ') : 'Household'
+
+  return (
+    <section className="space-y-6">
+      <div className={`${panelClass} flex flex-wrap items-center justify-between gap-4`}>
+        <div>
+          <h1 className="text-3xl font-extrabold">Calendar</h1>
+          <p className="mt-1 text-muted">{today.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+        </div>
+        <div className="rounded-2xl border-2 border-primary/40 bg-primary-soft px-5 py-3 text-center">
+          <p className="text-sm font-bold uppercase tracking-wide text-primary">Next 7 days</p>
+          <p className="text-2xl font-extrabold text-primary">{events.length}</p>
+        </div>
+      </div>
+
+      {error && <p className="rounded-xl border border-danger bg-danger-soft px-4 py-3 text-danger">{error}</p>}
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {days.map(day => {
+          const dayEvents = events.filter(event => eventStartsOn(event, day))
+          return (
+            <section key={day.toISOString()} className={`${panelClass} min-h-[220px]`}>
+              <div className="mb-4 flex items-baseline justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-extrabold">{dayTitle(day, today)}</h2>
+                  <p className="text-sm text-muted">{day.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>
+                </div>
+                <span className="rounded-full bg-sunken px-3 py-1 text-sm font-bold text-muted-strong">
+                  {dayEvents.length}
+                </span>
+              </div>
+              {dayEvents.length === 0 ? (
+                <p className={emptyClass}>Nothing booked</p>
+              ) : (
+                <div className="space-y-3">
+                  {dayEvents.map(event => (
+                    <article
+                      key={event.id}
+                      className="rounded-xl border-2 border-line bg-surface p-4 shadow-soft"
+                      style={{ borderLeftColor: event.colour || '#3f6f8f', borderLeftWidth: 8 }}
+                    >
+                      <p className="text-sm font-extrabold text-primary">{eventTime(event)}</p>
+                      <h3 className="mt-1 text-lg font-bold leading-tight">{event.title}</h3>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-muted">
+                        <span className="rounded-full bg-sunken px-2 py-1 capitalize">{sourceLabel(event)}</span>
+                        {event.location && <span className="rounded-full bg-sunken px-2 py-1">{event.location}</span>}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 const WIDGET_COMPONENTS: Record<string, React.ComponentType<{ widget: HubWidget }>> = {
   clock: ClockWidget,
   calendar_upcoming: UpcomingWidget,
@@ -401,6 +499,7 @@ export function KioskDashboard({ authUser, onLogout }: Props) {
   const [widgets, setWidgets] = useState<HubWidget[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   const [time, setTime] = useState(new Date())
+  const [view, setView] = useState<DashboardView>('home')
 
   // Return to avatar selection after 5 minutes of inactivity.
   useInactivityTimeout(onLogout, 5 * 60 * 1000)
@@ -426,9 +525,9 @@ export function KioskDashboard({ authUser, onLogout }: Props) {
   }
 
   return (
-    <div className="flex h-full w-full flex-col bg-paper text-ink">
+    <div className="flex h-full w-full flex-col bg-sunken text-ink">
       {/* Header */}
-      <header className="flex items-center justify-between gap-4 border-b border-line bg-raised px-8 py-4 shadow-soft">
+      <header className="flex items-center justify-between gap-4 border-b-2 border-line-strong bg-raised px-8 py-4 shadow-card">
         <div className="flex items-center gap-3">
           {avatarIsImage ? (
             <img src={authUser.avatar} alt="" className="w-10 h-10 rounded-full object-cover" />
@@ -444,10 +543,23 @@ export function KioskDashboard({ authUser, onLogout }: Props) {
         </div>
         <span className="text-3xl font-thin tabular-nums text-muted-strong">{timeStr}</span>
         <div className="flex items-center gap-3">
+          <div className="flex rounded-xl border border-line-strong bg-sunken p-1">
+            {(['home', 'calendar'] as DashboardView[]).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setView(tab)}
+                className={`min-h-10 rounded-lg px-4 text-sm font-bold capitalize transition-colors ${
+                  view === tab ? 'bg-raised text-primary shadow-soft' : 'text-muted-strong hover:bg-surface'
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
           <KioskThemeToggle />
           <button
             onClick={handleLogout}
-            className="min-h-11 rounded-lg border border-line bg-primary-soft px-4 py-2 text-sm font-bold text-primary transition-colors hover:bg-primary hover:text-white"
+            className="min-h-11 rounded-lg border border-primary bg-primary-soft px-4 py-2 text-sm font-bold text-primary transition-colors hover:bg-primary hover:text-white"
           >
             Switch user
           </button>
@@ -456,22 +568,28 @@ export function KioskDashboard({ authUser, onLogout }: Props) {
 
       {/* Widgets */}
       <main className="flex-1 overflow-auto p-8">
-        {loadError && <p className="mb-4 rounded-xl border border-danger bg-danger-soft px-4 py-3 text-danger">{loadError}</p>}
-        <div className="flex flex-wrap gap-6">
-          {widgets.map((w) => {
-            const Component = WIDGET_COMPONENTS[w.key]
-            return Component ? <Component key={w.key} widget={w} /> : null
-          })}
-          {widgets.length === 0 && !loadError && (
-            <p className="text-muted">Loading...</p>
-          )}
-        </div>
-        <div className="mt-6 flex flex-col gap-6">
-          <KioskRoutines />
-          <KioskShop />
-          <KioskGoalsWishlist />
-          <KioskBadges />
-        </div>
+        {view === 'calendar' ? (
+          <KioskCalendarView />
+        ) : (
+          <>
+            {loadError && <p className="mb-4 rounded-xl border border-danger bg-danger-soft px-4 py-3 text-danger">{loadError}</p>}
+            <div className="flex flex-wrap gap-6">
+              {widgets.map((w) => {
+                const Component = WIDGET_COMPONENTS[w.key]
+                return Component ? <Component key={w.key} widget={w} /> : null
+              })}
+              {widgets.length === 0 && !loadError && (
+                <p className="text-muted">Loading...</p>
+              )}
+            </div>
+            <div className="mt-6 flex flex-col gap-6">
+              <KioskRoutines />
+              <KioskShop />
+              <KioskGoalsWishlist />
+              <KioskBadges />
+            </div>
+          </>
+        )}
       </main>
     </div>
   )
