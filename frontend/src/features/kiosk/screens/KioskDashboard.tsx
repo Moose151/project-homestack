@@ -3,6 +3,7 @@ import { api } from '../../../api/client'
 import type {
   AuthUser, HubWidget, AtlasListItem as ListItem, AtlasReminder as Reminder,
   MeridianTask, PointsSummaryRow, MeridianReward, MeridianRoutine,
+  MeridianGoal, MeridianWishlistItem,
 } from '../../../api/types'
 import { useInactivityTimeout } from '../hooks/useInactivityTimeout'
 
@@ -142,6 +143,71 @@ function MeridianPointsWidget({ widget }: { widget: HubWidget }) {
           ))}
         </ul>
       )}
+    </div>
+  )
+}
+
+// Kiosk goals + wishlist — progress bars with quick-contribute buttons.
+function KioskBar({ pct }: { pct: number }) {
+  return (
+    <div className="h-2 rounded-full bg-gray-600 overflow-hidden mt-2">
+      <div className="h-full bg-amber-400" style={{ width: `${Math.min(100, pct)}%` }} />
+    </div>
+  )
+}
+
+function KioskGoalsWishlist() {
+  const [goals, setGoals] = useState<MeridianGoal[]>([])
+  const [items, setItems] = useState<MeridianWishlistItem[]>([])
+  const [balance, setBalance] = useState(0)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const load = async () => {
+    const [g, w, km] = await Promise.all([
+      api.getMeridianGoals(true).catch(() => []),
+      api.getWishlistItems().catch(() => []),
+      api.kioskMeridian().catch(() => ({ points_balance: 0 } as { points_balance: number })),
+    ])
+    setGoals(g.filter(x => x.status === 'active'))
+    setItems(w.filter(x => x.status === 'active'))
+    setBalance(km.points_balance)
+  }
+  useEffect(() => { load() }, [])
+
+  const give = async (key: string, fn: () => Promise<unknown>) => {
+    setBusy(key)
+    try { await fn(); await load() } catch { /* ignore */ } finally { setBusy(null) }
+  }
+
+  if (goals.length === 0 && items.length === 0) return null
+  const amounts = [5, 10]
+
+  const row = (key: string, title: string, pct: number, saved: number, target: number, contribute: (n: number) => Promise<unknown>) => (
+    <div key={key} className="bg-gray-700 rounded-xl p-4">
+      <p className="text-gray-100 font-medium">{title}</p>
+      <KioskBar pct={pct} />
+      <p className="text-xs text-gray-400 mt-1">★ {saved} / {target}</p>
+      <div className="flex gap-2 mt-2">
+        {amounts.map(n => (
+          <button key={n} disabled={busy === key || balance < n}
+            onClick={() => give(key, () => contribute(n))}
+            className="px-3 py-1 rounded-lg bg-amber-500/80 hover:bg-amber-500 disabled:opacity-40 text-sm font-semibold text-gray-900">
+            +{n}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="bg-gray-800 rounded-2xl p-6 w-full">
+      <h2 className="text-lg font-semibold text-gray-200 mb-4">Goals &amp; Wishlist · ★ {balance}</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {goals.map(g => row(`g${g.id}`, `🎯 ${g.title}`, g.progress_percentage, g.total_contributed, g.target_points,
+          n => api.contributeToGoal(g.id, n)))}
+        {items.map(it => row(`w${it.id}`, `🎁 ${it.name}`, it.progress_percentage, it.total_saved, it.point_cost,
+          n => api.contributeToWishlist(it.id, n)))}
+      </div>
     </div>
   )
 }
@@ -323,6 +389,7 @@ export function KioskDashboard({ authUser, onLogout }: Props) {
         <div className="mt-6 flex flex-col gap-6">
           <KioskRoutines />
           <KioskShop />
+          <KioskGoalsWishlist />
         </div>
       </main>
     </div>

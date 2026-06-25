@@ -6,6 +6,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { TasksTab } from './meridian/TasksTab'
 import { ShopTab } from './meridian/ShopTab'
 import { RoutinesTab } from './meridian/RoutinesTab'
+import { GoalsTab, WishlistTab } from './meridian/GoalsWishlistTabs'
 
 function PointsPill({ points, label = '' }: { points: number; label?: string }) {
   return (
@@ -67,7 +68,7 @@ function PointsTab({ pointsLabel }: { pointsLabel: string }) {
 // Meridian page
 // ---------------------------------------------------------------------------
 
-type Tab = 'tasks' | 'routines' | 'shop' | 'points'
+type Tab = 'tasks' | 'routines' | 'shop' | 'goals' | 'wishlist' | 'points'
 
 export function MeridianPage() {
   const { user } = useAuth()
@@ -84,7 +85,7 @@ export function MeridianPage() {
       <h1 className="text-2xl font-extrabold tracking-tight text-ink">Meridian</h1>
 
       <div className="flex gap-1 bg-sunken p-1 rounded-xl w-fit">
-        {(['tasks', 'routines', 'shop', 'points'] as Tab[]).map(t => (
+        {(['tasks', 'routines', 'shop', 'goals', 'wishlist', 'points'] as Tab[]).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -100,6 +101,8 @@ export function MeridianPage() {
       {tab === 'tasks' && <TasksTab canManage={canManage} pointsLabel={pointsLabel} />}
       {tab === 'routines' && <RoutinesTab canManage={canManage} pointsLabel={pointsLabel} />}
       {tab === 'shop' && <ShopTab canManage={canManage} pointsLabel={pointsLabel} />}
+      {tab === 'goals' && <GoalsTab canManage={canManage} pointsLabel={pointsLabel} />}
+      {tab === 'wishlist' && <WishlistTab canManage={canManage} pointsLabel={pointsLabel} />}
       {tab === 'points' && <PointsTab pointsLabel={pointsLabel} />}
     </div>
   )

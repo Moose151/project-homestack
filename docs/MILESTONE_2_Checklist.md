@@ -166,7 +166,7 @@
 >   filter on shop)*
 > - [x] **Routines + streaks** — web cards (done-today + streak badges, mark-done, admin create/
 >   delete); kiosk tap-to-complete routine cards with streak + celebration.
-> - [ ] Group goals + Wishlist (+ progress) + kiosk
+> - [x] **Group goals + Wishlist** — web progress cards + contribute, admin create/approve/fulfill; kiosk quick-contribute progress cards.
 > - [ ] Points / Leaderboard / Badges + kiosk badge celebration
 > - [ ] Approvals + Settings (web) + notification bell
 - [ ] Web: Tasks · Shop/Rewards · Routines · Goals · Wishlist · Points/Leaderboard · Badges ·
