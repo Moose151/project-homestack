@@ -8,6 +8,16 @@ export interface KioskUser {
   username: string
 }
 
+export interface Person {
+  id: number
+  display_name: string
+  preferred_name: string
+  avatar: string
+  colour: string
+  profile_type: 'adult' | 'child' | 'other'
+  linked_user_id: number | null
+}
+
 export interface AuthUser {
   id: number
   username: string

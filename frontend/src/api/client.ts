@@ -5,7 +5,7 @@ import type {
   MeridianRewardRequest, MeridianTask,
   MeridianCategory, MeridianRoutine, MeridianGoal,
   MeridianWishlistItem, MeridianWishlistRequest, MeridianSettings,
-  MeridianReports, Badge, PersonBadge, NotificationList,
+  MeridianReports, Badge, PersonBadge, NotificationList, Person,
 } from './types'
 
 const BASE = '/api/v1'
@@ -51,6 +51,9 @@ export const api = {
   me: (): Promise<AuthUser> => _fetch('/auth/me/'),
   reauth: (password: string): Promise<void> =>
     _fetch('/auth/reauth/', { method: 'POST', body: JSON.stringify({ password }) }),
+
+  // --- People ---
+  getPeople: (): Promise<Person[]> => _fetch('/people/'),
 
   // --- Hub ---
   hub: (): Promise<HubResponse> => _fetch('/hub/'),
@@ -100,6 +103,8 @@ export const api = {
   createMeridianTask: (data: {
     title: string; points: number; description?: string
     assigned_to_person_id?: number | null; is_hot?: boolean; due_at?: string
+    hot_bonus_points?: number; hot_label?: string; category_id?: number | null
+    completion_behavior?: string; completion_scope?: string; availability_window?: string
   }): Promise<MeridianTask> =>
     _fetch('/meridian/tasks/', { method: 'POST', body: JSON.stringify(data) }),
   deleteMeridianTask: (id: number): Promise<void> =>
