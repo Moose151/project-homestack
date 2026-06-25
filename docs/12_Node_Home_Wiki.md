@@ -73,6 +73,10 @@ Children see only safe pages; future guests see only specifically shared pages.
 Widgets: favourite pages · emergency-info shortcut · recently updated · bin-night reminder ·
 household notice · quick links · kiosk help. Permission-aware (a child sees only safe items).
 
+Completion rule: this node is not "done" until its Hub widget rows are seeded with
+`source_node` set, kiosk support declared per widget, and content is supplied through
+permission-filtered selectors that the Hub service calls without cross-node model imports.
+
 ## 9. Calendar integration
 
 Mostly reference, so few events. Some pages carry date-based reminders (bin night, filter
@@ -140,4 +144,4 @@ labels; favourites; review reminders later; few categories; strong search.
 
 Create/edit/delete pages; categorise, tag, attach, favourite; search; permissions enforced;
 kiosk-safe pages viewable from kiosk; emergency info configurable; Hub shows favourites;
-follows the shared design system.
+Hub widget rows/selectors are shipped; follows the shared design system.

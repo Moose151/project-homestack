@@ -264,3 +264,39 @@ class CalendarEventCRUDTests(TestCase):
         resp = self.client.get(self.list_url)
         event = next(e for e in resp.json() if e["title"] == "Standalone")
         self.assertIsNone(event["source_node"])
+
+    def test_atlas_synced_event_exposes_source_node_and_respects_visibility(self):
+        from apps.atlas.models import Visibility as AtlasVisibility
+        from apps.atlas.services import create_reminder
+        reminder = create_reminder(
+            self.admin, title="Private reminder", due_at=timezone.now(),
+            visibility=AtlasVisibility.PRIVATE,
+        )
+        self.assertIsNotNone(reminder.calendar_event_id)
+
+        resp = self.client.get(self.list_url)
+        event = next(e for e in resp.json() if e["title"] == "Private reminder")
+        self.assertEqual(event["source_node"], "atlas")
+
+        child = _make_user("child_private", User.Role.USER, is_child=True)
+        _login(self.client, "child_private")
+        child_resp = self.client.get(self.list_url)
+        self.assertNotIn("Private reminder", [e["title"] for e in child_resp.json()])
+
+    def test_meridian_deadlines_render_for_allowed_roles_only(self):
+        from apps.meridian import services as meridian_services
+        from apps.meridian.models import Visibility as MeridianVisibility
+        task = meridian_services.create_task(
+            self.admin, title="Private Meridian deadline", points=5,
+            due_at=timezone.now(), visibility=MeridianVisibility.PRIVATE,
+        )
+        self.assertIsNotNone(task.calendar_event_id)
+
+        admin_resp = self.client.get(self.list_url)
+        event = next(e for e in admin_resp.json() if e["title"] == "Private Meridian deadline")
+        self.assertEqual(event["source_node"], "meridian")
+
+        child = _make_user("child_meridian", User.Role.USER, is_child=True)
+        _login(self.client, "child_meridian")
+        child_resp = self.client.get(self.list_url)
+        self.assertNotIn("Private Meridian deadline", [e["title"] for e in child_resp.json()])

@@ -16,7 +16,7 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False) -> list[dict]:
 
     kiosk_mode=True restricts to widgets where supports_kiosk=True.
     """
-    from apps.atlas.selectors import list_items_for_list, list_reminders, list_atlas_lists
+    from apps.atlas.selectors import list_open_items, list_reminders
     from apps.atlas.serializers import AtlasListItemSerializer, AtlasReminderSerializer
 
     qs = HouseholdHubWidget.objects.filter(
@@ -48,14 +48,7 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False) -> list[dict]:
         content: list = []
 
         if key == "atlas_todos":
-            from apps.atlas.models import AtlasListItem
-            items = list(
-                AtlasListItem.objects.filter(
-                    completed_at__isnull=True,
-                    deleted_at__isnull=True,
-                ).order_by("atlas_list__title", "position")[:20]
-            )
-            content = AtlasListItemSerializer(items, many=True).data
+            content = AtlasListItemSerializer(list_open_items(user, limit=20), many=True).data
 
         elif key == "atlas_reminders":
             week_ahead = timezone.now() + timezone.timedelta(days=7)

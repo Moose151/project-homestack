@@ -224,12 +224,19 @@ function AgendaView({ events, colourFor, time24, onOpen }: {
 // ---------------------------------------------------------------------------
 
 const lsGet = (k: string, d: string) => localStorage.getItem(k) ?? d
+const linkedDate = () => {
+  const raw = new URLSearchParams(window.location.search).get('date')
+  if (!raw) return null
+  const d = new Date(`${raw}T00:00:00`)
+  return Number.isNaN(d.getTime()) ? null : d
+}
 
 export function CalendarPage() {
-  const [view, setView] = useState<View>(() => lsGet('hs_cal_view', 'month') as View)
+  const initialLinkedDate = linkedDate()
+  const [view, setView] = useState<View>(() => initialLinkedDate ? 'day' : lsGet('hs_cal_view', 'month') as View)
   const [weekStart, setWeekStart] = useState<number>(() => Number(lsGet('hs_cal_weekstart', '1')))
   const [time24, setTime24] = useState<boolean>(() => lsGet('hs_cal_24h', '0') === '1')
-  const [anchor, setAnchor] = useState(() => new Date())
+  const [anchor, setAnchor] = useState(() => initialLinkedDate ?? new Date())
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [people, setPeople] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type { AtlasList, AtlasListItem, AtlasReminder, AtlasSearchResults } from '../../../api/types'
 import { Card } from '../../../components/Card'
@@ -14,6 +15,11 @@ function dueLabel(iso: string | null) {
   if (diff === 0) return { text: 'Today', tone: 'bg-primary-soft text-primary' }
   if (diff === 1) return { text: 'Tomorrow', tone: 'bg-sunken text-muted-strong' }
   return { text: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), tone: 'bg-sunken text-muted-strong' }
+}
+
+function calendarDayHref(iso: string | null) {
+  if (!iso) return '/calendar'
+  return `/calendar?date=${new Date(iso).toISOString().slice(0, 10)}`
 }
 
 // ---------------------------------------------------------------------------
@@ -245,6 +251,7 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
                   {r.due_at && (
                     <p className="text-xs text-primary mt-1">
                       {new Date(r.due_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                      <Link to={calendarDayHref(r.due_at)} className="ml-2 hover:underline">Open day</Link>
                     </p>
                   )}
                 </div>

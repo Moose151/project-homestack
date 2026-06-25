@@ -11,8 +11,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.atlas.models import Visibility as AtlasVisibility
 from apps.atlas.services import create_atlas_list, create_list_item, create_reminder
 from apps.people.services import create_person
+from apps.scheduling.models import CalendarEvent
 
 
 def _make_user(username, role=User.Role.ADMIN, is_child=False) -> User:
@@ -112,6 +114,28 @@ class HubContentTests(TestCase):
         reminders_w = next(w for w in resp.json()["widgets"] if w["key"] == "atlas_reminders")
         titles = [r["title"] for r in reminders_w["items"]]
         self.assertNotIn("Next year", titles)
+
+    def test_dated_reminder_appears_on_hub_and_calendar_once(self):
+        reminder = create_reminder(self.admin, title="Book dentist", due_at=_future(36))
+        self.assertIsNotNone(reminder.calendar_event_id)
+        self.assertEqual(CalendarEvent.objects.filter(source_record_type="AtlasReminder", source_record_id=reminder.id).count(), 1)
+
+        resp = self.client.get(reverse("hub"))
+        reminders_w = next(w for w in resp.json()["widgets"] if w["key"] == "atlas_reminders")
+        calendar_w = next(w for w in resp.json()["widgets"] if w["key"] == "calendar_upcoming")
+        self.assertIn("Book dentist", [r["title"] for r in reminders_w["items"]])
+        self.assertIn("Book dentist", [e["title"] for e in calendar_w["items"]])
+
+    def test_todos_widget_hides_items_from_private_list_for_child(self):
+        child = _make_user("child", User.Role.USER, is_child=True)
+        private_list = create_atlas_list(
+            self.admin, title="Private tasks", list_type="todo", visibility=AtlasVisibility.PRIVATE
+        )
+        create_list_item(self.admin, private_list, title="Hidden task")
+        _login(self.client, "child")
+        resp = self.client.get(reverse("hub"))
+        todos = next(w for w in resp.json()["widgets"] if w["key"] == "atlas_todos")
+        self.assertNotIn("Hidden task", [i["title"] for i in todos["items"]])
 
     def test_kiosk_hub_returns_kiosk_safe_widgets_only(self):
         resp = self.client.get(reverse("kiosk-hub"))

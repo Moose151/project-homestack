@@ -60,6 +60,17 @@ def list_items_for_list(atlas_list: AtlasList, *, include_complete: bool = True)
     return list(qs)
 
 
+def list_open_items(user=None, *, limit: int | None = None) -> list[AtlasListItem]:
+    """Open list items the user may see, restricted by the parent list visibility."""
+    qs = AtlasListItem.objects.filter(completed_at__isnull=True).order_by("atlas_list__title", "position", "id")
+    if user is not None:
+        visible_list_ids = apply_visibility(AtlasList.objects.all(), user).values_list("id", flat=True)
+        qs = qs.filter(atlas_list_id__in=visible_list_ids)
+    if limit is not None:
+        qs = qs[:limit]
+    return list(qs)
+
+
 def get_list_item(pk: int) -> AtlasListItem | None:
     return AtlasListItem.objects.filter(pk=pk).first()
 

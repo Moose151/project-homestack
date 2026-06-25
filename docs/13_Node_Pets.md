@@ -58,6 +58,10 @@ safe info.
 Widgets: pet reminders due · upcoming vet appointments · medication due · pet care today · pet
 profile cards · low pet-food alert (via Inventory).
 
+Completion rule: this node is not "done" until its Hub widget rows are seeded with
+`source_node` set, kiosk support declared per widget, and content is supplied through
+permission-filtered selectors that the Hub service calls without cross-node model imports.
+
 ## 9. Calendar integration
 
 Events for flea/worming/vaccination/vet/medication/grooming, optional feeding routines — all
@@ -109,4 +113,5 @@ travel pet-care planning.
 ## 18. Completion criteria
 
 Users create pets, add treatment reminders, mark treatments complete, see pet reminders on Hub
-and Calendar, use kiosk pet cards, and search permitted pet records.
+and Calendar, use kiosk pet cards, ship Hub widget rows/selectors, and search permitted pet
+records.

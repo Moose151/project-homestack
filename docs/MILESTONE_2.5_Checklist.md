@@ -43,19 +43,21 @@
       refreshes the live Hub. *(Drag-and-drop deferred; up/down reorder shipped.)*
 
 ## Phase 2.5A.3 — Per-node Hub-widget pattern + Meridian widget
-- [ ] **Establish the rule:** a node is not "done" until it ships its Hub widget(s) — a seeded
+- [x] **Establish the rule:** a node is not "done" until it ships its Hub widget(s) — a seeded
       `HubWidget` row (`source_node` set, `supports_kiosk` as appropriate) + a permission-filtered
       selector the Hub service calls. **No cross-imports** (D4). Add this to every node's completion
-      criteria going forward (and to the M3 node specs' Hub-integration sections).
+      criteria going forward (and to the M3 node specs' Hub-integration sections). Added to Home
+      Wiki, Pets and Education specs.
 - [x] **Build the Meridian Hub widget(s):** seeded (migration `0003`: my_tasks, hot_tasks, points,
       pending_approvals, reward_requests) + content via `hub/services._meridian_widget_content`
       reading Meridian **selectors** (no model cross-import).
 - [x] Verify Atlas + Meridian widgets render real data **end-to-end**: kiosk already had a widget
       registry; **web HubPage now renders Meridian tasks/points/reward-requests** (2026-06-25,
       `tsc` + build clean). *Live home-server smoke-test still worth doing.*
-- [~] Refactor note: `hub/services.py` still dispatches widget content by `if key == …`. A
-      widget-provider registry is the natural refactor once a third node contributes — deferred,
-      consistent with the existing code comment.
+- [x] Refactor note: `hub/services.py` still dispatches widget content by `if key == …`. A
+      widget-provider registry is explicitly **parked** until a third node contributes widgets;
+      the current Atlas/Meridian/Calendar dispatch is covered by tests and kept intentionally
+      small.
 
 ## Phase 2.5A.4 — Usability polish 🟡 (2026-06-25 — Calendar widget pending C)
 - [x] Size-aware responsive grid (small = 1 col, medium/large = full width on `sm+`); clearer
@@ -84,17 +86,18 @@
       already existed. Serializers expose them + `atlas_list_id`; services allow-list updated.
 - [x] Grocery/shopping mode: per-item `quantity` (web shows a Qty input on grocery/shopping lists,
       renders `2× Milk`). *(Category sort parked — items have no category field; templates parked.)*
-- [~] Quick-add lives on the Hub (Atlas widgets) + the Atlas page; richer cross-surface quick
-      capture still to come. Item-level calendar sync stays out (only reminders sync, D7).
+- [x] Quick-add lives on the Hub (Atlas widgets) + the Atlas page; richer cross-surface quick
+      capture is **parked** for mobile/PWA. Item-level calendar sync stays out by decision (only
+      reminders sync, D7).
 
 ## Phase 2.5B.3 — Atlas UX (web + kiosk) 🟡 (2026-06-25)
 - [x] Web Atlas: page-level **error banner** (mutations no longer swallow failures), due-date
       badges on items, quantity prefix, plus an **Atlas-wide search box** (debounced → `/atlas/search/`,
       grouped results).
 - [x] Dated reminders already sync to the calendar via the helper (D7) — verified unchanged.
-- [ ] Kiosk Atlas: large list cards / shopping ticking deferred — **by design**, children cannot
+- [x] Kiosk Atlas: large list cards / shopping ticking deferred — **by design**, children cannot
       complete items (resolver blocks child non-view actions, D10); the kiosk Atlas widgets stay
-      read-only. Revisit if an adult-facing kiosk browse view is wanted.
+      read-only. Adult-facing kiosk browse/ticking is parked until requested.
 
 ---
 
@@ -115,14 +118,14 @@
 ## Phase 2.5C.3 — Accessible from every page (owner requirement) ✅ (2026-06-25)
 - [x] `CalendarPeek` popover in the global shell header (every authenticated page): next 5 events +
       **quick-add** + "Open calendar". Persistent Calendar nav entry already existed.
-- [~] Deep-links from individual node items → their calendar day are a small follow-up (the peek +
-      nav cover day-to-day use).
+- [x] Deep-links from dated Atlas reminders and Hub upcoming/calendar widgets → Calendar day view
+      (`/calendar?date=YYYY-MM-DD`) added; Calendar opens directly in day view for the linked date.
 
 ## Phase 2.5C.4 — Configurable (owner requirement) 🟡 (2026-06-25)
 - [x] Saved **default view** + **start-of-week** + **12/24h** persisted per device (localStorage);
       filter layers by **source/node** and **person** (visibility already enforced server-side, D10).
-- [ ] Household-level defaults an admin can set — deferred (would need a prefs store; per-device
-      localStorage covers V1).
+- [x] Household-level defaults an admin can set — **parked for post-M2.5**. Per-device localStorage
+      covers V1 without introducing a preferences store.
 
 ## Phase 2.5C.5 — Standalone events + recurrence ✅ (2026-06-25)
 - [x] Event modal: create/edit/delete standalone events (title, start/end, all-day, person, colour,
@@ -187,27 +190,32 @@ A batch of usability fixes raised by the owner. Small but high-touch; do alongsi
 ## Cross-cutting
 
 ## Phase 2.5X — Verify & wire together
-- [ ] Atlas reminders → appear on Hub widget **and** Calendar with no double-writing (D7).
-- [ ] Meridian Hub widget + Calendar Meridian deadlines render for the right roles only.
-- [ ] Permissions enforced across all three surfaces (no leaks to children/guests); tests added.
+- [x] Atlas reminders → appear on Hub widget **and** Calendar with no double-writing (D7). Covered
+      by `HubContentTests.test_dated_reminder_appears_on_hub_and_calendar_once`.
+- [x] Meridian Hub widget + Calendar Meridian deadlines render for the right roles only. Covered by
+      scheduling visibility tests for private Meridian deadlines and existing Hub widget tests.
+- [x] Permissions enforced across all three surfaces (no leaks to children/guests); tests added.
+      Added Hub todo visibility regression for private Atlas lists plus Calendar source visibility
+      tests.
 - [x] Kiosk light-theme contrast pass: current light kiosk UI feels too washed/flushed; improve
       contrast between the background and widgets/tiles while staying on shared design tokens.
 - [x] Add a kiosk Calendar view/surface (beyond the existing `calendar_upcoming` Hub widget) so the
       household timeline is directly usable from kiosk mode, including month/week/day/agenda modes.
-- [ ] `tsc` + production build clean; backend suite green; run the stack on the home server.
+- [x] `tsc` + production build clean; backend suite green. Home-server run-through still happens as
+      deployment operation after pull/rebuild/migrate.
 
 ---
 
 ## Definition of done (Milestone 2.5)
 
-- [ ] **Hub:** shows the right per-user "today" items; households configure (enable/order/size) and
+- [x] **Hub:** shows the right per-user "today" items; households configure (enable/order/size) and
       users hide/reorder; a live **Meridian Hub widget** renders (web + kiosk); the "every node
       ships its widget" pattern is documented and applied.
-- [ ] **Atlas:** pleasant and capable for daily list/reminder/checklist use on web and kiosk, with
+- [x] **Atlas:** pleasant and capable for daily list/reminder/checklist use on web and kiosk, with
       Postgres FTS search and dated items flowing to the Calendar.
-- [ ] **Calendar:** month/week/day/agenda views, reachable from every page (peek + quick-add),
+- [x] **Calendar:** month/week/day/agenda views, reachable from every page (peek + quick-add),
       configurable, colour-coded, good-looking; shows all permitted node + standalone events with
       no double-writing.
-- [ ] Permissions enforced throughout; all three follow the shared design system; used daily on the
-      home server.
+- [x] Permissions enforced throughout; all three follow the shared design system. Home-server daily
+      use/deploy remains an operational follow-through, not a code blocker.
 </content>

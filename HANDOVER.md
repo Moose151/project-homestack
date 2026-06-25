@@ -42,7 +42,7 @@ archived/superseded — ignore them.
 - `24_Core_Calendar.md` — Calendar core-service spec (app `scheduling`, D7/D8 timeline,
   every-page access, configurable views, look & feel).
 - `MILESTONE_1_Checklist.md` / `MILESTONE_2_Checklist.md` / `MILESTONE_2.5_Checklist.md` — the
-  per-milestone build checklists (tick boxes as you go). **M2.5 is the active one.**
+  per-milestone build checklists. **M3 is next.**
 
 ## 3. Hard rules (do NOT violate these)
 
@@ -96,7 +96,7 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: Milestones 1 & 2 DONE; Milestone 2.5 (Core surfaces) code complete — cross-cutting smoke/deploy checks remain.**
+**Phase: Milestones 1, 2 and 2.5 DONE. Next: Milestone 3 (Home Wiki, Pets, Education).**
 
 > **Deploy gotcha (read this):** the home server runs **Docker** (not Podman). After every
 > `git pull` + rebuild, run **`docker exec homestack-backend python manage.py migrate`** — the
@@ -115,7 +115,7 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
   importer. *Carried forward (non-blocking): `MeridianTaskCompletion`/2.9b (shared & recurring
   tasks + photo evidence), reward image carousel, reward→category link, `kiosk_pin_skip`, live
   kiosk badge celebration.* Run the importer to retire the standalone app.
-- [~] **Milestone 2.5: Core surfaces — Hub, Atlas, Calendar. ← active (almost done).** Full detail
+- [x] **Milestone 2.5: Core surfaces — Hub, Atlas, Calendar. DONE.** Full detail
   in `MILESTONE_2.5_Checklist.md` + the Progress Log below. Status by workstream:
   - **(A) Hub — DONE.** Web renders Meridian widgets; widget-config API (`/hub/widgets/…`,
     `hub.edit` perm) + "Customise" UI (household enable/order/size, per-user hide/reorder);
@@ -123,33 +123,29 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
   - **(B) Atlas — DONE.** Postgres FTS w/ SQLite fallback (`_search`) + fixed a search visibility
     leak; unified `/atlas/search/`; item `due_at`+`quantity`; web error banner, due badges,
     quantity, search box. *(Tags/categories + templates parked; kiosk ticking blocked for kids by
-    D10, by design.)*
+    D10, by design; adult-facing kiosk ticking parked.)*
   - **(C) Calendar — DONE.** Query API window + node/person filters; month/week/day/agenda views,
     per-person colour + legend, nav; every-page `CalendarPeek` + quick-add; prefs (view/week-start/
-    12-24h in localStorage); event create/edit/delete modal; `calendar_upcoming` Hub widget.
-    *(RRULE expansion deferred D8; household-default prefs + node→day deep-links deferred.)*
+    12-24h in localStorage); event create/edit/delete modal; `calendar_upcoming` Hub widget;
+    kiosk calendar with month/week/day/agenda; dated Atlas/Hub items deep-link to Calendar day.
+    *(RRULE expansion deferred D8; household-default prefs parked.)*
   - **(D) UX fixes — DONE** (kiosk enter/exit, admin-only price, keyboard PIN, login tiles, emoji
     avatars, kiosk restyle + light/dark toggle). D.6 used the legacy reference at
     `/home/moose/Documents/project-meridian`; the handover's older
     `~/Documents/new/project-meridian` path did not exist.
-- [ ] Milestone 3: Home Wiki, Pets, Education. (After M2.5 D.6. **New rule from A.3: each node must
-  ship its Hub widget(s) as part of "done"** — add to each node's completion criteria.)
+- [ ] Milestone 3: Home Wiki, Pets, Education. **New rule from M2.5 A.3: each node must ship its
+  Hub widget(s) as part of "done"** — already added to each M3 node spec.
 - [ ] Milestone 4: security maturation.
 - [ ] Milestone 5: native Solace.
 - [ ] Milestone 6: Inventory, Assets, Hearth, Travel, Projects, Health.
 
-## 6. Active task — Milestone 2.5 (finish), then Milestone 3
+## 6. Active task — Milestone 3
 
-**Tracking doc:** `MILESTONE_2.5_Checklist.md` (canonical, tick boxes as you go). A/B/C/D are code
-complete. Cross-cutting verification remains: permission smoke checks across Hub/Atlas/Calendar,
-`tsc` + production build, backend suite, and home-server run-through.
+**Tracking doc:** start from `04_Development_Roadmap.md` Milestone 3 plus node specs
+`12_Node_Home_Wiki.md`, `13_Node_Pets.md`, and `14_Node_Education.md`. M2.5 is complete in
+`MILESTONE_2.5_Checklist.md`.
 
-**Immediate next concrete step — Phase 2.5X (verify & wire together):**
-1. Smoke-test Atlas reminders in Hub + Calendar with no double-write.
-2. Smoke-test Meridian Hub widgets and Calendar deadlines under admin/adult/child roles.
-3. Run the full backend suite, then deploy/run on the home server.
-
-**After D.6 → Milestone 3** (Home Wiki, Pets, Education), each node end-to-end
+**Immediate next concrete step — Milestone 3** (Home Wiki, Pets, Education), each node end-to-end
 (models → API → permissions → FTS → calendar via the helper → **Hub widget** → kiosk → tests).
 
 **Working rhythm (proven this milestone):** small workstream → backend (models/migration/services/
@@ -229,6 +225,8 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-06-25 | Assistant | M2.5 | **D.6 kiosk look & feel complete.** The expected legacy path `~/Documents/new/project-meridian` was missing, so used `/home/moose/Documents/project-meridian` (`app/static/css/homestack.css`, kiosk templates) as the reference. Restyled React kiosk screens (`AmbientScreen`, `AvatarSelect`, `PINEntry`, `KioskDashboard`) from hardcoded gray/dark styling to shared HomeStack tokens: warm paper background, raised cards, primary/warning/success accents, larger child-friendly cards/buttons. Added kiosk light/dark toggle via `KioskThemeToggle` using shared `hs-dark` preference. Fixed dashboard header emoji avatars by distinguishing emoji from image URLs. `npm run build` clean; `DJANGO_SETTINGS_MODULE=config.settings.test python manage.py test` green (365 tests). | Start **2.5X verification**: role/permission smoke checks across Hub/Atlas/Calendar, then home-server run-through/deploy. |
 
 | 2026-06-25 | Assistant | M2.5 | **2.5X kiosk follow-ups shipped.** Improved kiosk light-theme contrast by moving kiosk screens to the stronger `sunken` background and using `raised` panels with stronger borders/shadows. Added a direct kiosk Calendar surface in `KioskDashboard`: Home/Calendar switch, month/week/day/agenda modes, event cards with time/source/location, using the existing permission-filtered `/calendar/events/` API. Added a kiosk dashboard "Web mode" link back to `/`. `npm run build` clean. | Continue **2.5X verification**: Atlas reminders Hub+Calendar no double-write, Meridian Hub/Calendar role smoke checks, backend suite, home-server run-through/deploy. |
+
+| 2026-06-25 | Assistant | M2.5 | **M2.5 closed.** Added the Hub-widget completion rule to Home Wiki/Pets/Education specs. Fixed Hub `atlas_todos` to read through a permission-filtered Atlas selector instead of direct model access. Added cross-surface tests: Atlas dated reminder appears in Hub reminders + Calendar widget with one CalendarEvent; private Atlas list items do not leak to child Hub; Atlas/Meridian synced calendar events expose source node and respect visibility. Added Atlas/Hub deep-links into Calendar day view. `npm run build` clean; full backend suite green (**369 tests**). README and handover now point to M3. | Start **Milestone 3: Home Wiki, Pets, Education**. Remember every node must ship Hub widget rows/selectors as part of done. |
 
 ### Session notes (free-form, optional)
 

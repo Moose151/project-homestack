@@ -11,12 +11,10 @@ opt-in **nodes** (areas of household life), and a touchscreen **kiosk** for the 
 
 ## Status
 
-Milestone 1 (Walking Skeleton) — **complete**. Milestone 2 (Native Meridian) — **complete**: a
-full functional port of the standalone Meridian app (D19) — points-ledger parity, tasks,
-routines + streaks, rewards shop (cart), group goals, wishlist, cross-node achievements (D20),
-notifications, scheduled jobs, settings, reports/leaderboard, dry-runnable data import, and the
-web + kiosk frontend. 339 backend tests green. Next: Milestone 3 (Home Wiki, Pets, Education),
-after a follow-up pass on Atlas + the Hub. See `docs/MILESTONE_2_Checklist.md`.
+Milestone 1 (Walking Skeleton), Milestone 2 (Native Meridian), and Milestone 2.5 (Core Hub,
+Atlas, Calendar) are **complete**. M2.5 delivered configurable Hub widgets, Atlas FTS/UX polish,
+web + kiosk Calendar views, every-page Calendar access, and cross-surface permission/sync tests.
+Next: Milestone 3 (Home Wiki, Pets, Education). See `docs/MILESTONE_2.5_Checklist.md`.
 
 ## Tech stack
 

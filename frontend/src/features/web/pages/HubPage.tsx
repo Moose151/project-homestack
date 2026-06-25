@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type {
   HubResponse,
@@ -32,6 +33,11 @@ function formatDue(iso: string | null) {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
+function calendarDayHref(iso: string | null) {
+  if (!iso) return '/calendar'
+  return `/calendar?date=${new Date(iso).toISOString().slice(0, 10)}`
+}
+
 function TodoWidget({ items }: { items: AtlasListItem[] }) {
   const pending = items.filter(i => !i.is_complete)
   if (pending.length === 0) return <p className="text-sm text-muted">All done ✓</p>
@@ -61,6 +67,7 @@ function RemindersWidget({ items }: { items: AtlasReminder[] }) {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-ink truncate">{r.title}</p>
               {r.body && <p className="text-xs text-muted truncate">{r.body}</p>}
+              {r.due_at && <Link to={calendarDayHref(r.due_at)} className="text-xs text-primary hover:underline">Open day</Link>}
             </div>
             {due && (
               <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 font-medium ${
@@ -168,7 +175,7 @@ function UpcomingWidget({ items }: { items: CalendarEvent[] }) {
         return (
           <li key={e.id} className="flex items-center justify-between gap-3 text-sm">
             <span className="text-ink truncate">{e.title}</span>
-            <span className="text-xs text-muted flex-shrink-0">{label}</span>
+            <Link to={calendarDayHref(e.start_at)} className="text-xs text-primary hover:underline flex-shrink-0">{label}</Link>
           </li>
         )
       })}

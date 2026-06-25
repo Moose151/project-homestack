@@ -55,6 +55,10 @@ household-visible. Enforced via the central resolver.
 Widgets: homework due · assignments due · exam countdown · today's classes · school events ·
 reading reminders · upcoming education deadlines.
 
+Completion rule: this node is not "done" until its Hub widget rows are seeded with
+`source_node` set, kiosk support declared per widget, and content is supplied through
+permission-filtered selectors that the Hub service calls without cross-node model imports.
+
 ## 9. Calendar integration
 
 Events for assignments, homework due dates, exams, class times, school events, excursions,
@@ -103,4 +107,5 @@ Meridian task generation · university dashboard · school calendar import.
 ## 17. Completion criteria
 
 Adults track university deadlines; children view homework/school events; education dates appear
-on Calendar and Hub; kiosk homework cards work; permitted records searchable.
+on Calendar and Hub; kiosk homework cards work; Hub widget rows/selectors are shipped; permitted
+records searchable.
