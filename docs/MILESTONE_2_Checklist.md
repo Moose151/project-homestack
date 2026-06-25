@@ -155,6 +155,16 @@
 > templates** (`~/Documents/new/project-meridian/app/templates/`), adapted to HomeStack's warm
 > design system. Build **each feature on web + kiosk together**, feature by feature.
 > Part 1 (API types + client for every endpoint) — done. Screens in progress below.
+>
+> Per-feature progress (web + kiosk):
+> - [x] **Tasks** — web board matches legacy (filters, hot/behaviour/category/assignee badges,
+>   base+bonus points, role-aware actions, full create form); kiosk tap-to-complete cards +
+>   celebration (uses `award_value`).
+> - [ ] Shop / rewards (stock, cart, images) + kiosk shop
+> - [ ] Routines + streaks + kiosk routine cards
+> - [ ] Group goals + Wishlist (+ progress) + kiosk
+> - [ ] Points / Leaderboard / Badges + kiosk badge celebration
+> - [ ] Approvals + Settings (web) + notification bell
 - [ ] Web: Tasks · Shop/Rewards · Routines · Goals · Wishlist · Points/Leaderboard · Badges ·
       Approvals · Categories/Settings (role-aware).
 - [ ] Kiosk: task & routine cards (tap-to-complete + celebration), shop + cart, goal/wishlist
