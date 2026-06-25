@@ -56,3 +56,16 @@ def points_awarded(person_id: int, household_id: int, points: int, reason: str) 
         "person_id": person_id, "household_id": household_id,
         "points": points, "reason": reason,
     })
+
+
+def goal_contributed(goal_id: int, household_id: int, person_id: int, amount: int) -> None:
+    publish("meridian.goal_contributed", payload={
+        "goal_id": goal_id, "household_id": household_id,
+        "person_id": person_id, "amount": amount,
+    })
+
+
+def wishlist_funded(item_id: int, household_id: int, person_id: int) -> None:
+    publish("meridian.wishlist_funded", payload={
+        "item_id": item_id, "household_id": household_id, "person_id": person_id,
+    })

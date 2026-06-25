@@ -20,12 +20,17 @@ from apps.core.models import get_active_household
 from apps.meridian import events
 from apps.meridian.models import (
     MeridianCategory,
+    MeridianGroupGoal,
+    MeridianGroupGoalContribution,
     MeridianPointsEntry,
     MeridianReward,
     MeridianRewardRequest,
     MeridianRoutine,
     MeridianRoutineCompletion,
     MeridianTask,
+    MeridianWishlistContribution,
+    MeridianWishlistItem,
+    MeridianWishlistRequest,
 )
 from apps.scheduling.helpers import delete_event_for, sync_event_for
 
@@ -342,6 +347,210 @@ def void_routine_completion(acting_user: User, completion: MeridianRoutineComple
 
 
 # ---------------------------------------------------------------------------
+# Group goals
+# ---------------------------------------------------------------------------
+
+def create_goal(acting_user: User, **data) -> MeridianGroupGoal:
+    goal = MeridianGroupGoal(
+        household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
+    )
+    goal.save()
+    return goal
+
+
+def update_goal(acting_user: User, goal: MeridianGroupGoal, **data) -> MeridianGroupGoal:
+    allowed = {"title", "description", "target_points", "price_estimate", "store_url",
+               "image_url", "status", "is_active"}
+    for key, val in data.items():
+        if key in allowed:
+            setattr(goal, key, val)
+    goal.updated_by = acting_user
+    goal.save()
+    return goal
+
+
+def delete_goal(acting_user: User, goal: MeridianGroupGoal) -> None:
+    goal.updated_by = acting_user
+    goal.save(update_fields=["updated_by", "updated_at"])
+    goal.soft_delete()
+
+
+@transaction.atomic
+def contribute_to_goal(
+    acting_user: User, goal: MeridianGroupGoal, *, person_id: int, amount: int
+) -> MeridianGroupGoalContribution:
+    """A person contributes points to a group goal; the points are reserved (spent) now and
+    refundable later. Marks the goal funded once the target is reached."""
+    if not goal.is_active or goal.status == MeridianGroupGoal.Status.ARCHIVED:
+        raise MeridianError("This goal is not accepting contributions.")
+    if amount <= 0:
+        raise MeridianError("Contribution must be a positive number of points.")
+    if get_points_balance(person_id) < amount:
+        raise MeridianError("Not enough points to contribute that much.")
+    contribution = MeridianGroupGoalContribution(
+        household=get_active_household(), goal=goal, person_id=person_id, amount=amount,
+        created_by=acting_user, updated_by=acting_user,
+    )
+    contribution.save()
+    _record_points(
+        acting_user, person_id=person_id, points=-amount,
+        reason=f"Group goal contribution: {goal.title}",
+        transaction_type=_TxType.GROUP_GOAL_CONTRIBUTION,
+    )
+    if goal.is_funded() and goal.status != MeridianGroupGoal.Status.FUNDED:
+        goal.status = MeridianGroupGoal.Status.FUNDED
+        goal.updated_by = acting_user
+        goal.save(update_fields=["status", "updated_by", "updated_at"])
+    events.goal_contributed(goal.id, goal.household_id, person_id, amount)
+    return contribution
+
+
+@transaction.atomic
+def refund_goal_contribution(
+    acting_user: User, contribution: MeridianGroupGoalContribution
+) -> MeridianGroupGoalContribution:
+    """Refund an active goal contribution (admin, or when a goal is cancelled)."""
+    if contribution.status != MeridianGroupGoalContribution.Status.ACTIVE:
+        return contribution
+    contribution.status = MeridianGroupGoalContribution.Status.REFUNDED
+    contribution.updated_by = acting_user
+    contribution.save(update_fields=["status", "updated_by", "updated_at"])
+    _record_points(
+        acting_user, person_id=contribution.person_id, points=contribution.amount,
+        reason=f"Group goal contribution refunded: {contribution.goal.title}",
+        transaction_type=_TxType.GROUP_GOAL_REFUND,
+    )
+    return contribution
+
+
+# ---------------------------------------------------------------------------
+# Wishlist
+# ---------------------------------------------------------------------------
+
+def request_wishlist_item(
+    acting_user: User, *, person_id: int, requested_name: str, requested_description: str = ""
+) -> MeridianWishlistRequest:
+    """A person asks for an item to be added to their wishlist (awaits admin approval)."""
+    if not requested_name.strip():
+        raise MeridianError("A wishlist item needs a name.")
+    req = MeridianWishlistRequest(
+        household=get_active_household(), person_id=person_id,
+        requested_name=requested_name.strip(), requested_description=requested_description,
+        created_by=acting_user, updated_by=acting_user,
+    )
+    req.save()
+    return req
+
+
+@transaction.atomic
+def approve_wishlist_request(
+    acting_user: User, req: MeridianWishlistRequest, *, point_cost: int, **item_data
+) -> MeridianWishlistItem:
+    """Admin approves a request into a wishlist item with a point cost the person saves toward."""
+    if req.status != MeridianWishlistRequest.Status.REQUESTED:
+        raise MeridianError("Only pending wishlist requests can be approved.")
+    req.status = MeridianWishlistRequest.Status.APPROVED
+    req.reviewed_at = timezone.now()
+    req.reviewed_by = acting_user
+    req.updated_by = acting_user
+    req.save()
+    allowed = {"description", "price_estimate", "store_url", "image_url"}
+    item = MeridianWishlistItem(
+        household=get_active_household(), person_id=req.person_id,
+        name=req.requested_name, point_cost=point_cost,
+        description=req.requested_description,
+        created_by=acting_user, updated_by=acting_user,
+        **{k: v for k, v in item_data.items() if k in allowed},
+    )
+    item.save()
+    return item
+
+
+def reject_wishlist_request(acting_user: User, req: MeridianWishlistRequest, *, reason: str = "") -> MeridianWishlistRequest:
+    if req.status != MeridianWishlistRequest.Status.REQUESTED:
+        raise MeridianError("Only pending wishlist requests can be rejected.")
+    req.status = MeridianWishlistRequest.Status.REJECTED
+    req.rejection_reason = reason
+    req.reviewed_at = timezone.now()
+    req.reviewed_by = acting_user
+    req.updated_by = acting_user
+    req.save()
+    return req
+
+
+def create_wishlist_item(acting_user: User, *, person_id: int, name: str, point_cost: int, **data) -> MeridianWishlistItem:
+    """Admin adds a wishlist item directly (no request step)."""
+    allowed = {"description", "price_estimate", "store_url", "image_url"}
+    item = MeridianWishlistItem(
+        household=get_active_household(), person_id=person_id, name=name, point_cost=point_cost,
+        created_by=acting_user, updated_by=acting_user,
+        **{k: v for k, v in data.items() if k in allowed},
+    )
+    item.save()
+    return item
+
+
+def delete_wishlist_item(acting_user: User, item: MeridianWishlistItem) -> None:
+    item.updated_by = acting_user
+    item.save(update_fields=["updated_by", "updated_at"])
+    item.soft_delete()
+
+
+@transaction.atomic
+def contribute_to_wishlist(
+    acting_user: User, item: MeridianWishlistItem, *, person_id: int, amount: int
+) -> MeridianWishlistContribution:
+    """A person saves points toward their wishlist item; points are reserved and refundable."""
+    if not item.is_active or item.status == MeridianWishlistItem.Status.FULFILLED:
+        raise MeridianError("This wishlist item is not accepting contributions.")
+    if amount <= 0:
+        raise MeridianError("Contribution must be a positive number of points.")
+    if get_points_balance(person_id) < amount:
+        raise MeridianError("Not enough points to save that much.")
+    contribution = MeridianWishlistContribution(
+        household=get_active_household(), item=item, person_id=person_id, amount=amount,
+        created_by=acting_user, updated_by=acting_user,
+    )
+    contribution.save()
+    _record_points(
+        acting_user, person_id=person_id, points=-amount,
+        reason=f"Wishlist saving: {item.name}",
+        transaction_type=_TxType.WISHLIST_CONTRIBUTION,
+    )
+    if item.is_funded() and item.status == MeridianWishlistItem.Status.ACTIVE:
+        item.status = MeridianWishlistItem.Status.FUNDED
+        item.updated_by = acting_user
+        item.save(update_fields=["status", "updated_by", "updated_at"])
+        events.wishlist_funded(item.id, item.household_id, person_id)
+    return contribution
+
+
+@transaction.atomic
+def refund_wishlist_contribution(
+    acting_user: User, contribution: MeridianWishlistContribution
+) -> MeridianWishlistContribution:
+    if contribution.status != MeridianWishlistContribution.Status.ACTIVE:
+        return contribution
+    contribution.status = MeridianWishlistContribution.Status.REFUNDED
+    contribution.updated_by = acting_user
+    contribution.save(update_fields=["status", "updated_by", "updated_at"])
+    _record_points(
+        acting_user, person_id=contribution.person_id, points=contribution.amount,
+        reason=f"Wishlist saving refunded: {contribution.item.name}",
+        transaction_type=_TxType.WISHLIST_REFUND,
+    )
+    return contribution
+
+
+def fulfill_wishlist_item(acting_user: User, item: MeridianWishlistItem) -> MeridianWishlistItem:
+    """Admin marks a funded wishlist item as fulfilled (the real item was bought/given)."""
+    item.status = MeridianWishlistItem.Status.FULFILLED
+    item.updated_by = acting_user
+    item.save(update_fields=["status", "updated_by", "updated_at"])
+    return item
+
+
+# ---------------------------------------------------------------------------
 # Rewards
 # ---------------------------------------------------------------------------
 
@@ -354,7 +563,11 @@ def create_reward(acting_user: User, **data) -> MeridianReward:
 
 
 def update_reward(acting_user: User, reward: MeridianReward, **data) -> MeridianReward:
-    allowed = {"name", "description", "cost_points", "icon", "colour", "is_active"}
+    allowed = {
+        "name", "description", "cost_points", "icon", "colour", "image_url",
+        "is_active", "is_archived", "price_estimate", "store_url",
+        "quantity", "allow_multiple_in_cart", "disappear_when_empty", "daily_limit_per_user",
+    }
     for key, val in data.items():
         if key in allowed:
             setattr(reward, key, val)
@@ -377,8 +590,14 @@ def request_reward(acting_user: User, reward: MeridianReward, *, person_id: int)
     negative ledger entry so it cannot be double-spent on a parallel request. The hold is
     refunded if the request is later rejected or cancelled; approval does not deduct again.
     """
-    if not reward.is_active:
+    if not reward.is_active or reward.is_archived:
         raise MeridianError("This reward is not available.")
+    remaining = reward.remaining_stock()
+    if remaining is not None and remaining <= 0:
+        raise MeridianError("This reward is out of stock.")
+    daily_left = reward.daily_remaining_for_person(person_id)
+    if daily_left is not None and daily_left <= 0:
+        raise MeridianError("Daily limit reached for this reward.")
     cost = reward.cost_points
     if get_points_balance(person_id) < cost:
         raise MeridianError("Not enough points for this reward.")
@@ -400,6 +619,21 @@ def request_reward(acting_user: User, reward: MeridianReward, *, person_id: int)
         )
     events.reward_requested(req.id, req.household_id, person_id)
     return req
+
+
+@transaction.atomic
+def checkout_cart(acting_user: User, *, person_id: int, reward_ids: list[int]) -> list[MeridianRewardRequest]:
+    """Request several rewards at once (cart checkout). All-or-nothing: if any item fails
+    its stock/limit/balance check, the whole checkout rolls back."""
+    if not reward_ids:
+        raise MeridianError("Your cart is empty.")
+    requests = []
+    for reward_id in reward_ids:
+        reward = MeridianReward.objects.filter(pk=reward_id).first()
+        if reward is None:
+            raise MeridianError("A reward in your cart no longer exists.")
+        requests.append(request_reward(acting_user, reward, person_id=person_id))
+    return requests
 
 
 def _refund_reservation(acting_user: User, req: MeridianRewardRequest, *, transaction_type: str, reason: str) -> None:

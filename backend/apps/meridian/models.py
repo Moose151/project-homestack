@@ -14,8 +14,11 @@ required. Points accrue per **person**; approvals are recorded against a **user*
 """
 from __future__ import annotations
 
+from datetime import date
+
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from apps.core.models import AllObjectsManager, HouseholdBaseModel, HouseholdManager
 from apps.scheduling.mixins import CalendarSyncMixin
@@ -313,14 +316,26 @@ class MeridianRoutineCompletion(HouseholdBaseModel):
 
 
 class MeridianReward(HouseholdBaseModel):
-    """An item in the rewards shop, purchasable with points."""
+    """An item in the rewards shop, purchasable with points (legacy parity, D19)."""
 
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     cost_points = models.PositiveIntegerField(default=0)
     icon = models.CharField(max_length=100, blank=True, default="")
     colour = models.CharField(max_length=7, blank=True, default="")
+    image_url = models.URLField(max_length=500, blank=True, default="")
     is_active = models.BooleanField(default=True)
+    is_archived = models.BooleanField(default=False)
+
+    # Display-only real-world references.
+    price_estimate = models.CharField(max_length=60, blank=True, default="")
+    store_url = models.URLField(max_length=500, blank=True, default="")
+
+    # Stock + redemption limits.
+    quantity = models.PositiveIntegerField(null=True, blank=True)  # None = unlimited
+    allow_multiple_in_cart = models.BooleanField(default=False)
+    disappear_when_empty = models.BooleanField(default=True)
+    daily_limit_per_user = models.PositiveIntegerField(null=True, blank=True)  # None = no cap
 
     objects = HouseholdManager()
     all_objects = AllObjectsManager()
@@ -331,6 +346,32 @@ class MeridianReward(HouseholdBaseModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def _held_request_count(self, *, person_id: int | None = None, on: date | None = None) -> int:
+        qs = self.requests.filter(
+            status__in=(
+                MeridianRewardRequest.Status.PENDING,
+                MeridianRewardRequest.Status.APPROVED,
+            )
+        )
+        if person_id is not None:
+            qs = qs.filter(requested_by_person_id=person_id)
+        if on is not None:
+            qs = qs.filter(created_at__date=on)
+        return qs.count()
+
+    def remaining_stock(self) -> int | None:
+        """Units left, or None if unlimited. Pending + approved requests count as taken."""
+        if self.quantity is None:
+            return None
+        return max(0, self.quantity - self._held_request_count())
+
+    def daily_remaining_for_person(self, person_id: int) -> int | None:
+        """How many more this person may redeem today, or None if uncapped."""
+        if self.daily_limit_per_user is None:
+            return None
+        used = self._held_request_count(person_id=person_id, on=timezone.localdate())
+        return max(0, self.daily_limit_per_user - used)
 
 
 class MeridianRewardRequest(HouseholdBaseModel):
@@ -370,3 +411,182 @@ class MeridianRewardRequest(HouseholdBaseModel):
 
     def __str__(self) -> str:
         return f"{self.requested_by_person} → {self.reward} ({self.status})"
+
+
+class MeridianGroupGoal(HouseholdBaseModel):
+    """A shared target the household contributes points toward (legacy parity, D19)."""
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        FUNDED = "funded", "Funded"
+        ARCHIVED = "archived", "Archived"
+
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="")
+    target_points = models.PositiveIntegerField(default=0)
+    price_estimate = models.CharField(max_length=60, blank=True, default="")
+    store_url = models.URLField(max_length=500, blank=True, default="")
+    image_url = models.URLField(max_length=500, blank=True, default="")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
+    is_active = models.BooleanField(default=True)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "meridian group goal"
+        ordering = ["status", "title"]
+
+    def __str__(self) -> str:
+        return self.title
+
+    def total_contributed(self) -> int:
+        agg = self.contributions.filter(
+            status=MeridianGroupGoalContribution.Status.ACTIVE
+        ).aggregate(total=models.Sum("amount"))
+        return agg["total"] or 0
+
+    def remaining_points(self) -> int:
+        return max(0, self.target_points - self.total_contributed())
+
+    def progress_percentage(self) -> int:
+        if self.target_points <= 0:
+            return 0
+        return min(100, int((self.total_contributed() / self.target_points) * 100))
+
+    def is_funded(self) -> bool:
+        return self.total_contributed() >= self.target_points
+
+
+class MeridianGroupGoalContribution(HouseholdBaseModel):
+    """A person's points contribution toward a group goal (refundable)."""
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        REFUNDED = "refunded", "Refunded"
+
+    goal = models.ForeignKey(
+        MeridianGroupGoal, on_delete=models.CASCADE, related_name="contributions"
+    )
+    person = models.ForeignKey(
+        "people.Person", on_delete=models.CASCADE, related_name="meridian_goal_contributions"
+    )
+    amount = models.PositiveIntegerField()
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "meridian group goal contribution"
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.person} → {self.goal}: {self.amount}"
+
+
+class MeridianWishlistRequest(HouseholdBaseModel):
+    """A person's request for an item to be added to their wishlist (admin approves)."""
+
+    class Status(models.TextChoices):
+        REQUESTED = "requested", "Requested"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+
+    person = models.ForeignKey(
+        "people.Person", on_delete=models.CASCADE, related_name="meridian_wishlist_requests"
+    )
+    requested_name = models.CharField(max_length=255)
+    requested_description = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.REQUESTED)
+    rejection_reason = models.CharField(max_length=255, blank=True, default="")
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="reviewed_meridian_wishlist_requests",
+    )
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "meridian wishlist request"
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.person}: {self.requested_name} ({self.status})"
+
+
+class MeridianWishlistItem(HouseholdBaseModel):
+    """An approved wishlist item owned by a person, funded by their contributions over time."""
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        FUNDED = "funded", "Funded"
+        FULFILLED = "fulfilled", "Fulfilled"
+
+    person = models.ForeignKey(
+        "people.Person", on_delete=models.CASCADE, related_name="meridian_wishlist_items"
+    )
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="")
+    point_cost = models.PositiveIntegerField(default=0)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
+    is_active = models.BooleanField(default=True)
+    price_estimate = models.CharField(max_length=60, blank=True, default="")
+    store_url = models.URLField(max_length=500, blank=True, default="")
+    image_url = models.URLField(max_length=500, blank=True, default="")
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "meridian wishlist item"
+        ordering = ["status", "name"]
+
+    def __str__(self) -> str:
+        return f"{self.person}: {self.name}"
+
+    def total_saved(self) -> int:
+        agg = self.contributions.filter(
+            status=MeridianWishlistContribution.Status.ACTIVE
+        ).aggregate(total=models.Sum("amount"))
+        return agg["total"] or 0
+
+    def remaining_points(self) -> int:
+        return max(0, self.point_cost - self.total_saved())
+
+    def progress_percentage(self) -> int:
+        if self.point_cost <= 0:
+            return 0
+        return min(100, int((self.total_saved() / self.point_cost) * 100))
+
+    def is_funded(self) -> bool:
+        return self.total_saved() >= self.point_cost
+
+
+class MeridianWishlistContribution(HouseholdBaseModel):
+    """A person's points contribution toward their wishlist item (refundable)."""
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        REFUNDED = "refunded", "Refunded"
+
+    item = models.ForeignKey(
+        MeridianWishlistItem, on_delete=models.CASCADE, related_name="contributions"
+    )
+    person = models.ForeignKey(
+        "people.Person", on_delete=models.CASCADE, related_name="meridian_wishlist_contributions"
+    )
+    amount = models.PositiveIntegerField()
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "meridian wishlist contribution"
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.person} → {self.item}: {self.amount}"

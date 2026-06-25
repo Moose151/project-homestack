@@ -79,12 +79,22 @@
       status onto the task — fine for assigned chores; the completion table is needed for shared/
       recurring tasks. Tracked as Phase 2.9b.)*
 
-## Phase 2.10 — Rewards shop parity
-- [ ] Stock/quantity (`remaining_stock`, `disappear_when_empty`), `daily_limit_per_user`,
-      `allow_multiple_in_cart`, `price_estimate`, `store_url`.
-- [ ] Multiple reward images (carousel) via `attachments`.
-- [ ] Cart + checkout flow; purchase lifecycle requested→approved/rejected/cancelled with
-      reservation/refund.
+## Phase 2.10 — Rewards shop parity 🟡 (2026-06-25 — carousel deferred)
+- [x] Stock/quantity (`remaining_stock`, `disappear_when_empty`), `daily_limit_per_user`,
+      `allow_multiple_in_cart`, `price_estimate`, `store_url`, `image_url`, `is_archived`.
+- [x] Cart + checkout (`checkout_cart`, all-or-nothing); purchase lifecycle reservation/refund
+      (request→approve/reject/cancel) from 2.8.
+- [ ] Multiple uploaded reward images (carousel) via `attachments` — deferred to the attachments
+      pass (single `image_url` works for now).
+
+## Phase 2.12 — Group goals ✅ (2026-06-25)
+- [x] `MeridianGroupGoal` + `MeridianGroupGoalContribution`; progress %, funded; contribute
+      (reserve) + refund; child-safe `contribute` (resolver carve-out + `meridian.contribute`
+      permission seeded). Full API.
+
+## Phase 2.13 — Wishlist ✅ (2026-06-25)
+- [x] `MeridianWishlistRequest` → admin approve → `MeridianWishlistItem` (point cost) →
+      `MeridianWishlistContribution`; funded/fulfilled; child-safe request + contribute. Full API.
 
 ## Phase 2.11 — Routines + streaks ✅ (2026-06-25)
 - [x] `MeridianRoutine` + `MeridianRoutineCompletion` (one non-voided per person/routine/date);
@@ -92,13 +102,8 @@
 - [x] Streak calculation (`current_streak`, `completed_today`); admin void claws back points.
 - [~] `auto_end_streaks` household setting wired in 2.17 (streak helper already takes `auto_end`).
 
-## Phase 2.12 — Group goals
-- [ ] `GroupGoal` + `GroupGoalContribution`; progress %, funded; contribute (reserve) + refund;
-      `group_goals_enabled` toggle.
-
-## Phase 2.13 — Wishlist
-- [ ] `WishlistRequest` → admin approve → `WishlistItem` (point cost) → `WishlistContribution`;
-      funded/fulfilled; `wishlist_requests_enabled` toggle.
+> Group goals (2.12) and wishlist (2.13) are listed above, before 2.11 (built same day).
+> Their `group_goals_enabled` / `wishlist_requests_enabled` toggles land with settings in 2.17.
 
 ## Phase 2.14 — Achievements / badges (cross-node, D20)
 - [ ] New shared `achievements` app: `Badge` (code/name/description/icon/criteria) +

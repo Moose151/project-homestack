@@ -19,6 +19,7 @@ from apps.meridian.models import (
     MeridianReward,
     MeridianRewardRequest,
     MeridianTask,
+    MeridianWishlistRequest,
 )
 from apps.people.models import Person
 from apps.scheduling.models import CalendarEvent
@@ -300,6 +301,47 @@ class RewardTests(TestCase):
         with self.assertRaises(services.MeridianError):
             services.request_reward(self.admin, reward, person_id=self.person.id)
 
+    def test_stock_runs_out(self):
+        services.adjust_points(self.admin, person_id=self.person.id, points=100)
+        other = _make_person("Mara")
+        services.adjust_points(self.admin, person_id=other.id, points=100)
+        reward = services.create_reward(self.admin, name="Last toy", cost_points=10, quantity=1)
+        services.request_reward(self.admin, reward, person_id=self.person.id)
+        self.assertEqual(reward.remaining_stock(), 0)
+        with self.assertRaises(services.MeridianError):
+            services.request_reward(self.admin, reward, person_id=other.id)
+
+    def test_daily_limit_enforced(self):
+        services.adjust_points(self.admin, person_id=self.person.id, points=100)
+        reward = services.create_reward(
+            self.admin, name="Screen time", cost_points=5, daily_limit_per_user=1
+        )
+        services.request_reward(self.admin, reward, person_id=self.person.id)
+        with self.assertRaises(services.MeridianError):
+            services.request_reward(self.admin, reward, person_id=self.person.id)
+
+    def test_cart_checkout_is_all_or_nothing(self):
+        services.adjust_points(self.admin, person_id=self.person.id, points=25)
+        cheap = services.create_reward(self.admin, name="Sticker", cost_points=10)
+        pricey = services.create_reward(self.admin, name="Big toy", cost_points=20)
+        # 25 points can't cover 10 + 20 → whole checkout rolls back, nothing reserved.
+        with self.assertRaises(services.MeridianError):
+            services.checkout_cart(
+                self.admin, person_id=self.person.id, reward_ids=[cheap.id, pricey.id]
+            )
+        self.assertEqual(services.get_points_balance(self.person.id), 25)
+        self.assertEqual(MeridianRewardRequest.objects.count(), 0)
+
+    def test_cart_checkout_succeeds(self):
+        services.adjust_points(self.admin, person_id=self.person.id, points=40)
+        a = services.create_reward(self.admin, name="Sticker", cost_points=10)
+        b = services.create_reward(self.admin, name="Comic", cost_points=20)
+        reqs = services.checkout_cart(
+            self.admin, person_id=self.person.id, reward_ids=[a.id, b.id]
+        )
+        self.assertEqual(len(reqs), 2)
+        self.assertEqual(services.get_points_balance(self.person.id), 10)
+
     def test_total_earned_ignores_spending(self):
         services.adjust_points(self.admin, person_id=self.person.id, points=100)
         reward = services.create_reward(self.admin, name="Toy", cost_points=30)
@@ -378,6 +420,128 @@ class RoutineTests(TestCase):
         resp = self.client.post(
             reverse("meridian-routine-list"),
             {"title": "x", "points": 1}, content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 403)
+
+
+# ---------------------------------------------------------------------------
+# Group goals
+# ---------------------------------------------------------------------------
+
+class GroupGoalTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("admin", role=User.Role.ADMIN)
+        self.child_user = _make_user("kid", role=User.Role.USER, is_child=True)
+        self.person = _make_person("Finn", linked_user=self.child_user)
+
+    def test_contribute_reserves_points_and_tracks_progress(self):
+        services.adjust_points(self.admin, person_id=self.person.id, points=50)
+        goal = services.create_goal(self.admin, title="Family trip", target_points=100)
+        services.contribute_to_goal(self.admin, goal, person_id=self.person.id, amount=30)
+        self.assertEqual(services.get_points_balance(self.person.id), 20)
+        self.assertEqual(goal.total_contributed(), 30)
+        self.assertEqual(goal.progress_percentage(), 30)
+
+    def test_goal_marked_funded_when_target_reached(self):
+        services.adjust_points(self.admin, person_id=self.person.id, points=100)
+        goal = services.create_goal(self.admin, title="Trampoline", target_points=40)
+        services.contribute_to_goal(self.admin, goal, person_id=self.person.id, amount=40)
+        goal.refresh_from_db()
+        self.assertEqual(goal.status, "funded")
+        self.assertTrue(goal.is_funded())
+
+    def test_cannot_contribute_more_than_balance(self):
+        services.adjust_points(self.admin, person_id=self.person.id, points=10)
+        goal = services.create_goal(self.admin, title="Trip", target_points=100)
+        with self.assertRaises(services.MeridianError):
+            services.contribute_to_goal(self.admin, goal, person_id=self.person.id, amount=20)
+
+    def test_refund_contribution_returns_points(self):
+        services.adjust_points(self.admin, person_id=self.person.id, points=50)
+        goal = services.create_goal(self.admin, title="Trip", target_points=100)
+        contribution = services.contribute_to_goal(self.admin, goal, person_id=self.person.id, amount=30)
+        services.refund_goal_contribution(self.admin, contribution)
+        self.assertEqual(services.get_points_balance(self.person.id), 50)
+        self.assertEqual(goal.total_contributed(), 0)
+
+    def test_child_can_contribute_via_api(self):
+        services.adjust_points(self.admin, person_id=self.person.id, points=50)
+        goal = services.create_goal(self.admin, title="Trip", target_points=100)
+        _login(self.client, "kid")
+        resp = self.client.post(
+            reverse("meridian-goal-contribute", args=[goal.id]),
+            {"amount": 25}, content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(services.get_points_balance(self.person.id), 25)
+
+    def test_child_cannot_create_goal(self):
+        _login(self.client, "kid")
+        resp = self.client.post(
+            reverse("meridian-goal-list"),
+            {"title": "x", "target_points": 10}, content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 403)
+
+
+# ---------------------------------------------------------------------------
+# Wishlist
+# ---------------------------------------------------------------------------
+
+class WishlistTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("admin", role=User.Role.ADMIN)
+        self.child_user = _make_user("kid", role=User.Role.USER, is_child=True)
+        self.person = _make_person("Finn", linked_user=self.child_user)
+
+    def test_request_then_approve_creates_item(self):
+        req = services.request_wishlist_item(
+            self.admin, person_id=self.person.id, requested_name="Lego set"
+        )
+        item = services.approve_wishlist_request(self.admin, req, point_cost=80)
+        req.refresh_from_db()
+        self.assertEqual(req.status, "approved")
+        self.assertEqual(item.name, "Lego set")
+        self.assertEqual(item.point_cost, 80)
+
+    def test_contribute_saves_toward_item_and_funds_it(self):
+        services.adjust_points(self.admin, person_id=self.person.id, points=100)
+        item = services.create_wishlist_item(
+            self.admin, person_id=self.person.id, name="Lego set", point_cost=60
+        )
+        services.contribute_to_wishlist(self.admin, item, person_id=self.person.id, amount=60)
+        self.assertEqual(services.get_points_balance(self.person.id), 40)
+        item.refresh_from_db()
+        self.assertEqual(item.status, "funded")
+
+    def test_refund_wishlist_contribution(self):
+        services.adjust_points(self.admin, person_id=self.person.id, points=50)
+        item = services.create_wishlist_item(
+            self.admin, person_id=self.person.id, name="Book", point_cost=100
+        )
+        contribution = services.contribute_to_wishlist(
+            self.admin, item, person_id=self.person.id, amount=30
+        )
+        services.refund_wishlist_contribution(self.admin, contribution)
+        self.assertEqual(services.get_points_balance(self.person.id), 50)
+
+    def test_child_can_request_item_via_api(self):
+        _login(self.client, "kid")
+        resp = self.client.post(
+            reverse("meridian-wishlist-request-list"),
+            {"requested_name": "Skateboard"}, content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(MeridianWishlistRequest.objects.count(), 1)
+
+    def test_child_cannot_approve_wishlist_request(self):
+        req = services.request_wishlist_item(
+            self.admin, person_id=self.person.id, requested_name="Skateboard"
+        )
+        _login(self.client, "kid")
+        resp = self.client.post(
+            reverse("meridian-wishlist-request-approve", args=[req.id]),
+            {"point_cost": 50}, content_type="application/json",
         )
         self.assertEqual(resp.status_code, 403)
 

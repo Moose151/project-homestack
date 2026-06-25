@@ -9,11 +9,14 @@ from django.db.models import Q, Sum
 
 from apps.meridian.models import (
     MeridianCategory,
+    MeridianGroupGoal,
     MeridianPointsEntry,
     MeridianReward,
     MeridianRewardRequest,
     MeridianRoutine,
     MeridianTask,
+    MeridianWishlistItem,
+    MeridianWishlistRequest,
 )
 from apps.people.models import Person
 from apps.permissions.visibility import apply_visibility
@@ -101,11 +104,21 @@ def get_routine(pk: int) -> MeridianRoutine | None:
 # Rewards
 # ---------------------------------------------------------------------------
 
-def list_rewards(*, active_only: bool = False) -> list[MeridianReward]:
+def list_rewards(*, active_only: bool = False, include_archived: bool = False,
+                 hide_out_of_stock: bool = False) -> list[MeridianReward]:
     qs = MeridianReward.objects.all()
+    if not include_archived:
+        qs = qs.filter(is_archived=False)
     if active_only:
         qs = qs.filter(is_active=True)
-    return list(qs)
+    rewards = list(qs)
+    if hide_out_of_stock:
+        # Hide sold-out rewards that are configured to disappear (shopper view only).
+        rewards = [
+            r for r in rewards
+            if not (r.disappear_when_empty and r.remaining_stock() == 0)
+        ]
+    return rewards
 
 
 def get_reward(pk: int) -> MeridianReward | None:
@@ -123,6 +136,51 @@ def list_reward_requests(*, status: str | None = None, person_id: int | None = N
 
 def get_reward_request(pk: int) -> MeridianRewardRequest | None:
     return MeridianRewardRequest.objects.filter(pk=pk).first()
+
+
+# ---------------------------------------------------------------------------
+# Group goals
+# ---------------------------------------------------------------------------
+
+def list_goals(*, active_only: bool = False) -> list[MeridianGroupGoal]:
+    qs = MeridianGroupGoal.objects.all()
+    if active_only:
+        qs = qs.filter(is_active=True).exclude(status=MeridianGroupGoal.Status.ARCHIVED)
+    return list(qs)
+
+
+def get_goal(pk: int) -> MeridianGroupGoal | None:
+    return MeridianGroupGoal.objects.filter(pk=pk).first()
+
+
+# ---------------------------------------------------------------------------
+# Wishlist
+# ---------------------------------------------------------------------------
+
+def list_wishlist_items(*, person_id: int | None = None, active_only: bool = False) -> list[MeridianWishlistItem]:
+    qs = MeridianWishlistItem.objects.all()
+    if person_id is not None:
+        qs = qs.filter(person_id=person_id)
+    if active_only:
+        qs = qs.filter(is_active=True)
+    return list(qs)
+
+
+def get_wishlist_item(pk: int) -> MeridianWishlistItem | None:
+    return MeridianWishlistItem.objects.filter(pk=pk).first()
+
+
+def list_wishlist_requests(*, status: str | None = None, person_id: int | None = None) -> list[MeridianWishlistRequest]:
+    qs = MeridianWishlistRequest.objects.all()
+    if status:
+        qs = qs.filter(status=status)
+    if person_id is not None:
+        qs = qs.filter(person_id=person_id)
+    return list(qs)
+
+
+def get_wishlist_request(pk: int) -> MeridianWishlistRequest | None:
+    return MeridianWishlistRequest.objects.filter(pk=pk).first()
 
 
 # ---------------------------------------------------------------------------

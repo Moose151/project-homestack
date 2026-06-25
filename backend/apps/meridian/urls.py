@@ -8,6 +8,10 @@ from apps.meridian.views import (
     RewardListView,
     RewardRequestApproveView,
     RewardRequestListView,
+    CartCheckoutView,
+    GoalContributeView,
+    GoalDetailView,
+    GoalListView,
     RewardRequestRejectView,
     RewardRequestView,
     RoutineCompleteView,
@@ -18,6 +22,13 @@ from apps.meridian.views import (
     TaskDetailView,
     TaskListView,
     TaskRejectView,
+    WishlistItemContributeView,
+    WishlistItemDetailView,
+    WishlistItemFulfillView,
+    WishlistItemListView,
+    WishlistRequestApproveView,
+    WishlistRequestListView,
+    WishlistRequestRejectView,
 )
 
 urlpatterns = [
@@ -37,6 +48,20 @@ urlpatterns = [
     path("routines/<int:routine_id>/", RoutineDetailView.as_view(), name="meridian-routine-detail"),
     path("routines/<int:routine_id>/complete/", RoutineCompleteView.as_view(), name="meridian-routine-complete"),
 
+    # Group goals
+    path("goals/", GoalListView.as_view(), name="meridian-goal-list"),
+    path("goals/<int:goal_id>/", GoalDetailView.as_view(), name="meridian-goal-detail"),
+    path("goals/<int:goal_id>/contribute/", GoalContributeView.as_view(), name="meridian-goal-contribute"),
+
+    # Wishlist
+    path("wishlist/", WishlistItemListView.as_view(), name="meridian-wishlist-list"),
+    path("wishlist/<int:item_id>/", WishlistItemDetailView.as_view(), name="meridian-wishlist-detail"),
+    path("wishlist/<int:item_id>/contribute/", WishlistItemContributeView.as_view(), name="meridian-wishlist-contribute"),
+    path("wishlist/<int:item_id>/fulfill/", WishlistItemFulfillView.as_view(), name="meridian-wishlist-fulfill"),
+    path("wishlist-requests/", WishlistRequestListView.as_view(), name="meridian-wishlist-request-list"),
+    path("wishlist-requests/<int:request_id>/approve/", WishlistRequestApproveView.as_view(), name="meridian-wishlist-request-approve"),
+    path("wishlist-requests/<int:request_id>/reject/", WishlistRequestRejectView.as_view(), name="meridian-wishlist-request-reject"),
+
     # Points
     path("points/", PointsView.as_view(), name="meridian-points"),
 
@@ -44,6 +69,7 @@ urlpatterns = [
     path("rewards/", RewardListView.as_view(), name="meridian-reward-list"),
     path("rewards/<int:reward_id>/", RewardDetailView.as_view(), name="meridian-reward-detail"),
     path("rewards/<int:reward_id>/request/", RewardRequestView.as_view(), name="meridian-reward-request"),
+    path("rewards/checkout/", CartCheckoutView.as_view(), name="meridian-cart-checkout"),
 
     # Reward requests
     path("reward-requests/", RewardRequestListView.as_view(), name="meridian-reward-request-list"),

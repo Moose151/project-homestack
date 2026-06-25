@@ -42,11 +42,18 @@ class HomeStackPermission(BasePermission):
     resource: str = ""
 
     def has_permission(self, request, view) -> bool:
-        # Views may set `permission_action` to override the HTTP-method→action mapping.
-        action = (
-            getattr(view, "permission_action", None)
-            or _METHOD_ACTION.get(request.method, "view")
-        )
+        # Action resolution order:
+        #   1. `get_permission_action(request)` method — for views whose action varies by method
+        #   2. `permission_action` attribute — a static override of the method→action mapping
+        #   3. the default HTTP-method → action mapping
+        action_method = getattr(view, "get_permission_action", None)
+        if callable(action_method):
+            action = action_method(request)
+        else:
+            action = (
+                getattr(view, "permission_action", None)
+                or _METHOD_ACTION.get(request.method, "view")
+            )
         resource = getattr(view, "resource_name", None) or self.resource
         return resolve_permission(request.user, action, resource)
 

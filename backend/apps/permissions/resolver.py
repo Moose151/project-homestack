@@ -22,7 +22,7 @@ from __future__ import annotations
 # below). Meridian needs this so kids can complete tasks and request rewards on the
 # kiosk — the node's whole purpose — without weakening the global child-safety block.
 _CHILD_SAFE_ACTIONS: dict[str, frozenset[str]] = {
-    "meridian": frozenset({"complete", "request"}),
+    "meridian": frozenset({"complete", "request", "contribute"}),
 }
 
 

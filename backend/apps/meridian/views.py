@@ -17,12 +17,15 @@ from rest_framework.views import APIView
 from apps.meridian import selectors, services
 from apps.meridian.serializers import (
     MeridianCategorySerializer,
+    MeridianGroupGoalSerializer,
     MeridianPointsEntrySerializer,
     MeridianRewardRequestSerializer,
     MeridianRewardSerializer,
     MeridianRoutineSerializer,
     MeridianTaskSerializer,
     MeridianTaskWriteSerializer,
+    MeridianWishlistItemSerializer,
+    MeridianWishlistRequestSerializer,
     PointsSummarySerializer,
 )
 from apps.meridian.services import MeridianError
@@ -244,6 +247,207 @@ class RoutineCompleteView(APIView):
 
 
 # ---------------------------------------------------------------------------
+# Group goals
+# ---------------------------------------------------------------------------
+
+class GoalListView(APIView):
+    permission_classes = [_Perm]
+
+    def get(self, request: Request) -> Response:
+        goals = selectors.list_goals(active_only=request.query_params.get("active") == "1")
+        return Response(MeridianGroupGoalSerializer(goals, many=True).data)
+
+    def post(self, request: Request) -> Response:
+        serializer = MeridianGroupGoalSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        goal = services.create_goal(request.user, **serializer.validated_data)
+        return Response(MeridianGroupGoalSerializer(goal).data, status=status.HTTP_201_CREATED)
+
+
+class GoalDetailView(APIView):
+    permission_classes = [_Perm]
+
+    def _get(self, pk: int):
+        obj = selectors.get_goal(pk)
+        if obj is None:
+            raise NotFound()
+        return obj
+
+    def get(self, request: Request, goal_id: int) -> Response:
+        return Response(MeridianGroupGoalSerializer(self._get(goal_id)).data)
+
+    def patch(self, request: Request, goal_id: int) -> Response:
+        goal = self._get(goal_id)
+        serializer = MeridianGroupGoalSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        goal = services.update_goal(request.user, goal, **serializer.validated_data)
+        return Response(MeridianGroupGoalSerializer(goal).data)
+
+    def delete(self, request: Request, goal_id: int) -> Response:
+        services.delete_goal(request.user, self._get(goal_id))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class GoalContributeView(APIView):
+    """Child-safe action: a person contributes points to a group goal."""
+
+    permission_classes = [_Perm]
+    permission_action = "contribute"
+
+    def post(self, request: Request, goal_id: int) -> Response:
+        goal = selectors.get_goal(goal_id)
+        if goal is None:
+            raise NotFound()
+        person_id = _acting_person_id(request, request.data.get("person_id"))
+        if person_id is None:
+            raise ValidationError({"detail": "No person to contribute on behalf of."})
+        try:
+            amount = int(request.data.get("amount", 0))
+        except (TypeError, ValueError):
+            raise ValidationError({"detail": "amount must be a number."})
+        _domain_guard(services.contribute_to_goal, request.user, goal, person_id=person_id, amount=amount)
+        return Response(MeridianGroupGoalSerializer(goal).data)
+
+
+# ---------------------------------------------------------------------------
+# Wishlist
+# ---------------------------------------------------------------------------
+
+class WishlistItemListView(APIView):
+    permission_classes = [_Perm]
+
+    def get(self, request: Request) -> Response:
+        person_id = request.query_params.get("person_id") or None
+        items = selectors.list_wishlist_items(person_id=person_id, active_only=True)
+        return Response(MeridianWishlistItemSerializer(items, many=True).data)
+
+    def post(self, request: Request) -> Response:
+        # Admin/manager adds an item directly (create permission).
+        data = request.data
+        item = services.create_wishlist_item(
+            request.user,
+            person_id=data.get("person_id"),
+            name=(data.get("name") or "").strip(),
+            point_cost=int(data.get("point_cost") or 0),
+            description=data.get("description", ""),
+            price_estimate=data.get("price_estimate", ""),
+            store_url=data.get("store_url", ""),
+            image_url=data.get("image_url", ""),
+        )
+        return Response(MeridianWishlistItemSerializer(item).data, status=status.HTTP_201_CREATED)
+
+
+class WishlistItemDetailView(APIView):
+    permission_classes = [_Perm]
+
+    def _get(self, pk: int):
+        obj = selectors.get_wishlist_item(pk)
+        if obj is None:
+            raise NotFound()
+        return obj
+
+    def delete(self, request: Request, item_id: int) -> Response:
+        services.delete_wishlist_item(request.user, self._get(item_id))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class WishlistItemContributeView(APIView):
+    """Child-safe action: a person saves points toward their wishlist item."""
+
+    permission_classes = [_Perm]
+    permission_action = "contribute"
+
+    def post(self, request: Request, item_id: int) -> Response:
+        item = selectors.get_wishlist_item(item_id)
+        if item is None:
+            raise NotFound()
+        person_id = _acting_person_id(request, request.data.get("person_id"))
+        if person_id is None:
+            raise ValidationError({"detail": "No person to contribute on behalf of."})
+        try:
+            amount = int(request.data.get("amount", 0))
+        except (TypeError, ValueError):
+            raise ValidationError({"detail": "amount must be a number."})
+        _domain_guard(services.contribute_to_wishlist, request.user, item, person_id=person_id, amount=amount)
+        return Response(MeridianWishlistItemSerializer(item).data)
+
+
+class WishlistItemFulfillView(APIView):
+    permission_classes = [_Perm]
+    permission_action = "edit"
+
+    def post(self, request: Request, item_id: int) -> Response:
+        item = selectors.get_wishlist_item(item_id)
+        if item is None:
+            raise NotFound()
+        item = services.fulfill_wishlist_item(request.user, item)
+        return Response(MeridianWishlistItemSerializer(item).data)
+
+
+class WishlistRequestListView(APIView):
+    permission_classes = [_Perm]
+
+    def get(self, request: Request) -> Response:
+        reqs = selectors.list_wishlist_requests(status=request.query_params.get("status") or None)
+        return Response(MeridianWishlistRequestSerializer(reqs, many=True).data)
+
+    def get_permission_action(self, request) -> str:
+        # GET = view (list requests, manager); POST = request (child-safe).
+        return "request" if request.method == "POST" else "view"
+
+    def post(self, request: Request) -> Response:
+        # Child-safe: a person requests an item for their wishlist.
+        person_id = _acting_person_id(request, request.data.get("person_id"))
+        if person_id is None:
+            raise ValidationError({"detail": "No person to request on behalf of."})
+        serializer = MeridianWishlistRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        req = services.request_wishlist_item(
+            request.user, person_id=person_id,
+            requested_name=serializer.validated_data["requested_name"],
+            requested_description=serializer.validated_data.get("requested_description", ""),
+        )
+        return Response(MeridianWishlistRequestSerializer(req).data, status=status.HTTP_201_CREATED)
+
+
+class WishlistRequestApproveView(APIView):
+    permission_classes = [_Perm]
+    permission_action = "approve"
+
+    def post(self, request: Request, request_id: int) -> Response:
+        req = selectors.get_wishlist_request(request_id)
+        if req is None:
+            raise NotFound()
+        try:
+            point_cost = int(request.data.get("point_cost", 0))
+        except (TypeError, ValueError):
+            raise ValidationError({"detail": "point_cost must be a number."})
+        item = _domain_guard(
+            services.approve_wishlist_request, request.user, req, point_cost=point_cost,
+            description=request.data.get("description", ""),
+            price_estimate=request.data.get("price_estimate", ""),
+            store_url=request.data.get("store_url", ""),
+            image_url=request.data.get("image_url", ""),
+        )
+        return Response(MeridianWishlistItemSerializer(item).data, status=status.HTTP_201_CREATED)
+
+
+class WishlistRequestRejectView(APIView):
+    permission_classes = [_Perm]
+    permission_action = "approve"
+
+    def post(self, request: Request, request_id: int) -> Response:
+        req = selectors.get_wishlist_request(request_id)
+        if req is None:
+            raise NotFound()
+        req = _domain_guard(
+            services.reject_wishlist_request, request.user, req,
+            reason=request.data.get("reason", ""),
+        )
+        return Response(MeridianWishlistRequestSerializer(req).data)
+
+
+# ---------------------------------------------------------------------------
 # Points
 # ---------------------------------------------------------------------------
 
@@ -323,6 +527,26 @@ class RewardRequestView(APIView):
         )
 
 
+class CartCheckoutView(APIView):
+    """Child-safe action: request several rewards at once (cart checkout)."""
+
+    permission_classes = [_Perm]
+    permission_action = "request"
+
+    def post(self, request: Request) -> Response:
+        person_id = _acting_person_id(request, request.data.get("person_id"))
+        if person_id is None:
+            raise ValidationError({"detail": "No person to checkout on behalf of."})
+        reward_ids = request.data.get("reward_ids") or []
+        reqs = _domain_guard(
+            services.checkout_cart, request.user, person_id=person_id, reward_ids=reward_ids
+        )
+        return Response(
+            MeridianRewardRequestSerializer(reqs, many=True).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
 class RewardRequestListView(APIView):
     permission_classes = [_Perm]
 
@@ -377,7 +601,7 @@ class KioskMeridianView(APIView):
         my_tasks = [t for t in my_tasks if t.status in ("available", "pending")]
 
         balance = services.get_points_balance(person_id) if person_id else 0
-        rewards = selectors.list_rewards(active_only=True)
+        rewards = selectors.list_rewards(active_only=True, hide_out_of_stock=True)
 
         return Response({
             "person_id": person_id,

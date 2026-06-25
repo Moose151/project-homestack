@@ -5,11 +5,14 @@ from rest_framework import serializers
 
 from apps.meridian.models import (
     MeridianCategory,
+    MeridianGroupGoal,
     MeridianPointsEntry,
     MeridianReward,
     MeridianRewardRequest,
     MeridianRoutine,
     MeridianTask,
+    MeridianWishlistItem,
+    MeridianWishlistRequest,
 )
 
 
@@ -89,13 +92,22 @@ class MeridianRoutineSerializer(serializers.ModelSerializer):
 
 
 class MeridianRewardSerializer(serializers.ModelSerializer):
+    remaining_stock = serializers.SerializerMethodField()
+
     class Meta:
         model = MeridianReward
         fields = [
             "id", "name", "description", "cost_points",
-            "icon", "colour", "is_active", "created_at", "updated_at",
+            "icon", "colour", "image_url", "is_active", "is_archived",
+            "price_estimate", "store_url",
+            "quantity", "allow_multiple_in_cart", "disappear_when_empty",
+            "daily_limit_per_user", "remaining_stock",
+            "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = ["id", "remaining_stock", "created_at", "updated_at"]
+
+    def get_remaining_stock(self, obj) -> int | None:
+        return obj.remaining_stock()
 
     def validate_name(self, value: str) -> str:
         if not value.strip():
@@ -115,6 +127,84 @@ class MeridianRewardRequestSerializer(serializers.ModelSerializer):
             "id", "status", "points_spent", "approved_at",
             "approved_by_id", "rejection_reason", "created_at", "updated_at",
         ]
+
+
+class MeridianGroupGoalSerializer(serializers.ModelSerializer):
+    total_contributed = serializers.SerializerMethodField()
+    remaining_points = serializers.SerializerMethodField()
+    progress_percentage = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MeridianGroupGoal
+        fields = [
+            "id", "title", "description", "target_points",
+            "price_estimate", "store_url", "image_url", "status", "is_active",
+            "total_contributed", "remaining_points", "progress_percentage",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "id", "status", "total_contributed", "remaining_points",
+            "progress_percentage", "created_at", "updated_at",
+        ]
+
+    def get_total_contributed(self, obj) -> int:
+        return obj.total_contributed()
+
+    def get_remaining_points(self, obj) -> int:
+        return obj.remaining_points()
+
+    def get_progress_percentage(self, obj) -> int:
+        return obj.progress_percentage()
+
+    def validate_title(self, value: str) -> str:
+        if not value.strip():
+            raise serializers.ValidationError("Title may not be blank.")
+        return value
+
+
+class MeridianWishlistRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MeridianWishlistRequest
+        fields = [
+            "id", "person_id", "requested_name", "requested_description",
+            "status", "rejection_reason", "reviewed_at", "reviewed_by_id", "created_at",
+        ]
+        read_only_fields = [
+            "id", "status", "rejection_reason", "reviewed_at", "reviewed_by_id", "created_at",
+        ]
+
+    def validate_requested_name(self, value: str) -> str:
+        if not value.strip():
+            raise serializers.ValidationError("Name may not be blank.")
+        return value
+
+
+class MeridianWishlistItemSerializer(serializers.ModelSerializer):
+    total_saved = serializers.SerializerMethodField()
+    remaining_points = serializers.SerializerMethodField()
+    progress_percentage = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MeridianWishlistItem
+        fields = [
+            "id", "person_id", "name", "description", "point_cost",
+            "status", "is_active", "price_estimate", "store_url", "image_url",
+            "total_saved", "remaining_points", "progress_percentage",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "id", "status", "total_saved", "remaining_points",
+            "progress_percentage", "created_at", "updated_at",
+        ]
+
+    def get_total_saved(self, obj) -> int:
+        return obj.total_saved()
+
+    def get_remaining_points(self, obj) -> int:
+        return obj.remaining_points()
+
+    def get_progress_percentage(self, obj) -> int:
+        return obj.progress_percentage()
 
 
 class MeridianPointsEntrySerializer(serializers.ModelSerializer):
