@@ -19,7 +19,7 @@ from apps.meridian.models import (
 class MeridianCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = MeridianCategory
-        fields = ["id", "name", "colour", "icon", "position", "created_at", "updated_at"]
+        fields = ["id", "name", "kind", "colour", "icon", "position", "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def validate_name(self, value: str) -> str:

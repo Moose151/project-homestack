@@ -398,6 +398,25 @@ class RoutineTests(TestCase):
                 household=get_active_household(), routine=routine,
                 person_id=self.person.id, completed_date=today - timedelta(days=offset),
             )
+        # With auto-end on, a gap resets the streak to just today.
+        self.assertEqual(services.current_streak(routine, self.person.id, auto_end=True), 1)
+
+    def test_auto_end_setting_controls_streak_breaking(self):
+        from datetime import timedelta
+        from apps.core.models import get_active_household
+        from apps.meridian import config
+        from apps.meridian.models import MeridianRoutineCompletion
+        routine = services.create_routine(self.admin, title="Read", points=1)
+        today = timezone.localdate()
+        for offset in (5, 0):  # a gap of several days
+            MeridianRoutineCompletion.objects.create(
+                household=get_active_household(), routine=routine,
+                person_id=self.person.id, completed_date=today - timedelta(days=offset),
+            )
+        # Default (auto_end_streaks=False): streak is total completion days, gaps ignored.
+        self.assertEqual(services.current_streak(routine, self.person.id), 2)
+        # Turn auto-end on via the household setting → gap breaks the streak.
+        config.update_settings(self.admin, {"auto_end_streaks": True})
         self.assertEqual(services.current_streak(routine, self.person.id), 1)
 
     def test_void_completion_claws_back_points(self):
@@ -544,6 +563,65 @@ class WishlistTests(TestCase):
             {"point_cost": 50}, content_type="application/json",
         )
         self.assertEqual(resp.status_code, 403)
+
+
+# ---------------------------------------------------------------------------
+# Settings + reports + category kinds — Phase 2.17
+# ---------------------------------------------------------------------------
+
+class SettingsAndReportsTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("admin", role=User.Role.ADMIN)
+        self.child_user = _make_user("kid", role=User.Role.USER, is_child=True)
+        self.person = _make_person("Finn", linked_user=self.child_user)
+
+    def test_settings_defaults_and_update(self):
+        from apps.meridian import config
+        self.assertEqual(config.get_settings()["points_label"], "points")
+        config.update_settings(self.admin, {"points_label": "stars", "group_goals_enabled": False})
+        s = config.get_settings()
+        self.assertEqual(s["points_label"], "stars")
+        self.assertFalse(s["group_goals_enabled"])
+
+    def test_disabled_group_goals_blocks_contribution(self):
+        from apps.meridian import config
+        services.adjust_points(self.admin, person_id=self.person.id, points=50)
+        goal = services.create_goal(self.admin, title="Trip", target_points=100)
+        config.update_settings(self.admin, {"group_goals_enabled": False})
+        with self.assertRaises(services.MeridianError):
+            services.contribute_to_goal(self.admin, goal, person_id=self.person.id, amount=10)
+
+    def test_disabled_wishlist_blocks_requests(self):
+        from apps.meridian import config
+        config.update_settings(self.admin, {"wishlist_requests_enabled": False})
+        with self.assertRaises(services.MeridianError):
+            services.request_wishlist_item(self.admin, person_id=self.person.id, requested_name="Toy")
+
+    def test_settings_endpoint_patch_requires_manager(self):
+        _login(self.client, "kid")
+        resp = self.client.patch(
+            reverse("meridian-settings"), {"points_label": "x"}, content_type="application/json"
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_reports_leaderboard(self):
+        services.adjust_points(self.admin, person_id=self.person.id, points=40)
+        _login(self.client, "admin")
+        resp = self.client.get(reverse("meridian-reports"))
+        self.assertEqual(resp.status_code, 200)
+        board = resp.json()["leaderboard"]
+        self.assertEqual(board[0]["person_id"], self.person.id)
+        self.assertEqual(board[0]["total_earned"], 40)
+
+    def test_category_kind_filter(self):
+        from apps.meridian.models import MeridianCategory
+        services.create_category(self.admin, name="Bedroom", kind=MeridianCategory.Kind.TASK)
+        services.create_category(self.admin, name="Treats", kind=MeridianCategory.Kind.REWARD)
+        _login(self.client, "admin")
+        resp = self.client.get(reverse("meridian-category-list"), {"kind": "reward"})
+        self.assertEqual(resp.status_code, 200)
+        names = [c["name"] for c in resp.json()]
+        self.assertEqual(names, ["Treats"])
 
 
 # ---------------------------------------------------------------------------

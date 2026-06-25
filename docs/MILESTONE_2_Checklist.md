@@ -133,12 +133,14 @@
 - [ ] Recurring-task re-arm is part of the deferred task-completion model (2.9b).
 - [ ] Allowance config UI/endpoint lands with settings (2.17) / frontend (2.19).
 
-## Phase 2.17 — Categories, settings, reports
-- [ ] Separate task vs reward categories (admin-managed, active flag).
-- [ ] Household settings via `NodeSetting`: `points_label`, `group_goals_enabled`,
-      `wishlist_requests_enabled`, `auto_end_streaks`.
-- [ ] Reports/leaderboard/recent-activity: points leaderboard, per-person summaries, earned/spent
-      over time, task/reward activity feed.
+## Phase 2.17 — Categories, settings, reports ✅ (2026-06-25)
+- [x] Task vs reward categories via `MeridianCategory.kind` (filterable `?kind=`).
+- [x] Household settings via `NodeSetting` (`apps/meridian/config.py`): `points_label`,
+      `group_goals_enabled`, `wishlist_requests_enabled`, `auto_end_streaks`; `GET/PATCH
+      /meridian/settings/` (PATCH = manager). Toggles enforced in goal/wishlist services;
+      `auto_end_streaks` drives `current_streak`.
+- [x] `GET /meridian/reports/`: leaderboard (balance, lifetime earned, badge count) + recent
+      activity feed.
 
 ## Phase 2.18 — Data import (D14) — full
 - [ ] Extend `import_meridian` to a complete, **dry-runnable, idempotent** import: users →

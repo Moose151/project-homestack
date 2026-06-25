@@ -61,7 +61,8 @@ class CategoryListView(APIView):
     permission_classes = [_Perm]
 
     def get(self, request: Request) -> Response:
-        return Response(MeridianCategorySerializer(selectors.list_categories(), many=True).data)
+        cats = selectors.list_categories(kind=request.query_params.get("kind") or None)
+        return Response(MeridianCategorySerializer(cats, many=True).data)
 
     def post(self, request: Request) -> Response:
         serializer = MeridianCategorySerializer(data=request.data)
@@ -580,6 +581,38 @@ class RewardRequestRejectView(APIView):
             reason=request.data.get("reason", ""),
         )
         return Response(MeridianRewardRequestSerializer(req).data)
+
+
+# ---------------------------------------------------------------------------
+# Settings + reports (Phase 2.17)
+# ---------------------------------------------------------------------------
+
+class SettingsView(APIView):
+    permission_classes = [_Perm]
+
+    def get(self, request: Request) -> Response:
+        from apps.meridian import config
+        return Response(config.get_settings())
+
+    def patch(self, request: Request) -> Response:
+        from apps.meridian import config
+        return Response(config.update_settings(request.user, request.data))
+
+    # GET = view (anyone); PATCH = edit (admin/manager).
+    def get_permission_action(self, request) -> str:
+        return "edit" if request.method == "PATCH" else "view"
+
+
+class ReportsView(APIView):
+    """Leaderboard + recent activity (Node Spec 12). Manager-facing overview."""
+
+    permission_classes = [_Perm]
+
+    def get(self, request: Request) -> Response:
+        return Response({
+            "leaderboard": selectors.leaderboard(),
+            "recent_activity": selectors.recent_activity(),
+        })
 
 
 # ---------------------------------------------------------------------------

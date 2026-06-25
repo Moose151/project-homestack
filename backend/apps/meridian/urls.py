@@ -14,9 +14,11 @@ from apps.meridian.views import (
     GoalListView,
     RewardRequestRejectView,
     RewardRequestView,
+    ReportsView,
     RoutineCompleteView,
     RoutineDetailView,
     RoutineListView,
+    SettingsView,
     TaskApproveView,
     TaskCompleteView,
     TaskDetailView,
@@ -61,6 +63,10 @@ urlpatterns = [
     path("wishlist-requests/", WishlistRequestListView.as_view(), name="meridian-wishlist-request-list"),
     path("wishlist-requests/<int:request_id>/approve/", WishlistRequestApproveView.as_view(), name="meridian-wishlist-request-approve"),
     path("wishlist-requests/<int:request_id>/reject/", WishlistRequestRejectView.as_view(), name="meridian-wishlist-request-reject"),
+
+    # Settings + reports
+    path("settings/", SettingsView.as_view(), name="meridian-settings"),
+    path("reports/", ReportsView.as_view(), name="meridian-reports"),
 
     # Points
     path("points/", PointsView.as_view(), name="meridian-points"),

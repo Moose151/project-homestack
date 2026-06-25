@@ -115,7 +115,7 @@ def create_category(acting_user: User, **data) -> MeridianCategory:
 
 
 def update_category(acting_user: User, category: MeridianCategory, **data) -> MeridianCategory:
-    allowed = {"name", "colour", "icon", "position"}
+    allowed = {"name", "kind", "colour", "icon", "position"}
     for key, val in data.items():
         if key in allowed:
             setattr(category, key, val)
@@ -276,12 +276,17 @@ def completed_today(routine: MeridianRoutine, person_id: int, *, on: date | None
     ).exists()
 
 
-def current_streak(routine: MeridianRoutine, person_id: int, *, auto_end: bool = True) -> int:
+def current_streak(routine: MeridianRoutine, person_id: int, *, auto_end: bool | None = None) -> int:
     """Consecutive-day streak for a person on a routine (legacy parity).
 
     With ``auto_end=False`` the streak is the total count of distinct completion days and never
     resets automatically (split-household mode); otherwise a gap of more than one day breaks it.
+    When ``auto_end`` is None it falls back to the household ``auto_end_streaks`` setting
+    (default False — streaks don't auto-break, matching the legacy default).
     """
+    if auto_end is None:
+        from apps.meridian import config
+        auto_end = bool(config.get_setting("auto_end_streaks"))
     dates = sorted(
         {
             c.completed_date
@@ -456,6 +461,9 @@ def contribute_to_goal(
 ) -> MeridianGroupGoalContribution:
     """A person contributes points to a group goal; the points are reserved (spent) now and
     refundable later. Marks the goal funded once the target is reached."""
+    from apps.meridian import config
+    if not config.get_setting("group_goals_enabled"):
+        raise MeridianError("Group goals are disabled.")
     if not goal.is_active or goal.status == MeridianGroupGoal.Status.ARCHIVED:
         raise MeridianError("This goal is not accepting contributions.")
     if amount <= 0:
@@ -506,6 +514,9 @@ def request_wishlist_item(
     acting_user: User, *, person_id: int, requested_name: str, requested_description: str = ""
 ) -> MeridianWishlistRequest:
     """A person asks for an item to be added to their wishlist (awaits admin approval)."""
+    from apps.meridian import config
+    if not config.get_setting("wishlist_requests_enabled"):
+        raise MeridianError("Wishlist requests are disabled.")
     if not requested_name.strip():
         raise MeridianError("A wishlist item needs a name.")
     req = MeridianWishlistRequest(

@@ -5,7 +5,7 @@ where this can be upgraded to SearchVector/tsvector without changing signatures 
 """
 from __future__ import annotations
 
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
 
 from apps.meridian.models import (
     MeridianCategory,
@@ -59,8 +59,11 @@ def list_pending_tasks(user=None) -> list[MeridianTask]:
 # Categories
 # ---------------------------------------------------------------------------
 
-def list_categories() -> list[MeridianCategory]:
-    return list(MeridianCategory.objects.order_by("position", "name"))
+def list_categories(*, kind: str | None = None) -> list[MeridianCategory]:
+    qs = MeridianCategory.objects.order_by("position", "name")
+    if kind:
+        qs = qs.filter(kind=kind)
+    return list(qs)
 
 
 def get_category(pk: int) -> MeridianCategory | None:
@@ -213,6 +216,67 @@ def list_points_entries(*, person_id: int | None = None, limit: int = 50) -> lis
     if person_id is not None:
         qs = qs.filter(person_id=person_id)
     return list(qs[:limit])
+
+
+# ---------------------------------------------------------------------------
+# Reports / leaderboard / activity (Phase 2.17, Node Spec 12)
+# ---------------------------------------------------------------------------
+
+def leaderboard() -> list[dict]:
+    """Per-person standings: spendable balance, lifetime earned, and badge count.
+
+    Sorted by lifetime earned (descending) — the fair "who's worked hardest" ranking, since
+    spending doesn't drag you down the board.
+    """
+    from apps.achievements.models import PersonBadge
+
+    balances = {
+        r["person_id"]: r["total"] or 0
+        for r in MeridianPointsEntry.objects.values("person_id").annotate(total=Sum("points"))
+    }
+    earned = {
+        r["person_id"]: r["total"] or 0
+        for r in MeridianPointsEntry.objects.filter(
+            transaction_type__in=MeridianPointsEntry.EARNING_TYPES, points__gt=0
+        ).values("person_id").annotate(total=Sum("points"))
+    }
+    badge_counts: dict[int, int] = {}
+    for pb in PersonBadge.objects.values("person_id").annotate(n=Count("id")):
+        badge_counts[pb["person_id"]] = pb["n"]
+
+    person_ids = set(balances) | set(earned) | set(badge_counts)
+    names = dict(Person.objects.values_list("id", "display_name"))
+    rows = [
+        {
+            "person_id": pid,
+            "display_name": names.get(pid, ""),
+            "balance": balances.get(pid, 0),
+            "total_earned": earned.get(pid, 0),
+            "badge_count": badge_counts.get(pid, 0),
+        }
+        for pid in person_ids
+    ]
+    rows.sort(key=lambda r: (-r["total_earned"], -r["balance"]))
+    return rows
+
+
+def recent_activity(*, limit: int = 25) -> list[dict]:
+    """Recent points-ledger movements across the household, with person names attached."""
+    entries = list(
+        MeridianPointsEntry.objects.select_related("person")[:limit]
+    )
+    return [
+        {
+            "id": e.id,
+            "person_id": e.person_id,
+            "display_name": e.person.display_name if e.person else "",
+            "points": e.points,
+            "transaction_type": e.transaction_type,
+            "reason": e.reason,
+            "created_at": e.created_at,
+        }
+        for e in entries
+    ]
 
 
 # ---------------------------------------------------------------------------

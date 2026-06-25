@@ -32,9 +32,18 @@ class Visibility(models.TextChoices):
 
 
 class MeridianCategory(HouseholdBaseModel):
-    """A grouping for tasks (e.g. Bedroom, Pets, Reading)."""
+    """A grouping for tasks or rewards (e.g. Bedroom, Pets, Reading, Treats).
+
+    ``kind`` separates task categories from reward/shop categories (legacy parity: the standalone
+    app had distinct TaskCategory and RewardCategory tables).
+    """
+
+    class Kind(models.TextChoices):
+        TASK = "task", "Task"
+        REWARD = "reward", "Reward"
 
     name = models.CharField(max_length=100)
+    kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.TASK, db_index=True)
     colour = models.CharField(max_length=7, blank=True, default="")
     icon = models.CharField(max_length=100, blank=True, default="")
     position = models.PositiveIntegerField(default=0)
