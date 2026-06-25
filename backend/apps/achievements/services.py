@@ -30,6 +30,12 @@ def award_badge(person_id: int, code: str, *, source: str = "") -> tuple[PersonB
         source=source or badge.source,
     )
     pb.save()
+    from apps.notifications import services as notifications
+    notifications.notify_person_id(
+        person_id, title="Badge earned!",
+        message=f"{badge.icon} You earned the '{badge.name}' badge.",
+        level=notifications.Notification.Level.SUCCESS, source_node="achievements",
+    )
     events.badge_earned(person_id, pb.household_id, badge.code, badge.name, badge.icon)
     return pb, True
 

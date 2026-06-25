@@ -28,5 +28,6 @@ urlpatterns = [
     path("api/v1/achievements/", include("apps.achievements.urls")),
     path("api/v1/kiosk/meridian/", KioskMeridianView.as_view(), name="kiosk-meridian"),
     path("api/v1/hub/", include("apps.hub.urls")),
+    path("api/v1/notifications/", include("apps.notifications.urls")),
     path("api/v1/backups/", include("apps.backups.urls")),
 ]

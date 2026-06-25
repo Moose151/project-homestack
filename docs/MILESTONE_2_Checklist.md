@@ -116,9 +116,12 @@
 - [ ] `routine_perfect_month` evaluated in the scheduled command (2.16); Hub badge widget +
       kiosk celebration land with the frontend (2.19).
 
-## Phase 2.15 — Notifications
-- [ ] Wire the `notifications` app: task approved/rejected, reward approved/rejected, badge
-      earned, allowance awarded. Surfaced on web + kiosk.
+## Phase 2.15 — Notifications 🟡 (2026-06-25 — UI in 2.19)
+- [x] Built the `notifications` app (shared infra: `Notification`, services, selectors,
+      `GET /notifications/` + read/read-all, `notifications.view` perm migration 0011).
+- [x] Wired: task approved/rejected, reward approved/rejected, badge earned. Allowance awarded
+      lands with the scheduled command (2.16).
+- [ ] Web/kiosk notification UI (bell + list) lands with the frontend (2.19).
 
 ## Phase 2.16 — Scheduled command (D5 — cron, no in-process scheduler)
 - [ ] One management command: weekly allowance awards (per-person amount + weekday), recurrence

@@ -18,6 +18,7 @@ from django.utils import timezone
 from apps.accounts.models import User
 from apps.core.models import get_active_household
 from apps.meridian import events
+from apps.notifications import services as notifications
 from apps.meridian.models import (
     MeridianCategory,
     MeridianGroupGoal,
@@ -209,6 +210,11 @@ def approve_task(acting_user: User, task: MeridianTask) -> MeridianTask:
             reason=f"Task approved: {task.title}", source_task=task,
             transaction_type=_TxType.TASK_APPROVED,
         )
+    notifications.notify_person_id(
+        person_id, title="Task approved",
+        message=f"'{task.title}' was approved — you earned {awarded} points.",
+        level=notifications.Notification.Level.SUCCESS, source_node="meridian",
+    )
     events.task_approved(task.id, task.household_id, person_id, awarded)
     return task
 
@@ -217,6 +223,11 @@ def reject_task(acting_user: User, task: MeridianTask, *, reason: str = "") -> M
     """Reject a completed task; it returns to AVAILABLE so it can be retried."""
     if task.status != MeridianTask.Status.PENDING:
         raise MeridianError("Only tasks pending approval can be rejected.")
+    notifications.notify_person_id(
+        task.completed_by_person_id, title="Task not approved",
+        message=f"'{task.title}' was sent back" + (f": {reason}" if reason else "."),
+        level=notifications.Notification.Level.WARNING, source_node="meridian",
+    )
     task.status = MeridianTask.Status.AVAILABLE
     task.completed_at = None
     task.completed_by_person_id = None
@@ -666,6 +677,11 @@ def approve_reward_request(acting_user: User, req: MeridianRewardRequest) -> Mer
     req.approved_by = acting_user
     req.updated_by = acting_user
     req.save()
+    notifications.notify_person_id(
+        req.requested_by_person_id, title="Reward approved",
+        message=f"Your reward '{req.reward.name}' was approved!",
+        level=notifications.Notification.Level.SUCCESS, source_node="meridian",
+    )
     events.reward_approved(req.id, req.household_id, req.requested_by_person_id, req.points_spent)
     return req
 
@@ -683,6 +699,12 @@ def reject_reward_request(acting_user: User, req: MeridianRewardRequest, *, reas
     req.rejection_reason = reason
     req.updated_by = acting_user
     req.save()
+    notifications.notify_person_id(
+        req.requested_by_person_id, title="Reward not approved",
+        message=f"'{req.reward.name}' was declined" + (f": {reason}" if reason else ".")
+        + f" Your {req.points_spent} points were refunded.",
+        level=notifications.Notification.Level.WARNING, source_node="meridian",
+    )
     return req
 
 
