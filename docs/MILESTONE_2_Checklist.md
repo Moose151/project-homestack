@@ -123,9 +123,15 @@
       lands with the scheduled command (2.16).
 - [ ] Web/kiosk notification UI (bell + list) lands with the frontend (2.19).
 
-## Phase 2.16 — Scheduled command (D5 — cron, no in-process scheduler)
-- [ ] One management command: weekly allowance awards (per-person amount + weekday), recurrence
-      re-arm, streak auto-end, periodic badge re-checks (e.g. perfect-month). Idempotent.
+## Phase 2.16 — Scheduled command (D5 — cron, no in-process scheduler) 🟡 (2026-06-25)
+- [x] `meridian_run_scheduled` management command (cron-friendly, `--date`/`--skip-*` flags).
+- [x] Weekly allowance: `MeridianAllowance` (per-person amount + weekday), `award_allowances`,
+      idempotent per day (keyed on the date in the reason). Notifies the person.
+- [x] Perfect-month routine badge via the achievements bus (`award_perfect_month_badges` →
+      `meridian.routine_perfect_month` → achievements awards). Idempotent.
+- [x] Streak auto-end needs no job (computed at read time from completions + the setting).
+- [ ] Recurring-task re-arm is part of the deferred task-completion model (2.9b).
+- [ ] Allowance config UI/endpoint lands with settings (2.17) / frontend (2.19).
 
 ## Phase 2.17 — Categories, settings, reports
 - [ ] Separate task vs reward categories (admin-managed, active flag).

@@ -20,6 +20,7 @@ from apps.core.models import get_active_household
 from apps.meridian import events
 from apps.notifications import services as notifications
 from apps.meridian.models import (
+    MeridianAllowance,
     MeridianCategory,
     MeridianGroupGoal,
     MeridianGroupGoalContribution,
@@ -357,6 +358,67 @@ def void_routine_completion(acting_user: User, completion: MeridianRoutineComple
             source_routine=completion.routine, transaction_type=_TxType.MANUAL_ADJUSTMENT,
         )
     return completion
+
+
+# ---------------------------------------------------------------------------
+# Scheduled work (D5 — run by a management command on cron, not a live scheduler)
+# ---------------------------------------------------------------------------
+
+def award_allowances(*, on: date | None = None) -> int:
+    """Award the weekly allowance to every eligible person whose configured weekday is ``on``.
+
+    Idempotent for the day: a person who already has an allowance entry dated ``on`` is skipped,
+    so re-running the command on the same day does not double-pay.
+    """
+    day = on or timezone.localdate()
+    weekday = day.weekday()
+    awarded = 0
+    allowances = MeridianAllowance.objects.filter(
+        is_active=True, amount__gt=0, weekday=weekday
+    ).select_related("person")
+    reason = f"Weekly allowance ({day.isoformat()})"
+    for allowance in allowances:
+        # Idempotent for the day: keyed on the allowance date in the reason, so re-running the
+        # command (or running it with an explicit --date) never double-pays.
+        already = MeridianPointsEntry.objects.filter(
+            person_id=allowance.person_id,
+            transaction_type=_TxType.ALLOWANCE,
+            reason=reason,
+        ).exists()
+        if already:
+            continue
+        _record_points(
+            None, person_id=allowance.person_id, points=allowance.amount,
+            reason=reason, transaction_type=_TxType.ALLOWANCE,
+        )
+        notifications.notify_person_id(
+            allowance.person_id, title="Allowance",
+            message=f"You received your weekly allowance of {allowance.amount} points.",
+            level=notifications.Notification.Level.SUCCESS, source_node="meridian",
+        )
+        awarded += 1
+    return awarded
+
+
+def award_perfect_month_badges(*, year: int, month: int) -> int:
+    """Emit a perfect-month event for each person who completed a routine on every day of the
+    given calendar month. Achievements awards the badge (idempotent) via the bus (D4)."""
+    import calendar as _calendar
+
+    days_in_month = _calendar.monthrange(year, month)[1]
+    person_days: dict[int, set] = {}
+    completions = MeridianRoutineCompletion.objects.filter(
+        completed_date__year=year, completed_date__month=month, voided=False
+    ).values_list("person_id", "completed_date")
+    for person_id, completed_date in completions:
+        person_days.setdefault(person_id, set()).add(completed_date.day)
+    emitted = 0
+    household = get_active_household()
+    for person_id, days in person_days.items():
+        if len(days) >= days_in_month:
+            events.routine_perfect_month(person_id, household.id, year, month)
+            emitted += 1
+    return emitted
 
 
 # ---------------------------------------------------------------------------

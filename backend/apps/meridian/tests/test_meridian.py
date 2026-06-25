@@ -547,6 +547,76 @@ class WishlistTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Scheduled work (allowance, perfect-month) — Phase 2.16
+# ---------------------------------------------------------------------------
+
+class ScheduledWorkTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("admin", role=User.Role.ADMIN)
+        self.person = _make_person("Finn")
+
+    def test_allowance_awarded_on_matching_weekday(self):
+        from datetime import date
+        from apps.core.models import get_active_household
+        from apps.meridian.models import MeridianAllowance
+        # A Monday.
+        monday = date(2026, 6, 22)
+        self.assertEqual(monday.weekday(), 0)
+        MeridianAllowance.objects.create(
+            household=get_active_household(), person=self.person, amount=15, weekday=0,
+        )
+        awarded = services.award_allowances(on=monday)
+        self.assertEqual(awarded, 1)
+        self.assertEqual(services.get_points_balance(self.person.id), 15)
+
+    def test_allowance_skipped_on_other_weekday(self):
+        from datetime import date
+        from apps.core.models import get_active_household
+        from apps.meridian.models import MeridianAllowance
+        MeridianAllowance.objects.create(
+            household=get_active_household(), person=self.person, amount=15, weekday=0,
+        )
+        tuesday = date(2026, 6, 23)
+        self.assertEqual(services.award_allowances(on=tuesday), 0)
+        self.assertEqual(services.get_points_balance(self.person.id), 0)
+
+    def test_allowance_is_idempotent_per_day(self):
+        from datetime import date
+        from apps.core.models import get_active_household
+        from apps.meridian.models import MeridianAllowance
+        monday = date(2026, 6, 22)
+        MeridianAllowance.objects.create(
+            household=get_active_household(), person=self.person, amount=15, weekday=0,
+        )
+        services.award_allowances(on=monday)
+        services.award_allowances(on=monday)  # second run same day → no double-pay
+        self.assertEqual(services.get_points_balance(self.person.id), 15)
+
+    def test_perfect_month_awards_badge(self):
+        import calendar
+        from datetime import date
+        from apps.core.models import get_active_household
+        from apps.achievements.models import PersonBadge
+        from apps.meridian.models import MeridianRoutine, MeridianRoutineCompletion
+        routine = services.create_routine(self.admin, title="Brush teeth", points=1)
+        year, month = 2025, 2
+        for day in range(1, calendar.monthrange(year, month)[1] + 1):
+            MeridianRoutineCompletion.objects.create(
+                household=get_active_household(), routine=routine, person_id=self.person.id,
+                completed_date=date(year, month, day),
+            )
+        emitted = services.award_perfect_month_badges(year=year, month=month)
+        self.assertEqual(emitted, 1)
+        self.assertTrue(
+            PersonBadge.objects.filter(person=self.person, badge__code="routine_perfect_month").exists()
+        )
+
+    def test_command_runs(self):
+        from django.core.management import call_command
+        call_command("meridian_run_scheduled", date="2026-06-22")
+
+
+# ---------------------------------------------------------------------------
 # Calendar sync (D7)
 # ---------------------------------------------------------------------------
 

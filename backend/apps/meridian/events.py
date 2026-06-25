@@ -78,3 +78,9 @@ def wishlist_contributed(item_id: int, household_id: int, person_id: int, amount
         "item_id": item_id, "household_id": household_id,
         "person_id": person_id, "amount": amount,
     })
+
+
+def routine_perfect_month(person_id: int, household_id: int, year: int, month: int) -> None:
+    publish("meridian.routine_perfect_month", payload={
+        "person_id": person_id, "household_id": household_id, "year": year, "month": month,
+    })

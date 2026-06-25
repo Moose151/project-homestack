@@ -315,6 +315,37 @@ class MeridianRoutineCompletion(HouseholdBaseModel):
         return f"{self.person} · {self.routine} · {self.completed_date}"
 
 
+class MeridianAllowance(HouseholdBaseModel):
+    """Optional weekly allowance for a person — points awarded automatically by the scheduled
+    command on a chosen weekday (legacy parity, D19; runs via cron per D5, not a live scheduler).
+    """
+
+    class Weekday(models.IntegerChoices):
+        MONDAY = 0, "Monday"
+        TUESDAY = 1, "Tuesday"
+        WEDNESDAY = 2, "Wednesday"
+        THURSDAY = 3, "Thursday"
+        FRIDAY = 4, "Friday"
+        SATURDAY = 5, "Saturday"
+        SUNDAY = 6, "Sunday"
+
+    person = models.OneToOneField(
+        "people.Person", on_delete=models.CASCADE, related_name="meridian_allowance"
+    )
+    amount = models.PositiveIntegerField(default=0)
+    weekday = models.IntegerField(choices=Weekday.choices, default=Weekday.MONDAY)
+    is_active = models.BooleanField(default=True)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "meridian allowance"
+
+    def __str__(self) -> str:
+        return f"{self.person}: {self.amount}/wk (day {self.weekday})"
+
+
 class MeridianReward(HouseholdBaseModel):
     """An item in the rewards shop, purchasable with points (legacy parity, D19)."""
 

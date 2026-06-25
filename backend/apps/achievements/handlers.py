@@ -79,6 +79,12 @@ def _on_wishlist_funded(sender, *, payload: dict, **kwargs) -> None:
         services.award_badge(person_id, "wishlist_funded")
 
 
+def _on_routine_perfect_month(sender, *, payload: dict, **kwargs) -> None:
+    person_id = payload.get("person_id")
+    if person_id:
+        services.award_badge(person_id, "routine_perfect_month")
+
+
 def connect() -> None:
     """Wire all handlers to the bus. Called once from AppConfig.ready()."""
     for event_type, (counter_key, thresholds) in _COUNT_RULES.items():
@@ -86,3 +92,4 @@ def connect() -> None:
     subscribe("meridian.routine_completed", _on_routine_streak)
     subscribe("meridian.points_awarded", _on_points_awarded)
     subscribe("meridian.wishlist_funded", _on_wishlist_funded)
+    subscribe("meridian.routine_perfect_month", _on_routine_perfect_month)
