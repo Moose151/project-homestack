@@ -3,6 +3,7 @@ import { api } from '../../../api/client'
 import type { AdminUser, Person } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
+import { Avatar } from '../../../components/Avatar'
 import { useAuth } from '../../auth/AuthContext'
 
 const ROLES = ['admin', 'manager', 'user', 'guest'] as const
@@ -11,6 +12,42 @@ const ROLE_BADGE: Record<string, string> = {
   user: 'bg-primary-soft text-primary', guest: 'bg-sunken text-muted-strong',
 }
 const input = 'px-3 py-2 rounded-xl border border-line bg-raised text-sm text-ink placeholder-muted outline-none focus:ring-2 focus:ring-primary'
+
+const AVATAR_EMOJIS = [
+  '😀', '😎', '🦊', '🐱', '🐶', '🐰', '🐻', '🐼', '🦁', '🐸', '🦄', '🐧',
+  '🦉', '🐢', '🐝', '🌟', '🌈', '🍀', '🍎', '🍕', '⚽', '🎮', '🎨', '🎸',
+  '🚀', '🏰', '👑', '❤️',
+]
+
+function EmojiPicker({ value, colour, onChange }: { value: string; colour: string; onChange: (e: string) => void }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <Avatar name="?" colour={colour} avatar={value} size="lg" />
+        <span className="text-sm text-muted">Account picture (emoji)</span>
+        {value && (
+          <button type="button" onClick={() => onChange('')} className="text-xs text-muted hover:text-danger">
+            clear
+          </button>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {AVATAR_EMOJIS.map(e => (
+          <button
+            key={e}
+            type="button"
+            onClick={() => onChange(e)}
+            className={`w-9 h-9 rounded-lg text-lg flex items-center justify-center transition-colors ${
+              value === e ? 'bg-primary-soft ring-2 ring-primary' : 'bg-sunken hover:bg-line'
+            }`}
+          >
+            {e}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export function UsersPage() {
   const { user } = useAuth()
@@ -54,6 +91,7 @@ export function UsersPage() {
         {users.map(u => (
           <Card key={u.id} className={u.is_active ? '' : 'opacity-60'}>
             <div className="flex items-center gap-3 flex-wrap">
+              <Avatar name={u.display_name} colour={u.colour} avatar={u.avatar} size="md" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-ink">{u.display_name}</span>
@@ -89,7 +127,7 @@ export function UsersPage() {
 function UserForm({ people, onSaved, onError }: { people: Person[]; onSaved: () => void; onError: (s: string | null) => void }) {
   const [f, setF] = useState({
     username: '', display_name: '', role: 'user', is_child_account: false, colour: '#4A90E2',
-    pin: '', password: '', personMode: 'new' as 'new' | 'existing' | 'none', link_person_id: '',
+    avatar: '', pin: '', password: '', personMode: 'new' as 'new' | 'existing' | 'none', link_person_id: '',
   })
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: unknown) => setF(prev => ({ ...prev, [k]: v }))
@@ -102,7 +140,7 @@ function UserForm({ people, onSaved, onError }: { people: Person[]; onSaved: () 
     try {
       await api.createUser({
         username: f.username.trim(), display_name: f.display_name.trim(), role: f.role,
-        is_child_account: f.is_child_account, colour: f.colour,
+        is_child_account: f.is_child_account, colour: f.colour, avatar: f.avatar,
         pin: f.pin || undefined, password: f.password || undefined,
         create_person: f.personMode === 'new',
         link_person_id: f.personMode === 'existing' && f.link_person_id ? Number(f.link_person_id) : undefined,
@@ -124,6 +162,9 @@ function UserForm({ people, onSaved, onError }: { people: Person[]; onSaved: () 
         <label className="flex items-center gap-2 text-sm text-ink">
           <input type="color" value={f.colour} onChange={e => set('colour', e.target.value)} /> Accent colour
         </label>
+        <div className="sm:col-span-2">
+          <EmojiPicker value={f.avatar} colour={f.colour} onChange={e => set('avatar', e)} />
+        </div>
         <input className={input} placeholder="PIN (4–6 digits)" value={f.pin} onChange={e => set('pin', e.target.value)} />
         <input className={input} type="password" placeholder="Password (adults; for re-auth)" value={f.password} onChange={e => set('password', e.target.value)} />
         <label className="flex items-center gap-2 text-sm text-ink sm:col-span-2">
@@ -164,7 +205,7 @@ function UserForm({ people, onSaved, onError }: { people: Person[]; onSaved: () 
 }
 
 function EditUser({ u, onSaved, onError }: { u: AdminUser; onSaved: () => void; onError: (s: string | null) => void }) {
-  const [f, setF] = useState({ display_name: u.display_name, role: u.role, colour: u.colour || '#4A90E2', pin: '', password: '' })
+  const [f, setF] = useState({ display_name: u.display_name, role: u.role, colour: u.colour || '#4A90E2', avatar: u.avatar || '', pin: '', password: '' })
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: unknown) => setF(prev => ({ ...prev, [k]: v }))
 
@@ -172,7 +213,7 @@ function EditUser({ u, onSaved, onError }: { u: AdminUser; onSaved: () => void; 
     onError(null); setSaving(true)
     try {
       await api.updateUser(u.id, {
-        display_name: f.display_name, role: f.role, colour: f.colour,
+        display_name: f.display_name, role: f.role, colour: f.colour, avatar: f.avatar,
         pin: f.pin || undefined, password: f.password || undefined,
       })
       onSaved()
@@ -189,6 +230,9 @@ function EditUser({ u, onSaved, onError }: { u: AdminUser; onSaved: () => void; 
       </select>
       <input className={input} placeholder="Reset PIN (blank = keep)" value={f.pin} onChange={e => set('pin', e.target.value)} />
       <input className={input} type="password" placeholder="Reset password (blank = keep)" value={f.password} onChange={e => set('password', e.target.value)} />
+      <div className="sm:col-span-2">
+        <EmojiPicker value={f.avatar} colour={f.colour} onChange={e => set('avatar', e)} />
+      </div>
       <div className="sm:col-span-2"><Button size="sm" loading={saving} onClick={save}>Save changes</Button></div>
     </div>
   )

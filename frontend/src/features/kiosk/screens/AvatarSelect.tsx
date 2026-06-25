@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../../api/client'
 import type { KioskUser } from '../../../api/types'
+import { isImageAvatar } from '../../../components/Avatar'
 
 interface Props {
   onSelect: (user: KioskUser) => void
@@ -9,20 +10,21 @@ interface Props {
 function AvatarCard({ user, onClick }: { user: KioskUser; onClick: () => void }) {
   const initials = user.preferred_name.slice(0, 2).toUpperCase()
   const bg = user.colour || '#4B5563'
+  const isImage = !!user.avatar && isImageAvatar(user.avatar)
 
   return (
     <button
       onClick={onClick}
       className="flex flex-col items-center gap-4 p-6 rounded-2xl bg-gray-800 hover:bg-gray-700 active:scale-95 transition-all cursor-pointer border-2 border-transparent hover:border-white/20 min-w-[160px]"
     >
-      {user.avatar ? (
+      {isImage ? (
         <img src={user.avatar} alt={user.display_name} className="w-24 h-24 rounded-full object-cover" />
       ) : (
         <div
-          className="w-24 h-24 rounded-full flex items-center justify-center text-3xl font-bold text-white"
+          className="w-24 h-24 rounded-full flex items-center justify-center text-5xl font-bold text-white"
           style={{ backgroundColor: bg }}
         >
-          {initials}
+          {user.avatar || initials}
         </div>
       )}
       <span className="text-white text-xl font-medium">{user.preferred_name}</span>

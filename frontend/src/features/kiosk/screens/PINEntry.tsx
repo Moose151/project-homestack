@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { KioskUser } from '../../../api/types'
 import { api } from '../../../api/client'
 import type { AuthUser } from '../../../api/types'
+import { isImageAvatar } from '../../../components/Avatar'
 
 const PIN_LENGTH = 4
 
@@ -85,14 +86,14 @@ export function PINEntry({ kioskUser, onSuccess, onCancel }: Props) {
   return (
     <div className="flex flex-col items-center justify-center w-full h-full bg-gray-900 text-white gap-8">
       <div className="flex flex-col items-center gap-2">
-        {kioskUser.avatar ? (
+        {kioskUser.avatar && isImageAvatar(kioskUser.avatar) ? (
           <img src={kioskUser.avatar} alt="" className="w-16 h-16 rounded-full object-cover" />
         ) : (
           <div
-            className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold"
+            className="w-16 h-16 rounded-full flex items-center justify-center text-3xl font-bold"
             style={{ backgroundColor: kioskUser.colour || '#4B5563' }}
           >
-            {kioskUser.preferred_name.slice(0, 2).toUpperCase()}
+            {kioskUser.avatar || kioskUser.preferred_name.slice(0, 2).toUpperCase()}
           </div>
         )}
         <p className="text-2xl font-light">{kioskUser.preferred_name}</p>

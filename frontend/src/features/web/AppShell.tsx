@@ -61,7 +61,7 @@ export function AppShell() {
           </a>
           {user && (
             <div className="flex items-center gap-2 px-1">
-              <Avatar name={user.display_name} colour={user.colour} size="sm" />
+              <Avatar name={user.display_name} colour={user.colour} avatar={user.avatar} size="sm" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-ink truncate">{user.display_name}</p>
                 <p className="text-xs text-muted capitalize">{user.role}</p>

@@ -94,8 +94,10 @@ class KioskUsersView(APIView):
                 "person_id": p.pk,
                 "display_name": p.display_name,
                 "preferred_name": p.preferred_name or p.display_name,
-                "avatar": p.avatar,
-                "colour": p.colour,
+                # The account picture (emoji or image) lives on the login User; fall back
+                # to the Person's own avatar for people-only records.
+                "avatar": p.linked_user.avatar or p.avatar,
+                "colour": p.linked_user.colour or p.colour,
                 "profile_type": p.profile_type,
                 "username": p.linked_user.username,
             }

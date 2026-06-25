@@ -135,15 +135,19 @@ A batch of usability fixes raised by the owner. Small but high-touch; do alongsi
 - [x] Web `PINPad` and kiosk `PINEntry` accept digits + Backspace from a hardware keyboard via a
       `window` keydown listener (kiosk also maps Esc → cancel). On-screen pad still works.
 
-## Phase 2.5D.4 — User tiles for web login (replace username field)
-- [ ] Web `LoginPage` shows selectable user **avatar tiles** (like the kiosk), not a username text
-      field, then PIN. Reuse the kiosk-users list (persons-with-linked-user) or a web equivalent.
-      *Decision: confirm every login-capable user appears (all have a linked Person?).*
+## Phase 2.5D.4 — User tiles for web login (replace username field) ✅ (2026-06-25)
+- [x] Web `LoginPage` now shows selectable user **avatar tiles** (from `getKioskUsers`) → PIN.
+      Kept a **"Sign in with a username instead"** fallback so no one is locked out if a user has
+      no linked Person. *(Decision resolved: `seed_admin` + `create_user` both link a Person, so
+      all login users appear; the manual fallback covers edge cases.)*
 
-## Phase 2.5D.5 — Emoji account pictures (like Meridian/Solace)
-- [ ] Allow an **emoji** as an account picture. `User.avatar` is a `CharField` — store the emoji
-      there; `Avatar` renders emoji → image → initials fallback. Emoji picker/input on the admin
-      Users create/edit form. Render on web shell, login tiles, kiosk avatar select + PIN screens.
+## Phase 2.5D.5 — Emoji account pictures (like Meridian/Solace) ✅ (2026-06-25)
+- [x] Emoji account pictures stored in `User.avatar` (CharField). `Avatar` now renders
+      **emoji → image → initials** (`isImageAvatar` helper distinguishes a URL/path from an emoji).
+      Emoji **picker** (preset grid + clear) on the admin Users create/edit forms; avatar shown in
+      the user-list rows. `kiosk-users` now returns the **account** avatar (`User.avatar`, falling
+      back to `Person.avatar`) so emoji appear on the web login tiles, kiosk avatar-select and PIN
+      screens. **352 backend tests green; `tsc` + build clean.**
 
 ## Phase 2.5D.6 — Kiosk look & feel + light/dark toggle
 - [ ] Restyle the kiosk to match the **original Meridian kiosk** (needs the legacy reference:
