@@ -18,6 +18,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/v1/health/", health, name="health"),
     path("api/v1/auth/", include("apps.accounts.urls")),
+    path("api/v1/users/", include("apps.accounts.user_urls")),
     path("api/v1/people/", include("apps.people.urls")),
     path("api/v1/household/", include("apps.core.urls")),
     path("api/v1/nodes/", include("apps.nodes.urls")),

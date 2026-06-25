@@ -25,3 +25,8 @@ def get_user_by_username(username: str) -> User | None:
 
 def list_active_users() -> list[User]:
     return list(User.objects.filter(is_active=True).order_by("display_name"))
+
+
+def list_users() -> list[User]:
+    """All non-deleted users (active and deactivated) for the admin management screen."""
+    return list(User.objects.order_by("-is_active", "display_name"))

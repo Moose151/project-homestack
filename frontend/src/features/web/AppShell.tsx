@@ -14,6 +14,9 @@ const NAV = [
 export function AppShell() {
   const { user, logout } = useAuth()
   const [dark, setDark] = useDarkMode()
+  const nav = user?.role === 'admin'
+    ? [...NAV, { to: '/users', label: 'Users', icon: '⚙' }]
+    : NAV
 
   return (
     <div className="min-h-screen flex">
@@ -25,7 +28,7 @@ export function AppShell() {
         </div>
 
         <nav className="flex-1 px-3 py-4 flex flex-col gap-1">
-          {NAV.map(({ to, label, icon }) => (
+          {nav.map(({ to, label, icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -81,7 +84,7 @@ export function AppShell() {
 
       {/* Bottom nav — mobile only */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-surface/95 backdrop-blur border-t border-line flex z-20">
-        {NAV.map(({ to, label, icon }) => (
+        {nav.map(({ to, label, icon }) => (
           <NavLink
             key={to}
             to={to}

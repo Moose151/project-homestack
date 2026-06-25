@@ -5,8 +5,14 @@ import type {
   MeridianRewardRequest, MeridianTask,
   MeridianCategory, MeridianRoutine, MeridianGoal,
   MeridianWishlistItem, MeridianWishlistRequest, MeridianSettings,
-  MeridianReports, Badge, PersonBadge, NotificationList, Person,
+  MeridianReports, Badge, PersonBadge, NotificationList, Person, AdminUser,
 } from './types'
+
+type UserWrite = Partial<{
+  username: string; display_name: string; role: string; email: string; colour: string
+  avatar: string; is_child_account: boolean; is_active: boolean; pin: string; password: string
+  link_person_id: number | null; create_person: boolean
+}>
 
 const BASE = '/api/v1'
 
@@ -54,6 +60,15 @@ export const api = {
 
   // --- People ---
   getPeople: (): Promise<Person[]> => _fetch('/people/'),
+
+  // --- User management (admin) ---
+  getUsers: (): Promise<AdminUser[]> => _fetch('/users/'),
+  createUser: (data: UserWrite): Promise<AdminUser> =>
+    _fetch('/users/', { method: 'POST', body: JSON.stringify(data) }),
+  updateUser: (id: number, data: UserWrite): Promise<AdminUser> =>
+    _fetch(`/users/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deactivateUser: (id: number): Promise<void> =>
+    _fetch(`/users/${id}/`, { method: 'DELETE' }),
 
   // --- Hub ---
   hub: (): Promise<HubResponse> => _fetch('/hub/'),

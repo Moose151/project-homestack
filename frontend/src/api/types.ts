@@ -18,6 +18,23 @@ export interface Person {
   linked_user_id: number | null
 }
 
+export interface AdminUser {
+  id: number
+  username: string
+  display_name: string
+  email: string
+  avatar: string
+  role: 'admin' | 'manager' | 'user' | 'guest'
+  is_active: boolean
+  is_child_account: boolean
+  colour: string
+  last_login: string | null
+  created_at: string
+  linked_person_id: number | null
+  linked_person_name: string | null
+  has_password: boolean
+}
+
 export interface AuthUser {
   id: number
   username: string
