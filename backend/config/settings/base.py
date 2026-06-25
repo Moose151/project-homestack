@@ -16,6 +16,18 @@ ALLOWED_HOSTS: list[str] = [
     h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if h
 ]
 
+# Django 4+ verifies the Origin header of unsafe (POST/PATCH/DELETE) requests against this
+# list. Because the SPA is served from a different port than the API and the Vite dev proxy
+# rewrites the Host header (changeOrigin), the browser Origin (e.g. http://192.168.1.125:5173)
+# must be listed explicitly or every write fails with "CSRF Failed: Origin checking failed".
+# Provide a comma-separated list of scheme://host[:port] entries. dev.py also auto-derives
+# entries from DJANGO_ALLOWED_HOSTS so a LAN deployment only needs to set the host.
+CSRF_TRUSTED_ORIGINS: list[str] = [
+    o.strip()
+    for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
+    if o.strip()
+]
+
 # --- Applications ---
 DJANGO_APPS = [
     "django.contrib.auth",
