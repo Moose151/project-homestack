@@ -53,6 +53,15 @@ PWA · native Android/iOS · desktop app · offline mode · push/email notificat
 calendar sync · plugin architecture · webhooks · advanced automation · AI-assisted search ·
 OCR · semantic search.
 
+**Node graph / "web" view (Obsidian-style)** — a visual map of the Hub at the centre with every
+node hanging off it, coloured lines connecting nodes to show how they interact and what data
+flows between them (which signals/events each sends and receives — see each node spec's "Events"
+section + D4). Clicking a node's icon navigates to that node's page. *Not important — a fun,
+exploratory visualisation, not core functionality.* Naturally driven by the existing decoupled
+events interface (D4): the edges are the publish/consume relationships already declared per node.
+Parked until the core product is solid; revisit as a delight feature (possibly alongside the Hub
+work, but well after V1).
+
 > Per D3, the mobile/desktop tech choice (React Native vs. Tauri vs. PWA) is deliberately
 > undecided; a PWA is the likely first phone bridge.
 

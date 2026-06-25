@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { KioskUser } from '../../../api/types'
 import { api } from '../../../api/client'
 import type { AuthUser } from '../../../api/types'
@@ -41,6 +41,24 @@ export function PINEntry({ kioskUser, onSuccess, onCancel }: Props) {
     setError(null)
     setDigits((prev) => prev.slice(0, -1))
   }
+
+  // Allow typing the PIN on a hardware keyboard (in addition to the on-screen pad).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault()
+        push(e.key)
+      } else if (e.key === 'Backspace') {
+        e.preventDefault()
+        pop()
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        onCancel()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  })
 
   const submit = async (pin: string) => {
     setLoading(true)

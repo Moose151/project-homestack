@@ -356,6 +356,30 @@ class RewardTests(TestCase):
 # Routines + streaks
 # ---------------------------------------------------------------------------
 
+class RewardPriceVisibilityTests(TestCase):
+    """Estimated cost (`price_estimate`) is admin-only in the shop (owner request)."""
+
+    def setUp(self):
+        self.admin = _make_user("admin", role=User.Role.ADMIN)
+        self.user = _make_user("parentuser", role=User.Role.USER)
+        services.create_reward(
+            self.admin, name="Bike", cost_points=500, price_estimate="120.00"
+        )
+        self.list_url = reverse("meridian-reward-list")
+
+    def test_admin_sees_price_estimate(self):
+        _login(self.client, "admin")
+        resp = self.client.get(self.list_url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("price_estimate", resp.json()[0])
+
+    def test_non_admin_does_not_see_price_estimate(self):
+        _login(self.client, "parentuser")
+        resp = self.client.get(self.list_url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn("price_estimate", resp.json()[0])
+
+
 class RoutineTests(TestCase):
     def setUp(self):
         self.admin = _make_user("admin", role=User.Role.ADMIN)

@@ -22,9 +22,17 @@ export function AmbientScreen({ onStart }: Props) {
 
   return (
     <div
-      className="flex flex-col items-center justify-center w-full h-full bg-gray-950 text-white cursor-pointer select-none"
+      className="relative flex flex-col items-center justify-center w-full h-full bg-gray-950 text-white cursor-pointer select-none"
       onClick={onStart}
     >
+      <a
+        href="/"
+        onClick={(e) => e.stopPropagation()}
+        className="absolute top-5 right-6 text-sm text-gray-600 hover:text-gray-300 transition-colors"
+        title="Exit kiosk mode"
+      >
+        Exit kiosk ✕
+      </a>
       <p className="text-9xl font-thin tracking-widest tabular-nums">{timeStr}</p>
       <p className="mt-4 text-2xl font-light text-gray-400">{dateStr}</p>
       <p className="mt-16 text-lg text-gray-600 animate-pulse">Tap anywhere to start</p>

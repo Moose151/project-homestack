@@ -256,13 +256,13 @@ class GoalListView(APIView):
 
     def get(self, request: Request) -> Response:
         goals = selectors.list_goals(active_only=request.query_params.get("active") == "1")
-        return Response(MeridianGroupGoalSerializer(goals, many=True).data)
+        return Response(MeridianGroupGoalSerializer(goals, many=True, context={"request": request}).data)
 
     def post(self, request: Request) -> Response:
         serializer = MeridianGroupGoalSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         goal = services.create_goal(request.user, **serializer.validated_data)
-        return Response(MeridianGroupGoalSerializer(goal).data, status=status.HTTP_201_CREATED)
+        return Response(MeridianGroupGoalSerializer(goal, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 
 class GoalDetailView(APIView):
@@ -275,14 +275,14 @@ class GoalDetailView(APIView):
         return obj
 
     def get(self, request: Request, goal_id: int) -> Response:
-        return Response(MeridianGroupGoalSerializer(self._get(goal_id)).data)
+        return Response(MeridianGroupGoalSerializer(self._get(goal_id), context={"request": request}).data)
 
     def patch(self, request: Request, goal_id: int) -> Response:
         goal = self._get(goal_id)
         serializer = MeridianGroupGoalSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         goal = services.update_goal(request.user, goal, **serializer.validated_data)
-        return Response(MeridianGroupGoalSerializer(goal).data)
+        return Response(MeridianGroupGoalSerializer(goal, context={"request": request}).data)
 
     def delete(self, request: Request, goal_id: int) -> Response:
         services.delete_goal(request.user, self._get(goal_id))
@@ -307,7 +307,7 @@ class GoalContributeView(APIView):
         except (TypeError, ValueError):
             raise ValidationError({"detail": "amount must be a number."})
         _domain_guard(services.contribute_to_goal, request.user, goal, person_id=person_id, amount=amount)
-        return Response(MeridianGroupGoalSerializer(goal).data)
+        return Response(MeridianGroupGoalSerializer(goal, context={"request": request}).data)
 
 
 # ---------------------------------------------------------------------------
@@ -320,7 +320,7 @@ class WishlistItemListView(APIView):
     def get(self, request: Request) -> Response:
         person_id = request.query_params.get("person_id") or None
         items = selectors.list_wishlist_items(person_id=person_id, active_only=True)
-        return Response(MeridianWishlistItemSerializer(items, many=True).data)
+        return Response(MeridianWishlistItemSerializer(items, many=True, context={"request": request}).data)
 
     def post(self, request: Request) -> Response:
         # Admin/manager adds an item directly (create permission).
@@ -335,7 +335,7 @@ class WishlistItemListView(APIView):
             store_url=data.get("store_url", ""),
             image_url=data.get("image_url", ""),
         )
-        return Response(MeridianWishlistItemSerializer(item).data, status=status.HTTP_201_CREATED)
+        return Response(MeridianWishlistItemSerializer(item, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 
 class WishlistItemDetailView(APIView):
@@ -370,7 +370,7 @@ class WishlistItemContributeView(APIView):
         except (TypeError, ValueError):
             raise ValidationError({"detail": "amount must be a number."})
         _domain_guard(services.contribute_to_wishlist, request.user, item, person_id=person_id, amount=amount)
-        return Response(MeridianWishlistItemSerializer(item).data)
+        return Response(MeridianWishlistItemSerializer(item, context={"request": request}).data)
 
 
 class WishlistItemFulfillView(APIView):
@@ -382,7 +382,7 @@ class WishlistItemFulfillView(APIView):
         if item is None:
             raise NotFound()
         item = services.fulfill_wishlist_item(request.user, item)
-        return Response(MeridianWishlistItemSerializer(item).data)
+        return Response(MeridianWishlistItemSerializer(item, context={"request": request}).data)
 
 
 class WishlistRequestListView(APIView):
@@ -430,7 +430,7 @@ class WishlistRequestApproveView(APIView):
             store_url=request.data.get("store_url", ""),
             image_url=request.data.get("image_url", ""),
         )
-        return Response(MeridianWishlistItemSerializer(item).data, status=status.HTTP_201_CREATED)
+        return Response(MeridianWishlistItemSerializer(item, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 
 class WishlistRequestRejectView(APIView):
@@ -476,13 +476,13 @@ class RewardListView(APIView):
 
     def get(self, request: Request) -> Response:
         rewards = selectors.list_rewards(active_only=request.query_params.get("active") == "1")
-        return Response(MeridianRewardSerializer(rewards, many=True).data)
+        return Response(MeridianRewardSerializer(rewards, many=True, context={"request": request}).data)
 
     def post(self, request: Request) -> Response:
         serializer = MeridianRewardSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         reward = services.create_reward(request.user, **serializer.validated_data)
-        return Response(MeridianRewardSerializer(reward).data, status=status.HTTP_201_CREATED)
+        return Response(MeridianRewardSerializer(reward, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 
 class RewardDetailView(APIView):
@@ -495,14 +495,14 @@ class RewardDetailView(APIView):
         return obj
 
     def get(self, request: Request, reward_id: int) -> Response:
-        return Response(MeridianRewardSerializer(self._get(reward_id)).data)
+        return Response(MeridianRewardSerializer(self._get(reward_id), context={"request": request}).data)
 
     def patch(self, request: Request, reward_id: int) -> Response:
         reward = self._get(reward_id)
         serializer = MeridianRewardSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         reward = services.update_reward(request.user, reward, **serializer.validated_data)
-        return Response(MeridianRewardSerializer(reward).data)
+        return Response(MeridianRewardSerializer(reward, context={"request": request}).data)
 
     def delete(self, request: Request, reward_id: int) -> Response:
         services.delete_reward(request.user, self._get(reward_id))
@@ -640,5 +640,5 @@ class KioskMeridianView(APIView):
             "person_id": person_id,
             "points_balance": balance,
             "tasks": MeridianTaskSerializer(my_tasks, many=True).data,
-            "rewards": MeridianRewardSerializer(rewards, many=True).data,
+            "rewards": MeridianRewardSerializer(rewards, many=True, context={"request": request}).data,
         })

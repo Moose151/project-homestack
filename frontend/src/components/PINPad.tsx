@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 interface Props {
   length?: number
@@ -37,6 +37,21 @@ export function PINPad({ length = 4, onComplete, loading = false, error, onClear
     setDigits(prev => prev.slice(0, -1))
     onClear?.()
   }
+
+  // Allow typing the PIN on a hardware keyboard (in addition to the on-screen pad).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault()
+        push(e.key)
+      } else if (e.key === 'Backspace') {
+        e.preventDefault()
+        pop()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  })
 
   return (
     <div className="flex flex-col items-center gap-5">

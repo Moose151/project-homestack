@@ -37,7 +37,12 @@ archived/superseded — ignore them.
 - `10_Future_Features_Parking_Lot.md` — what is deferred vs out of scope.
 - `11`–`22_Node_*.md` — per-node specs (Atlas, Home Wiki, Pets, Education, Meridian,
   Inventory, Assets, Hearth, Travel, Projects, Health, Solace).
-- `MILESTONE_1_Checklist.md` — the current build checklist (tick boxes as you go).
+- `23_Core_Hub.md` — Hub core-service spec (aggregation surface, widgets, kiosk Hub). Read
+  before the Atlas + Hub UX pass (§8).
+- `24_Core_Calendar.md` — Calendar core-service spec (app `scheduling`, D7/D8 timeline,
+  every-page access, configurable views, look & feel).
+- `MILESTONE_1_Checklist.md` / `MILESTONE_2_Checklist.md` / `MILESTONE_2.5_Checklist.md` — the
+  per-milestone build checklists (tick boxes as you go). **M2.5 is the active one.**
 
 ## 3. Hard rules (do NOT violate these)
 
@@ -105,8 +110,13 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
   importer. *Carried forward (non-blocking): `MeridianTaskCompletion`/2.9b (shared & recurring
   tasks + photo evidence), reward image carousel, reward→category link, `kiosk_pin_skip`, live
   kiosk badge celebration.* Run the importer to retire the standalone app.
-- [ ] **Milestone 3: Home Wiki, Pets, Education. ← next.** (First, per owner request §8: revisit
-  Atlas + Hub UX now that Meridian is done.)
+- [ ] **Milestone 2.5: Core surfaces — Hub, Atlas, Calendar. ← next.** (Owner request, 2026-06-25,
+  inserted before M3.) Three workstreams: **(A) Hub** — widget config (household + per-user) UI +
+  endpoints, and the "every node ships its Hub widget" pattern, starting by building the
+  **Meridian Hub widget**; **(B) Atlas** — UX/functionality gap pass + Postgres FTS (D9);
+  **(C) Calendar** — build the real core (month/week/day/agenda views, every-page access,
+  configurable, nice to look at). Specs: `23_Core_Hub.md`, `11_Node_Atlas.md`, `24_Core_Calendar.md`.
+- [ ] Milestone 3: Home Wiki, Pets, Education.
 - [ ] Milestone 4: security maturation.
 - [ ] Milestone 5: native Solace.
 - [ ] Milestone 6: Inventory, Assets, Hearth, Travel, Projects, Health.
@@ -141,10 +151,12 @@ used daily.
 
 - Mobile/desktop client tech (React Native vs. Tauri vs. PWA) — deferred until after core
   product proves itself (D3). PWA is the likely first bridge.
-- **Revisit Atlas + Hub after Meridian (owner request, 2026-06-25).** Both work but "are not
-  functioning as I would like yet." Once the Meridian full port (M2) is complete, do a dedicated
-  pass on Atlas and the Hub to refine behaviour/UX to the owner's expectations. Gather specifics
-  from the owner at that point.
+- **Revisit Atlas + Hub after Meridian (owner request, 2026-06-25).** *Resolved → folded into the
+  new **Milestone 2.5** (Core surfaces: Hub, Atlas, Calendar) in `04_Development_Roadmap.md` and §5
+  above.* Both surfaces "are not functioning as I would like yet"; the milestone now scopes a
+  dedicated pass on the Hub (incl. building the Meridian Hub widget + the per-node widget pattern),
+  Atlas, and building out the Calendar core. Gather any remaining UX specifics from the owner when
+  starting each workstream.
 
 ## 9. Progress Log
 
@@ -174,6 +186,10 @@ used daily.
 | 2026-06-25 | Assistant | M2 | **Meridian full-port build started (D19/D20 ratified into changelog).** Phase 2.8 ledger parity: typed signed transactions (`MeridianPointsEntry.TransactionType`), `get_total_earned` (earning types only) vs `get_points_balance`, reward **reservation/refund** (reserve on request, idempotent refund on reject/cancel, no double-deduct on approve). Phase 2.9 tasks parity (additive): `completion_behavior`, `is_active`/`is_archived`, hot `hot_bonus_points`/`hot_label` + `award_value`, `completion_scope`/`availability_window` fields; **deferred** per-person completion history / shared & recurring completion / evidence / admin-complete-for-person to a `MeridianTaskCompletion` model (Phase 2.9b). Phase 2.11 routines+streaks: `MeridianRoutine` + `MeridianRoutineCompletion`, immediate points (no approval), idempotent per day, streak calc, admin void claws back; full API + child-safe complete. Migrations 0003–0005. **292 tests green** (+10). Not committed. | Continue: Phase 2.10 rewards shop (stock/limits/images/cart), then 2.12 goals, 2.13 wishlist, 2.14 achievements app, 2.15 notifications, 2.16 scheduled cmd, 2.17 settings/reports, 2.18 import, 2.19 frontend. |
 | 2026-06-25 | Assistant | M2 | **Audit + scope correction + bug fix.** Found the Progress Log was missing all M2 + design-system/seed-admin/prod-cookie commits, and §5 was stale ("code not started"). **Fixed a CSRF write bug breaking ALL browser writes** (Atlas save, Meridian add, every POST/PATCH/DELETE): DRF `SessionAuthentication` enforces CSRF but the SPA never sent a token. Fix: `@ensure_csrf_cookie` on `GET /auth/me/` (`accounts/views.py`) + client reads `csrftoken` cookie → `X-CSRFToken` header on unsafe methods (`api/client.ts`). **Audited native Meridian vs the legacy app** (`~/Documents/new/project-meridian`, 20 models/9 services): only a thin tasks/points/rewards subset was ported — no routines/streaks, group goals, wishlist, badges, allowance, shop depth (stock/limits/images/cart), reports/leaderboard, notifications, or separate task/reward categories. **Rewrote `15_Node_Meridian.md` and `MILESTONE_2_Checklist.md`** to the true full-port scope (Parts A/B/C). Proposed **D19** (Meridian = full port) and **D20** (cross-node achievements/badges system) — ratify into `00_README_and_Changelog.md` on sign-off. | **Owner sign-off on the rewritten M2 spec**, then build Part B (wire up foundation) → Part C phases 2.8–2.19. |
 | 2026-06-24 | Assistant | M1 | **Phase 1.5 done.** Permission spine (D10) fully implemented. `permissions` app: `Permission` (global catalogue, `{resource}.{action}` codenames), `Role` (HouseholdBaseModel, system roles: admin/manager/user/guest), `RolePermission` (join: role→permission), `UserPermission` (HouseholdBaseModel, per-user override with `is_granted`). Data migration `0002_seed_roles_and_permissions` seeds 4 system roles + 4 `people.*` permissions + default matrix (admin/manager=all, user/guest=view-only). **Resolver** (`permissions/resolver.py`): unauthenticated/inactive→deny; `is_child_account+non-view`→deny; user_permission override first; role_permission fallback. **Visibility mixin** (`permissions/visibility.py`): structural passthrough, ready to extend in Phase 1.8 when Atlas adds visibility/sensitivity. **DRF class** (`permissions/drf.py`): `HomeStackPermission.for_resource("people")` factory — no view checks permissions ad hoc. `people/views.py` switched from `IsAuthenticated` to `HomeStackPermission`. `people/selectors.py` now passes user to `apply_visibility`. **120/120 tests green** (+52: 31 resolver, 21 integration). | Start Phase 1.6: nodes registry (`nodes`, `household_nodes`, `node_settings`), seed node rows (atlas enabled), minimal household settings endpoints, audit log. |
+
+| 2026-06-25 | Assistant | M2.5 | **M2.5 kicked off (Core surfaces).** Added core-service specs `23_Core_Hub.md` + `24_Core_Calendar.md` (Hub = read-only widget aggregation; Calendar = `scheduling`, D7 timeline, every-page access + configurable + nice-to-look-at per owner). Inserted **Milestone 2.5 — Core surfaces (Hub/Atlas/Calendar)** in `04_Development_Roadmap.md` (before M3) + `MILESTONE_2.5_Checklist.md`; updated §5 status + resolved the §8 Atlas/Hub open question into it. Parked an Obsidian-style **node graph "web" view** in `10_Future_Features_Parking_Lot.md` §4. **First build:** found Meridian Hub widgets were already seeded (mig `0003`) + content-wired in `hub/services.py`, and the **kiosk** already rendered them, but the **web `HubPage`** only rendered the two Atlas widgets (Meridian fell through to the reminders renderer). Fixed: web HubPage now renders Meridian tasks/points/reward-requests via a key dispatcher (`tsc` + production build clean). | Continue M2.5: **2.5A.1** widget-config endpoints (household enable/order/size + per-user reorder) → **2.5A.2** Hub config UI; then Atlas FTS (**2.5B.1**) and the Calendar core build (**2.5C**). Smoke-test the web Meridian widgets live on the home server. |
+
+| 2026-06-25 | Assistant | M2.5 | **UI/UX fixes (Workstream D) noted + 3 of 6 shipped.** Logged six owner UX items as Phases 2.5D.1–.6 in the checklist. Done: **(D.1)** enter/exit kiosk buttons (web shell `→ /kiosk`; kiosk ambient corner link `→ /`); **(D.2)** estimated cost (`price_estimate`) is now **admin-only** in shop/wishlist/group-goals — `AdminOnlyPriceMixin` (fails closed) + `request` context threaded through all Meridian output call sites, with tests (74 meridian tests green); **(D.3)** hardware-keyboard PIN entry on web `PINPad` + kiosk `PINEntry`. `tsc` + build clean. | **Remaining D items:** D.4 user-tiles web login (reuse kiosk-users; confirm all login users have a linked Person), D.5 emoji account pictures (store in `User.avatar`, `Avatar` emoji→img→initials, picker on Users page), D.6 kiosk restyle to match **original Meridian** (need legacy ref `~/Documents/new/project-meridian`) + kiosk light/dark toggle. Then resume A.1 widget-config API / C Calendar core. |
 
 ### Session notes (free-form, optional)
 

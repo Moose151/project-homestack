@@ -65,6 +65,51 @@ kid kiosk cards and celebrations — and the standalone Meridian app is no longe
 
 ---
 
+## Milestone 2.5 — Core surfaces: Hub, Atlas, Calendar (owner request, 2026-06-25)
+
+Inserted before M3 at the owner's request. With Meridian done, the daily-use core surfaces —
+the **Hub**, **Atlas**, and the **Calendar** — need to actually function and feel good before
+we add more nodes on top of them. These are the screens the family touches most; getting them
+right makes every later node land better. Specs: `23_Core_Hub.md`, `11_Node_Atlas.md`,
+`24_Core_Calendar.md`.
+
+Build, three workstreams:
+
+**A. Hub — functionality & usability.**
+- Per-household widget config (enable/disable, order, size) and per-user overrides (hide/
+  reorder), with endpoints (the config API is currently unbuilt) and a clean web UI.
+- **Establish the "every node ships its Hub widget" pattern** — a node is not done until it
+  contributes its Hub widget(s) via a seeded `HubWidget` row + a permission-filtered selector
+  (no cross-imports, D4). Backfill the **Meridian Hub widget** (today's tasks / points summary,
+  kiosk-safe) now, and add this requirement to every node's completion criteria going forward.
+- Wire the Calendar "upcoming events" widget once Calendar views land (workstream C).
+- Keep it permission- and kiosk-filtered; calm, glanceable defaults. (Ambient widgets —
+  clock/photo/greeting — optional low-effort nicety; **weather** stays parked, D5.)
+
+**B. Atlas — improve functionality & usability.**
+- Gap pass against `11_Node_Atlas.md`: tighten lists/items/checklists/reminders UX on web and
+  kiosk, quick-add/quick-capture, grocery/shopping mode polish, due-dates and person assignment,
+  clearer visual states.
+- Replace the SQLite-safe `icontains` search with Postgres FTS (D9) in Atlas selectors.
+- Make dated Atlas items render properly on the new Calendar (they already sync via the helper).
+
+**C. Calendar — build the core.**
+- Build the real Calendar UI beyond today's "upcoming list": month / week / day / agenda views,
+  per-person colour coding, and filters (by node/source, person, visibility).
+- **Accessible from every page** (persistent entry point + a lightweight peek/mini-calendar +
+  quick-add), **easily configurable** (saved default view, filters, start-of-week/time-format
+  as prefs), and **nice to look at** (shared design system, dark-mode, kiosk-safe view).
+- Standalone event CRUD UI; node-derived events continue to flow only through the scheduling
+  helper (D7). RRULE expansion may be tackled here or deferred per `24_Core_Calendar.md` (D8).
+
+**Done when:** the Hub shows the right per-user "today" items including a live Meridian widget and
+is configurable; Atlas is pleasant and capable for daily list/reminder use on web and kiosk with
+FTS search; the Calendar offers month/week/day/agenda views, is reachable from every page, is
+configurable, looks good, and shows all permitted node + standalone events with no double-writing.
+Permissions enforced throughout; all three follow the shared design system; used daily.
+
+---
+
 ## Milestone 3 — Home Wiki, Pets, Education
 
 Round out everyday household value.

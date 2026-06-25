@@ -53,6 +53,12 @@ export function AppShell() {
           >
             {dark ? '☀ Light' : '☾ Dark'}
           </button>
+          <a
+            href="/kiosk"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-muted hover:bg-sunken transition-colors"
+          >
+            <span className="text-lg">▣</span> Enter kiosk
+          </a>
           {user && (
             <div className="flex items-center gap-2 px-1">
               <Avatar name={user.display_name} colour={user.colour} size="sm" />

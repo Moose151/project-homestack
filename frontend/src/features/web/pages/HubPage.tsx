@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../../api/client'
-import type { HubResponse, AtlasListItem, AtlasReminder } from '../../../api/types'
+import type {
+  HubResponse,
+  HubWidget,
+  AtlasListItem,
+  AtlasReminder,
+  MeridianTask,
+  PointsSummaryRow,
+  MeridianRewardRequest,
+} from '../../../api/types'
 import { Card } from '../../../components/Card'
 
 function formatDue(iso: string | null) {
@@ -63,6 +71,83 @@ function RemindersWidget({ items }: { items: AtlasReminder[] }) {
   )
 }
 
+function TasksWidget({ items }: { items: MeridianTask[] }) {
+  if (items.length === 0) return <p className="text-sm text-muted">Nothing here right now</p>
+  return (
+    <ul className="flex flex-col gap-2">
+      {items.slice(0, 8).map(task => (
+        <li key={task.id} className="flex items-center gap-3 text-sm">
+          <span className="flex-1 min-w-0 truncate text-ink">{task.title}</span>
+          {task.is_hot && (
+            <span className="text-xs px-2 py-0.5 rounded-full flex-shrink-0 font-medium bg-danger-soft text-danger">
+              {task.hot_label || 'Hot'}
+            </span>
+          )}
+          <span className="text-xs px-2 py-0.5 rounded-full flex-shrink-0 font-medium bg-primary-soft text-primary">
+            {task.award_value} pts
+          </span>
+        </li>
+      ))}
+      {items.length > 8 && (
+        <li className="text-xs text-muted">+{items.length - 8} more</li>
+      )}
+    </ul>
+  )
+}
+
+function PointsWidget({ items }: { items: PointsSummaryRow[] }) {
+  if (items.length === 0) return <p className="text-sm text-muted">No points yet</p>
+  return (
+    <ul className="flex flex-col gap-2">
+      {items.map(row => (
+        <li key={row.person_id} className="flex items-center justify-between text-sm">
+          <span className="text-ink truncate">{row.display_name}</span>
+          <span className="font-semibold text-primary flex-shrink-0">{row.balance} pts</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function RewardRequestsWidget({ items }: { items: MeridianRewardRequest[] }) {
+  const pending = items.filter(r => r.status === 'pending')
+  if (pending.length === 0) return <p className="text-sm text-muted">No requests awaiting approval</p>
+  return (
+    <ul className="flex flex-col gap-2">
+      {pending.slice(0, 8).map(req => (
+        <li key={req.id} className="flex items-center justify-between text-sm">
+          <span className="text-ink">Reward redemption</span>
+          <span className="text-xs px-2 py-0.5 rounded-full flex-shrink-0 font-medium bg-sunken text-muted">
+            {req.points_spent} pts · pending
+          </span>
+        </li>
+      ))}
+      {pending.length > 8 && (
+        <li className="text-xs text-muted">+{pending.length - 8} more</li>
+      )}
+    </ul>
+  )
+}
+
+function renderWidget(w: HubWidget) {
+  switch (w.key) {
+    case 'atlas_todos':
+      return <TodoWidget items={w.items as AtlasListItem[]} />
+    case 'atlas_reminders':
+      return <RemindersWidget items={w.items as AtlasReminder[]} />
+    case 'meridian_my_tasks':
+    case 'meridian_hot_tasks':
+    case 'meridian_pending_approvals':
+      return <TasksWidget items={w.items as MeridianTask[]} />
+    case 'meridian_points':
+      return <PointsWidget items={w.items as PointsSummaryRow[]} />
+    case 'meridian_reward_requests':
+      return <RewardRequestsWidget items={w.items as MeridianRewardRequest[]} />
+    default:
+      return <p className="text-sm text-muted">Nothing to show</p>
+  }
+}
+
 export function HubPage() {
   const [data, setData] = useState<HubResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -102,10 +187,7 @@ export function HubPage() {
         <div className="flex flex-col gap-4">
           {data.widgets.map(w => (
             <Card key={w.key} title={w.name}>
-              {w.key === 'atlas_todos'
-                ? <TodoWidget items={w.items as AtlasListItem[]} />
-                : <RemindersWidget items={w.items as AtlasReminder[]} />
-              }
+              {renderWidget(w)}
             </Card>
           ))}
         </div>

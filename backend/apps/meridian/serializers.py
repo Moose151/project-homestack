@@ -16,6 +16,23 @@ from apps.meridian.models import (
 )
 
 
+class AdminOnlyPriceMixin:
+    """Hide the estimated real-world cost (`price_estimate`) from non-admin users.
+
+    Owner request: only admins should see an item's estimated cost in the shop, wishlist
+    and group goals. Gating happens at representation time using the request user's role.
+    Fails closed: if no request/user is in context, the field is omitted.
+    """
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if getattr(user, "role", None) != "admin":
+            data.pop("price_estimate", None)
+        return data
+
+
 class MeridianCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = MeridianCategory
@@ -91,7 +108,7 @@ class MeridianRoutineSerializer(serializers.ModelSerializer):
         return value
 
 
-class MeridianRewardSerializer(serializers.ModelSerializer):
+class MeridianRewardSerializer(AdminOnlyPriceMixin, serializers.ModelSerializer):
     remaining_stock = serializers.SerializerMethodField()
 
     class Meta:
@@ -129,7 +146,7 @@ class MeridianRewardRequestSerializer(serializers.ModelSerializer):
         ]
 
 
-class MeridianGroupGoalSerializer(serializers.ModelSerializer):
+class MeridianGroupGoalSerializer(AdminOnlyPriceMixin, serializers.ModelSerializer):
     total_contributed = serializers.SerializerMethodField()
     remaining_points = serializers.SerializerMethodField()
     progress_percentage = serializers.SerializerMethodField()
@@ -179,7 +196,7 @@ class MeridianWishlistRequestSerializer(serializers.ModelSerializer):
         return value
 
 
-class MeridianWishlistItemSerializer(serializers.ModelSerializer):
+class MeridianWishlistItemSerializer(AdminOnlyPriceMixin, serializers.ModelSerializer):
     total_saved = serializers.SerializerMethodField()
     remaining_points = serializers.SerializerMethodField()
     progress_percentage = serializers.SerializerMethodField()
