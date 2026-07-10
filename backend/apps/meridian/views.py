@@ -22,6 +22,7 @@ from apps.meridian.serializers import (
     MeridianRewardRequestSerializer,
     MeridianRewardSerializer,
     MeridianRoutineSerializer,
+    MeridianTaskCompletionSerializer,
     MeridianTaskSerializer,
     MeridianTaskWriteSerializer,
     MeridianWishlistItemSerializer,
@@ -40,8 +41,11 @@ def _acting_person_id(request: Request, explicit: int | None) -> int | None:
     Admin/manager may pass an explicit person_id (acting on a child's behalf);
     otherwise fall back to the person linked to the acting user (kiosk self-service).
     """
-    if explicit is not None:
-        return explicit
+    if explicit is not None and explicit != "":
+        try:
+            return int(explicit)
+        except (TypeError, ValueError):
+            raise ValidationError({"detail": "person_id must be a number."})
     person = getattr(request.user, "person_profile", None)
     return person.id if person else None
 
@@ -156,6 +160,57 @@ class TaskCompleteView(APIView):
         person_id = _acting_person_id(request, request.data.get("person_id"))
         task = services.complete_task(request.user, task, person_id=person_id)
         return Response(MeridianTaskSerializer(task).data)
+
+
+class TaskCompletionListView(APIView):
+    """Adult approval/history queue for native Meridian task submissions."""
+
+    permission_classes = [_Perm]
+
+    def get(self, request: Request) -> Response:
+        completions = selectors.list_task_completions(
+            request.user,
+            status=request.query_params.get("status") or None,
+            task_id=request.query_params.get("task_id") or None,
+            person_id=request.query_params.get("person_id") or None,
+            limit=100,
+        )
+        return Response(MeridianTaskCompletionSerializer(completions, many=True).data)
+
+
+class TaskCompletionApproveView(APIView):
+    permission_classes = [_Perm]
+    permission_action = "approve"
+
+    def post(self, request: Request, completion_id: int) -> Response:
+        completion = selectors.get_task_completion(completion_id)
+        if completion is None:
+            raise NotFound()
+        completion = _domain_guard(
+            services.approve_task_completion,
+            request.user,
+            completion,
+            review_note=request.data.get("review_note", ""),
+        )
+        return Response(MeridianTaskCompletionSerializer(completion).data)
+
+
+class TaskCompletionRejectView(APIView):
+    permission_classes = [_Perm]
+    permission_action = "approve"
+
+    def post(self, request: Request, completion_id: int) -> Response:
+        completion = selectors.get_task_completion(completion_id)
+        if completion is None:
+            raise NotFound()
+        completion = _domain_guard(
+            services.reject_task_completion,
+            request.user,
+            completion,
+            reason=request.data.get("reason", ""),
+            review_note=request.data.get("review_note", ""),
+        )
+        return Response(MeridianTaskCompletionSerializer(completion).data)
 
 
 class TaskApproveView(APIView):

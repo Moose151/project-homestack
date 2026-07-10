@@ -96,7 +96,7 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: Milestones 1, 2 and 2.5 DONE. Next: Milestone 3 (Home Wiki, Pets, Education).**
+**Phase: Meridian parity/cockpit revisit in progress before Milestone 3.**
 
 > **Deploy gotcha (read this):** the home server runs **Docker** (not Podman). After every
 > `git pull` + rebuild, run **`docker exec homestack-backend python manage.py migrate`** — the
@@ -107,14 +107,16 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 - [x] All architectural decisions made (D1–D20).
 - [x] **Milestone 1 (Walking Skeleton) — DONE** (Phases 1.0–1.12). Only outstanding item:
   deploy to the home server for daily use (running via Podman locally).
-- [x] **Milestone 2: native Meridian — DONE (full port, D19/D20).** Backend (339 tests) + web
-  & kiosk frontend complete: points-ledger parity (reservation/refund, balance vs lifetime
-  earned), tasks (hot/behaviours/scope), routines + streaks, rewards shop (stock/limits/cart),
-  group goals, wishlist, cross-node achievements (`apps/achievements`), notifications, scheduled
-  command (allowance/perfect-month), settings, reports/leaderboard, and a dry-runnable full data
-  importer. *Carried forward (non-blocking): `MeridianTaskCompletion`/2.9b (shared & recurring
-  tasks + photo evidence), reward image carousel, reward→category link, `kiosk_pin_skip`, live
-  kiosk badge celebration.* Run the importer to retire the standalone app.
+- [~] **Milestone 2: native Meridian — functional, now under parity/cockpit revisit (owner
+  request, 2026-07-10).** Backend + web/kiosk frontend had been marked complete: points-ledger
+  parity (reservation/refund, balance vs lifetime earned), tasks (hot/behaviours/scope), routines
+  + streaks, rewards shop (stock/limits/cart), group goals, wishlist, cross-node achievements
+  (`apps/achievements`), notifications, scheduled command (allowance/perfect-month), settings,
+  reports/leaderboard, and a dry-runnable full data importer. New product decision: **HomeStack is
+  the Meridian source of truth and adult/admin cockpit; the native Meridian app is the behavioural/
+  visual reference and may remain/adapt as the child-facing client.** Current shipped revisit work:
+  `MeridianTaskCompletion` model/API (per-person submissions, shared/household task blocking,
+  review notes/history) + adult Overview tab + task-management tab.
 - [x] **Milestone 2.5: Core surfaces — Hub, Atlas, Calendar. DONE.** Full detail
   in `MILESTONE_2.5_Checklist.md` + the Progress Log below. Status by workstream:
   - **(A) Hub — DONE.** Web renders Meridian widgets; widget-config API (`/hub/widgets/…`,
@@ -133,20 +135,24 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
     avatars, kiosk restyle + light/dark toggle). D.6 used the legacy reference at
     `/home/moose/Documents/project-meridian`; the handover's older
     `~/Documents/new/project-meridian` path did not exist.
-- [ ] Milestone 3: Home Wiki, Pets, Education. **New rule from M2.5 A.3: each node must ship its
+- [ ] Milestone 3: Home Wiki, Pets, Education. **Paused until the Meridian adult cockpit/parity
+  revisit reaches a usable stopping point.** New rule from M2.5 A.3: each node must ship its
   Hub widget(s) as part of "done"** — already added to each M3 node spec.
 - [ ] Milestone 4: security maturation.
 - [ ] Milestone 5: native Solace.
 - [ ] Milestone 6: Inventory, Assets, Hearth, Travel, Projects, Health.
 
-## 6. Active task — Milestone 3
+## 6. Active task — Meridian parity/cockpit revisit
 
-**Tracking doc:** start from `04_Development_Roadmap.md` Milestone 3 plus node specs
-`12_Node_Home_Wiki.md`, `13_Node_Pets.md`, and `14_Node_Education.md`. M2.5 is complete in
-`MILESTONE_2.5_Checklist.md`.
+**Tracking doc:** `04_Development_Roadmap.md` Milestone 2 revisit note +
+`MILESTONE_2_Checklist.md` Phase 2.9b / Phase 2.19 revisit notes. Reference app:
+`/home/instructor/Documents/new/project-meridian`.
 
-**Immediate next concrete step — Milestone 3** (Home Wiki, Pets, Education), each node end-to-end
-(models → API → permissions → FTS → calendar via the helper → **Hub widget** → kiosk → tests).
+**Immediate next concrete step:** continue reshaping Meridian as an adult/admin cockpit over
+HomeStack as source of truth. Behaviour parity first, then UI polish. Shipped so far:
+`MeridianTaskCompletion` model/API, Overview approval/monitoring tab, and adult task-management
+tab. Next recommended slice: **Shop/Rewards** adult management (reward setup, stock, approvals,
+monitoring) while keeping the child spending/cart experience secondary.
 
 **Working rhythm (proven this milestone):** small workstream → backend (models/migration/services/
 selectors/serializers/views/urls) → tests → frontend (types/client → UI) → `tsc` + `npm run build`
@@ -227,6 +233,8 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-06-25 | Assistant | M2.5 | **2.5X kiosk follow-ups shipped.** Improved kiosk light-theme contrast by moving kiosk screens to the stronger `sunken` background and using `raised` panels with stronger borders/shadows. Added a direct kiosk Calendar surface in `KioskDashboard`: Home/Calendar switch, month/week/day/agenda modes, event cards with time/source/location, using the existing permission-filtered `/calendar/events/` API. Added a kiosk dashboard "Web mode" link back to `/`. `npm run build` clean. | Continue **2.5X verification**: Atlas reminders Hub+Calendar no double-write, Meridian Hub/Calendar role smoke checks, backend suite, home-server run-through/deploy. |
 
 | 2026-06-25 | Assistant | M2.5 | **M2.5 closed.** Added the Hub-widget completion rule to Home Wiki/Pets/Education specs. Fixed Hub `atlas_todos` to read through a permission-filtered Atlas selector instead of direct model access. Added cross-surface tests: Atlas dated reminder appears in Hub reminders + Calendar widget with one CalendarEvent; private Atlas list items do not leak to child Hub; Atlas/Meridian synced calendar events expose source node and respect visibility. Added Atlas/Hub deep-links into Calendar day view. `npm run build` clean; full backend suite green (**369 tests**). README and handover now point to M3. | Start **Milestone 3: Home Wiki, Pets, Education**. Remember every node must ship Hub widget rows/selectors as part of done. |
+
+| 2026-07-10 | Assistant | M2 revisit | **Meridian parity/cockpit revisit started (owner direction).** Product direction clarified: **HomeStack becomes the Meridian source of truth and adult/admin cockpit**; the native Meridian app at `/home/instructor/Documents/new/project-meridian` is the behaviour/style reference and may remain/adapt as child-facing client. Behaviour parity first: added `MeridianTaskCompletion` model + migration `0011` (submitted/approved/rejected, per-person history, review notes, evidence placeholder), completion-based service flow with backward-compatible task endpoints, completion list/approve/reject API, tests for per-person vs household/shared completions and specific-completion approval. Frontend: typed completion API bindings, new default **Meridian Overview** tab for pending task/reward approvals + balances/activity, and rebuilt **Tasks** as an adult management table with filters, inline edit, hide/archive/delete, pending completion actions, and recent completion history. **372 backend tests green; frontend `tsc && vite build` clean.** Applied migrations to local running DB. | Commit + push, then continue adult cockpit with **Shop/Rewards management** (setup, stock, approvals, monitoring) before broader UI polish. |
 
 ### Session notes (free-form, optional)
 

@@ -170,6 +170,23 @@ export interface MeridianTask {
   updated_at: string
 }
 
+export interface MeridianTaskCompletion {
+  id: number
+  task_id: number
+  task_title: string
+  person_id: number
+  person_display_name: string
+  status: 'submitted' | 'approved' | 'rejected'
+  submitted_at: string
+  reviewed_at: string | null
+  reviewed_by_id: number | null
+  rejection_reason: string
+  review_note: string
+  evidence_photo: string
+  created_at: string
+  updated_at: string
+}
+
 export interface MeridianReward {
   id: number
   name: string

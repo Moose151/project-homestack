@@ -11,6 +11,7 @@ from apps.meridian.models import (
     MeridianRewardRequest,
     MeridianRoutine,
     MeridianTask,
+    MeridianTaskCompletion,
     MeridianWishlistItem,
     MeridianWishlistRequest,
 )
@@ -86,6 +87,25 @@ class MeridianTaskWriteSerializer(serializers.ModelSerializer):
         if not value.strip():
             raise serializers.ValidationError("Title may not be blank.")
         return value
+
+
+class MeridianTaskCompletionSerializer(serializers.ModelSerializer):
+    task_title = serializers.CharField(source="task.title", read_only=True)
+    person_display_name = serializers.CharField(source="person.display_name", read_only=True)
+
+    class Meta:
+        model = MeridianTaskCompletion
+        fields = [
+            "id", "task_id", "task_title", "person_id", "person_display_name",
+            "status", "submitted_at", "reviewed_at", "reviewed_by_id",
+            "rejection_reason", "review_note", "evidence_photo",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "id", "task_title", "person_display_name", "status",
+            "submitted_at", "reviewed_at", "reviewed_by_id",
+            "rejection_reason", "review_note", "created_at", "updated_at",
+        ]
 
 
 class MeridianRoutineSerializer(serializers.ModelSerializer):

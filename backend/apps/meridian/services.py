@@ -9,7 +9,7 @@ Calendar entries for dated tasks are maintained ONLY via the scheduling helper (
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 
 from django.db import transaction
 from django.db.models import Sum
@@ -30,6 +30,7 @@ from apps.meridian.models import (
     MeridianRoutine,
     MeridianRoutineCompletion,
     MeridianTask,
+    MeridianTaskCompletion,
     MeridianWishlistContribution,
     MeridianWishlistItem,
     MeridianWishlistRequest,
@@ -167,43 +168,147 @@ def delete_task(acting_user: User, task: MeridianTask) -> None:
     task.soft_delete()
 
 
-def complete_task(acting_user: User, task: MeridianTask, *, person_id: int | None = None) -> MeridianTask:
-    """Mark a task done, pending approval. No points awarded until approved.
+def _task_cycle_start(task: MeridianTask, *, now=None):
+    """Return the lower bound for active completions in the current recurrence cycle.
+
+    Native Meridian's weekly recurrence ignores completions older than the current week. HomeStack
+    stores recurrence as an RRULE string, but the current UI only needs the same weekly re-arm
+    behaviour: any non-empty recurrence rule gets a Monday-start weekly cycle.
+    """
+    if not task.recurrence_rule:
+        return None
+    now = now or timezone.now()
+    local_day = timezone.localtime(now).date()
+    return timezone.make_aware(
+        datetime.combine(local_day - timedelta(days=local_day.weekday()), time.min)
+    )
+
+
+def _active_task_completions(task: MeridianTask):
+    qs = MeridianTaskCompletion.objects.filter(
+        task=task,
+        status__in=[
+            MeridianTaskCompletion.Status.SUBMITTED,
+            MeridianTaskCompletion.Status.APPROVED,
+        ],
+    )
+    cycle_start = _task_cycle_start(task)
+    if cycle_start is not None:
+        qs = qs.filter(submitted_at__gte=cycle_start)
+    return qs
+
+
+def _sync_task_from_latest_completion(task: MeridianTask) -> MeridianTask:
+    latest = task.completions.order_by("-submitted_at", "-id").first()
+    if latest is None:
+        task.status = MeridianTask.Status.AVAILABLE
+        task.completed_at = None
+        task.completed_by_person_id = None
+        task.approved_at = None
+        task.approved_by = None
+        task.rejection_reason = ""
+    elif latest.status == MeridianTaskCompletion.Status.SUBMITTED:
+        task.status = MeridianTask.Status.PENDING
+        task.completed_at = latest.submitted_at
+        task.completed_by_person_id = latest.person_id
+        task.approved_at = None
+        task.approved_by = None
+        task.rejection_reason = ""
+    elif latest.status == MeridianTaskCompletion.Status.APPROVED:
+        task.status = MeridianTask.Status.APPROVED
+        task.completed_at = latest.submitted_at
+        task.completed_by_person_id = latest.person_id
+        task.approved_at = latest.reviewed_at
+        task.approved_by = latest.reviewed_by
+        task.rejection_reason = ""
+    else:
+        task.status = MeridianTask.Status.AVAILABLE
+        task.completed_at = None
+        task.completed_by_person_id = None
+        task.approved_at = latest.reviewed_at
+        task.approved_by = latest.reviewed_by
+        task.rejection_reason = latest.rejection_reason
+    task.save(update_fields=[
+        "status", "completed_at", "completed_by_person", "approved_at", "approved_by",
+        "rejection_reason", "updated_at",
+    ])
+    return task
+
+
+def submit_task_completion(
+    acting_user: User,
+    task: MeridianTask,
+    *,
+    person_id: int | None = None,
+    evidence_photo: str = "",
+) -> MeridianTaskCompletion:
+    """Submit a task completion for review. No points are awarded until approval.
 
     ``person_id`` records WHO did the task (a person). Defaults to the task's
     assigned person, or — when a child completes their own task on the kiosk —
     the person linked to the acting user is the natural fallback the caller passes in.
     """
-    if task.status in (MeridianTask.Status.PENDING, MeridianTask.Status.APPROVED):
-        return task  # already completed/approved — idempotent
-    task.status = MeridianTask.Status.PENDING
-    task.completed_at = timezone.now()
-    task.completed_by_person_id = person_id or task.assigned_to_person_id
-    task.approved_at = None
-    task.approved_by = None
-    task.rejection_reason = ""
+    if not task.is_active or task.is_archived:
+        raise MeridianError("This task is not active.")
+    person_id = person_id or task.assigned_to_person_id
+    if person_id is None:
+        raise MeridianError("No person to complete on behalf of.")
+
+    active = _active_task_completions(task)
+    if task.completion_scope == MeridianTask.CompletionScope.HOUSEHOLD:
+        existing = active.order_by("-submitted_at", "-id").first()
+    else:
+        existing = active.filter(person_id=person_id).order_by("-submitted_at", "-id").first()
+    if existing:
+        return existing
+
+    completion = MeridianTaskCompletion(
+        household=get_active_household(),
+        task=task,
+        person_id=person_id,
+        evidence_photo=evidence_photo,
+        created_by=acting_user,
+        updated_by=acting_user,
+    )
+    completion.save()
     task.updated_by = acting_user
-    task.save()
-    events.task_completed(task.id, task.household_id, task.completed_by_person_id)
+    task.save(update_fields=["updated_by", "updated_at"])
+    _sync_task_from_latest_completion(task)
+    events.task_completed(task.id, task.household_id, person_id)
+    return completion
+
+
+def complete_task(acting_user: User, task: MeridianTask, *, person_id: int | None = None) -> MeridianTask:
+    """Backward-compatible task-level completion API."""
+    submit_task_completion(acting_user, task, person_id=person_id)
+    task.refresh_from_db()
     return task
 
 
 @transaction.atomic
-def approve_task(acting_user: User, task: MeridianTask) -> MeridianTask:
-    """Approve a completed task and award its points to the completing person."""
-    if task.status != MeridianTask.Status.PENDING:
-        raise MeridianError("Only tasks pending approval can be approved.")
-    task.status = MeridianTask.Status.APPROVED
-    task.approved_at = timezone.now()
-    task.approved_by = acting_user
-    task.rejection_reason = ""
+def approve_task_completion(
+    acting_user: User, completion: MeridianTaskCompletion, *, review_note: str = ""
+) -> MeridianTaskCompletion:
+    """Approve a submitted completion and award task points to its person."""
+    if completion.status != MeridianTaskCompletion.Status.SUBMITTED:
+        raise MeridianError("Only submitted completions can be approved.")
+    task = completion.task
+    completion.status = MeridianTaskCompletion.Status.APPROVED
+    completion.reviewed_at = timezone.now()
+    completion.reviewed_by = acting_user
+    completion.rejection_reason = ""
+    completion.review_note = review_note
+    completion.updated_by = acting_user
+    completion.save()
+
     # One-off tasks are hidden once approved; repeatable tasks stay active (legacy parity).
     if task.completion_behavior == MeridianTask.CompletionBehavior.HIDE_AFTER_APPROVAL:
         task.is_active = False
     task.updated_by = acting_user
     task.save()
 
-    person_id = task.completed_by_person_id or task.assigned_to_person_id
+    _sync_task_from_latest_completion(task)
+    person_id = completion.person_id
     awarded = task.award_value
     if person_id and awarded:
         _record_points(
@@ -217,27 +322,61 @@ def approve_task(acting_user: User, task: MeridianTask) -> MeridianTask:
         level=notifications.Notification.Level.SUCCESS, source_node="meridian",
     )
     events.task_approved(task.id, task.household_id, person_id, awarded)
+    return completion
+
+
+@transaction.atomic
+def approve_task(acting_user: User, task: MeridianTask) -> MeridianTask:
+    """Backward-compatible task-level approval: approve the latest submitted completion."""
+    completion = task.completions.filter(
+        status=MeridianTaskCompletion.Status.SUBMITTED
+    ).order_by("-submitted_at", "-id").first()
+    if completion is None:
+        raise MeridianError("Only tasks pending approval can be approved.")
+    approve_task_completion(acting_user, completion)
+    task.refresh_from_db()
     return task
 
 
-def reject_task(acting_user: User, task: MeridianTask, *, reason: str = "") -> MeridianTask:
-    """Reject a completed task; it returns to AVAILABLE so it can be retried."""
-    if task.status != MeridianTask.Status.PENDING:
-        raise MeridianError("Only tasks pending approval can be rejected.")
+def reject_task_completion(
+    acting_user: User,
+    completion: MeridianTaskCompletion,
+    *,
+    reason: str = "",
+    review_note: str = "",
+) -> MeridianTaskCompletion:
+    """Reject a submitted completion; the task can be retried."""
+    if completion.status != MeridianTaskCompletion.Status.SUBMITTED:
+        raise MeridianError("Only submitted completions can be rejected.")
+    task = completion.task
     notifications.notify_person_id(
-        task.completed_by_person_id, title="Task not approved",
+        completion.person_id, title="Task not approved",
         message=f"'{task.title}' was sent back" + (f": {reason}" if reason else "."),
         level=notifications.Notification.Level.WARNING, source_node="meridian",
     )
-    task.status = MeridianTask.Status.AVAILABLE
-    task.completed_at = None
-    task.completed_by_person_id = None
-    task.approved_at = None
-    task.approved_by = None
-    task.rejection_reason = reason
+    completion.status = MeridianTaskCompletion.Status.REJECTED
+    completion.reviewed_at = timezone.now()
+    completion.reviewed_by = acting_user
+    completion.rejection_reason = reason
+    completion.review_note = review_note
+    completion.updated_by = acting_user
+    completion.save()
     task.updated_by = acting_user
-    task.save()
+    task.save(update_fields=["updated_by", "updated_at"])
+    _sync_task_from_latest_completion(task)
     events.task_rejected(task.id, task.household_id)
+    return completion
+
+
+def reject_task(acting_user: User, task: MeridianTask, *, reason: str = "") -> MeridianTask:
+    """Backward-compatible task-level rejection: reject the latest submitted completion."""
+    completion = task.completions.filter(
+        status=MeridianTaskCompletion.Status.SUBMITTED
+    ).order_by("-submitted_at", "-id").first()
+    if completion is None:
+        raise MeridianError("Only tasks pending approval can be rejected.")
+    reject_task_completion(acting_user, completion, reason=reason)
+    task.refresh_from_db()
     return task
 
 

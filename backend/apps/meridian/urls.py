@@ -20,6 +20,9 @@ from apps.meridian.views import (
     RoutineListView,
     SettingsView,
     TaskApproveView,
+    TaskCompletionApproveView,
+    TaskCompletionListView,
+    TaskCompletionRejectView,
     TaskCompleteView,
     TaskDetailView,
     TaskListView,
@@ -40,6 +43,9 @@ urlpatterns = [
     path("tasks/<int:task_id>/complete/", TaskCompleteView.as_view(), name="meridian-task-complete"),
     path("tasks/<int:task_id>/approve/", TaskApproveView.as_view(), name="meridian-task-approve"),
     path("tasks/<int:task_id>/reject/", TaskRejectView.as_view(), name="meridian-task-reject"),
+    path("task-completions/", TaskCompletionListView.as_view(), name="meridian-task-completion-list"),
+    path("task-completions/<int:completion_id>/approve/", TaskCompletionApproveView.as_view(), name="meridian-task-completion-approve"),
+    path("task-completions/<int:completion_id>/reject/", TaskCompletionRejectView.as_view(), name="meridian-task-completion-reject"),
 
     # Categories
     path("categories/", CategoryListView.as_view(), name="meridian-category-list"),

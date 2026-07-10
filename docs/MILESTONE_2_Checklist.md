@@ -66,18 +66,20 @@
 - [x] **Reservation/refund pattern**: rewards reserve on request, refund on reject/cancel,
       idempotent (`_refund_reservation`); approval no longer double-deducts.
 
-## Phase 2.9 — Tasks parity 🟡 (2026-06-25 — additive done; completion-history deferred)
+## Phase 2.9 — Tasks parity 🟡 (2026-06-25 additive; 2026-07-10 completion-history started)
 - [x] `completion_behavior` (stay_active / hide_after_approval; one-off hides on approval);
       `is_archived` (archive) vs soft-delete; `is_active` published flag.
 - [x] Assignment to person, visibility, `availability_window`, `completion_scope` (fields).
 - [x] Hot tasks: `hot_bonus_points` + `hot_label`; `award_value` includes the bonus on approval.
 - [~] Recurrence: `recurrence_rule` + `due_at` sync to calendar (D7) already work; **cycle-based
       re-arming deferred** to the completion model + scheduled command (2.16).
-- [ ] **Deferred to a `MeridianTaskCompletion` model**: per-person completion history, shared
-      (first-come) completion by multiple people, recurring re-arm, photo **evidence** via
-      `attachments` (D11), review notes, admin complete-for-person. *(Current model folds a single
-      status onto the task — fine for assigned chores; the completion table is needed for shared/
-      recurring tasks. Tracked as Phase 2.9b.)*
+- [~] **`MeridianTaskCompletion` model/API started (2026-07-10):** per-person completion history,
+      submitted/approved/rejected records, review notes, evidence placeholder, specific-completion
+      approve/reject endpoints, household/shared task blocks after one active submission, and
+      backwards-compatible task-level complete/approve/reject endpoints. **Remaining:** true
+      weekday/RRULE recurrence-cycle UI + scheduled re-arm polish, photo evidence via
+      `attachments` (D11), admin complete-for-person as a first-class cockpit workflow, and import
+      of legacy task-completion history.
 
 ## Phase 2.10 — Rewards shop parity 🟡 (2026-06-25 — carousel deferred)
 - [x] Stock/quantity (`remaining_stock`, `disappear_when_empty`), `daily_limit_per_user`,
@@ -178,6 +180,23 @@
 - [x] API types/client for all endpoints; `tsc` + production build clean.
 - [ ] *Deferred polish:* `kiosk_pin_skip` tap-to-login; live badge-earned celebration on kiosk
       (badges currently shown as a strip); category-management UI; reward-category linking.
+
+### Phase 2.19R — Adult cockpit revisit (owner request, 2026-07-10)
+
+> New direction: HomeStack is the Meridian source of truth and **adult/admin cockpit**. The
+> native Meridian app remains the reference and may remain/adapt as the child-facing client.
+
+- [x] **Overview cockpit:** default Meridian tab with pending task-completion approvals, pending
+      reward requests, balances, active earners, and recent activity.
+- [x] **Task management:** adult table with filters (active/pending/hot/hidden/all, category,
+      assignee), inline edit, hide/show, archive/unarchive, delete, pending completion actions,
+      and recent completion history.
+- [ ] **Shop/Rewards management:** adult setup/stock/approval/monitoring view; make spending/cart
+      secondary in HomeStack.
+- [ ] **Reports/history polish:** richer completion and points history from the new completion
+      model.
+- [ ] **Settings/admin polish:** category management UI, reward-category linking, allowance
+      config UI.
 
 ---
 

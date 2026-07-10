@@ -2,7 +2,7 @@ import type {
   AtlasList, AtlasListItem, AtlasNote, AtlasReminder,
   AuthUser, CalendarEvent, CalendarEventWrite, HubResponse, HubWidgetConfig, KioskUser,
   KioskMeridian, MeridianPointsResponse, MeridianReward,
-  MeridianRewardRequest, MeridianTask,
+  MeridianRewardRequest, MeridianTask, MeridianTaskCompletion,
   MeridianCategory, MeridianRoutine, MeridianGoal,
   MeridianWishlistItem, MeridianWishlistRequest, MeridianSettings,
   MeridianReports, Badge, PersonBadge, NotificationList, Person, AdminUser,
@@ -166,6 +166,24 @@ export const api = {
     _fetch(`/meridian/tasks/${id}/approve/`, { method: 'POST' }),
   rejectMeridianTask: (id: number, reason?: string): Promise<MeridianTask> =>
     _fetch(`/meridian/tasks/${id}/reject/`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  getMeridianTaskCompletions: (params?: {
+    status?: 'submitted' | 'approved' | 'rejected'; taskId?: number; personId?: number
+  }): Promise<MeridianTaskCompletion[]> => {
+    const q = new URLSearchParams()
+    if (params?.status) q.set('status', params.status)
+    if (params?.taskId) q.set('task_id', String(params.taskId))
+    if (params?.personId) q.set('person_id', String(params.personId))
+    const s = q.toString()
+    return _fetch(`/meridian/task-completions/${s ? `?${s}` : ''}`)
+  },
+  approveMeridianTaskCompletion: (id: number, reviewNote?: string): Promise<MeridianTaskCompletion> =>
+    _fetch(`/meridian/task-completions/${id}/approve/`, {
+      method: 'POST', body: JSON.stringify({ review_note: reviewNote || '' }),
+    }),
+  rejectMeridianTaskCompletion: (id: number, reason?: string, reviewNote?: string): Promise<MeridianTaskCompletion> =>
+    _fetch(`/meridian/task-completions/${id}/reject/`, {
+      method: 'POST', body: JSON.stringify({ reason: reason || '', review_note: reviewNote || '' }),
+    }),
 
   // --- Meridian: points ---
   getMeridianPoints: (): Promise<MeridianPointsResponse> => _fetch('/meridian/points/'),
@@ -203,7 +221,8 @@ export const api = {
     title: string; description: string; points: number; category_id: number | null
     assigned_to_person_id: number | null; is_hot: boolean; hot_bonus_points: number
     hot_label: string; completion_behavior: string; due_at: string | null
-    recurrence_rule: string; visibility: string; is_active: boolean; is_archived: boolean
+    completion_scope: string; recurrence_rule: string; visibility: string
+    is_active: boolean; is_archived: boolean
   }>): Promise<MeridianTask> =>
     _fetch(`/meridian/tasks/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
 

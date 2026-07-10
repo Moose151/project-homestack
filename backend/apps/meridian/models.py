@@ -187,6 +187,57 @@ class MeridianTask(CalendarSyncMixin, HouseholdBaseModel):
         return "meridian"
 
 
+class MeridianTaskCompletion(HouseholdBaseModel):
+    """One submitted/reviewed completion of a Meridian task by a person.
+
+    Native Meridian keeps completion state separate from the task definition. That lets one task
+    have per-person history, shared/household completions, recurring cycles, evidence, and review
+    notes without mutating the task itself into a single-use submission record.
+    """
+
+    class Status(models.TextChoices):
+        SUBMITTED = "submitted", "Submitted"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+
+    task = models.ForeignKey(
+        MeridianTask, on_delete=models.CASCADE, related_name="completions"
+    )
+    person = models.ForeignKey(
+        "people.Person", on_delete=models.CASCADE, related_name="meridian_task_completions"
+    )
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.SUBMITTED, db_index=True
+    )
+    submitted_at = models.DateTimeField(default=timezone.now, db_index=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reviewed_meridian_task_completions",
+    )
+    rejection_reason = models.TextField(blank=True, default="")
+    review_note = models.TextField(blank=True, default="")
+    evidence_photo = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Legacy-compatible evidence reference. Attachments integration will replace this.",
+    )
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "meridian task completion"
+        ordering = ["-submitted_at", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.task} · {self.person} · {self.status}"
+
+
 class MeridianPointsEntry(HouseholdBaseModel):
     """A single signed movement in a person's points ledger (the source of truth).
 

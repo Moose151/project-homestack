@@ -19,6 +19,7 @@ from apps.meridian.models import (
     MeridianReward,
     MeridianRewardRequest,
     MeridianTask,
+    MeridianTaskCompletion,
     MeridianWishlistRequest,
 )
 from apps.people.models import Person
@@ -177,6 +178,10 @@ class TaskLifecycleTests(TestCase):
         self.assertEqual(task.status, MeridianTask.Status.APPROVED)
         self.assertEqual(services.get_points_balance(self.person.id), 15)
         self.assertEqual(MeridianPointsEntry.objects.filter(source_task=task).count(), 1)
+        self.assertEqual(
+            MeridianTaskCompletion.objects.get(task=task).status,
+            MeridianTaskCompletion.Status.APPROVED,
+        )
 
     def test_reject_returns_task_available_and_no_points(self):
         task = services.create_task(
@@ -242,6 +247,47 @@ class TaskLifecycleTests(TestCase):
         resp = self.client.post(reverse("meridian-task-approve", args=[task.id]))
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(services.get_points_balance(self.person.id), 8)
+
+    def test_per_person_task_allows_separate_pending_completions(self):
+        other = _make_person("Avery")
+        task = services.create_task(
+            self.admin,
+            title="Read",
+            points=4,
+            completion_scope=MeridianTask.CompletionScope.PER_PERSON,
+        )
+        first = services.submit_task_completion(self.admin, task, person_id=self.person.id)
+        second = services.submit_task_completion(self.admin, task, person_id=other.id)
+        self.assertNotEqual(first.id, second.id)
+        self.assertEqual(MeridianTaskCompletion.objects.filter(task=task).count(), 2)
+
+    def test_household_task_blocks_after_one_active_completion(self):
+        other = _make_person("Avery")
+        task = services.create_task(
+            self.admin,
+            title="Take bins out",
+            points=4,
+            completion_scope=MeridianTask.CompletionScope.HOUSEHOLD,
+        )
+        first = services.submit_task_completion(self.admin, task, person_id=self.person.id)
+        second = services.submit_task_completion(self.admin, task, person_id=other.id)
+        self.assertEqual(first.id, second.id)
+        self.assertEqual(MeridianTaskCompletion.objects.filter(task=task).count(), 1)
+
+    def test_completion_endpoint_approves_specific_submission(self):
+        task = services.create_task(self.admin, title="Sweep", points=6)
+        completion = services.submit_task_completion(self.admin, task, person_id=self.person.id)
+        _login(self.client, "admin")
+        resp = self.client.post(
+            reverse("meridian-task-completion-approve", args=[completion.id]),
+            {"review_note": "Looks good"},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        completion.refresh_from_db()
+        self.assertEqual(completion.status, MeridianTaskCompletion.Status.APPROVED)
+        self.assertEqual(completion.review_note, "Looks good")
+        self.assertEqual(services.get_points_balance(self.person.id), 6)
 
 
 # ---------------------------------------------------------------------------

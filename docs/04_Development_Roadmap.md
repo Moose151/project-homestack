@@ -63,6 +63,28 @@ Build:
 **Done when:** Meridian runs entirely inside HomeStack — tasks, points, rewards, approvals,
 kid kiosk cards and celebrations — and the standalone Meridian app is no longer needed at home.
 
+### Milestone 2 revisit — Meridian parity and adult cockpit (owner request, 2026-07-10)
+
+After live use, the Meridian integration was judged too thin/clunky despite the earlier full-port
+checkoff. Product direction: **HomeStack is the Meridian source of truth and the adult/admin
+cockpit** (approvals, task/reward setup, monitoring, reports, settings), while the native
+Meridian app at `/home/instructor/Documents/new/project-meridian` remains the behaviour/style
+reference and may remain/adapt as the child-facing client.
+
+Build:
+- Behaviour parity first, starting with native-style task completion history: per-person
+  submissions, shared/household completion rules, recurring-cycle re-arm, evidence placeholder,
+  review notes, approval/rejection history, and admin complete-for-person.
+- Adult cockpit UI in HomeStack: overview approvals queue, task/reward management, stock and
+  setup, monitoring, points/reports, and settings. Keep it HomeStack-consistent rather than a
+  jarring clone of the child-facing native app.
+- Defer deeper kid-facing delight work until the source-of-truth/adult workflows are solid.
+
+**Done when:** an adult can manage day-to-day Meridian from HomeStack without needing the legacy
+admin screens: approve/reject submissions and purchases, create/edit/archive tasks and rewards,
+monitor balances/activity/history, and trust the completion/ledger behaviour to match native
+Meridian rules.
+
 ---
 
 ## Milestone 2.5 — Core surfaces: Hub, Atlas, Calendar (owner request, 2026-06-25)

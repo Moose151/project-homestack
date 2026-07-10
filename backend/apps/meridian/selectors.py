@@ -15,6 +15,7 @@ from apps.meridian.models import (
     MeridianRewardRequest,
     MeridianRoutine,
     MeridianTask,
+    MeridianTaskCompletion,
     MeridianWishlistItem,
     MeridianWishlistRequest,
 )
@@ -35,7 +36,7 @@ def list_tasks(
         qs = qs.filter(is_archived=False)
     if active_only:
         qs = qs.filter(is_active=True)
-    if status:
+    if status and status != MeridianTask.Status.AVAILABLE:
         qs = qs.filter(status=status)
     if assigned_to_person_id is not None:
         qs = qs.filter(assigned_to_person_id=assigned_to_person_id)
@@ -43,7 +44,10 @@ def list_tasks(
         qs = qs.filter(is_hot=True)
     if user is not None:
         qs = apply_visibility(qs, user)
-    return list(qs)
+    tasks = list(qs)
+    if status == MeridianTask.Status.AVAILABLE:
+        tasks = [t for t in tasks if is_task_available_for(t, assigned_to_person_id)]
+    return tasks
 
 
 def get_task(pk: int) -> MeridianTask | None:
@@ -52,7 +56,56 @@ def get_task(pk: int) -> MeridianTask | None:
 
 def list_pending_tasks(user=None) -> list[MeridianTask]:
     """Tasks awaiting approval — drives the 'pending approvals' hub widget."""
-    return list_tasks(user, status=MeridianTask.Status.PENDING)
+    completions = list_task_completions(user, status=MeridianTaskCompletion.Status.SUBMITTED)
+    seen = set()
+    tasks = []
+    for completion in completions:
+        if completion.task_id in seen:
+            continue
+        seen.add(completion.task_id)
+        tasks.append(completion.task)
+    return tasks
+
+
+def is_task_available_for(task: MeridianTask, person_id: int | None = None) -> bool:
+    """Return whether a task can be submitted in the current completion cycle."""
+    if task.is_archived or not task.is_active:
+        return False
+    if task.assigned_to_person_id and person_id and task.assigned_to_person_id != person_id:
+        return False
+    from apps.meridian import services
+    active = services._active_task_completions(task)
+    if task.completion_scope == MeridianTask.CompletionScope.HOUSEHOLD:
+        return not active.exists()
+    if person_id is None:
+        return True
+    return not active.filter(person_id=person_id).exists()
+
+
+def list_task_completions(
+    user=None,
+    *,
+    status: str | None = None,
+    task_id: int | None = None,
+    person_id: int | None = None,
+    limit: int | None = None,
+) -> list[MeridianTaskCompletion]:
+    qs = MeridianTaskCompletion.objects.select_related("task", "person", "reviewed_by")
+    if status:
+        qs = qs.filter(status=status)
+    if task_id is not None:
+        qs = qs.filter(task_id=task_id)
+    if person_id is not None:
+        qs = qs.filter(person_id=person_id)
+    if user is not None:
+        qs = qs.filter(task__in=apply_visibility(MeridianTask.objects.all(), user))
+    if limit is not None:
+        qs = qs[:limit]
+    return list(qs)
+
+
+def get_task_completion(pk: int) -> MeridianTaskCompletion | None:
+    return MeridianTaskCompletion.objects.select_related("task", "person", "reviewed_by").filter(pk=pk).first()
 
 
 # ---------------------------------------------------------------------------
