@@ -191,7 +191,7 @@
 - [x] **Task management:** adult table with filters (active/pending/hot/hidden/all, category,
       assignee), inline edit, hide/show, archive/unarchive, delete, pending completion actions,
       and recent completion history.
-- [ ] **Shop/Rewards management:** adult setup/stock/approval/monitoring view; make spending/cart
+- [x] **Shop/Rewards management:** adult setup/stock/approval/monitoring view; make spending/cart
       secondary in HomeStack.
 - [ ] **Reports/history polish:** richer completion and points history from the new completion
       model.

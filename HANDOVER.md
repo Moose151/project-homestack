@@ -150,9 +150,10 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 **Immediate next concrete step:** continue reshaping Meridian as an adult/admin cockpit over
 HomeStack as source of truth. Behaviour parity first, then UI polish. Shipped so far:
-`MeridianTaskCompletion` model/API, Overview approval/monitoring tab, and adult task-management
-tab. Next recommended slice: **Shop/Rewards** adult management (reward setup, stock, approvals,
-monitoring) while keeping the child spending/cart experience secondary.
+`MeridianTaskCompletion` model/API, Overview approval/monitoring tab, adult task-management tab,
+and adult Shop/Rewards management (reward setup, stock, visibility/archive, approvals, monitoring).
+Next recommended slice: **Reports/history and settings/admin polish** (completion history,
+points history, category management, reward-category linking, allowance config UI).
 
 **Working rhythm (proven this milestone):** small workstream → backend (models/migration/services/
 selectors/serializers/views/urls) → tests → frontend (types/client → UI) → `tsc` + `npm run build`
@@ -235,6 +236,8 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-06-25 | Assistant | M2.5 | **M2.5 closed.** Added the Hub-widget completion rule to Home Wiki/Pets/Education specs. Fixed Hub `atlas_todos` to read through a permission-filtered Atlas selector instead of direct model access. Added cross-surface tests: Atlas dated reminder appears in Hub reminders + Calendar widget with one CalendarEvent; private Atlas list items do not leak to child Hub; Atlas/Meridian synced calendar events expose source node and respect visibility. Added Atlas/Hub deep-links into Calendar day view. `npm run build` clean; full backend suite green (**369 tests**). README and handover now point to M3. | Start **Milestone 3: Home Wiki, Pets, Education**. Remember every node must ship Hub widget rows/selectors as part of done. |
 
 | 2026-07-10 | Assistant | M2 revisit | **Meridian parity/cockpit revisit started (owner direction).** Product direction clarified: **HomeStack becomes the Meridian source of truth and adult/admin cockpit**; the native Meridian app at `/home/instructor/Documents/new/project-meridian` is the behaviour/style reference and may remain/adapt as child-facing client. Behaviour parity first: added `MeridianTaskCompletion` model + migration `0011` (submitted/approved/rejected, per-person history, review notes, evidence placeholder), completion-based service flow with backward-compatible task endpoints, completion list/approve/reject API, tests for per-person vs household/shared completions and specific-completion approval. Frontend: typed completion API bindings, new default **Meridian Overview** tab for pending task/reward approvals + balances/activity, and rebuilt **Tasks** as an adult management table with filters, inline edit, hide/archive/delete, pending completion actions, and recent completion history. **372 backend tests green; frontend `tsc && vite build` clean.** Applied migrations to local running DB. | Commit + push, then continue adult cockpit with **Shop/Rewards management** (setup, stock, approvals, monitoring) before broader UI polish. |
+
+| 2026-07-10 | Assistant | M2 revisit | **Adult Shop/Rewards management shipped.** Rebuilt `ShopTab` from a shopper/product-card-first surface into an adult management view for admins/managers: metrics (active rewards, pending requests, out-of-stock), filters (active/needs approval/out-of-stock/hidden/all), reward table with image, stock, price/store, daily limit, multi-cart badges, inline pending request approvals, inline edit form (name, cost, description, image/store/price, stock, daily limit, multiple-cart, hide-when-empty, active), hide/show, archive/unarchive, delete, and a side pending-request queue. Non-manager shopper view remains card/cart based but secondary. Frontend `tsc && vite build` clean. | Next: reports/history polish from `MeridianTaskCompletion`, then settings/admin polish (category management, reward-category linking, allowance config UI). |
 
 ### Session notes (free-form, optional)
 
