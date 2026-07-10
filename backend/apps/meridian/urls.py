@@ -1,6 +1,7 @@
 from django.urls import path
 
 from apps.meridian.views import (
+    AllowanceConfigView,
     CategoryDetailView,
     CategoryListView,
     PointsView,
@@ -72,6 +73,7 @@ urlpatterns = [
 
     # Settings + reports
     path("settings/", SettingsView.as_view(), name="meridian-settings"),
+    path("allowances/", AllowanceConfigView.as_view(), name="meridian-allowances"),
     path("reports/", ReportsView.as_view(), name="meridian-reports"),
 
     # Points

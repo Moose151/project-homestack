@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../../../../api/client'
 import type {
   Badge,
+  MeridianAllowanceRow,
   MeridianCategory,
   MeridianPointsResponse,
   MeridianReports,
@@ -156,6 +157,7 @@ export function SettingsTab() {
   const [s, setS] = useState<MeridianSettings | null>(null)
   const [taskCategories, setTaskCategories] = useState<MeridianCategory[]>([])
   const [rewardCategories, setRewardCategories] = useState<MeridianCategory[]>([])
+  const [allowances, setAllowances] = useState<MeridianAllowanceRow[]>([])
   const [newTaskCategory, setNewTaskCategory] = useState('')
   const [newRewardCategory, setNewRewardCategory] = useState('')
   const [saving, setSaving] = useState(false)
@@ -174,6 +176,7 @@ export function SettingsTab() {
   useEffect(() => {
     api.getMeridianSettings().then(setS).catch(() => {})
     reloadCategories()
+    api.getMeridianAllowances().then(data => setAllowances(data.results)).catch(() => {})
   }, [])
   if (!s) return <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
 
@@ -204,6 +207,23 @@ export function SettingsTab() {
       await reloadCategories()
     } catch {
       setError('Category could not be deleted.')
+    }
+  }
+
+  const setAllowance = (personId: number, patch: Partial<MeridianAllowanceRow>) => {
+    setAllowances(rows => rows.map(row => row.person_id === personId ? { ...row, ...patch } : row))
+  }
+
+  const saveAllowances = async () => {
+    setSaving(true); setSaved(false); setError(null)
+    try {
+      const data = await api.updateMeridianAllowances(allowances)
+      setAllowances(data.results)
+      setSaved(true)
+    } catch {
+      setError('Allowances did not save.')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -258,9 +278,68 @@ export function SettingsTab() {
           onDelete={deleteCategory}
         />
       </div>
+
+      <Card title="Weekly allowances">
+        {allowances.length === 0 ? (
+          <p className="text-sm text-muted py-3">No people found.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[620px] text-sm">
+              <thead>
+                <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-muted">
+                  <th className="py-2 pr-3">Person</th>
+                  <th className="py-2 pr-3">Amount</th>
+                  <th className="py-2 pr-3">Day</th>
+                  <th className="py-2 pr-3">Active</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line/70">
+                {allowances.map(row => (
+                  <tr key={row.person_id}>
+                    <td className="py-2 pr-3 font-medium text-ink">{row.display_name}</td>
+                    <td className="py-2 pr-3">
+                      <input
+                        className="w-28 px-3 py-2 rounded-xl border border-line bg-raised text-sm text-ink outline-none focus:ring-2 focus:ring-primary"
+                        type="number"
+                        min="0"
+                        value={row.amount}
+                        onChange={e => setAllowance(row.person_id, { amount: Number(e.target.value) || 0 })}
+                      />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <select
+                        className="px-3 py-2 rounded-xl border border-line bg-raised text-sm text-ink outline-none focus:ring-2 focus:ring-primary"
+                        value={row.weekday}
+                        onChange={e => setAllowance(row.person_id, { weekday: Number(e.target.value) })}
+                      >
+                        {WEEKDAYS.map((day, idx) => <option key={day} value={idx}>{day}</option>)}
+                      </select>
+                    </td>
+                    <td className="py-2 pr-3">
+                      <label className="inline-flex items-center gap-2 text-sm text-ink">
+                        <input
+                          type="checkbox"
+                          checked={row.is_active}
+                          onChange={e => setAllowance(row.person_id, { is_active: e.target.checked })}
+                        />
+                        Enabled
+                      </label>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="mt-3">
+              <Button onClick={saveAllowances} loading={saving}>Save allowances</Button>
+            </div>
+          </div>
+        )}
+      </Card>
     </div>
   )
 }
+
+const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 function CategoryPanel({
   title,

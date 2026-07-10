@@ -753,6 +753,31 @@ class ScheduledWorkTests(TestCase):
         services.award_allowances(on=monday)  # second run same day → no double-pay
         self.assertEqual(services.get_points_balance(self.person.id), 15)
 
+    def test_allowance_config_endpoint_upserts(self):
+        _login(self.client, "admin")
+        resp = self.client.patch(
+            reverse("meridian-allowances"),
+            {"results": [{"person_id": self.person.id, "amount": 20, "weekday": 4, "is_active": True}]},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        from apps.meridian.models import MeridianAllowance
+        allowance = MeridianAllowance.objects.get(person=self.person)
+        self.assertEqual(allowance.amount, 20)
+        self.assertEqual(allowance.weekday, 4)
+        self.assertTrue(allowance.is_active)
+
+    def test_non_manager_cannot_patch_allowance_config(self):
+        user = _make_user("parentuser", role=User.Role.USER)
+        _make_person("Parent", linked_user=user)
+        _login(self.client, "parentuser")
+        resp = self.client.patch(
+            reverse("meridian-allowances"),
+            {"results": [{"person_id": self.person.id, "amount": 20, "weekday": 4, "is_active": True}]},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 403)
+
     def test_perfect_month_awards_badge(self):
         import calendar
         from datetime import date

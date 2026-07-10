@@ -153,8 +153,10 @@ HomeStack as source of truth. Behaviour parity first, then UI polish. Shipped so
 `MeridianTaskCompletion` model/API, Overview approval/monitoring tab, adult task-management tab,
 and adult Shop/Rewards management (reward setup, stock, visibility/archive, approvals, monitoring).
 Reports/history now includes completion history and ledger panels. Settings now includes task and
-reward category management; rewards now link to reward categories. Next recommended slice:
-**settings/admin polish** (allowance config UI).
+reward category management, reward-category linking, and allowance config UI. Next recommended
+slice: a live run-through of the Meridian adult cockpit on the home server, then decide whether to
+continue deeper parity (photo evidence/importing legacy completion history/recurrence UI) or move
+back to M3.
 
 **Working rhythm (proven this milestone):** small workstream → backend (models/migration/services/
 selectors/serializers/views/urls) → tests → frontend (types/client → UI) → `tsc` + `npm run build`
@@ -245,6 +247,8 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-07-10 | Assistant | M2 revisit | **Settings category management shipped.** `SettingsTab` now includes task/reward category management using the existing Meridian category API: load task + reward categories, create categories, delete categories, and visible error handling. Frontend `tsc && vite build` clean. | Next: reward-category linking (backend + frontend), then allowance config UI. |
 
 | 2026-07-10 | Assistant | M2 revisit | **Reward-category linking shipped.** Added `MeridianReward.category` FK + migration `0012`, exposed `category_id` in reward serializer/service/API, added regression test, and wired reward category filter/display/select into the adult Shop/Rewards management UI. **78 Meridian tests green; frontend `tsc && vite build` clean.** | Next: allowance config UI. Remember to run `docker exec homestack-backend python manage.py migrate` after deploying this migration. |
+
+| 2026-07-10 | Assistant | M2 revisit | **Allowance config UI/API shipped.** Added `/api/v1/meridian/allowances/` (`GET` per-person config, `PATCH` batch upsert, manager/admin edit permission), `selectors.allowance_config`, `services.set_allowance_config`, and tests for admin upsert + non-manager denial. Settings tab now has a weekly allowances table with amount, weekday, active toggle, and save action. **80 Meridian tests green; frontend `tsc && vite build` clean.** | Next: live run-through/deploy verification, then choose deeper parity vs returning to M3. |
 
 ### Session notes (free-form, optional)
 

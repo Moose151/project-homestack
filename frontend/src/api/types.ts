@@ -278,6 +278,14 @@ export interface MeridianSettings {
   auto_end_streaks: boolean
 }
 
+export interface MeridianAllowanceRow {
+  person_id: number
+  display_name: string
+  amount: number
+  weekday: number
+  is_active: boolean
+}
+
 export interface LeaderboardRow {
   person_id: number
   display_name: string

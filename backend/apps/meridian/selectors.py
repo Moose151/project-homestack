@@ -8,6 +8,7 @@ from __future__ import annotations
 from django.db.models import Count, Q, Sum
 
 from apps.meridian.models import (
+    MeridianAllowance,
     MeridianCategory,
     MeridianGroupGoal,
     MeridianPointsEntry,
@@ -269,6 +270,26 @@ def list_points_entries(*, person_id: int | None = None, limit: int = 50) -> lis
     if person_id is not None:
         qs = qs.filter(person_id=person_id)
     return list(qs[:limit])
+
+
+# ---------------------------------------------------------------------------
+# Allowances
+# ---------------------------------------------------------------------------
+
+def allowance_config() -> list[dict]:
+    """Per-person allowance settings for the admin Settings screen."""
+    allowances = {a.person_id: a for a in MeridianAllowance.objects.all()}
+    rows = []
+    for person in Person.objects.order_by("display_name"):
+        allowance = allowances.get(person.id)
+        rows.append({
+            "person_id": person.id,
+            "display_name": person.display_name,
+            "amount": allowance.amount if allowance else 0,
+            "weekday": allowance.weekday if allowance else 0,
+            "is_active": allowance.is_active if allowance else False,
+        })
+    return rows
 
 
 # ---------------------------------------------------------------------------

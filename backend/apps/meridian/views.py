@@ -658,6 +658,23 @@ class SettingsView(APIView):
         return "edit" if request.method == "PATCH" else "view"
 
 
+class AllowanceConfigView(APIView):
+    permission_classes = [_Perm]
+
+    def get(self, request: Request) -> Response:
+        return Response({"results": selectors.allowance_config()})
+
+    def patch(self, request: Request) -> Response:
+        rows = request.data.get("results", request.data)
+        if not isinstance(rows, list):
+            raise ValidationError({"detail": "Expected a list of allowance rows."})
+        _domain_guard(services.set_allowance_config, request.user, rows)
+        return Response({"results": selectors.allowance_config()})
+
+    def get_permission_action(self, request) -> str:
+        return "edit" if request.method == "PATCH" else "view"
+
+
 class ReportsView(APIView):
     """Leaderboard + recent activity (Node Spec 12). Manager-facing overview."""
 

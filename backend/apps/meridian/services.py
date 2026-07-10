@@ -544,6 +544,32 @@ def award_allowances(*, on: date | None = None) -> int:
     return awarded
 
 
+def set_allowance_config(acting_user: User, rows: list[dict]) -> None:
+    """Upsert per-person weekly allowance settings from the admin cockpit."""
+    for row in rows:
+        person_id = row.get("person_id")
+        if person_id is None:
+            continue
+        amount = max(0, int(row.get("amount") or 0))
+        weekday = int(row.get("weekday") or 0)
+        if weekday < 0 or weekday > 6:
+            raise MeridianError("Allowance weekday must be between 0 and 6.")
+        is_active = bool(row.get("is_active")) and amount > 0
+        allowance, _ = MeridianAllowance.objects.get_or_create(
+            person_id=person_id,
+            defaults={
+                "household": get_active_household(),
+                "created_by": acting_user,
+                "updated_by": acting_user,
+            },
+        )
+        allowance.amount = amount
+        allowance.weekday = weekday
+        allowance.is_active = is_active
+        allowance.updated_by = acting_user
+        allowance.save()
+
+
 def award_perfect_month_badges(*, year: int, month: int) -> int:
     """Emit a perfect-month event for each person who completed a routine on every day of the
     given calendar month. Achievements awards the badge (idempotent) via the bus (D4)."""

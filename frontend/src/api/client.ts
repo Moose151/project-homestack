@@ -5,7 +5,7 @@ import type {
   MeridianRewardRequest, MeridianTask, MeridianTaskCompletion,
   MeridianCategory, MeridianRoutine, MeridianGoal,
   MeridianWishlistItem, MeridianWishlistRequest, MeridianSettings,
-  MeridianReports, Badge, PersonBadge, NotificationList, Person, AdminUser,
+  MeridianReports, MeridianAllowanceRow, Badge, PersonBadge, NotificationList, Person, AdminUser,
   AtlasSearchResults,
 } from './types'
 
@@ -296,6 +296,10 @@ export const api = {
   getMeridianSettings: (): Promise<MeridianSettings> => _fetch('/meridian/settings/'),
   updateMeridianSettings: (data: Partial<MeridianSettings>): Promise<MeridianSettings> =>
     _fetch('/meridian/settings/', { method: 'PATCH', body: JSON.stringify(data) }),
+  getMeridianAllowances: (): Promise<{ results: MeridianAllowanceRow[] }> =>
+    _fetch('/meridian/allowances/'),
+  updateMeridianAllowances: (results: MeridianAllowanceRow[]): Promise<{ results: MeridianAllowanceRow[] }> =>
+    _fetch('/meridian/allowances/', { method: 'PATCH', body: JSON.stringify({ results }) }),
   getMeridianReports: (): Promise<MeridianReports> => _fetch('/meridian/reports/'),
 
   // --- Meridian: kiosk ---
