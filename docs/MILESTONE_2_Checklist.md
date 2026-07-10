@@ -193,7 +193,7 @@
       and recent completion history.
 - [x] **Shop/Rewards management:** adult setup/stock/approval/monitoring view; make spending/cart
       secondary in HomeStack.
-- [ ] **Reports/history polish:** richer completion and points history from the new completion
+- [x] **Reports/history polish:** richer completion and points history from the new completion
       model.
 - [ ] **Settings/admin polish:** category management UI, reward-category linking, allowance
       config UI.
