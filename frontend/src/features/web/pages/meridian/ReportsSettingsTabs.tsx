@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../../../../api/client'
 import type {
   Badge,
+  MeridianCategory,
   MeridianPointsResponse,
   MeridianReports,
   MeridianSettings,
@@ -153,16 +154,57 @@ function formatWhen(value: string | null) {
 
 export function SettingsTab() {
   const [s, setS] = useState<MeridianSettings | null>(null)
+  const [taskCategories, setTaskCategories] = useState<MeridianCategory[]>([])
+  const [rewardCategories, setRewardCategories] = useState<MeridianCategory[]>([])
+  const [newTaskCategory, setNewTaskCategory] = useState('')
+  const [newRewardCategory, setNewRewardCategory] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => { api.getMeridianSettings().then(setS).catch(() => {}) }, [])
+  const reloadCategories = async () => {
+    const [tasks, rewards] = await Promise.all([
+      api.getMeridianCategories('task').catch(() => []),
+      api.getMeridianCategories('reward').catch(() => []),
+    ])
+    setTaskCategories(tasks)
+    setRewardCategories(rewards)
+  }
+
+  useEffect(() => {
+    api.getMeridianSettings().then(setS).catch(() => {})
+    reloadCategories()
+  }, [])
   if (!s) return <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
 
   const set = (patch: Partial<MeridianSettings>) => setS({ ...s, ...patch })
   const save = async () => {
-    setSaving(true); setSaved(false)
-    try { setS(await api.updateMeridianSettings(s)); setSaved(true) } finally { setSaving(false) }
+    setSaving(true); setSaved(false); setError(null)
+    try { setS(await api.updateMeridianSettings(s)); setSaved(true) } catch { setError('Settings did not save.') } finally { setSaving(false) }
+  }
+
+  const createCategory = async (kind: 'task' | 'reward') => {
+    const name = (kind === 'task' ? newTaskCategory : newRewardCategory).trim()
+    if (!name) return
+    setError(null)
+    try {
+      await api.createMeridianCategory({ name, kind })
+      if (kind === 'task') setNewTaskCategory('')
+      else setNewRewardCategory('')
+      await reloadCategories()
+    } catch {
+      setError('Category could not be created.')
+    }
+  }
+
+  const deleteCategory = async (id: number) => {
+    setError(null)
+    try {
+      await api.deleteMeridianCategory(id)
+      await reloadCategories()
+    } catch {
+      setError('Category could not be deleted.')
+    }
   }
 
   const toggle = (key: keyof MeridianSettings, label: string, help: string) => (
@@ -177,22 +219,87 @@ export function SettingsTab() {
   )
 
   return (
-    <Card title="Meridian settings">
-      <div className="flex flex-col gap-2 max-w-lg">
-        <label className="flex flex-col gap-1 mb-2">
-          <span className="text-ink font-medium">Points label</span>
-          <span className="text-xs text-muted">What points are called everywhere (e.g. points, stars, tokens).</span>
-          <input value={s.points_label} onChange={e => set({ points_label: e.target.value })}
-            className="mt-1 px-3 py-2 rounded-xl border border-line bg-raised text-sm text-ink outline-none focus:ring-2 focus:ring-primary w-48" />
-        </label>
-        {toggle('group_goals_enabled', 'Group goals', 'Let the household pool points toward shared goals.')}
-        {toggle('wishlist_requests_enabled', 'Wishlist requests', 'Let children request items for their wishlist.')}
-        {toggle('auto_end_streaks', 'Auto-end streaks', 'Break a routine streak after a missed day (off = lenient, for split households).')}
-        <div className="flex items-center gap-3 mt-3">
-          <Button onClick={save} loading={saving}>Save settings</Button>
-          {saved && <span className="text-sm text-success">Saved ✓</span>}
+    <div className="flex flex-col gap-4">
+      {error && <div className="rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">{error}</div>}
+
+      <Card title="Meridian settings">
+        <div className="flex flex-col gap-2 max-w-lg">
+          <label className="flex flex-col gap-1 mb-2">
+            <span className="text-ink font-medium">Points label</span>
+            <span className="text-xs text-muted">What points are called everywhere (e.g. points, stars, tokens).</span>
+            <input value={s.points_label} onChange={e => set({ points_label: e.target.value })}
+              className="mt-1 px-3 py-2 rounded-xl border border-line bg-raised text-sm text-ink outline-none focus:ring-2 focus:ring-primary w-48" />
+          </label>
+          {toggle('group_goals_enabled', 'Group goals', 'Let the household pool points toward shared goals.')}
+          {toggle('wishlist_requests_enabled', 'Wishlist requests', 'Let children request items for their wishlist.')}
+          {toggle('auto_end_streaks', 'Auto-end streaks', 'Break a routine streak after a missed day (off = lenient, for split households).')}
+          <div className="flex items-center gap-3 mt-3">
+            <Button onClick={save} loading={saving}>Save settings</Button>
+            {saved && <span className="text-sm text-success">Saved ✓</span>}
+          </div>
         </div>
+      </Card>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <CategoryPanel
+          title="Task categories"
+          categories={taskCategories}
+          value={newTaskCategory}
+          onChange={setNewTaskCategory}
+          onCreate={() => createCategory('task')}
+          onDelete={deleteCategory}
+        />
+        <CategoryPanel
+          title="Reward categories"
+          categories={rewardCategories}
+          value={newRewardCategory}
+          onChange={setNewRewardCategory}
+          onCreate={() => createCategory('reward')}
+          onDelete={deleteCategory}
+        />
       </div>
+    </div>
+  )
+}
+
+function CategoryPanel({
+  title,
+  categories,
+  value,
+  onChange,
+  onCreate,
+  onDelete,
+}: {
+  title: string
+  categories: MeridianCategory[]
+  value: string
+  onChange: (value: string) => void
+  onCreate: () => void
+  onDelete: (id: number) => void
+}) {
+  return (
+    <Card title={title}>
+      <div className="flex gap-2">
+        <input
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          className="min-w-0 flex-1 px-3 py-2 rounded-xl border border-line bg-raised text-sm text-ink placeholder-muted outline-none focus:ring-2 focus:ring-primary"
+          placeholder="New category"
+        />
+        <Button size="sm" disabled={!value.trim()} onClick={onCreate}>Add</Button>
+      </div>
+      {categories.length === 0 ? (
+        <p className="mt-4 text-sm text-muted">No categories yet.</p>
+      ) : (
+        <ul className="mt-4 divide-y divide-line/70">
+          {categories.map(c => (
+            <li key={c.id} className="flex items-center justify-between gap-3 py-2">
+              <span className="font-medium text-ink">{c.name}</span>
+              <Button size="sm" variant="ghost" onClick={() => onDelete(c.id)}>Delete</Button>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   )
 }

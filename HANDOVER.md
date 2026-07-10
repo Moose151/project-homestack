@@ -152,8 +152,9 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 HomeStack as source of truth. Behaviour parity first, then UI polish. Shipped so far:
 `MeridianTaskCompletion` model/API, Overview approval/monitoring tab, adult task-management tab,
 and adult Shop/Rewards management (reward setup, stock, visibility/archive, approvals, monitoring).
-Reports/history now includes completion history and ledger panels. Next recommended slice:
-**settings/admin polish** (category management, reward-category linking, allowance config UI).
+Reports/history now includes completion history and ledger panels. Settings now includes task and
+reward category management. Next recommended slice: **settings/admin polish** (reward-category
+linking, allowance config UI).
 
 **Working rhythm (proven this milestone):** small workstream → backend (models/migration/services/
 selectors/serializers/views/urls) → tests → frontend (types/client → UI) → `tsc` + `npm run build`
@@ -240,6 +241,8 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-07-10 | Assistant | M2 revisit | **Adult Shop/Rewards management shipped.** Rebuilt `ShopTab` from a shopper/product-card-first surface into an adult management view for admins/managers: metrics (active rewards, pending requests, out-of-stock), filters (active/needs approval/out-of-stock/hidden/all), reward table with image, stock, price/store, daily limit, multi-cart badges, inline pending request approvals, inline edit form (name, cost, description, image/store/price, stock, daily limit, multiple-cart, hide-when-empty, active), hide/show, archive/unarchive, delete, and a side pending-request queue. Non-manager shopper view remains card/cart based but secondary. Frontend `tsc && vite build` clean. | Next: reports/history polish from `MeridianTaskCompletion`, then settings/admin polish (category management, reward-category linking, allowance config UI). |
 
 | 2026-07-10 | Assistant | M2 revisit | **Reports/history cockpit polish shipped.** `LeaderboardTab` now acts more like an adult audit surface: metrics for approved/submitted/rejected completions, ledger-entry count, badges earned; leaderboard retained; badge catalogue moved into a denser panel; added **Task completion history** (status, person, timestamps, rejection reason/review note) from `MeridianTaskCompletion`; added **Points ledger** panel from `/meridian/points/`. Frontend `tsc && vite build` clean. | Next: settings/admin polish — category management UI, reward-category linking (backend + frontend), allowance config UI. |
+
+| 2026-07-10 | Assistant | M2 revisit | **Settings category management shipped.** `SettingsTab` now includes task/reward category management using the existing Meridian category API: load task + reward categories, create categories, delete categories, and visible error handling. Frontend `tsc && vite build` clean. | Next: reward-category linking (backend + frontend), then allowance config UI. |
 
 ### Session notes (free-form, optional)
 
