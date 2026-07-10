@@ -153,8 +153,8 @@ HomeStack as source of truth. Behaviour parity first, then UI polish. Shipped so
 `MeridianTaskCompletion` model/API, Overview approval/monitoring tab, adult task-management tab,
 and adult Shop/Rewards management (reward setup, stock, visibility/archive, approvals, monitoring).
 Reports/history now includes completion history and ledger panels. Settings now includes task and
-reward category management. Next recommended slice: **settings/admin polish** (reward-category
-linking, allowance config UI).
+reward category management; rewards now link to reward categories. Next recommended slice:
+**settings/admin polish** (allowance config UI).
 
 **Working rhythm (proven this milestone):** small workstream → backend (models/migration/services/
 selectors/serializers/views/urls) → tests → frontend (types/client → UI) → `tsc` + `npm run build`
@@ -243,6 +243,8 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-07-10 | Assistant | M2 revisit | **Reports/history cockpit polish shipped.** `LeaderboardTab` now acts more like an adult audit surface: metrics for approved/submitted/rejected completions, ledger-entry count, badges earned; leaderboard retained; badge catalogue moved into a denser panel; added **Task completion history** (status, person, timestamps, rejection reason/review note) from `MeridianTaskCompletion`; added **Points ledger** panel from `/meridian/points/`. Frontend `tsc && vite build` clean. | Next: settings/admin polish — category management UI, reward-category linking (backend + frontend), allowance config UI. |
 
 | 2026-07-10 | Assistant | M2 revisit | **Settings category management shipped.** `SettingsTab` now includes task/reward category management using the existing Meridian category API: load task + reward categories, create categories, delete categories, and visible error handling. Frontend `tsc && vite build` clean. | Next: reward-category linking (backend + frontend), then allowance config UI. |
+
+| 2026-07-10 | Assistant | M2 revisit | **Reward-category linking shipped.** Added `MeridianReward.category` FK + migration `0012`, exposed `category_id` in reward serializer/service/API, added regression test, and wired reward category filter/display/select into the adult Shop/Rewards management UI. **78 Meridian tests green; frontend `tsc && vite build` clean.** | Next: allowance config UI. Remember to run `docker exec homestack-backend python manage.py migrate` after deploying this migration. |
 
 ### Session notes (free-form, optional)
 

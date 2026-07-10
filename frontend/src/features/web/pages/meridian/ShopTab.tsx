@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../../../api/client'
-import type { MeridianReward, MeridianRewardRequest, Person } from '../../../../api/types'
+import type { MeridianCategory, MeridianReward, MeridianRewardRequest, Person } from '../../../../api/types'
 import { Card } from '../../../../components/Card'
 import { Button } from '../../../../components/Button'
 import { useAuth } from '../../../auth/AuthContext'
@@ -17,10 +17,12 @@ export function ShopTab({ canManage, pointsLabel }: { canManage: boolean; points
   const { user } = useAuth()
   const [rewards, setRewards] = useState<MeridianReward[]>([])
   const [requests, setRequests] = useState<MeridianRewardRequest[]>([])
+  const [categories, setCategories] = useState<MeridianCategory[]>([])
   const [people, setPeople] = useState<Person[]>([])
   const [balance, setBalance] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<RewardFilter>('active')
+  const [categoryId, setCategoryId] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [cart, setCart] = useState<number[]>([])
@@ -30,13 +32,15 @@ export function ShopTab({ canManage, pointsLabel }: { canManage: boolean; points
   const reload = async () => {
     setError(null)
     try {
-      const [rewardRows, peopleRows, points, requestRows] = await Promise.all([
+      const [rewardRows, categoryRows, peopleRows, points, requestRows] = await Promise.all([
         api.getMeridianRewards(),
+        api.getMeridianCategories('reward').catch(() => []),
         api.getPeople().catch(() => []),
         api.getMeridianPoints().catch(() => ({ summary: [], entries: [] })),
         canManage ? api.getMeridianRewardRequests('pending') : Promise.resolve([]),
       ])
       setRewards(rewardRows)
+      setCategories(categoryRows)
       setPeople(peopleRows)
       setRequests(requestRows)
       const myPerson = peopleRows.find(x => x.linked_user_id === user?.id)
@@ -65,8 +69,11 @@ export function ShopTab({ canManage, pointsLabel }: { canManage: boolean; points
     if (filter === 'pending' && !pendingByReward.has(r.id)) return false
     if (filter === 'stock' && !out) return false
     if (filter === 'hidden' && r.is_active && !r.is_archived) return false
+    if (categoryId && r.category_id !== Number(categoryId)) return false
     return true
-  }), [rewards, filter, pendingByReward])
+  }), [rewards, filter, categoryId, pendingByReward])
+
+  const categoryName = (id: number | null) => categories.find(c => c.id === id)?.name || ''
 
   const metrics = {
     active: rewards.filter(r => r.is_active && !r.is_archived).length,
@@ -142,7 +149,14 @@ export function ShopTab({ canManage, pointsLabel }: { canManage: boolean; points
               <option value="all">All rewards</option>
             </select>
           </label>
-          {filter !== 'active' && <Button size="sm" variant="ghost" onClick={() => setFilter('active')}>Clear</Button>}
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-muted font-medium">Category</span>
+            <select value={categoryId} onChange={e => setCategoryId(e.target.value)} className={inputClass}>
+              <option value="">All categories</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </label>
+          {(filter !== 'active' || categoryId) && <Button size="sm" variant="ghost" onClick={() => { setFilter('active'); setCategoryId('') }}>Clear</Button>}
           <Button size="sm" className="ml-auto" onClick={() => setShowForm(s => !s)}>
             {showForm ? 'Close' : 'New reward'}
           </Button>
@@ -151,6 +165,7 @@ export function ShopTab({ canManage, pointsLabel }: { canManage: boolean; points
 
       {showForm && (
         <RewardForm
+          categories={categories}
           onSaved={() => { setShowForm(false); reload() }}
           onError={() => setError('Reward could not be created.')}
         />
@@ -178,6 +193,7 @@ export function ShopTab({ canManage, pointsLabel }: { canManage: boolean; points
                       <RewardEditRow
                         key={reward.id}
                         reward={reward}
+                        categories={categories}
                         onCancel={() => setEditingId(null)}
                         onSaved={() => { setEditingId(null); reload() }}
                         onError={() => setError('Reward could not be saved.')}
@@ -188,6 +204,7 @@ export function ShopTab({ canManage, pointsLabel }: { canManage: boolean; points
                         reward={reward}
                         pending={pendingByReward.get(reward.id) || []}
                         pointsLabel={pointsLabel}
+                        categoryName={categoryName(reward.category_id)}
                         personName={personName}
                         onEdit={() => setEditingId(reward.id)}
                         onToggleActive={() => act(api.updateMeridianReward(reward.id, { is_active: !reward.is_active }))}
@@ -231,6 +248,7 @@ function RewardRow({
   reward,
   pending,
   pointsLabel,
+  categoryName,
   personName,
   onEdit,
   onToggleActive,
@@ -242,6 +260,7 @@ function RewardRow({
   reward: MeridianReward
   pending: MeridianRewardRequest[]
   pointsLabel: string
+  categoryName: string
   personName: (id: number | null) => string
   onEdit: () => void
   onToggleActive: () => void
@@ -265,6 +284,7 @@ function RewardRow({
             {reward.description && <p className="mt-0.5 max-w-xl text-xs text-muted line-clamp-2">{reward.description}</p>}
             <div className="mt-1 flex flex-wrap gap-1.5">
               {reward.store_url && <a className="text-xs font-semibold text-primary underline" href={reward.store_url} target="_blank" rel="noreferrer">Store</a>}
+              {categoryName && <Badge>{categoryName}</Badge>}
               {reward.price_estimate && <Badge>{reward.price_estimate}</Badge>}
               {reward.daily_limit_per_user !== null && <Badge>{reward.daily_limit_per_user}/day</Badge>}
               {reward.allow_multiple_in_cart && <Badge>Multiple allowed</Badge>}
@@ -313,8 +333,9 @@ function RewardRow({
   )
 }
 
-function RewardEditRow({ reward, onCancel, onSaved, onError }: {
+function RewardEditRow({ reward, categories, onCancel, onSaved, onError }: {
   reward: MeridianReward
+  categories: MeridianCategory[]
   onCancel: () => void
   onSaved: () => void
   onError: () => void
@@ -322,14 +343,15 @@ function RewardEditRow({ reward, onCancel, onSaved, onError }: {
   return (
     <tr>
       <td colSpan={5} className="py-3">
-        <RewardForm reward={reward} onSaved={onSaved} onCancel={onCancel} onError={onError} />
+        <RewardForm reward={reward} categories={categories} onSaved={onSaved} onCancel={onCancel} onError={onError} />
       </td>
     </tr>
   )
 }
 
-function RewardForm({ reward, onSaved, onCancel, onError }: {
+function RewardForm({ reward, categories, onSaved, onCancel, onError }: {
   reward?: MeridianReward
+  categories: MeridianCategory[]
   onSaved: () => void
   onCancel?: () => void
   onError: () => void
@@ -337,6 +359,7 @@ function RewardForm({ reward, onSaved, onCancel, onError }: {
   const [f, setF] = useState({
     name: reward?.name || '',
     cost_points: String(reward?.cost_points ?? 20),
+    category_id: reward?.category_id ? String(reward.category_id) : '',
     description: reward?.description || '',
     image_url: reward?.image_url || '',
     price_estimate: reward?.price_estimate || '',
@@ -357,6 +380,7 @@ function RewardForm({ reward, onSaved, onCancel, onError }: {
     const payload = {
       name: f.name.trim(),
       cost_points: Number(f.cost_points) || 0,
+      category_id: f.category_id ? Number(f.category_id) : null,
       description: f.description,
       image_url: f.image_url,
       price_estimate: f.price_estimate,
@@ -391,8 +415,12 @@ function RewardForm({ reward, onSaved, onCancel, onError }: {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <input className={`${inputClass} md:col-span-2`} placeholder="Reward name" value={f.name} onChange={e => set('name', e.target.value)} />
         <input className={inputClass} type="number" min="0" placeholder="Cost" value={f.cost_points} onChange={e => set('cost_points', e.target.value)} />
-        <input className={inputClass} type="number" min="0" placeholder="Stock blank = unlimited" value={f.quantity} onChange={e => set('quantity', e.target.value)} />
+        <select className={inputClass} value={f.category_id} onChange={e => set('category_id', e.target.value)}>
+          <option value="">No category</option>
+          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
         <textarea className={`${inputClass} md:col-span-2`} placeholder="Description" value={f.description} onChange={e => set('description', e.target.value)} />
+        <input className={inputClass} type="number" min="0" placeholder="Stock blank = unlimited" value={f.quantity} onChange={e => set('quantity', e.target.value)} />
         <input className={inputClass} placeholder="Image URL" value={f.image_url} onChange={e => set('image_url', e.target.value)} />
         <input className={inputClass} placeholder="Store URL" value={f.store_url} onChange={e => set('store_url', e.target.value)} />
         <input className={inputClass} placeholder="Price estimate" value={f.price_estimate} onChange={e => set('price_estimate', e.target.value)} />

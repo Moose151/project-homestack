@@ -790,7 +790,7 @@ def create_reward(acting_user: User, **data) -> MeridianReward:
 
 def update_reward(acting_user: User, reward: MeridianReward, **data) -> MeridianReward:
     allowed = {
-        "name", "description", "cost_points", "icon", "colour", "image_url",
+        "name", "description", "cost_points", "category_id", "icon", "colour", "image_url",
         "is_active", "is_archived", "price_estimate", "store_url",
         "quantity", "allow_multiple_in_cart", "disappear_when_empty", "daily_limit_per_user",
     }

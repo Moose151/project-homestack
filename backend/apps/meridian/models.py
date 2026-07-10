@@ -412,6 +412,13 @@ class MeridianReward(HouseholdBaseModel):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     cost_points = models.PositiveIntegerField(default=0)
+    category = models.ForeignKey(
+        MeridianCategory,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="rewards",
+    )
     icon = models.CharField(max_length=100, blank=True, default="")
     colour = models.CharField(max_length=7, blank=True, default="")
     image_url = models.URLField(max_length=500, blank=True, default="")

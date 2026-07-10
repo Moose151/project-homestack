@@ -195,7 +195,7 @@
       secondary in HomeStack.
 - [x] **Reports/history polish:** richer completion and points history from the new completion
       model.
-- [~] **Settings/admin polish:** category management UI shipped; reward-category linking, allowance
+- [~] **Settings/admin polish:** category management UI and reward-category linking shipped; allowance
       config UI.
 
 ---

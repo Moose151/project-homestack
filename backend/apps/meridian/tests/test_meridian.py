@@ -15,6 +15,7 @@ from django.utils import timezone
 from apps.accounts.models import User
 from apps.meridian import selectors, services
 from apps.meridian.models import (
+    MeridianCategory,
     MeridianPointsEntry,
     MeridianReward,
     MeridianRewardRequest,
@@ -396,6 +397,18 @@ class RewardTests(TestCase):
         # Balance drops to 70, but lifetime "total earned" stays at 100.
         self.assertEqual(services.get_points_balance(self.person.id), 70)
         self.assertEqual(services.get_total_earned(self.person.id), 100)
+
+    def test_reward_category_is_serialized(self):
+        category = services.create_category(
+            self.admin, name="Treats", kind=MeridianCategory.Kind.REWARD
+        )
+        reward = services.create_reward(
+            self.admin, name="Ice cream", cost_points=30, category_id=category.id
+        )
+        _login(self.client, "admin")
+        resp = self.client.get(reverse("meridian-reward-detail", args=[reward.id]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["category_id"], category.id)
 
 
 # ---------------------------------------------------------------------------

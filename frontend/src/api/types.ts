@@ -192,6 +192,7 @@ export interface MeridianReward {
   name: string
   description: string
   cost_points: number
+  category_id: number | null
   icon: string
   colour: string
   image_url: string
