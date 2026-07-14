@@ -8,6 +8,9 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     watch: { usePolling: true },
+    // Accessed on the LAN by hostname (e.g. homestack.home.arpa); Vite blocks unknown
+    // Host headers by default. Local-network-only deploy, so allow the .home.arpa domain.
+    allowedHosts: ['homestack.home.arpa', '.home.arpa'],
     // Proxy API calls to the backend container so the browser stays host-port-agnostic
     // and avoids CORS. The target uses the compose service name on the docker network.
     proxy: {
