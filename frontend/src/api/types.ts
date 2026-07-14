@@ -485,3 +485,34 @@ export interface EducationClassSession {
   created_at: string
   updated_at: string
 }
+
+// ---------------------------------------------------------------------------
+// Nodes (stacks) + household
+// ---------------------------------------------------------------------------
+
+export interface NodeInfo {
+  key: string
+  name: string
+  description: string
+  icon: string
+  is_core: boolean
+  supports_kiosk: boolean
+  supports_sensitive_lock: boolean
+  is_enabled: boolean
+  is_hidden: boolean
+  requires_reauthentication: boolean
+  display_order: number
+  custom_name: string
+  custom_icon: string
+}
+
+export interface Household {
+  id: number
+  name: string
+  slug: string
+  timezone: string
+  default_locale: string
+  family_colour: string
+  created_at: string
+  updated_at: string
+}

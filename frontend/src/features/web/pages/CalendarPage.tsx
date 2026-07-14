@@ -3,6 +3,9 @@ import { api } from '../../../api/client'
 import type { CalendarEvent, CalendarEventWrite, Person } from '../../../api/types'
 import { Button } from '../../../components/Button'
 import { DateTimeField } from '../../../components/DateTimeField'
+import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
+import { useAuth } from '../../auth/AuthContext'
+import { useStacks } from '../../stacks/StacksContext'
 
 // ---------------------------------------------------------------------------
 // Date helpers (no external deps)
@@ -33,7 +36,7 @@ function fmtTime(iso: string, time24: boolean) {
   return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: !time24 })
 }
 
-const NODE_COLOUR: Record<string, string> = { atlas: '#6366F1', meridian: '#F59E0B' }
+const NODE_COLOUR: Record<string, string> = { atlas: '#5b57d1', meridian: '#d98324', education: '#2f9e6f' }
 const DEFAULT_COLOUR = '#9CA3AF'
 
 // ---------------------------------------------------------------------------
@@ -41,11 +44,12 @@ const DEFAULT_COLOUR = '#9CA3AF'
 // ---------------------------------------------------------------------------
 
 function EventModal({
-  event, defaultDate, people, onClose, onSaved, onError,
+  event, defaultDate, people, defaultAssignee, onClose, onSaved, onError,
 }: {
   event: CalendarEvent | null
   defaultDate: Date | null
   people: Person[]
+  defaultAssignee: number | null
   onClose: () => void
   onSaved: () => void
   onError: (m: string) => void
@@ -59,7 +63,7 @@ function EventModal({
     is_all_day: event?.is_all_day ?? false,
     location: event?.location ?? '',
     colour: event?.colour ?? '',
-    assigned_to_person_id: event?.assigned_to_person_id ?? 0,
+    assigned_to_person_id: event ? (event.assigned_to_person_id ?? 0) : (defaultAssignee ?? 0),
     visibility: event?.visibility ?? 'household',
   })
   const [saving, setSaving] = useState(false)
@@ -134,10 +138,9 @@ function EventModal({
             </div>
             <input className={input} placeholder="Location (optional)" value={f.location} onChange={e => set('location', e.target.value)} />
             <div className="grid grid-cols-2 gap-2">
-              <select className={input} value={f.assigned_to_person_id} onChange={e => set('assigned_to_person_id', Number(e.target.value))}>
-                <option value={0}>Unassigned</option>
-                {people.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}
-              </select>
+              <AssigneeSelect className={input} people={people}
+                value={f.assigned_to_person_id || null}
+                onChange={v => set('assigned_to_person_id', v ?? 0)} />
               <select className={input} value={f.visibility} onChange={e => set('visibility', e.target.value)}>
                 <option value="household">Household</option>
                 <option value="private">Private</option>
@@ -234,6 +237,8 @@ const linkedDate = () => {
 }
 
 export function CalendarPage() {
+  const { user } = useAuth()
+  const { household } = useStacks()
   const initialLinkedDate = linkedDate()
   const [view, setView] = useState<View>(() => initialLinkedDate ? 'day' : lsGet('hs_cal_view', 'month') as View)
   const [weekStart, setWeekStart] = useState<number>(() => Number(lsGet('hs_cal_weekstart', '1')))
@@ -289,9 +294,18 @@ export function CalendarPage() {
     return m
   }, [people])
 
-  const colourFor = (e: CalendarEvent) =>
-    e.colour || (e.assigned_to_person_id ? personColour[e.assigned_to_person_id] : '') ||
-    (e.source_node ? NODE_COLOUR[e.source_node] : '') || DEFAULT_COLOUR
+  const familyColour = household?.family_colour || DEFAULT_COLOUR
+  const defaultAssignee = personIdForUser(people, user?.id)
+
+  // Colour precedence: explicit event colour → assigned person's colour →
+  // whole-family (unassigned) uses the household family colour.
+  const colourFor = (e: CalendarEvent) => {
+    if (e.colour) return e.colour
+    if (e.assigned_to_person_id)
+      return personColour[e.assigned_to_person_id]
+        || (e.source_node ? NODE_COLOUR[e.source_node] : '') || DEFAULT_COLOUR
+    return familyColour
+  }
 
   const eventsByDay = useMemo(() => {
     const m = new Map<string, CalendarEvent[]>()
@@ -445,21 +459,23 @@ export function CalendarPage() {
       )}
 
       {/* Legend */}
-      {people.some(p => p.colour) && (
-        <div className="flex flex-wrap gap-3 text-xs text-muted pt-1">
-          {people.filter(p => p.colour).map(p => (
-            <span key={p.id} className="flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.colour }} /> {p.display_name}
-            </span>
-          ))}
-        </div>
-      )}
+      <div className="flex flex-wrap gap-3 text-xs text-muted pt-1">
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-full" style={{ backgroundColor: familyColour }} /> Whole family
+        </span>
+        {people.filter(p => p.colour).map(p => (
+          <span key={p.id} className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.colour }} /> {p.display_name}
+          </span>
+        ))}
+      </div>
 
       {modal && (
         <EventModal
           event={modal.event}
           defaultDate={modal.date}
           people={people}
+          defaultAssignee={defaultAssignee}
           onClose={() => setModal(null)}
           onError={setError}
           onSaved={() => { setModal(null); reload() }}

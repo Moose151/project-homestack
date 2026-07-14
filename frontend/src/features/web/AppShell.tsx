@@ -1,51 +1,79 @@
 import { NavLink, Outlet } from 'react-router-dom'
+import type { CSSProperties } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { Avatar } from '../../components/Avatar'
 import { NotificationBell } from '../../components/NotificationBell'
 import { CalendarPeek } from '../../components/CalendarPeek'
 import { useDarkMode } from '../../hooks/useDarkMode'
+import { useStacks } from '../stacks/StacksContext'
+import { STACKS, softColour } from '../../config/stacks'
 
-const NAV = [
-  { to: '/hub',      label: 'Hub',      icon: '⊙' },
-  { to: '/atlas',    label: 'Atlas',    icon: '☰' },
-  { to: '/meridian', label: 'Meridian', icon: '★' },
-  { to: '/calendar', label: 'Calendar', icon: '◫' },
-  { to: '/education', label: 'Education', icon: '✎' },
-]
+interface NavItem { label: string; route: string; icon: string; colour: string }
 
 export function AppShell() {
   const { user, logout } = useAuth()
   const [dark, setDark] = useDarkMode()
-  const nav = user?.role === 'admin'
-    ? [...NAV, { to: '/users', label: 'Users', icon: '⚙' }]
-    : NAV
+  const { enabledKeys } = useStacks()
+
+  // Core surfaces (Hub, Calendar) always show; node-backed stacks only when enabled.
+  const stackNav: NavItem[] = STACKS
+    .filter(s => !s.isNode || enabledKeys.has(s.key))
+    .map(s => ({ label: s.label, route: s.route, icon: s.icon, colour: s.colour }))
+
+  const adminNav: NavItem[] = user?.role === 'admin'
+    ? [
+        { label: 'Users', route: '/users', icon: '👥', colour: 'var(--hs-muted-strong)' },
+        { label: 'Settings', route: '/settings', icon: '⚙️', colour: 'var(--hs-muted-strong)' },
+      ]
+    : []
+
+  const activeStyle = (colour: string) => ({ isActive }: { isActive: boolean }): CSSProperties | undefined =>
+    isActive ? { background: softColour(colour, '22'), color: colour } : undefined
 
   return (
     <div className="min-h-screen flex">
       {/* Sidebar — md+ */}
       <aside className="hidden md:flex flex-col w-56 bg-surface/90 backdrop-blur border-r border-line fixed inset-y-0 left-0 z-20">
         <div className="px-5 py-5 border-b border-line flex items-center gap-2">
-          <span className="inline-grid place-items-center w-8 h-8 rounded-xl bg-primary-soft text-primary border border-line">◇</span>
+          <span className="inline-grid place-items-center w-9 h-9 rounded-xl bg-primary text-white shadow-soft">◇</span>
           <span className="text-xl font-extrabold tracking-tight text-ink">HomeStack</span>
         </div>
 
-        <nav className="flex-1 px-3 py-4 flex flex-col gap-1">
-          {nav.map(({ to, label, icon }) => (
+        <nav className="flex-1 px-3 py-4 flex flex-col gap-1 overflow-y-auto">
+          {stackNav.map(item => (
             <NavLink
-              key={to}
-              to={to}
+              key={item.route}
+              to={item.route}
+              style={activeStyle(item.colour)}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-                  isActive
-                    ? 'bg-primary-soft text-primary'
-                    : 'text-muted-strong hover:bg-sunken'
+                  isActive ? '' : 'text-muted-strong hover:bg-sunken'
                 }`
               }
             >
-              <span className="text-lg">{icon}</span>
-              {label}
+              <span className="text-lg w-6 text-center">{item.icon}</span>
+              {item.label}
             </NavLink>
           ))}
+
+          {adminNav.length > 0 && (
+            <div className="mt-2 pt-2 border-t border-line flex flex-col gap-1">
+              {adminNav.map(item => (
+                <NavLink
+                  key={item.route}
+                  to={item.route}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                      isActive ? 'bg-sunken text-ink' : 'text-muted-strong hover:bg-sunken'
+                    }`
+                  }
+                >
+                  <span className="text-lg w-6 text-center">{item.icon}</span>
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          )}
         </nav>
 
         <div className="px-4 py-4 border-t border-line flex flex-col gap-2">
@@ -92,21 +120,32 @@ export function AppShell() {
       </div>
 
       {/* Bottom nav — mobile only */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-surface/95 backdrop-blur border-t border-line flex z-20">
-        {nav.map(({ to, label, icon }) => (
+      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-surface/95 backdrop-blur border-t border-line flex z-20 overflow-x-auto">
+        {stackNav.map(item => (
           <NavLink
-            key={to}
-            to={to}
+            key={item.route}
+            to={item.route}
+            style={({ isActive }) => (isActive ? { color: item.colour } : undefined)}
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center justify-center py-3 text-xs font-semibold transition-colors ${
-                isActive ? 'text-primary' : 'text-muted'
+              `flex-1 min-w-[4rem] flex flex-col items-center justify-center py-3 text-xs font-semibold transition-colors ${
+                isActive ? '' : 'text-muted'
               }`
             }
           >
-            <span className="text-xl mb-0.5">{icon}</span>
-            {label}
+            <span className="text-xl mb-0.5">{item.icon}</span>
+            {item.label}
           </NavLink>
         ))}
+        {user?.role === 'admin' && (
+          <NavLink
+            to="/settings"
+            className={({ isActive }) =>
+              `flex-none flex flex-col items-center justify-center px-4 py-3 text-xs ${isActive ? 'text-ink' : 'text-muted'}`
+            }
+          >
+            <span className="text-xl mb-0.5">⚙️</span>
+          </NavLink>
+        )}
         <button
           onClick={() => setDark(!dark)}
           className="flex-none flex flex-col items-center justify-center px-4 py-3 text-xs text-muted"

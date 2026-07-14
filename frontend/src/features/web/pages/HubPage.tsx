@@ -16,11 +16,22 @@ import type {
 import { Card } from '../../../components/Card'
 import { HubConfig } from './HubConfig'
 import { useAuth } from '../../auth/AuthContext'
+import { STACK_BY_KEY, softColour } from '../../../config/stacks'
 
 const SIZE_SPAN: Record<string, string> = {
   small: 'sm:col-span-1',
   medium: 'sm:col-span-2',
   large: 'sm:col-span-2',
+}
+
+// Which stack a hub widget belongs to → its accent colour + icon for the card header.
+function widgetAccent(key: string): { colour: string; icon: string } {
+  const pick = (k: string) => ({ colour: STACK_BY_KEY[k].colour, icon: STACK_BY_KEY[k].icon })
+  if (key.startsWith('atlas')) return pick('atlas')
+  if (key.startsWith('meridian')) return pick('meridian')
+  if (key.startsWith('education')) return pick('education')
+  if (key === 'calendar_upcoming') return pick('calendar')
+  return { colour: STACK_BY_KEY.hub.colour, icon: '' } // clock, greeting, other core widgets
 }
 
 function formatDue(iso: string | null) {
@@ -269,7 +280,9 @@ export function HubPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-ink">{greeting}</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-ink">
+            {greeting}{user ? `, ${user.display_name}` : ''}
+          </h1>
           <p className="text-muted text-sm mt-0.5">
             {now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
           </p>
@@ -288,8 +301,8 @@ export function HubPage() {
 
       {!data ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {[1, 2].map(i => (
-            <div key={i} className="h-32 rounded-2xl bg-sunken animate-pulse sm:col-span-2" />
+          {[1, 2, 3].map(i => (
+            <div key={i} className={`h-36 rounded-2xl bg-sunken animate-pulse ${i === 1 ? 'sm:col-span-2' : ''}`} />
           ))}
         </div>
       ) : data.widgets.length === 0 ? (
@@ -299,14 +312,25 @@ export function HubPage() {
           </p>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {data.widgets.map(w => (
-            <div key={w.key} className={SIZE_SPAN[w.size] ?? 'sm:col-span-2'}>
-              <Card title={w.name}>
-                {renderWidget(w)}
-              </Card>
-            </div>
-          ))}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+          {data.widgets.map(w => {
+            const accent = widgetAccent(w.key)
+            return (
+              <div
+                key={w.key}
+                className={`${SIZE_SPAN[w.size] ?? 'sm:col-span-2'} bg-surface rounded-2xl shadow-soft border border-line overflow-hidden`}
+              >
+                <div
+                  className="flex items-center gap-2 px-4 py-2.5 border-b border-line"
+                  style={{ background: softColour(accent.colour, '18') }}
+                >
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: accent.colour }} />
+                  <h3 className="text-sm font-bold text-ink truncate">{w.name}</h3>
+                </div>
+                <div className="p-4">{renderWidget(w)}</div>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

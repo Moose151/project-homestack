@@ -8,7 +8,34 @@ import { MeridianPage } from './features/web/pages/MeridianPage'
 import { CalendarPage } from './features/web/pages/CalendarPage'
 import { EducationPage } from './features/web/pages/EducationPage'
 import { UsersPage } from './features/web/pages/UsersPage'
+import { SettingsPage } from './features/web/pages/SettingsPage'
 import { KioskApp } from './features/kiosk/KioskApp'
+import { StacksProvider, useStacks } from './features/stacks/StacksContext'
+
+// Node-backed stacks are only routable when the household has them enabled.
+function NodeRoute({ nodeKey, children }: { nodeKey: string; children: React.ReactNode }) {
+  const { enabledKeys, loading } = useStacks()
+  if (loading) return null
+  return enabledKeys.has(nodeKey) ? <>{children}</> : <Navigate to="/hub" replace />
+}
+
+function WebRoutes({ isAdmin }: { isAdmin: boolean }) {
+  return (
+    <Routes>
+      <Route element={<AppShell />}>
+        <Route path="/" element={<Navigate to="/hub" replace />} />
+        <Route path="/hub" element={<HubPage />} />
+        <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/atlas" element={<NodeRoute nodeKey="atlas"><AtlasPage /></NodeRoute>} />
+        <Route path="/meridian" element={<NodeRoute nodeKey="meridian"><MeridianPage /></NodeRoute>} />
+        <Route path="/education" element={<NodeRoute nodeKey="education"><EducationPage /></NodeRoute>} />
+        {isAdmin && <Route path="/users" element={<UsersPage />} />}
+        {isAdmin && <Route path="/settings" element={<SettingsPage />} />}
+        <Route path="*" element={<Navigate to="/hub" replace />} />
+      </Route>
+    </Routes>
+  )
+}
 
 function WebApp() {
   const { user, loading } = useAuth()
@@ -24,18 +51,9 @@ function WebApp() {
   if (!user) return <LoginPage />
 
   return (
-    <Routes>
-      <Route element={<AppShell />}>
-        <Route path="/" element={<Navigate to="/hub" replace />} />
-        <Route path="/hub" element={<HubPage />} />
-        <Route path="/atlas" element={<AtlasPage />} />
-        <Route path="/meridian" element={<MeridianPage />} />
-        <Route path="/calendar" element={<CalendarPage />} />
-        <Route path="/education" element={<EducationPage />} />
-        {user.role === 'admin' && <Route path="/users" element={<UsersPage />} />}
-        <Route path="*" element={<Navigate to="/hub" replace />} />
-      </Route>
-    </Routes>
+    <StacksProvider>
+      <WebRoutes isAdmin={user.role === 'admin'} />
+    </StacksProvider>
   )
 }
 

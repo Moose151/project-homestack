@@ -17,23 +17,31 @@
     --hs-bg-soft: #fbf7ef;
     --hs-surface: #fffaf2;
     --hs-surface-raised: #ffffff;
-    --hs-surface-muted: #f1e9dc;
-    --hs-border: #ded4c5;
-    --hs-border-strong: #cdbfaa;
+    --hs-surface-muted: #efe6d7;
+    --hs-border: #e0d5c4;
+    --hs-border-strong: #cbb99f;
 
-    --hs-text: #252525;
+    --hs-text: #221f1b;
     --hs-muted: #6f6a61;
-    --hs-muted-strong: #514d47;
+    --hs-muted-strong: #4c4842;
 
-    --hs-primary: #3f6f8f;
-    --hs-primary-hover: #315a75;
-    --hs-primary-soft: #e7f0f4;
-    --hs-success: #5f8f6b;
-    --hs-success-soft: #e8f3ea;
-    --hs-warning: #c98a3d;
-    --hs-warning-soft: #f7ead7;
-    --hs-danger: #b85c50;
-    --hs-danger-soft: #f5e2df;
+    /* Richer, more confident teal-blue primary (vibrant but warm). */
+    --hs-primary: #1d7a91;
+    --hs-primary-hover: #155f73;
+    --hs-primary-soft: #d7ebf0;
+    --hs-success: #3f9068;
+    --hs-success-soft: #dff1e6;
+    --hs-warning: #d98324;
+    --hs-warning-soft: #f9e8cf;
+    --hs-danger: #c65449;
+    --hs-danger-soft: #f6ddd8;
+
+    /* Per-stack accent colours — shared with src/config/stacks.ts (keep in sync). */
+    --hs-accent-hub: #1d7a91;
+    --hs-accent-atlas: #5b57d1;
+    --hs-accent-meridian: #d98324;
+    --hs-accent-education: #2f9e6f;
+    --hs-accent-calendar: #2b7fd0;
   }
 
   .dark {
@@ -49,17 +57,27 @@
     --hs-muted: #8a8590;
     --hs-muted-strong: #b0adb5;
 
-    --hs-primary: #83a9bd;
-    --hs-primary-hover: #9bbccd;
-    --hs-primary-soft: #1e203a;
-    --hs-success-soft: #1a2a22;
-    --hs-warning-soft: #2a2210;
-    --hs-danger-soft: #2a1818;
+    --hs-primary: #4bb6cf;
+    --hs-primary-hover: #6cc6da;
+    --hs-primary-soft: #16323b;
+    --hs-success: #59a97f;
+    --hs-success-soft: #172a20;
+    --hs-warning: #e0993f;
+    --hs-warning-soft: #2c2412;
+    --hs-danger: #d47066;
+    --hs-danger-soft: #2c1a17;
+
+    --hs-accent-hub: #4bb6cf;
+    --hs-accent-atlas: #8a86ee;
+    --hs-accent-meridian: #e0993f;
+    --hs-accent-education: #52c093;
+    --hs-accent-calendar: #6aa9e6;
   }
 
   body {
     background:
-      radial-gradient(circle at top left, rgb(201 138 61 / 0.10), transparent 24rem),
+      radial-gradient(circle at top left, rgb(29 122 145 / 0.10), transparent 22rem),
+      radial-gradient(circle at top right, rgb(217 131 36 / 0.08), transparent 26rem),
       linear-gradient(180deg, var(--hs-bg-soft) 0%, var(--hs-bg) 18rem, var(--hs-bg) 100%);
     background-attachment: fixed;
     color: var(--hs-text);

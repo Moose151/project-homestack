@@ -5,9 +5,12 @@ import type {
   AssessmentPriority, AssessmentStatus, AssessmentType,
   EducationAssessment, EducationClassSession, EducationCourse,
 } from '../../../api/types'
+import type { Person } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { DateTimeField } from '../../../components/DateTimeField'
+import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
+import { useAuth } from '../../auth/AuthContext'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -56,8 +59,10 @@ type Tab = 'assignments' | 'courses' | 'timetable'
 // Assignments
 // ===========================================================================
 
-function AssignmentForm({ courses, onCreated, onError }: {
+function AssignmentForm({ courses, people, defaultAssignee, onCreated, onError }: {
   courses: EducationCourse[]
+  people: Person[]
+  defaultAssignee: number | null
   onCreated: (a: EducationAssessment) => void
   onError: (m: string) => void
 }) {
@@ -68,6 +73,7 @@ function AssignmentForm({ courses, onCreated, onError }: {
   const [due, setDue] = useState<string | null>(null)
   const [dueAllDay, setDueAllDay] = useState(true)
   const [priority, setPriority] = useState<AssessmentPriority>('medium')
+  const [assignee, setAssignee] = useState<number | null>(defaultAssignee)
   const [busy, setBusy] = useState(false)
 
   const submit = async (e: React.FormEvent) => {
@@ -78,10 +84,11 @@ function AssignmentForm({ courses, onCreated, onError }: {
       const a = await api.createAssessment({
         title: title.trim(), assessment_type: type, priority,
         course_id: courseId ? Number(courseId) : null,
-        due_at: due, is_all_day: dueAllDay,
+        due_at: due, is_all_day: dueAllDay, assigned_to_person_id: assignee,
       })
       onCreated(a)
-      setTitle(''); setDue(null); setDueAllDay(true); setCourseId(''); setType('assignment'); setPriority('medium')
+      setTitle(''); setDue(null); setDueAllDay(true); setCourseId(''); setType('assignment')
+      setPriority('medium'); setAssignee(defaultAssignee)
       setOpen(false)
     } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
@@ -107,10 +114,16 @@ function AssignmentForm({ courses, onCreated, onError }: {
           <option value="high">High priority</option>
         </select>
       </div>
-      <div>
-        <div className="text-xs text-muted-strong mb-1">Due</div>
-        <DateTimeField value={due} allDay={dueAllDay}
-          onChange={({ value, allDay }) => { setDue(value); setDueAllDay(allDay) }} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <div className="text-xs text-muted-strong mb-1">Due</div>
+          <DateTimeField value={due} allDay={dueAllDay}
+            onChange={({ value, allDay }) => { setDue(value); setDueAllDay(allDay) }} />
+        </div>
+        <div>
+          <div className="text-xs text-muted-strong mb-1">Assign to</div>
+          <AssigneeSelect people={people} value={assignee} onChange={setAssignee} className={inputCls} />
+        </div>
       </div>
       <div className="flex gap-2">
         <Button type="submit" loading={busy}>Add</Button>
@@ -181,7 +194,12 @@ function AssignmentRow({ a, onChange, onDelete, onError }: {
   )
 }
 
-function AssignmentsTab({ courses, onError }: { courses: EducationCourse[]; onError: (m: string) => void }) {
+function AssignmentsTab({ courses, people, defaultAssignee, onError }: {
+  courses: EducationCourse[]
+  people: Person[]
+  defaultAssignee: number | null
+  onError: (m: string) => void
+}) {
   const [assessments, setAssessments] = useState<EducationAssessment[]>([])
   const [showDone, setShowDone] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -201,7 +219,7 @@ function AssignmentsTab({ courses, onError }: { courses: EducationCourse[]; onEr
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <AssignmentForm courses={courses} onCreated={upsert} onError={onError} />
+        <AssignmentForm courses={courses} people={people} defaultAssignee={defaultAssignee} onCreated={upsert} onError={onError} />
         <label className="flex items-center gap-2 text-sm text-muted-strong">
           <input type="checkbox" checked={showDone} onChange={e => setShowDone(e.target.checked)} />
           Show completed
@@ -419,12 +437,17 @@ const TABS: { key: Tab; label: string }[] = [
 ]
 
 export function EducationPage() {
+  const { user } = useAuth()
   const [tab, setTab] = useState<Tab>('assignments')
   const [courses, setCourses] = useState<EducationCourse[]>([])
+  const [people, setPeople] = useState<Person[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const loadCourses = () => api.getCourses().then(setCourses).catch(e => setError(errMsg(e)))
   useEffect(() => { loadCourses() }, [])
+  useEffect(() => { api.getPeople().then(setPeople).catch(() => {}) }, [])
+
+  const defaultAssignee = personIdForUser(people, user?.id)
 
   return (
     <div className="space-y-5 max-w-3xl mx-auto">
@@ -454,7 +477,7 @@ export function EducationPage() {
         ))}
       </div>
 
-      {tab === 'assignments' && <AssignmentsTab courses={courses} onError={setError} />}
+      {tab === 'assignments' && <AssignmentsTab courses={courses} people={people} defaultAssignee={defaultAssignee} onError={setError} />}
       {tab === 'courses' && <CoursesTab courses={courses} reload={loadCourses} onError={setError} />}
       {tab === 'timetable' && <TimetableTab courses={courses} onError={setError} />}
     </div>

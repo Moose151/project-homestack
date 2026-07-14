@@ -8,6 +8,7 @@ import type {
   MeridianReports, MeridianAllowanceRow, Badge, PersonBadge, NotificationList, Person, AdminUser,
   AtlasSearchResults,
   EducationInstitution, EducationCourse, EducationAssessment, EducationClassSession,
+  NodeInfo, Household,
 } from './types'
 
 type CourseWrite = Partial<{
@@ -363,6 +364,16 @@ export const api = {
     _fetch(`/education/assessments/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteAssessment: (id: number): Promise<void> =>
     _fetch(`/education/assessments/${id}/`, { method: 'DELETE' }),
+
+  // --- Nodes (stacks) ---
+  getNodes: (): Promise<NodeInfo[]> => _fetch('/nodes/'),
+  enableNode: (key: string): Promise<NodeInfo> => _fetch(`/nodes/${key}/enable/`, { method: 'POST' }),
+  disableNode: (key: string): Promise<NodeInfo> => _fetch(`/nodes/${key}/disable/`, { method: 'POST' }),
+
+  // --- Household ---
+  getHousehold: (): Promise<Household> => _fetch('/household/'),
+  updateHousehold: (data: Partial<{ name: string; family_colour: string }>): Promise<Household> =>
+    _fetch('/household/', { method: 'PATCH', body: JSON.stringify(data) }),
 
   getClassSessions: (params?: { course?: number }): Promise<EducationClassSession[]> =>
     _fetch(`/education/classes/${params?.course ? `?course=${params.course}` : ''}`),
