@@ -4,6 +4,7 @@ import { api } from '../../../api/client'
 import type { AtlasList, AtlasListItem, AtlasReminder, AtlasSearchResults } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
+import { DateTimeField } from '../../../components/DateTimeField'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -183,7 +184,8 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
   const [reminders, setReminders] = useState<AtlasReminder[]>([])
   const [loading, setLoading] = useState(true)
   const [title, setTitle] = useState('')
-  const [dueAt, setDueAt] = useState('')
+  const [dueAt, setDueAt] = useState<string | null>(null)
+  const [dueAllDay, setDueAllDay] = useState(true)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -195,9 +197,9 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
     if (!title.trim()) return
     setSaving(true)
     try {
-      const r = await api.createReminder({ title: title.trim(), due_at: dueAt || undefined })
+      const r = await api.createReminder({ title: title.trim(), due_at: dueAt, is_all_day: dueAllDay })
       setReminders(prev => [...prev, r])
-      setTitle(''); setDueAt('')
+      setTitle(''); setDueAt(null); setDueAllDay(true)
     } catch (e) {
       onError(errMsg(e))
     } finally {
@@ -226,13 +228,9 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
             placeholder="Reminder title"
             className="w-full px-3 py-2.5 rounded-xl border border-line bg-raised text-sm text-ink placeholder-muted outline-none focus:ring-2 focus:ring-primary"
           />
-          <div className="flex gap-2">
-            <input
-              type="datetime-local"
-              value={dueAt}
-              onChange={e => setDueAt(e.target.value)}
-              className="flex-1 px-3 py-2 rounded-xl border border-line bg-raised text-sm text-muted-strong outline-none focus:ring-2 focus:ring-primary"
-            />
+          <DateTimeField value={dueAt} allDay={dueAllDay}
+            onChange={({ value, allDay }) => { setDueAt(value); setDueAllDay(allDay) }} />
+          <div className="flex justify-end">
             <Button type="submit" loading={saving} disabled={!title.trim()}>Save</Button>
           </div>
         </form>
@@ -250,7 +248,8 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
                   {r.body && <p className="text-sm text-muted mt-0.5">{r.body}</p>}
                   {r.due_at && (
                     <p className="text-xs text-primary mt-1">
-                      {new Date(r.due_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                      {new Date(r.due_at).toLocaleString(undefined,
+                        r.is_all_day ? { dateStyle: 'medium' } : { dateStyle: 'medium', timeStyle: 'short' })}
                       <Link to={calendarDayHref(r.due_at)} className="ml-2 hover:underline">Open day</Link>
                     </p>
                   )}

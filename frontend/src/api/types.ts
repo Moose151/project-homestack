@@ -93,6 +93,7 @@ export interface AtlasReminder {
   title: string
   body: string
   due_at: string | null
+  is_all_day: boolean
   recurrence_rule: string
   calendar_event_id: number | null
   visibility: string
@@ -454,6 +455,7 @@ export interface EducationAssessment {
   course_code: string
   assigned_to_person_id: number | null
   due_at: string | null
+  is_all_day: boolean
   status: AssessmentStatus
   priority: AssessmentPriority
   weight: string

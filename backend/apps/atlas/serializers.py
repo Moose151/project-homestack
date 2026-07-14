@@ -78,7 +78,7 @@ class AtlasReminderSerializer(serializers.ModelSerializer):
     class Meta:
         model = AtlasReminder
         fields = [
-            "id", "title", "body", "due_at", "recurrence_rule",
+            "id", "title", "body", "due_at", "is_all_day", "recurrence_rule",
             "calendar_event_id", "visibility", "sensitivity",
             "created_at", "updated_at",
         ]

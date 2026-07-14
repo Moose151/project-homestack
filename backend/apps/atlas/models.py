@@ -130,6 +130,7 @@ class AtlasReminder(CalendarSyncMixin, HouseholdBaseModel):
     title = models.CharField(max_length=255)
     body = models.TextField(blank=True, default="")
     due_at = models.DateTimeField(null=True, blank=True)
+    is_all_day = models.BooleanField(default=False)  # due on a date, no specific time
     recurrence_rule = models.CharField(max_length=512, blank=True, default="")
     calendar_event_id = models.PositiveBigIntegerField(null=True, blank=True)
     visibility = models.CharField(
@@ -157,6 +158,7 @@ class AtlasReminder(CalendarSyncMixin, HouseholdBaseModel):
         return {
             "title": self.title,
             "start_at": self.due_at,
+            "is_all_day": self.is_all_day,
             "description": self.body,
             "recurrence_rule": self.recurrence_rule,
             "visibility": self.visibility,

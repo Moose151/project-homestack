@@ -133,7 +133,7 @@ def create_reminder(acting_user: User, **data) -> AtlasReminder:
 
 
 def update_reminder(acting_user: User, reminder: AtlasReminder, **data) -> AtlasReminder:
-    allowed = {"title", "body", "due_at", "recurrence_rule", "visibility", "sensitivity"}
+    allowed = {"title", "body", "due_at", "is_all_day", "recurrence_rule", "visibility", "sensitivity"}
     for key, val in data.items():
         if key in allowed:
             setattr(reminder, key, val)

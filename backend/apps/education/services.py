@@ -83,7 +83,7 @@ def delete_course(acting_user: User, obj: EducationCourse) -> None:
 # ---------------------------------------------------------------------------
 
 _ASSESSMENT_FIELDS = {
-    "title", "assessment_type", "course_id", "assigned_to_person_id", "due_at",
+    "title", "assessment_type", "course_id", "assigned_to_person_id", "due_at", "is_all_day",
     "status", "priority", "weight", "description", "visibility", "sensitivity",
 }
 

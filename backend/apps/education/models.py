@@ -145,6 +145,7 @@ class EducationAssessment(CalendarSyncMixin, HouseholdBaseModel):
         related_name="education_assessments",
     )
     due_at = models.DateTimeField(null=True, blank=True)
+    is_all_day = models.BooleanField(default=False)  # due on a date, no specific time
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.TODO
     )
@@ -184,6 +185,7 @@ class EducationAssessment(CalendarSyncMixin, HouseholdBaseModel):
         return {
             "title": f"{label}: {self.title}",
             "start_at": self.due_at,
+            "is_all_day": self.is_all_day,
             "description": self.description,
             "visibility": self.visibility,
             "sensitivity": self.sensitivity,

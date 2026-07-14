@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../../api/client'
 import type { CalendarEvent, CalendarEventWrite, Person } from '../../../api/types'
 import { Button } from '../../../components/Button'
+import { DateTimeField } from '../../../components/DateTimeField'
 
 // ---------------------------------------------------------------------------
 // Date helpers (no external deps)
@@ -26,11 +27,6 @@ function monthGrid(anchor: Date, weekStart: number): Date[] {
   const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
   const gridStart = startOfWeek(first, weekStart)
   return Array.from({ length: 42 }, (_, i) => addDays(gridStart, i))
-}
-
-function toLocalInput(d: Date) {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 function fmtTime(iso: string, time24: boolean) {
@@ -58,8 +54,8 @@ function EventModal({
   const base = event ? new Date(event.start_at) : (defaultDate ?? new Date())
   const [f, setF] = useState({
     title: event?.title ?? '',
-    start_at: toLocalInput(base),
-    end_at: event?.end_at ? toLocalInput(new Date(event.end_at)) : '',
+    start_at: base.toISOString(),
+    end_at: event?.end_at ?? '',
     is_all_day: event?.is_all_day ?? false,
     location: event?.location ?? '',
     colour: event?.colour ?? '',
@@ -119,16 +115,22 @@ function EventModal({
         ) : (
           <>
             <input className={input} placeholder="Title" value={f.title} onChange={e => set('title', e.target.value)} autoFocus />
-            <label className="flex items-center gap-2 text-sm text-ink">
-              <input type="checkbox" checked={f.is_all_day} onChange={e => set('is_all_day', e.target.checked)} /> All day
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              <label className="flex flex-col gap-1 text-xs text-muted">Start
-                <input type="datetime-local" className={input} value={f.start_at} onChange={e => set('start_at', e.target.value)} />
-              </label>
-              <label className="flex flex-col gap-1 text-xs text-muted">End (optional)
-                <input type="datetime-local" className={input} value={f.end_at} onChange={e => set('end_at', e.target.value)} />
-              </label>
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-muted">Start</span>
+              <DateTimeField
+                value={f.start_at}
+                allDay={f.is_all_day}
+                onChange={({ value, allDay }) => setF(prev => ({ ...prev, start_at: value ?? prev.start_at, is_all_day: allDay }))}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-muted">End (optional)</span>
+              <DateTimeField
+                value={f.end_at || null}
+                allDay={f.is_all_day}
+                allowAllDay={false}
+                onChange={({ value }) => set('end_at', value ?? '')}
+              />
             </div>
             <input className={input} placeholder="Location (optional)" value={f.location} onChange={e => set('location', e.target.value)} />
             <div className="grid grid-cols-2 gap-2">

@@ -18,7 +18,7 @@ type CourseWrite = Partial<{
 
 type AssessmentWrite = Partial<{
   title: string; assessment_type: string; course_id: number | null
-  assigned_to_person_id: number | null; due_at: string | null; status: string
+  assigned_to_person_id: number | null; due_at: string | null; is_all_day: boolean; status: string
   priority: string; weight: string; description: string; visibility: string
 }>
 
@@ -141,7 +141,7 @@ export const api = {
   // --- Atlas reminders ---
   getReminders: (upcoming?: boolean): Promise<AtlasReminder[]> =>
     _fetch(`/atlas/reminders/${upcoming ? '?upcoming=1' : ''}`),
-  createReminder: (data: { title: string; due_at?: string; body?: string }): Promise<AtlasReminder> =>
+  createReminder: (data: { title: string; due_at?: string | null; is_all_day?: boolean; body?: string }): Promise<AtlasReminder> =>
     _fetch('/atlas/reminders/', { method: 'POST', body: JSON.stringify(data) }),
   deleteReminder: (id: number): Promise<void> => _fetch(`/atlas/reminders/${id}/`, { method: 'DELETE' }),
 

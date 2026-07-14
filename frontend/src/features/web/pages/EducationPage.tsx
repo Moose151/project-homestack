@@ -7,6 +7,7 @@ import type {
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
+import { DateTimeField } from '../../../components/DateTimeField'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -27,14 +28,14 @@ const PRIORITY_TONE: Record<AssessmentPriority, string> = {
 }
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-function dueLabel(iso: string | null) {
+function dueLabel(iso: string | null, allDay = false) {
   if (!iso) return null
   const d = new Date(iso)
   const diff = Math.round((d.getTime() - Date.now()) / 86400000)
-  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  const time = allDay ? '' : ` · ${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`
   if (diff < 0) return { text: `${Math.abs(diff)}d overdue`, tone: 'bg-danger-soft text-danger' }
-  if (diff === 0) return { text: `Today · ${time}`, tone: 'bg-primary-soft text-primary' }
-  if (diff === 1) return { text: `Tomorrow · ${time}`, tone: 'bg-sunken text-muted-strong' }
+  if (diff === 0) return { text: `Today${time}`, tone: 'bg-primary-soft text-primary' }
+  if (diff === 1) return { text: `Tomorrow${time}`, tone: 'bg-sunken text-muted-strong' }
   return {
     text: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
     tone: 'bg-sunken text-muted-strong',
@@ -64,7 +65,8 @@ function AssignmentForm({ courses, onCreated, onError }: {
   const [title, setTitle] = useState('')
   const [type, setType] = useState<AssessmentType>('assignment')
   const [courseId, setCourseId] = useState('')
-  const [due, setDue] = useState('')
+  const [due, setDue] = useState<string | null>(null)
+  const [dueAllDay, setDueAllDay] = useState(true)
   const [priority, setPriority] = useState<AssessmentPriority>('medium')
   const [busy, setBusy] = useState(false)
 
@@ -76,10 +78,10 @@ function AssignmentForm({ courses, onCreated, onError }: {
       const a = await api.createAssessment({
         title: title.trim(), assessment_type: type, priority,
         course_id: courseId ? Number(courseId) : null,
-        due_at: fromInputValue(due),
+        due_at: due, is_all_day: dueAllDay,
       })
       onCreated(a)
-      setTitle(''); setDue(''); setCourseId(''); setType('assignment'); setPriority('medium')
+      setTitle(''); setDue(null); setDueAllDay(true); setCourseId(''); setType('assignment'); setPriority('medium')
       setOpen(false)
     } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
@@ -99,12 +101,16 @@ function AssignmentForm({ courses, onCreated, onError }: {
           <option value="">No course</option>
           {courses.map(c => <option key={c.id} value={c.id}>{c.code || c.name}</option>)}
         </select>
-        <input type="datetime-local" className={inputCls} value={due} onChange={e => setDue(e.target.value)} />
         <select className={inputCls} value={priority} onChange={e => setPriority(e.target.value as AssessmentPriority)}>
           <option value="low">Low priority</option>
           <option value="medium">Medium priority</option>
           <option value="high">High priority</option>
         </select>
+      </div>
+      <div>
+        <div className="text-xs text-muted-strong mb-1">Due</div>
+        <DateTimeField value={due} allDay={dueAllDay}
+          onChange={({ value, allDay }) => { setDue(value); setDueAllDay(allDay) }} />
       </div>
       <div className="flex gap-2">
         <Button type="submit" loading={busy}>Add</Button>
@@ -121,7 +127,7 @@ function AssignmentRow({ a, onChange, onDelete, onError }: {
   onError: (m: string) => void
 }) {
   const [busy, setBusy] = useState(false)
-  const due = dueLabel(a.due_at)
+  const due = dueLabel(a.due_at, a.is_all_day)
 
   const setStatus = async (status: AssessmentStatus) => {
     setBusy(true)

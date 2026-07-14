@@ -63,7 +63,7 @@ class EducationAssessmentSerializer(serializers.ModelSerializer):
         model = EducationAssessment
         fields = [
             "id", "title", "assessment_type", "course_id", "course_name", "course_code",
-            "assigned_to_person_id", "due_at", "status", "priority", "weight",
+            "assigned_to_person_id", "due_at", "is_all_day", "status", "priority", "weight",
             "description", "is_complete", "calendar_event_id", "visibility", "sensitivity",
             "created_at", "updated_at",
         ]
