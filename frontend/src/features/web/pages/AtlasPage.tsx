@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../../api/client'
-import type { AtlasList, AtlasListItem, AtlasReminder, AtlasSearchResults } from '../../../api/types'
+import type { AtlasList, AtlasListItem, AtlasReminder, AtlasSearchResults, Person } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { DateTimeField } from '../../../components/DateTimeField'
+import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
+import { useAuth } from '../../auth/AuthContext'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -28,16 +30,20 @@ function calendarDayHref(iso: string | null) {
 // ---------------------------------------------------------------------------
 
 function ItemRow({
-  item, listId, onToggle, onDelete, onError,
+  item, listId, people, onToggle, onDelete, onError,
 }: {
   item: AtlasListItem
   listId: number
+  people: Person[]
   onToggle: (item: AtlasListItem) => void
   onDelete: (item: AtlasListItem) => void
   onError: (m: string) => void
 }) {
   const [busy, setBusy] = useState(false)
   const due = dueLabel(item.due_at)
+  const assignee = item.assigned_to_person_id
+    ? people.find(p => p.id === item.assigned_to_person_id)
+    : null
 
   const toggle = async () => {
     setBusy(true)
@@ -69,6 +75,12 @@ function ItemRow({
         {item.quantity && <span className="text-muted-strong font-medium mr-1.5">{item.quantity}×</span>}
         {item.title}
       </span>
+      {assignee && !item.is_complete && (
+        <span className="flex items-center gap-1 text-xs text-muted-strong flex-shrink-0" title={`Assigned to ${assignee.display_name}`}>
+          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: assignee.colour || 'var(--hs-muted)' }} />
+          <span className="hidden sm:inline">{assignee.preferred_name || assignee.display_name}</span>
+        </span>
+      )}
       {due && !item.is_complete && (
         <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${due.tone}`}>{due.text}</span>
       )}
@@ -87,10 +99,17 @@ function ItemRow({
 // Single list card
 // ---------------------------------------------------------------------------
 
-function ListCard({ list, onDeleted, onError }: { list: AtlasList; onDeleted: (id: number) => void; onError: (m: string) => void }) {
+function ListCard({ list, people, defaultAssignee, onDeleted, onError }: {
+  list: AtlasList
+  people: Person[]
+  defaultAssignee: number | null
+  onDeleted: (id: number) => void
+  onError: (m: string) => void
+}) {
   const [items, setItems] = useState<AtlasListItem[]>(list.items ?? [])
   const [newTitle, setNewTitle] = useState('')
   const [qty, setQty] = useState('')
+  const [assignee, setAssignee] = useState<number | null>(defaultAssignee)
   const [adding, setAdding] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const hasQty = list.list_type === 'grocery' || list.list_type === 'shopping'
@@ -100,9 +119,12 @@ function ListCard({ list, onDeleted, onError }: { list: AtlasList; onDeleted: (i
     if (!newTitle.trim()) return
     setAdding(true)
     try {
-      const item = await api.createItem(list.id, { title: newTitle.trim(), quantity: qty.trim() || undefined })
+      const item = await api.createItem(list.id, {
+        title: newTitle.trim(), quantity: qty.trim() || undefined,
+        assigned_to_person_id: assignee,
+      })
       setItems(prev => [...prev, item])
-      setNewTitle(''); setQty('')
+      setNewTitle(''); setQty(''); setAssignee(defaultAssignee)
       inputRef.current?.focus()
     } catch (e) {
       onError(errMsg(e))
@@ -147,14 +169,14 @@ function ListCard({ list, onDeleted, onError }: { list: AtlasList; onDeleted: (i
 
       <ul className="divide-y divide-line/60">
         {pending.map(item => (
-          <ItemRow key={item.id} item={item} listId={list.id} onToggle={handleToggle} onDelete={handleDelete} onError={onError} />
+          <ItemRow key={item.id} item={item} listId={list.id} people={people} onToggle={handleToggle} onDelete={handleDelete} onError={onError} />
         ))}
         {done.map(item => (
-          <ItemRow key={item.id} item={item} listId={list.id} onToggle={handleToggle} onDelete={handleDelete} onError={onError} />
+          <ItemRow key={item.id} item={item} listId={list.id} people={people} onToggle={handleToggle} onDelete={handleDelete} onError={onError} />
         ))}
       </ul>
 
-      <form onSubmit={addItem} className="flex gap-2 mt-3 pt-3 border-t border-line">
+      <form onSubmit={addItem} className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-line">
         {hasQty && (
           <input
             value={qty}
@@ -168,7 +190,13 @@ function ListCard({ list, onDeleted, onError }: { list: AtlasList; onDeleted: (i
           value={newTitle}
           onChange={e => setNewTitle(e.target.value)}
           placeholder="Add item…"
-          className="flex-1 text-sm bg-transparent text-ink placeholder-muted outline-none min-h-[36px]"
+          className="flex-1 min-w-[8rem] text-sm bg-transparent text-ink placeholder-muted outline-none min-h-[36px]"
+        />
+        <AssigneeSelect
+          people={people}
+          value={assignee}
+          onChange={setAssignee}
+          className="text-sm rounded-lg border border-line bg-surface px-2 py-1.5 text-muted-strong min-h-[36px] max-w-[9rem]"
         />
         <Button type="submit" size="sm" loading={adding} disabled={!newTitle.trim()}>Add</Button>
       </form>
@@ -330,8 +358,10 @@ function SearchResults({ results }: { results: AtlasSearchResults }) {
 type Tab = 'lists' | 'reminders'
 
 export function AtlasPage() {
+  const { user } = useAuth()
   const [tab, setTab] = useState<Tab>('lists')
   const [lists, setLists] = useState<AtlasList[]>([])
+  const [people, setPeople] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
   const [newTitle, setNewTitle] = useState('')
   const [creating, setCreating] = useState(false)
@@ -342,6 +372,9 @@ export function AtlasPage() {
   useEffect(() => {
     api.getLists().then(setLists).catch(e => setError(errMsg(e))).finally(() => setLoading(false))
   }, [])
+  useEffect(() => { api.getPeople().then(setPeople).catch(() => {}) }, [])
+
+  const defaultAssignee = personIdForUser(people, user?.id)
 
   // Debounced Atlas-wide search.
   useEffect(() => {
@@ -427,6 +460,8 @@ export function AtlasPage() {
                   <ListCard
                     key={list.id}
                     list={list}
+                    people={people}
+                    defaultAssignee={defaultAssignee}
                     onDeleted={id => setLists(prev => prev.filter(l => l.id !== id))}
                     onError={setError}
                   />
