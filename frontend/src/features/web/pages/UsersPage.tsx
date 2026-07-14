@@ -127,7 +127,8 @@ export function UsersPage() {
 function UserForm({ people, onSaved, onError }: { people: Person[]; onSaved: () => void; onError: (s: string | null) => void }) {
   const [f, setF] = useState({
     username: '', display_name: '', role: 'user', is_child_account: false, colour: '#4A90E2',
-    avatar: '', pin: '', password: '', personMode: 'new' as 'new' | 'existing' | 'none', link_person_id: '',
+    avatar: '', pin: '', pin_confirm: '', password: '', password_confirm: '',
+    personMode: 'new' as 'new' | 'existing' | 'none', link_person_id: '',
   })
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: unknown) => setF(prev => ({ ...prev, [k]: v }))
@@ -136,6 +137,8 @@ function UserForm({ people, onSaved, onError }: { people: Person[]; onSaved: () 
     e.preventDefault()
     onError(null)
     if (!f.username.trim() || !f.display_name.trim()) return
+    if (f.pin && f.pin !== f.pin_confirm) { onError('PINs do not match.'); return }
+    if (f.password && f.password !== f.password_confirm) { onError('Passwords do not match.'); return }
     setSaving(true)
     try {
       await api.createUser({
@@ -165,8 +168,10 @@ function UserForm({ people, onSaved, onError }: { people: Person[]; onSaved: () 
         <div className="sm:col-span-2">
           <EmojiPicker value={f.avatar} colour={f.colour} onChange={e => set('avatar', e)} />
         </div>
-        <input className={input} placeholder="PIN (4–6 digits)" value={f.pin} onChange={e => set('pin', e.target.value)} />
-        <input className={input} type="password" placeholder="Password (adults; for re-auth)" value={f.password} onChange={e => set('password', e.target.value)} />
+        <input className={input} type="password" inputMode="numeric" autoComplete="new-password" placeholder="PIN (4–6 digits)" value={f.pin} onChange={e => set('pin', e.target.value)} />
+        <input className={input} type="password" inputMode="numeric" autoComplete="new-password" placeholder="Confirm PIN" value={f.pin_confirm} onChange={e => set('pin_confirm', e.target.value)} />
+        <input className={input} type="password" autoComplete="new-password" placeholder="Password (adults; for re-auth)" value={f.password} onChange={e => set('password', e.target.value)} />
+        <input className={input} type="password" autoComplete="new-password" placeholder="Confirm password" value={f.password_confirm} onChange={e => set('password_confirm', e.target.value)} />
         <label className="flex items-center gap-2 text-sm text-ink sm:col-span-2">
           <input type="checkbox" checked={f.is_child_account} onChange={e => set('is_child_account', e.target.checked)} />
           Child account (PIN only, no password)
@@ -205,12 +210,15 @@ function UserForm({ people, onSaved, onError }: { people: Person[]; onSaved: () 
 }
 
 function EditUser({ u, onSaved, onError }: { u: AdminUser; onSaved: () => void; onError: (s: string | null) => void }) {
-  const [f, setF] = useState({ display_name: u.display_name, role: u.role, colour: u.colour || '#4A90E2', avatar: u.avatar || '', pin: '', password: '' })
+  const [f, setF] = useState({ display_name: u.display_name, role: u.role, colour: u.colour || '#4A90E2', avatar: u.avatar || '', pin: '', pin_confirm: '', password: '', password_confirm: '' })
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: unknown) => setF(prev => ({ ...prev, [k]: v }))
 
   const save = async () => {
-    onError(null); setSaving(true)
+    onError(null)
+    if (f.pin && f.pin !== f.pin_confirm) { onError('PINs do not match.'); return }
+    if (f.password && f.password !== f.password_confirm) { onError('Passwords do not match.'); return }
+    setSaving(true)
     try {
       await api.updateUser(u.id, {
         display_name: f.display_name, role: f.role, colour: f.colour, avatar: f.avatar,
@@ -228,8 +236,10 @@ function EditUser({ u, onSaved, onError }: { u: AdminUser; onSaved: () => void; 
       <select className={input} value={f.role} onChange={e => set('role', e.target.value)}>
         {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
       </select>
-      <input className={input} placeholder="Reset PIN (blank = keep)" value={f.pin} onChange={e => set('pin', e.target.value)} />
-      <input className={input} type="password" placeholder="Reset password (blank = keep)" value={f.password} onChange={e => set('password', e.target.value)} />
+      <input className={input} type="password" inputMode="numeric" autoComplete="new-password" placeholder="Reset PIN (blank = keep)" value={f.pin} onChange={e => set('pin', e.target.value)} />
+      <input className={input} type="password" inputMode="numeric" autoComplete="new-password" placeholder="Confirm new PIN" value={f.pin_confirm} onChange={e => set('pin_confirm', e.target.value)} />
+      <input className={input} type="password" autoComplete="new-password" placeholder="Reset password (blank = keep)" value={f.password} onChange={e => set('password', e.target.value)} />
+      <input className={input} type="password" autoComplete="new-password" placeholder="Confirm new password" value={f.password_confirm} onChange={e => set('password_confirm', e.target.value)} />
       <div className="sm:col-span-2">
         <EmojiPicker value={f.avatar} colour={f.colour} onChange={e => set('avatar', e)} />
       </div>
