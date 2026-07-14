@@ -29,8 +29,9 @@ def _link_person(user: User, *, link_person_id: int | None, create_person: bool,
         if person.linked_user_id and person.linked_user_id != user.id:
             raise UserAdminError("That person is already linked to another user.")
         person.linked_user = user
+        person.colour = user.colour or person.colour
         person.updated_by = acting_user
-        person.save(update_fields=["linked_user", "updated_by", "updated_at"])
+        person.save(update_fields=["linked_user", "colour", "updated_by", "updated_at"])
     elif create_person:
         Person.objects.create(
             household=get_active_household(),
@@ -84,6 +85,14 @@ def update_user_account(acting_user: User, user: User, *, pin: str | None = None
         user.set_password(password)
     user.updated_by = acting_user
     user.save()
+    # Keep the linked person's calendar colour in step with the account colour, so a
+    # user's colour shows on their assigned calendar events/tasks (which key off person).
+    if "colour" in fields:
+        person = getattr(user, "person_profile", None)
+        if person is not None and person.colour != user.colour:
+            person.colour = user.colour
+            person.updated_by = acting_user
+            person.save(update_fields=["colour", "updated_by", "updated_at"])
     return user
 
 

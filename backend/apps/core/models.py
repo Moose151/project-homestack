@@ -25,6 +25,8 @@ class Household(models.Model):
     slug = models.SlugField(max_length=255, unique=True)
     timezone = models.CharField(max_length=64, default="UTC")
     default_locale = models.CharField(max_length=16, default="en-us")
+    # Accent colour for household-wide ("whole family") calendar events/tasks.
+    family_colour = models.CharField(max_length=20, blank=True, default="#7C6F5A")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

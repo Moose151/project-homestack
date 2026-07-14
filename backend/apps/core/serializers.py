@@ -7,11 +7,11 @@ from apps.core.models import Household
 class HouseholdSerializer(serializers.ModelSerializer):
     class Meta:
         model = Household
-        fields = ["id", "name", "slug", "timezone", "default_locale", "created_at", "updated_at"]
+        fields = ["id", "name", "slug", "timezone", "default_locale", "family_colour", "created_at", "updated_at"]
         read_only_fields = fields
 
 
 class HouseholdWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Household
-        fields = ["name", "timezone", "default_locale"]
+        fields = ["name", "timezone", "default_locale", "family_colour"]

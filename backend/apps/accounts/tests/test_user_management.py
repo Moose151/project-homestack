@@ -107,3 +107,37 @@ class UserManagementCRUDTests(TestCase):
     def test_cannot_deactivate_self(self):
         resp = self.client.delete(reverse("user-detail", args=[self.admin.id]))
         self.assertEqual(resp.status_code, 400)
+
+
+class UserColourPropagationTests(TestCase):
+    """A user's colour should flow to their linked Person so it shows on calendar items."""
+
+    def setUp(self):
+        self.admin = _make_user("admin", role=User.Role.ADMIN)
+        _login(self.client, "admin")
+
+    def test_create_with_person_copies_colour(self):
+        resp = self.client.post(
+            reverse("user-list"),
+            {"username": "kid", "display_name": "Kid", "pin": "4321",
+             "colour": "#123456", "create_person": True},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201)
+        person = Person.objects.get(linked_user__username="kid")
+        self.assertEqual(person.colour, "#123456")
+
+    def test_update_colour_propagates_to_linked_person(self):
+        self.client.post(
+            reverse("user-list"),
+            {"username": "kid", "display_name": "Kid", "pin": "4321", "create_person": True},
+            content_type="application/json",
+        )
+        target = User.objects.get(username="kid")
+        resp = self.client.patch(
+            reverse("user-detail", args=[target.id]),
+            {"colour": "#abcdef"}, content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        person = Person.objects.get(linked_user=target)
+        self.assertEqual(person.colour, "#abcdef")

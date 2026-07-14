@@ -8,7 +8,7 @@ from apps.core.models import Household, get_active_household
 
 def update_household(acting_user, **data: Any) -> Household:
     household = get_active_household()
-    allowed = {"name", "timezone", "default_locale"}
+    allowed = {"name", "timezone", "default_locale", "family_colour"}
     for field, value in data.items():
         if field in allowed:
             setattr(household, field, value)
