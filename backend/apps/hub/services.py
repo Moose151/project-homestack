@@ -65,6 +65,9 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False) -> list[dict]:
         elif key.startswith("meridian_"):
             content = _meridian_widget_content(key, user)
 
+        elif key.startswith("education_"):
+            content = _education_widget_content(key, user)
+
         widgets.append({
             "key": key,
             "name": hw.widget.name,
@@ -112,6 +115,25 @@ def _meridian_widget_content(key: str, user) -> list:
         return MeridianRewardRequestSerializer(
             m.list_reward_requests(status="pending")[:20], many=True
         ).data
+
+    return []
+
+
+def _education_widget_content(key: str, user) -> list:
+    """Assemble content for an Education hub widget (Node Spec 8), permission-filtered."""
+    from apps.education import selectors as e
+    from apps.education.serializers import (
+        EducationAssessmentSerializer,
+        EducationClassSessionSerializer,
+    )
+
+    if key == "education_deadlines":
+        assessments = e.list_assessments(user, upcoming_only=True, open_only=True, limit=10)
+        return EducationAssessmentSerializer(assessments, many=True).data
+
+    if key == "education_classes":
+        sessions = e.list_class_sessions(user)[:10]
+        return EducationClassSessionSerializer(sessions, many=True).data
 
     return []
 

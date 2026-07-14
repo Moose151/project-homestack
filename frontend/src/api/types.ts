@@ -387,7 +387,7 @@ export interface HubWidget {
   name: string
   size: string
   supports_kiosk: boolean
-  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[]
+  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[]
 }
 
 export interface HubResponse {
@@ -405,4 +405,81 @@ export interface HubWidgetConfig {
   size: 'small' | 'medium' | 'large'
   user_hidden: boolean
   user_order: number | null
+}
+
+// ---------------------------------------------------------------------------
+// Education (Milestone 3 — uni-first slice)
+// ---------------------------------------------------------------------------
+
+export interface EducationInstitution {
+  id: number
+  name: string
+  institution_type: 'school' | 'university' | 'tafe' | 'other'
+  location: string
+  notes: string
+  visibility: string
+  created_at: string
+  updated_at: string
+}
+
+export interface EducationCourse {
+  id: number
+  name: string
+  code: string
+  institution_id: number | null
+  institution_name: string
+  student_id: number | null
+  student_name: string
+  teacher: string
+  start_date: string | null
+  end_date: string | null
+  colour: string
+  description: string
+  is_archived: boolean
+  visibility: string
+  created_at: string
+  updated_at: string
+}
+
+export type AssessmentType = 'homework' | 'assignment' | 'exam' | 'quiz' | 'reading' | 'project' | 'other'
+export type AssessmentStatus = 'todo' | 'in_progress' | 'submitted' | 'done'
+export type AssessmentPriority = 'low' | 'medium' | 'high'
+
+export interface EducationAssessment {
+  id: number
+  title: string
+  assessment_type: AssessmentType
+  course_id: number | null
+  course_name: string
+  course_code: string
+  assigned_to_person_id: number | null
+  due_at: string | null
+  status: AssessmentStatus
+  priority: AssessmentPriority
+  weight: string
+  description: string
+  is_complete: boolean
+  calendar_event_id: number | null
+  visibility: string
+  sensitivity: string
+  created_at: string
+  updated_at: string
+}
+
+export interface EducationClassSession {
+  id: number
+  title: string
+  display_title: string
+  course_id: number | null
+  course_name: string
+  course_code: string
+  student_id: number | null
+  location: string
+  start_at: string
+  end_at: string | null
+  recurrence_rule: string
+  calendar_event_id: number | null
+  visibility: string
+  created_at: string
+  updated_at: string
 }

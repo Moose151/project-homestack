@@ -96,7 +96,20 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: Meridian parity/cockpit revisit in progress before Milestone 3.**
+**Phase: Owner re-prioritisation (2026-07-14) — Education node (uni-first) + core-surface
+web/mobile polish are now the priority; kiosk work is deferred.**
+
+> **Owner direction, 2026-07-14 (new term started).** Two changes to priorities:
+> 1. **Build the school/education side now** so it's usable this university term — track
+>    assignments, lectures/timetable, exams, etc. (Education node, uni-student use first; the
+>    household also has school-age children.)
+> 2. **Web/mobile daily use is the priority; kiosk is secondary.** The Calendar, tasks and lists
+>    surfaces feel "clunky" on **web/mobile** and need a UX pass there first. Kiosk polish that was
+>    being treated as a priority is explicitly de-prioritised — revisit it later.
+>
+> Meridian remains a work in progress but is **paused** — it is no longer the active workstream.
+> "Mobile" here means the **responsive web app** (there is no native client yet; native mobile/
+> desktop stays deferred per D3 — PWA is the likely first bridge). See §8 open questions.
 
 > **Deploy gotcha (read this):** the home server runs **Docker** (not Podman). After every
 > `git pull` + rebuild, run **`docker exec homestack-backend python manage.py migrate`** — the
@@ -135,9 +148,26 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
     avatars, kiosk restyle + light/dark toggle). D.6 used the legacy reference at
     `/home/moose/Documents/project-meridian`; the handover's older
     `~/Documents/new/project-meridian` path did not exist.
-- [ ] Milestone 3: Home Wiki, Pets, Education. **Paused until the Meridian adult cockpit/parity
-  revisit reaches a usable stopping point.** New rule from M2.5 A.3: each node must ship its
+- [~] Milestone 3: Home Wiki, Pets, Education. **Re-ordered by owner (2026-07-14): Education is
+  pulled to the front and built now (uni-first) for the new term.** Home Wiki and Pets follow.
+  Meridian revisit is paused (see §5 phase note). New rule from M2.5 A.3: each node must ship its
   Hub widget(s) as part of "done"** — already added to each M3 node spec.
+  - **Education uni-first slice — SHIPPED end-to-end (2026-07-14).** Backend `apps/education`:
+    models `EducationInstitution`, `EducationCourse`, `EducationAssessment` (due→Calendar via the
+    scheduling helper, D7), `EducationClassSession` (weekly timetable, `recurrence_rule`/RRULE, D8);
+    full layered app (serializers/selectors/services/views/urls/events/admin); `education.*`
+    permissions (perms migration `0014`); two seeded Hub widgets `education_deadlines` +
+    `education_classes` (hub migration `0006`, `source_node="education"`, kiosk off for now) wired
+    through `hub/services._education_widget_content`; 21 tests (permissions-first, calendar sync,
+    visibility, hub). Frontend: `EducationPage` (Assignments / Courses / Timetable tabs, mobile-
+    first responsive) + `/education` route + nav entry + Hub widget renderers + API client/types.
+    **Still to do for the fuller node:** institution management UI (API exists, no dedicated
+    screen), assessment edit form (only status/quick-actions inline so far), person/student
+    assignment UI, FTS search box, and the deferred school-child/kiosk features.
+- [~] Milestone 2.5 follow-up: **web/mobile UX pass on Calendar + Atlas (tasks/lists)** (owner
+  2026-07-14). M2.5 closed the functionality gap; this reopens a **quality/feel pass on web and
+  small screens** — the surfaces are "clunky" for daily phone/laptop use. Kiosk equivalents are
+  **deferred**.
 - [ ] Milestone 4: security maturation.
 - [ ] Milestone 5: native Solace.
 - [ ] Milestone 6: Inventory, Assets, Hearth, Travel, Projects, Health.
@@ -184,6 +214,16 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 
 - Mobile/desktop client tech (React Native vs. Tauri vs. PWA) — deferred until after core
   product proves itself (D3). PWA is the likely first bridge.
+- **Owner re-prioritisation 2026-07-14 — RESOLVED (owner answers):**
+  1. **"Mobile" = responsive-web polish only** for now (no PWA/install/offline yet; PWA stays the
+     later bridge).
+  2. **"Tasks" = the Atlas to-do lists** — improve the existing Atlas lists/items as the general
+     task surface (not a new task app, not Meridian).
+  3. **Education V1 = uni-first focused slice:** courses/subjects + assignments/exams (due dates →
+     Calendar) + weekly lecture **timetable**. School-age-child features (homework cards, reading
+     logs, kiosk) come **after** the uni slice is usable.
+  4. **Sequencing = Education first.** Build the Education uni slice now (term already started);
+     Calendar + Atlas web/mobile polish follows or runs alongside. Kiosk deferred throughout.
 - **Revisit Atlas + Hub after Meridian (owner request, 2026-06-25).** *Resolved → folded into the
   new **Milestone 2.5** (Core surfaces: Hub, Atlas, Calendar) in `04_Development_Roadmap.md` and §5
   above.* Both surfaces "are not functioning as I would like yet"; the milestone now scopes a
@@ -249,6 +289,8 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-07-10 | Assistant | M2 revisit | **Reward-category linking shipped.** Added `MeridianReward.category` FK + migration `0012`, exposed `category_id` in reward serializer/service/API, added regression test, and wired reward category filter/display/select into the adult Shop/Rewards management UI. **78 Meridian tests green; frontend `tsc && vite build` clean.** | Next: allowance config UI. Remember to run `docker exec homestack-backend python manage.py migrate` after deploying this migration. |
 
 | 2026-07-10 | Assistant | M2 revisit | **Allowance config UI/API shipped.** Added `/api/v1/meridian/allowances/` (`GET` per-person config, `PATCH` batch upsert, manager/admin edit permission), `selectors.allowance_config`, `services.set_allowance_config`, and tests for admin upsert + non-manager denial. Settings tab now has a weekly allowances table with amount, weekday, active toggle, and save action. **80 Meridian tests green; frontend `tsc && vite build` clean.** | Next: live run-through/deploy verification, then choose deeper parity vs returning to M3. |
+| 2026-07-14 | Assistant | Planning | **Owner re-prioritisation captured (no code).** Recorded new direction in §5, §8 and the roadmap: **pause Meridian**, **build the Education node uni-first** for the new term, and run a **web/mobile UX pass on Calendar + Atlas (tasks/lists)** while **deferring kiosk** work. Added four open questions (§8) on "mobile" scope, what "tasks" means, the Education V1 slice, and sequencing. Roadmap M3 note + "NOT on roadmap" mobile note updated. | Get owner answers to §8 Q1–Q4, then begin (likely: quick Calendar/Atlas web-mobile polish → Education uni slice). |
+| 2026-07-14 | Assistant | M3 | **Education uni-first slice shipped (owner answers: Education first; "tasks"=Atlas lists; mobile=responsive web; V1=uni slice).** New `apps/education` node end-to-end: institutions, courses, assessments (due dates sync to Calendar via helper, D7), class sessions (weekly timetable via `recurrence_rule`, D8). Layered app + `education.*` perms (perms `0014`) + two Hub widgets (hub `0006`, wired in `hub/services`). Frontend `EducationPage` (Assignments/Courses/Timetable, mobile-first) + route + nav + Hub renderers + client/types. **21 education tests; full suite 396 green; `tsc` + `vite build` clean; no migration drift.** Note: fixed a DRF gotcha — bare `<fk>_id` fields listed in a ModelSerializer's `fields` are read-only; declared them as explicit `IntegerField`s so writes land (atlas write serializers carry the same latent quirk, left untouched). | Deploy (`docker exec homestack-backend python manage.py migrate` — perms `0014`, hub `0006`, education `0001`). Then either extend Education (institution/edit/search UI, student assignment, school-child+kiosk slice) or start the **Calendar + Atlas web/mobile UX polish** (the other half of the 2026-07-14 direction). |
 
 ### Session notes (free-form, optional)
 

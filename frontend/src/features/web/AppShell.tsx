@@ -10,6 +10,7 @@ const NAV = [
   { to: '/atlas',    label: 'Atlas',    icon: '☰' },
   { to: '/meridian', label: 'Meridian', icon: '★' },
   { to: '/calendar', label: 'Calendar', icon: '◫' },
+  { to: '/education', label: 'Education', icon: '✎' },
 ]
 
 export function AppShell() {

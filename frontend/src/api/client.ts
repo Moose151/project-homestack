@@ -7,7 +7,29 @@ import type {
   MeridianWishlistItem, MeridianWishlistRequest, MeridianSettings,
   MeridianReports, MeridianAllowanceRow, Badge, PersonBadge, NotificationList, Person, AdminUser,
   AtlasSearchResults,
+  EducationInstitution, EducationCourse, EducationAssessment, EducationClassSession,
 } from './types'
+
+type CourseWrite = Partial<{
+  name: string; code: string; institution_id: number | null; student_id: number | null
+  teacher: string; start_date: string | null; end_date: string | null; colour: string
+  description: string; is_archived: boolean; visibility: string
+}>
+
+type AssessmentWrite = Partial<{
+  title: string; assessment_type: string; course_id: number | null
+  assigned_to_person_id: number | null; due_at: string | null; status: string
+  priority: string; weight: string; description: string; visibility: string
+}>
+
+type ClassSessionWrite = Partial<{
+  title: string; course_id: number | null; student_id: number | null; location: string
+  start_at: string; end_at: string | null; recurrence_rule: string; visibility: string
+}>
+
+type InstitutionWrite = Partial<{
+  name: string; institution_type: string; location: string; notes: string; visibility: string
+}>
 
 type ItemWrite = Partial<{
   title: string; notes: string; quantity: string; position: number
@@ -309,6 +331,47 @@ export const api = {
   getBadges: (): Promise<Badge[]> => _fetch('/achievements/badges/'),
   getMyBadges: (personId?: number): Promise<PersonBadge[]> =>
     _fetch(`/achievements/my-badges/${personId ? `?person_id=${personId}` : ''}`),
+
+  // --- Education ---
+  getInstitutions: (): Promise<EducationInstitution[]> => _fetch('/education/institutions/'),
+  createInstitution: (data: InstitutionWrite): Promise<EducationInstitution> =>
+    _fetch('/education/institutions/', { method: 'POST', body: JSON.stringify(data) }),
+  updateInstitution: (id: number, data: InstitutionWrite): Promise<EducationInstitution> =>
+    _fetch(`/education/institutions/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteInstitution: (id: number): Promise<void> =>
+    _fetch(`/education/institutions/${id}/`, { method: 'DELETE' }),
+
+  getCourses: (includeArchived = false): Promise<EducationCourse[]> =>
+    _fetch(`/education/courses/${includeArchived ? '?archived=1' : ''}`),
+  createCourse: (data: CourseWrite): Promise<EducationCourse> =>
+    _fetch('/education/courses/', { method: 'POST', body: JSON.stringify(data) }),
+  updateCourse: (id: number, data: CourseWrite): Promise<EducationCourse> =>
+    _fetch(`/education/courses/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteCourse: (id: number): Promise<void> =>
+    _fetch(`/education/courses/${id}/`, { method: 'DELETE' }),
+
+  getAssessments: (params?: { open?: boolean; course?: number }): Promise<EducationAssessment[]> => {
+    const q = new URLSearchParams()
+    if (params?.open) q.set('open', '1')
+    if (params?.course) q.set('course', String(params.course))
+    const qs = q.toString()
+    return _fetch(`/education/assessments/${qs ? `?${qs}` : ''}`)
+  },
+  createAssessment: (data: AssessmentWrite): Promise<EducationAssessment> =>
+    _fetch('/education/assessments/', { method: 'POST', body: JSON.stringify(data) }),
+  updateAssessment: (id: number, data: AssessmentWrite): Promise<EducationAssessment> =>
+    _fetch(`/education/assessments/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteAssessment: (id: number): Promise<void> =>
+    _fetch(`/education/assessments/${id}/`, { method: 'DELETE' }),
+
+  getClassSessions: (params?: { course?: number }): Promise<EducationClassSession[]> =>
+    _fetch(`/education/classes/${params?.course ? `?course=${params.course}` : ''}`),
+  createClassSession: (data: ClassSessionWrite): Promise<EducationClassSession> =>
+    _fetch('/education/classes/', { method: 'POST', body: JSON.stringify(data) }),
+  updateClassSession: (id: number, data: ClassSessionWrite): Promise<EducationClassSession> =>
+    _fetch(`/education/classes/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteClassSession: (id: number): Promise<void> =>
+    _fetch(`/education/classes/${id}/`, { method: 'DELETE' }),
 
   // --- Notifications ---
   getNotifications: (unreadOnly?: boolean): Promise<NotificationList> =>

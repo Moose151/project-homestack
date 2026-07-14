@@ -134,6 +134,24 @@ Permissions enforced throughout; all three follow the shared design system; used
 
 ## Milestone 3 — Home Wiki, Pets, Education
 
+> **Owner re-prioritisation (2026-07-14, new university term).** Two changes:
+> 1. **Education is pulled to the front of M3 and built now**, uni-first — the owner needs to
+>    track **assignments, lectures/timetable and exams** this term. School-age-child features
+>    (homework cards, reading logs, kiosk) follow once the uni slice is usable.
+> 2. **Web/mobile daily use is the priority; kiosk is deferred.** Before/alongside Education,
+>    run a **UX pass on the Calendar and Atlas (tasks/lists) for web and small screens** — they
+>    are functionally complete (M2.5) but feel clunky for daily phone/laptop use. Kiosk polish
+>    that was being treated as a priority is de-prioritised until the web/mobile core feels good.
+>
+> "Mobile" = the **responsive web app** (no native client yet; native stays deferred per D3, PWA
+> is the likely first bridge). The Meridian revisit (M2 note above) is **paused**.
+>
+> **Scope resolved with owner (2026-07-14):** build **Education first**. **V1 = uni slice** —
+> courses/subjects + assignments/exams (due dates → Calendar) + weekly lecture timetable; school-
+> child/kiosk features follow. **"Tasks" = Atlas to-do lists** (improve those, no new task app).
+> **"Mobile" = responsive-web polish only** (no PWA yet). Calendar/Atlas web-mobile polish runs
+> after/alongside Education.
+
 Round out everyday household value.
 
 Build, one node at a time, each fully end-to-end (models → API → permissions → search via
@@ -226,3 +244,8 @@ Consider:
 Native mobile/desktop apps, full offline mode, OCR/AI, plugin system, public internet
 exposure, external calendar sync, field-level encryption, and any multi-household/SaaS
 behaviour. These stay in the Parking Lot until the core product earns them.
+
+> Note (2026-07-14): the owner's "web/mobile" priority means **responsive-web** quality on phones
+> and laptops — **not** a native app. A **PWA** (installable/offline shell) is the sanctioned first
+> bridge (D3, M8) and may be pulled earlier if daily phone use warrants it; native apps remain off
+> the roadmap.

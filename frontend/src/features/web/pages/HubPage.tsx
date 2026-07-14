@@ -10,6 +10,8 @@ import type {
   PointsSummaryRow,
   MeridianRewardRequest,
   CalendarEvent,
+  EducationAssessment,
+  EducationClassSession,
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { HubConfig } from './HubConfig'
@@ -183,6 +185,44 @@ function UpcomingWidget({ items }: { items: CalendarEvent[] }) {
   )
 }
 
+function EducationDeadlinesWidget({ items }: { items: EducationAssessment[] }) {
+  if (items.length === 0) return <p className="text-sm text-muted">Nothing due</p>
+  return (
+    <ul className="flex flex-col gap-2">
+      {items.slice(0, 6).map(a => {
+        const label = a.due_at
+          ? new Date(a.due_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+          : ''
+        return (
+          <li key={a.id} className="flex items-center justify-between gap-3 text-sm">
+            <span className="text-ink truncate">
+              {a.course_code && <span className="text-muted mr-1">{a.course_code}</span>}
+              {a.title}
+            </span>
+            {label && <Link to={calendarDayHref(a.due_at)} className="text-xs text-primary hover:underline flex-shrink-0">{label}</Link>}
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+function EducationClassesWidget({ items }: { items: EducationClassSession[] }) {
+  if (items.length === 0) return <p className="text-sm text-muted">No classes</p>
+  return (
+    <ul className="flex flex-col gap-2">
+      {items.slice(0, 6).map(s => (
+        <li key={s.id} className="flex items-center justify-between gap-3 text-sm">
+          <span className="text-ink truncate">{s.display_title}</span>
+          <span className="text-xs text-muted flex-shrink-0">
+            {new Date(s.start_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function renderWidget(w: HubWidget) {
   switch (w.key) {
     case 'clock':
@@ -201,6 +241,10 @@ function renderWidget(w: HubWidget) {
       return <PointsWidget items={w.items as PointsSummaryRow[]} />
     case 'meridian_reward_requests':
       return <RewardRequestsWidget items={w.items as MeridianRewardRequest[]} />
+    case 'education_deadlines':
+      return <EducationDeadlinesWidget items={w.items as EducationAssessment[]} />
+    case 'education_classes':
+      return <EducationClassesWidget items={w.items as EducationClassSession[]} />
     default:
       return <p className="text-sm text-muted">Nothing to show</p>
   }
