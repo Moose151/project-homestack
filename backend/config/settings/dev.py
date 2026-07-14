@@ -32,5 +32,9 @@ CSRF_TRUSTED_ORIGINS = sorted(
         # deploy only needs its hostname added to DJANGO_ALLOWED_HOSTS — nothing else.
         *(f"http://{h}" for h in _DEV_HOSTS),
         *(f"https://{h}" for h in _DEV_HOSTS),
+        # Wildcard-trust the standard home-network domains (RFC 8375 .home.arpa and mDNS
+        # .local) so a reverse-proxied LAN hostname (e.g. homestack.home.arpa) is accepted
+        # in dev without any per-host config. Dev-only; prod lists explicit origins.
+        *(f"{scheme}://*.{suffix}" for scheme in ("http", "https") for suffix in ("home.arpa", "local")),
     }
 )
