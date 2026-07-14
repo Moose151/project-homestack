@@ -20,8 +20,17 @@ def list_widget_config(user) -> list[dict]:
     }
     user_state = {uw.widget_id: uw for uw in UserHubWidget.objects.filter(user=user)}
 
+    # Widgets from disabled stacks aren't offered in the Customise list either.
+    from apps.nodes.models import HouseholdNode
+    enabled_node_ids = set(
+        HouseholdNode.objects.filter(household=user.household, is_enabled=True)
+        .values_list("node_id", flat=True)
+    )
+
     rows = []
     for widget in HubWidget.objects.select_related("source_node").all():
+        if widget.source_node_id and widget.source_node_id not in enabled_node_ids:
+            continue
         hh = household_state.get(widget.id)
         uu = user_state.get(widget.id)
         rows.append({

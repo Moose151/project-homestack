@@ -83,6 +83,14 @@ class HubContentTests(TestCase):
         widget_keys = [w["key"] for w in resp.json()["widgets"]]
         self.assertIn("atlas_reminders", widget_keys)
 
+    def test_disabled_stack_hides_its_widgets(self):
+        from apps.nodes.services import disable_node
+        keys = [w["key"] for w in self.client.get(reverse("hub")).json()["widgets"]]
+        self.assertTrue(any(k.startswith("meridian_") for k in keys), "meridian widgets expected while enabled")
+        disable_node(self.admin, "meridian")
+        keys = [w["key"] for w in self.client.get(reverse("hub")).json()["widgets"]]
+        self.assertFalse(any(k.startswith("meridian_") for k in keys), "meridian widgets should vanish when stack disabled")
+
     def test_todos_widget_includes_open_items(self):
         atlas_list = create_atlas_list(self.admin, title="Chores", list_type="todo")
         create_list_item(self.admin, atlas_list, title="Clean bathroom")

@@ -25,6 +25,14 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False) -> list[dict]:
     if kiosk_mode:
         qs = qs.filter(widget__supports_kiosk=True)
 
+    # A widget belonging to a disabled stack (node) must not appear — disabling a stack
+    # hides its Hub widgets too. Core widgets (source_node is null) are always allowed.
+    from apps.nodes.models import HouseholdNode
+    enabled_node_ids = set(
+        HouseholdNode.objects.filter(household=user.household, is_enabled=True)
+        .values_list("node_id", flat=True)
+    )
+
     # Per-user overrides: hide widgets, and reorder (user order wins over household order).
     from apps.hub.models import UserHubWidget
     hidden_keys: set[str] = set()
@@ -43,6 +51,9 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False) -> list[dict]:
     for hw in ordered:
         key = hw.widget.key
         if key in hidden_keys:
+            continue
+        # Skip widgets whose stack is disabled for this household.
+        if hw.widget.source_node_id and hw.widget.source_node_id not in enabled_node_ids:
             continue
 
         content: list = []
