@@ -27,5 +27,10 @@ CSRF_TRUSTED_ORIGINS = sorted(
     {
         *_ENV_CSRF_TRUSTED_ORIGINS,
         *(f"http://{h}:{p}" for h in _DEV_HOSTS for p in _DEV_PORTS),
+        # Behind a reverse proxy the browser Origin carries no port (e.g.
+        # http://homestack.home.arpa). Trust both schemes for every allowed host so a LAN
+        # deploy only needs its hostname added to DJANGO_ALLOWED_HOSTS — nothing else.
+        *(f"http://{h}" for h in _DEV_HOSTS),
+        *(f"https://{h}" for h in _DEV_HOSTS),
     }
 )
