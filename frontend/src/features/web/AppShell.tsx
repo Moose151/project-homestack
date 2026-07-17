@@ -8,6 +8,7 @@ import { CalendarPeek } from '../../components/CalendarPeek'
 import { useDarkMode } from '../../hooks/useDarkMode'
 import { useStacks } from '../stacks/StacksContext'
 import { STACKS, softColour } from '../../config/stacks'
+import { APP_VERSION } from '../../config/version'
 import { api } from '../../api/client'
 import type { AuthUser } from '../../api/types'
 
@@ -187,6 +188,7 @@ export function AppShell() {
               )}
             </>
           )}
+          <p className="text-center text-[10px] text-muted/50 select-none pt-1">v{APP_VERSION}</p>
         </div>
       </aside>
 
