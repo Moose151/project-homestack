@@ -21,7 +21,9 @@ from apps.accounts.serializers import (
     PinLoginSerializer,
     ReauthSerializer,
     UserSerializer,
+    UserWriteSerializer,
 )
+from apps.accounts.user_services import update_user_account
 
 
 class PinLoginView(APIView):
@@ -70,6 +72,18 @@ class MeView(APIView):
         if not request.user.is_authenticated:
             return Response({"detail": "Not authenticated."}, status=status.HTTP_401_UNAUTHORIZED)
         return Response(UserSerializer(request.user).data)
+
+    def patch(self, request: Request) -> Response:
+        """Let the logged-in user update their own display_name, colour, avatar, pin, password."""
+        if not request.user.is_authenticated:
+            return Response({"detail": "Not authenticated."}, status=status.HTTP_401_UNAUTHORIZED)
+        # Allow only self-editable fields (no role/is_child/is_active changes via self-edit)
+        _SELF_FIELDS = {"display_name", "colour", "avatar", "pin", "password"}
+        filtered = {k: v for k, v in request.data.items() if k in _SELF_FIELDS}
+        serializer = UserWriteSerializer(data=filtered, partial=True)
+        serializer.is_valid(raise_exception=True)
+        user = update_user_account(request.user, request.user, **serializer.validated_data)
+        return Response(UserSerializer(user).data)
 
 
 class KioskUsersView(APIView):

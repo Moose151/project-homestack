@@ -12,6 +12,8 @@ directly (D7). Weekly classes recur via `recurrence_rule` (RRULE, D8).
 """
 from __future__ import annotations
 
+import os
+
 from django.db import models
 
 from apps.core.models import AllObjectsManager, HouseholdBaseModel, HouseholdManager
@@ -85,6 +87,8 @@ class EducationCourse(HouseholdBaseModel):
     teacher = models.CharField(max_length=255, blank=True, default="")  # teacher/lecturer
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
+    credit_value = models.PositiveSmallIntegerField(default=0)  # UOC / credits this course is worth
+    is_completed = models.BooleanField(default=False)  # explicitly marked done; credits counted
     colour = models.CharField(max_length=20, blank=True, default="")
     description = models.TextField(blank=True, default="")
     is_archived = models.BooleanField(default=False)
@@ -197,6 +201,56 @@ class EducationAssessment(CalendarSyncMixin, HouseholdBaseModel):
         return "education"
 
 
+class EducationAssessmentNote(HouseholdBaseModel):
+    """A short note attached to an assessment — e.g. supervisor feedback, clarifications."""
+
+    assessment = models.ForeignKey(
+        EducationAssessment,
+        on_delete=models.CASCADE,
+        related_name="notes",
+    )
+    body = models.TextField()
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "education assessment note"
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return f"Note on {self.assessment_id} ({self.id})"
+
+
+def _assessment_file_path(instance: "EducationAssessmentFile", filename: str) -> str:
+    _, ext = os.path.splitext(filename)
+    return f"education/assessments/{instance.assessment_id}/{instance.id}{ext}"
+
+
+class EducationAssessmentFile(HouseholdBaseModel):
+    """A file attached to an assessment — e.g. the assignment brief/criteria PDF."""
+
+    assessment = models.ForeignKey(
+        EducationAssessment,
+        on_delete=models.CASCADE,
+        related_name="files",
+    )
+    label = models.CharField(max_length=255, blank=True, default="")
+    file = models.FileField(upload_to=_assessment_file_path)
+    original_filename = models.CharField(max_length=255, blank=True, default="")
+    file_size = models.PositiveIntegerField(default=0)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "education assessment file"
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return self.label or self.original_filename or f"File {self.id}"
+
+
 class EducationClassSession(CalendarSyncMixin, HouseholdBaseModel):
     """A timetabled class/lecture, usually recurring weekly via `recurrence_rule` (D8)."""
 
@@ -260,3 +314,48 @@ class EducationClassSession(CalendarSyncMixin, HouseholdBaseModel):
 
     def get_calendar_node_key(self) -> str:
         return "education"
+
+
+class EducationAcademicProfile(HouseholdBaseModel):
+    """Per-person academic profile: institution enrolment, credit tracking, graduation goal.
+
+    One profile per person (enforced at the service layer). Current credits are derived from
+    completed `EducationCourse` rows for the person, so they update when courses are marked done.
+    """
+
+    person = models.OneToOneField(
+        "people.Person",
+        on_delete=models.CASCADE,
+        related_name="education_profile",
+    )
+    institution = models.ForeignKey(
+        EducationInstitution,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="enrolled_profiles",
+    )
+    programme_name = models.CharField(max_length=255, blank=True, default="")  # e.g. "B Eng (CompSci)"
+    credits_required = models.PositiveSmallIntegerField(default=0)  # total UOC to graduate
+    credits_per_course_default = models.PositiveSmallIntegerField(default=6)  # UOC default when adding a new course
+    graduation_year = models.PositiveSmallIntegerField(null=True, blank=True)
+    notes = models.TextField(blank=True, default="")
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "education academic profile"
+        ordering = ["person__display_name"]
+
+    def __str__(self) -> str:
+        return f"Academic profile — {self.person}"
+
+    def get_current_credits(self) -> int:
+        """Sum of credit_value for completed courses assigned to this person."""
+        from django.db.models import Sum
+        result = (
+            EducationCourse.objects.filter(student=self.person, is_completed=True)
+            .aggregate(total=Sum("credit_value"))["total"]
+        )
+        return result or 0

@@ -85,14 +85,20 @@ def update_user_account(acting_user: User, user: User, *, pin: str | None = None
         user.set_password(password)
     user.updated_by = acting_user
     user.save()
-    # Keep the linked person's calendar colour in step with the account colour, so a
-    # user's colour shows on their assigned calendar events/tasks (which key off person).
-    if "colour" in fields:
-        person = getattr(user, "person_profile", None)
-        if person is not None and person.colour != user.colour:
+    # Keep the linked person in step: colour drives calendar event colouring; display_name
+    # ensures the person record reflects the account's chosen name (D12).
+    person = getattr(user, "person_profile", None)
+    if person is not None:
+        person_fields_changed = []
+        if "colour" in fields and person.colour != user.colour:
             person.colour = user.colour
+            person_fields_changed.append("colour")
+        if "display_name" in fields and person.display_name != user.display_name:
+            person.display_name = user.display_name
+            person_fields_changed.append("display_name")
+        if person_fields_changed:
             person.updated_by = acting_user
-            person.save(update_fields=["colour", "updated_by", "updated_at"])
+            person.save(update_fields=[*person_fields_changed, "updated_by", "updated_at"])
     return user
 
 

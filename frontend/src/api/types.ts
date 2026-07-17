@@ -434,6 +434,8 @@ export interface EducationCourse {
   teacher: string
   start_date: string | null
   end_date: string | null
+  credit_value: number
+  is_completed: boolean
   colour: string
   description: string
   is_archived: boolean
@@ -482,6 +484,49 @@ export interface EducationClassSession {
   recurrence_rule: string
   calendar_event_id: number | null
   visibility: string
+  created_at: string
+  updated_at: string
+}
+
+export interface AcademicProfile {
+  id: number
+  person_id: number
+  institution_id: number | null
+  institution_name: string
+  programme_name: string
+  credits_required: number
+  credits_per_course_default: number
+  graduation_year: number | null
+  notes: string
+  current_credits: number
+  created_at: string
+  updated_at: string
+}
+
+export interface AcademicProfileResponse {
+  profile: AcademicProfile
+  courses: {
+    current: EducationCourse[]
+    upcoming: EducationCourse[]
+    past: EducationCourse[]
+  }
+}
+
+export interface AssessmentNote {
+  id: number
+  assessment_id: number
+  body: string
+  created_at: string
+  updated_at: string
+}
+
+export interface AssessmentFile {
+  id: number
+  assessment_id: number
+  label: string
+  file_url: string
+  original_filename: string
+  file_size: number
   created_at: string
   updated_at: string
 }

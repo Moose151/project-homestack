@@ -8,7 +8,10 @@ from __future__ import annotations
 from apps.accounts.models import User
 from apps.core.models import get_active_household
 from apps.education.models import (
+    EducationAcademicProfile,
     EducationAssessment,
+    EducationAssessmentFile,
+    EducationAssessmentNote,
     EducationClassSession,
     EducationCourse,
     EducationInstitution,
@@ -51,7 +54,7 @@ def delete_institution(acting_user: User, obj: EducationInstitution) -> None:
 
 _COURSE_FIELDS = {
     "name", "code", "institution_id", "student_id", "teacher", "start_date",
-    "end_date", "colour", "description", "is_archived", "visibility",
+    "end_date", "credit_value", "is_completed", "colour", "description", "is_archived", "visibility",
 }
 
 
@@ -115,6 +118,69 @@ def delete_assessment(acting_user: User, obj: EducationAssessment) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Assessment notes
+# ---------------------------------------------------------------------------
+
+
+def create_assessment_note(acting_user: User, assessment: EducationAssessment, body: str) -> EducationAssessmentNote:
+    note = EducationAssessmentNote(
+        household=get_active_household(),
+        created_by=acting_user,
+        updated_by=acting_user,
+        assessment=assessment,
+        body=body,
+    )
+    note.save()
+    return note
+
+
+def update_assessment_note(acting_user: User, note: EducationAssessmentNote, body: str) -> EducationAssessmentNote:
+    note.body = body
+    note.updated_by = acting_user
+    note.save()
+    return note
+
+
+def delete_assessment_note(acting_user: User, note: EducationAssessmentNote) -> None:
+    note.updated_by = acting_user
+    note.save(update_fields=["updated_by", "updated_at"])
+    note.soft_delete()
+
+
+# ---------------------------------------------------------------------------
+# Assessment files
+# ---------------------------------------------------------------------------
+
+
+def create_assessment_file(
+    acting_user: User,
+    assessment: EducationAssessment,
+    file,
+    label: str = "",
+) -> EducationAssessmentFile:
+    original_filename = getattr(file, "name", "") or ""
+    obj = EducationAssessmentFile(
+        household=get_active_household(),
+        created_by=acting_user,
+        updated_by=acting_user,
+        assessment=assessment,
+        label=label or original_filename,
+        original_filename=original_filename,
+        file_size=file.size if hasattr(file, "size") else 0,
+    )
+    obj.save()
+    obj.file = file
+    obj.save(update_fields=["file"])
+    return obj
+
+
+def delete_assessment_file(acting_user: User, obj: EducationAssessmentFile) -> None:
+    obj.updated_by = acting_user
+    obj.save(update_fields=["updated_by", "updated_at"])
+    obj.soft_delete()
+
+
+# ---------------------------------------------------------------------------
 # Class sessions (timetable)
 # ---------------------------------------------------------------------------
 
@@ -148,3 +214,39 @@ def delete_class_session(acting_user: User, obj: EducationClassSession) -> None:
     obj.updated_by = acting_user
     obj.save(update_fields=["updated_by", "updated_at"])
     obj.soft_delete()
+
+
+# ---------------------------------------------------------------------------
+# Academic profiles
+# ---------------------------------------------------------------------------
+
+_PROFILE_FIELDS = {
+    "institution_id", "programme_name", "credits_required",
+    "credits_per_course_default", "graduation_year", "notes",
+}
+
+
+def get_or_create_academic_profile(
+    acting_user: User, person_id: int
+) -> EducationAcademicProfile:
+    """Return the existing profile for a person, or create a blank one."""
+    obj, _ = EducationAcademicProfile.objects.get_or_create(
+        person_id=person_id,
+        defaults={
+            "household": get_active_household(),
+            "created_by": acting_user,
+            "updated_by": acting_user,
+        },
+    )
+    return obj
+
+
+def update_academic_profile(
+    acting_user: User, profile: EducationAcademicProfile, **data
+) -> EducationAcademicProfile:
+    for key, val in data.items():
+        if key in _PROFILE_FIELDS:
+            setattr(profile, key, val)
+    profile.updated_by = acting_user
+    profile.save()
+    return profile

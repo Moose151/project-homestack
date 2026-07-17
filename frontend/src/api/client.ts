@@ -8,13 +8,14 @@ import type {
   MeridianReports, MeridianAllowanceRow, Badge, PersonBadge, NotificationList, Person, AdminUser,
   AtlasSearchResults,
   EducationInstitution, EducationCourse, EducationAssessment, EducationClassSession,
+  AssessmentNote, AssessmentFile, AcademicProfile, AcademicProfileResponse,
   NodeInfo, Household,
 } from './types'
 
 type CourseWrite = Partial<{
   name: string; code: string; institution_id: number | null; student_id: number | null
   teacher: string; start_date: string | null; end_date: string | null; colour: string
-  description: string; is_archived: boolean; visibility: string
+  description: string; is_archived: boolean; is_completed: boolean; credit_value: number; visibility: string
 }>
 
 type AssessmentWrite = Partial<{
@@ -75,6 +76,27 @@ async function _fetch<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
+// Like _fetch but lets the browser set Content-Type (needed for FormData multipart uploads).
+async function _fetchRaw<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? 'GET').toUpperCase()
+  const csrfHeader: Record<string, string> = {}
+  if (!SAFE_METHODS.has(method)) {
+    const token = getCookie('csrftoken')
+    if (token) csrfHeader['X-CSRFToken'] = token
+  }
+  const res = await fetch(`${BASE}${path}`, {
+    credentials: 'include',
+    headers: { ...csrfHeader, ...init?.headers },
+    ...init,
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`${res.status} ${res.statusText}: ${text}`)
+  }
+  if (res.status === 204) return undefined as T
+  return res.json() as Promise<T>
+}
+
 export const api = {
   // --- Auth ---
   getKioskUsers: (): Promise<KioskUser[]> => _fetch('/auth/kiosk-users/'),
@@ -84,6 +106,8 @@ export const api = {
     _fetch('/auth/password-login/', { method: 'POST', body: JSON.stringify({ username, password }) }),
   logout: (): Promise<void> => _fetch('/auth/logout/', { method: 'POST' }),
   me: (): Promise<AuthUser> => _fetch('/auth/me/'),
+  patchMe: (data: Partial<{ display_name: string; colour: string; avatar: string; pin: string; password: string }>): Promise<AuthUser> =>
+    _fetch('/auth/me/', { method: 'PATCH', body: JSON.stringify(data) }),
   reauth: (password: string): Promise<void> =>
     _fetch('/auth/reauth/', { method: 'POST', body: JSON.stringify({ password }) }),
 
@@ -364,6 +388,34 @@ export const api = {
     _fetch(`/education/assessments/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteAssessment: (id: number): Promise<void> =>
     _fetch(`/education/assessments/${id}/`, { method: 'DELETE' }),
+
+  getAssessmentNotes: (assessmentId: number): Promise<AssessmentNote[]> =>
+    _fetch(`/education/assessments/${assessmentId}/notes/`),
+  createAssessmentNote: (assessmentId: number, body: string): Promise<AssessmentNote> =>
+    _fetch(`/education/assessments/${assessmentId}/notes/`, { method: 'POST', body: JSON.stringify({ body }) }),
+  updateAssessmentNote: (assessmentId: number, noteId: number, body: string): Promise<AssessmentNote> =>
+    _fetch(`/education/assessments/${assessmentId}/notes/${noteId}/`, { method: 'PATCH', body: JSON.stringify({ body }) }),
+  deleteAssessmentNote: (assessmentId: number, noteId: number): Promise<void> =>
+    _fetch(`/education/assessments/${assessmentId}/notes/${noteId}/`, { method: 'DELETE' }),
+
+  getAssessmentFiles: (assessmentId: number): Promise<AssessmentFile[]> =>
+    _fetch(`/education/assessments/${assessmentId}/files/`),
+  uploadAssessmentFile: (assessmentId: number, file: File, label?: string): Promise<AssessmentFile> => {
+    const fd = new FormData()
+    fd.append('file', file)
+    if (label) fd.append('label', label)
+    return _fetchRaw(`/education/assessments/${assessmentId}/files/`, { method: 'POST', body: fd })
+  },
+  deleteAssessmentFile: (assessmentId: number, fileId: number): Promise<void> =>
+    _fetch(`/education/assessments/${assessmentId}/files/${fileId}/`, { method: 'DELETE' }),
+
+  getAcademicProfile: (personId: number): Promise<AcademicProfileResponse> =>
+    _fetch(`/education/profile/${personId}/`),
+  updateAcademicProfile: (personId: number, data: Partial<{
+    institution_id: number | null; programme_name: string; credits_required: number;
+    credits_per_course_default: number; graduation_year: number | null; notes: string;
+  }>): Promise<AcademicProfile> =>
+    _fetch(`/education/profile/${personId}/`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   // --- Nodes (stacks) ---
   getNodes: (): Promise<NodeInfo[]> => _fetch('/nodes/'),

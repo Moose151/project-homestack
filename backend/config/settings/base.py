@@ -159,9 +159,12 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+# --- Media (user uploads) ---
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- Backups (D17) ---
 # Docker maps backup_data volume to /app/backups; dev/test fall back to BASE_DIR/backups.
 BACKUP_DIR = BASE_DIR / "backups"
-MEDIA_ROOT = BASE_DIR / "media"

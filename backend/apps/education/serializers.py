@@ -4,7 +4,10 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from apps.education.models import (
+    EducationAcademicProfile,
     EducationAssessment,
+    EducationAssessmentFile,
+    EducationAssessmentNote,
     EducationClassSession,
     EducationCourse,
     EducationInstitution,
@@ -43,6 +46,7 @@ class EducationCourseSerializer(serializers.ModelSerializer):
         fields = [
             "id", "name", "code", "institution_id", "institution_name",
             "student_id", "student_name", "teacher", "start_date", "end_date",
+            "credit_value", "is_completed",
             "colour", "description", "is_archived", "visibility",
             "created_at", "updated_at",
         ]
@@ -99,3 +103,54 @@ class EducationClassSessionSerializer(serializers.ModelSerializer):
         if self.instance is None and not attrs.get("start_at"):
             raise serializers.ValidationError({"start_at": "A start time is required."})
         return attrs
+
+
+class AssessmentNoteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EducationAssessmentNote
+        fields = ["id", "assessment_id", "body", "created_at", "updated_at"]
+        read_only_fields = ["id", "assessment_id", "created_at", "updated_at"]
+
+    def validate_body(self, value: str) -> str:
+        return _non_blank(value)
+
+
+class AssessmentFileSerializer(serializers.ModelSerializer):
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EducationAssessmentFile
+        fields = [
+            "id", "assessment_id", "label", "file_url",
+            "original_filename", "file_size", "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "id", "assessment_id", "file_url",
+            "original_filename", "file_size", "created_at", "updated_at",
+        ]
+
+    def get_file_url(self, obj: EducationAssessmentFile) -> str:
+        request = self.context.get("request")
+        if obj.file and request:
+            return request.build_absolute_uri(obj.file.url)
+        return obj.file.url if obj.file else ""
+
+
+class AcademicProfileSerializer(serializers.ModelSerializer):
+    person_id = serializers.IntegerField(required=True)
+    institution_id = serializers.IntegerField(required=False, allow_null=True)
+    institution_name = serializers.CharField(source="institution.name", read_only=True, default="")
+    current_credits = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EducationAcademicProfile
+        fields = [
+            "id", "person_id", "institution_id", "institution_name",
+            "programme_name", "credits_required", "credits_per_course_default",
+            "graduation_year", "notes", "current_credits",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "institution_name", "current_credits", "created_at", "updated_at"]
+
+    def get_current_credits(self, obj: EducationAcademicProfile) -> int:
+        return obj.get_current_credits()

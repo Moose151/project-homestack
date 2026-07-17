@@ -7,6 +7,7 @@ interface AuthState {
   loading: boolean
   login: (user: AuthUser) => void
   logout: () => Promise<void>
+  updateUser: (user: AuthUser) => void
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -23,6 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = (u: AuthUser) => setUser(u)
+  const updateUser = (u: AuthUser) => setUser(u)
 
   const logout = async () => {
     await api.logout().catch(() => {})
@@ -30,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   )

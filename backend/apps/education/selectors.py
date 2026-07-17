@@ -6,7 +6,10 @@ from django.db.models import Q
 from django.utils import timezone
 
 from apps.education.models import (
+    EducationAcademicProfile,
     EducationAssessment,
+    EducationAssessmentFile,
+    EducationAssessmentNote,
     EducationClassSession,
     EducationCourse,
     EducationInstitution,
@@ -88,6 +91,30 @@ def get_assessment(pk: int) -> EducationAssessment | None:
 
 
 # ---------------------------------------------------------------------------
+# Assessment notes
+# ---------------------------------------------------------------------------
+
+def list_assessment_notes(assessment: EducationAssessment) -> list[EducationAssessmentNote]:
+    return list(assessment.notes.order_by("created_at"))
+
+
+def get_assessment_note(pk: int) -> EducationAssessmentNote | None:
+    return EducationAssessmentNote.objects.filter(pk=pk).first()
+
+
+# ---------------------------------------------------------------------------
+# Assessment files
+# ---------------------------------------------------------------------------
+
+def list_assessment_files(assessment: EducationAssessment) -> list[EducationAssessmentFile]:
+    return list(assessment.files.order_by("created_at"))
+
+
+def get_assessment_file(pk: int) -> EducationAssessmentFile | None:
+    return EducationAssessmentFile.objects.filter(pk=pk).first()
+
+
+# ---------------------------------------------------------------------------
 # Class sessions (timetable)
 # ---------------------------------------------------------------------------
 
@@ -104,6 +131,46 @@ def list_class_sessions(user=None, *, course_id: int | None = None, student_id: 
 
 def get_class_session(pk: int) -> EducationClassSession | None:
     return EducationClassSession.objects.filter(pk=pk).first()
+
+
+# ---------------------------------------------------------------------------
+# Academic profiles
+# ---------------------------------------------------------------------------
+
+def get_academic_profile(person_id: int) -> EducationAcademicProfile | None:
+    return EducationAcademicProfile.objects.select_related("institution", "person").filter(person_id=person_id).first()
+
+
+def list_courses_for_profile(person_id: int, user=None):
+    """All active (non-archived) courses for a person, with date-based status classification."""
+    from django.utils import timezone
+    today = timezone.now().date()
+    qs = (
+        EducationCourse.objects.select_related("institution")
+        .filter(student_id=person_id, is_archived=False)
+        .order_by("start_date", "name")
+    )
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    courses = list(qs)
+    current, upcoming, past = [], [], []
+    for c in courses:
+        if c.is_completed:
+            past.append(c)
+        elif c.start_date and c.end_date:
+            if c.start_date <= today <= c.end_date:
+                current.append(c)
+            elif c.start_date > today:
+                upcoming.append(c)
+            else:
+                past.append(c)
+        elif c.start_date and c.start_date <= today:
+            current.append(c)
+        elif c.start_date and c.start_date > today:
+            upcoming.append(c)
+        else:
+            current.append(c)  # no dates → assume active
+    return {"current": current, "upcoming": upcoming, "past": past}
 
 
 # ---------------------------------------------------------------------------

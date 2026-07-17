@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import type { CSSProperties } from 'react'
+import { useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { Avatar } from '../../components/Avatar'
 import { NotificationBell } from '../../components/NotificationBell'
@@ -7,12 +8,80 @@ import { CalendarPeek } from '../../components/CalendarPeek'
 import { useDarkMode } from '../../hooks/useDarkMode'
 import { useStacks } from '../stacks/StacksContext'
 import { STACKS, softColour } from '../../config/stacks'
+import { api } from '../../api/client'
+import type { AuthUser } from '../../api/types'
 
 interface NavItem { label: string; route: string; icon: string; colour: string }
 
+const EMOJI_OPTS = ['🐱','🐶','🦊','🐼','🐻','🦋','🦄','🐸','🐳','🌻','🌙','⭐','🎸','🎮','🏄','🍕','🎩','🔮','🌈','🦅']
+
+function ProfileEditor({ user, onSaved, onClose }: {
+  user: AuthUser
+  onSaved: (u: AuthUser) => void
+  onClose: () => void
+}) {
+  const [name, setName] = useState(user.display_name)
+  const [colour, setColour] = useState(user.colour || '#4A90E2')
+  const [avatar, setAvatar] = useState(user.avatar || '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const save = async () => {
+    if (!name.trim()) return
+    setBusy(true)
+    setError(null)
+    try {
+      const updated = await api.patchMe({ display_name: name.trim(), colour, avatar })
+      onSaved(updated)
+      onClose()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed')
+    } finally { setBusy(false) }
+  }
+
+  const inputCls = 'w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary/40'
+
+  return (
+    <div className="bg-sunken rounded-2xl p-3 space-y-3 border border-line">
+      <div className="text-xs font-semibold text-muted-strong uppercase tracking-wide">Edit profile</div>
+      {error && <p className="text-xs text-danger">{error}</p>}
+      <input
+        className={inputCls}
+        value={name}
+        onChange={e => setName(e.target.value)}
+        placeholder="Your name"
+      />
+      <div className="flex items-center gap-2">
+        <input type="color" value={colour} onChange={e => setColour(e.target.value)}
+          className="w-9 h-9 rounded-lg border border-line cursor-pointer p-0.5" title="Accent colour" />
+        <span className="text-xs text-muted-strong flex-1">Accent colour</span>
+        <Avatar name={name || '?'} colour={colour} avatar={avatar} size="md" />
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {EMOJI_OPTS.map(e => (
+          <button
+            key={e}
+            onClick={() => setAvatar(avatar === e ? '' : e)}
+            className={`w-8 h-8 rounded-lg text-lg transition-all ${avatar === e ? 'ring-2 ring-primary bg-primary/10' : 'hover:bg-surface'}`}
+          >{e}</button>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={save}
+          disabled={busy || !name.trim()}
+          className="px-3 py-1.5 rounded-xl bg-primary text-white text-xs font-semibold disabled:opacity-50"
+        >{busy ? 'Saving…' : 'Save'}</button>
+        <button onClick={onClose} className="px-3 py-1.5 rounded-xl text-xs text-muted hover:text-ink">Cancel</button>
+      </div>
+    </div>
+  )
+}
+
 export function AppShell() {
-  const { user, logout } = useAuth()
+  const { user, logout, updateUser } = useAuth()
   const [dark, setDark] = useDarkMode()
+  const [editingProfile, setEditingProfile] = useState(false)
   const { enabledKeys } = useStacks()
 
   // Core surfaces (Hub, Calendar) always show; node-backed stacks only when enabled.
@@ -90,20 +159,33 @@ export function AppShell() {
             <span className="text-lg">▣</span> Enter kiosk
           </a>
           {user && (
-            <div className="flex items-center gap-2 px-1">
-              <Avatar name={user.display_name} colour={user.colour} avatar={user.avatar} size="sm" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-ink truncate">{user.display_name}</p>
-                <p className="text-xs text-muted capitalize">{user.role}</p>
+            <>
+              <div className="flex items-center gap-2 px-1">
+                <button onClick={() => setEditingProfile(v => !v)} className="flex-shrink-0" title="Edit profile">
+                  <Avatar name={user.display_name} colour={user.colour} avatar={user.avatar} size="sm" />
+                </button>
+                <div className="flex-1 min-w-0">
+                  <button onClick={() => setEditingProfile(v => !v)} className="text-left w-full">
+                    <p className="text-sm font-semibold text-ink truncate hover:text-primary transition-colors">{user.display_name}</p>
+                    <p className="text-xs text-muted capitalize">{user.role}</p>
+                  </button>
+                </div>
+                <button
+                  onClick={logout}
+                  className="text-xs text-muted hover:text-danger transition-colors"
+                  title="Sign out"
+                >
+                  ⊗
+                </button>
               </div>
-              <button
-                onClick={logout}
-                className="text-xs text-muted hover:text-danger transition-colors"
-                title="Sign out"
-              >
-                ⊗
-              </button>
-            </div>
+              {editingProfile && (
+                <ProfileEditor
+                  user={user}
+                  onSaved={u => { updateUser(u); setEditingProfile(false) }}
+                  onClose={() => setEditingProfile(false)}
+                />
+              )}
+            </>
           )}
         </div>
       </aside>

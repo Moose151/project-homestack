@@ -9,6 +9,9 @@ from rest_framework.views import APIView
 
 from apps.education import selectors, services
 from apps.education.serializers import (
+    AcademicProfileSerializer,
+    AssessmentFileSerializer,
+    AssessmentNoteSerializer,
     EducationAssessmentSerializer,
     EducationClassSessionSerializer,
     EducationCourseSerializer,
@@ -184,6 +187,105 @@ class AssessmentDetailView(APIView):
 
 
 # ---------------------------------------------------------------------------
+# Assessment notes
+# ---------------------------------------------------------------------------
+
+class AssessmentNoteListView(APIView):
+    permission_classes = [_EduPerm]
+
+    def _get_assessment(self, pk: int):
+        obj = selectors.get_assessment(pk)
+        if obj is None:
+            raise NotFound()
+        return obj
+
+    def get(self, request: Request, assessment_id: int) -> Response:
+        assessment = self._get_assessment(assessment_id)
+        return Response(AssessmentNoteSerializer(
+            selectors.list_assessment_notes(assessment), many=True).data)
+
+    def post(self, request: Request, assessment_id: int) -> Response:
+        assessment = self._get_assessment(assessment_id)
+        serializer = AssessmentNoteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        note = services.create_assessment_note(
+            request.user, assessment, serializer.validated_data["body"]
+        )
+        return Response(AssessmentNoteSerializer(note).data, status=status.HTTP_201_CREATED)
+
+
+class AssessmentNoteDetailView(APIView):
+    permission_classes = [_EduPerm]
+    permission_action = "edit"  # note create/edit/delete all fall under education.edit
+
+    def _get(self, pk: int):
+        obj = selectors.get_assessment_note(pk)
+        if obj is None:
+            raise NotFound()
+        return obj
+
+    def patch(self, request: Request, assessment_id: int, note_id: int) -> Response:
+        note = self._get(note_id)
+        serializer = AssessmentNoteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        note = services.update_assessment_note(
+            request.user, note, serializer.validated_data.get("body", note.body)
+        )
+        return Response(AssessmentNoteSerializer(note).data)
+
+    def delete(self, request: Request, assessment_id: int, note_id: int) -> Response:
+        services.delete_assessment_note(request.user, self._get(note_id))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Assessment files
+# ---------------------------------------------------------------------------
+
+class AssessmentFileListView(APIView):
+    permission_classes = [_EduPerm]
+
+    def _get_assessment(self, pk: int):
+        obj = selectors.get_assessment(pk)
+        if obj is None:
+            raise NotFound()
+        return obj
+
+    def get(self, request: Request, assessment_id: int) -> Response:
+        assessment = self._get_assessment(assessment_id)
+        return Response(AssessmentFileSerializer(
+            selectors.list_assessment_files(assessment), many=True,
+            context={"request": request}).data)
+
+    def post(self, request: Request, assessment_id: int) -> Response:
+        assessment = self._get_assessment(assessment_id)
+        uploaded_file = request.FILES.get("file")
+        if not uploaded_file:
+            return Response({"file": "No file provided."}, status=status.HTTP_400_BAD_REQUEST)
+        label = (request.data.get("label") or "").strip()
+        obj = services.create_assessment_file(request.user, assessment, uploaded_file, label=label)
+        return Response(
+            AssessmentFileSerializer(obj, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class AssessmentFileDetailView(APIView):
+    permission_classes = [_EduPerm]
+    permission_action = "edit"  # file upload/delete falls under education.edit
+
+    def _get(self, pk: int):
+        obj = selectors.get_assessment_file(pk)
+        if obj is None:
+            raise NotFound()
+        return obj
+
+    def delete(self, request: Request, assessment_id: int, file_id: int) -> Response:
+        services.delete_assessment_file(request.user, self._get(file_id))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
 # Class sessions (timetable)
 # ---------------------------------------------------------------------------
 
@@ -227,3 +329,39 @@ class ClassSessionDetailView(APIView):
     def delete(self, request: Request, session_id: int) -> Response:
         services.delete_class_session(request.user, self._get(session_id))
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Academic profile (per-person)
+# ---------------------------------------------------------------------------
+
+class AcademicProfileView(APIView):
+    """GET/PATCH the academic profile for a given person.
+
+    GET creates a blank profile on first access (idempotent). PATCH updates it.
+    Also returns date-bucketed courses (current/upcoming/past) for the profile page.
+    """
+    permission_classes = [_EduPerm]
+
+    def get(self, request: Request, person_id: int) -> Response:
+        profile = services.get_or_create_academic_profile(request.user, person_id)
+        course_buckets = selectors.list_courses_for_profile(person_id, user=request.user)
+        return Response({
+            "profile": AcademicProfileSerializer(profile).data,
+            "courses": {
+                bucket: EducationCourseSerializer(courses, many=True).data
+                for bucket, courses in course_buckets.items()
+            },
+        })
+
+    def patch(self, request: Request, person_id: int) -> Response:
+        profile = services.get_or_create_academic_profile(request.user, person_id)
+        serializer = AcademicProfileSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        # Only pass recognised profile fields (exclude person_id, read-only fields)
+        profile_data = {
+            k: v for k, v in serializer.validated_data.items()
+            if k not in {"person_id", "current_credits"}
+        }
+        profile = services.update_academic_profile(request.user, profile, **profile_data)
+        return Response(AcademicProfileSerializer(profile).data)

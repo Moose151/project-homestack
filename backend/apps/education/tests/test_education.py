@@ -263,3 +263,59 @@ class EducationHubWidgetTests(TestCase):
         create_class_session(self.admin, title="Lecture", start_at=_future())
         content = _education_widget_content("education_classes", self.admin)
         self.assertEqual(len(content), 1)
+
+
+# ---------------------------------------------------------------------------
+# Assessment notes + files (D11 — no per-row ACL, visibility+sensitivity only)
+# ---------------------------------------------------------------------------
+
+class AssessmentNotesTests(TestCase):
+    def setUp(self):
+        self.user = _make_user("noteuser", User.Role.USER)
+        self.assessment = create_assessment(self.user, title="Essay")
+        self.client.force_login(self.user)
+
+    def test_list_notes_empty(self):
+        url = f"/api/v1/education/assessments/{self.assessment.id}/notes/"
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json(), [])
+
+    def test_create_and_list_note(self):
+        url = f"/api/v1/education/assessments/{self.assessment.id}/notes/"
+        res = self.client.post(url, {"body": "Check rubric page 3"}, content_type="application/json")
+        self.assertEqual(res.status_code, 201)
+        data = res.json()
+        self.assertEqual(data["body"], "Check rubric page 3")
+        self.assertEqual(data["assessment_id"], self.assessment.id)
+
+        res2 = self.client.get(url)
+        self.assertEqual(len(res2.json()), 1)
+
+    def test_update_note(self):
+        from apps.education.services import create_assessment_note
+        note = create_assessment_note(self.user, self.assessment, "Original text")
+        url = f"/api/v1/education/assessments/{self.assessment.id}/notes/{note.id}/"
+        res = self.client.patch(url, {"body": "Updated text"}, content_type="application/json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["body"], "Updated text")
+
+    def test_delete_note(self):
+        from apps.education.services import create_assessment_note
+        note = create_assessment_note(self.user, self.assessment, "Temporary note")
+        url = f"/api/v1/education/assessments/{self.assessment.id}/notes/{note.id}/"
+        res = self.client.delete(url)
+        self.assertEqual(res.status_code, 204)
+        res2 = self.client.get(f"/api/v1/education/assessments/{self.assessment.id}/notes/")
+        self.assertEqual(res2.json(), [])
+
+    def test_blank_body_rejected(self):
+        url = f"/api/v1/education/assessments/{self.assessment.id}/notes/"
+        res = self.client.post(url, {"body": "  "}, content_type="application/json")
+        self.assertEqual(res.status_code, 400)
+
+    def test_unauthenticated_cannot_access_notes(self):
+        self.client.logout()
+        url = f"/api/v1/education/assessments/{self.assessment.id}/notes/"
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 403)
