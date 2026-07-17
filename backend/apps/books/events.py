@@ -1,0 +1,1 @@
+"""Books event hooks placeholder."""

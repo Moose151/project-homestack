@@ -561,3 +561,101 @@ export interface Household {
   created_at: string
   updated_at: string
 }
+
+// ---------------------------------------------------------------------------
+// Books
+// ---------------------------------------------------------------------------
+
+export type BookShelfStatus = 'backlog' | 'reading' | 'history'
+
+export interface Book {
+  id: number
+  title: string
+  author: string
+  pages: number | null
+  genre: string
+  isbn: string
+  description: string
+  cover_url: string
+  created_at: string
+  updated_at: string
+}
+
+export interface BookRating {
+  id: number
+  book_id: number
+  user_id: number
+  user_name: string
+  user_colour: string
+  rating: number | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PersonalBookEntry {
+  id: number
+  book_id: number
+  book: Book
+  status: BookShelfStatus
+  position: number
+  rating: number | null
+  notes: string
+  source: 'personal'
+  created_at: string
+  updated_at: string
+}
+
+export interface BookClubMembership {
+  id: number
+  user_id: number
+  user_name: string
+  user_colour: string
+  user_avatar: string
+  created_at: string
+}
+
+export interface BookClub {
+  id: number
+  name: string
+  colour: string
+  description: string
+  memberships: BookClubMembership[]
+  created_at: string
+  updated_at: string
+}
+
+export interface ClubBookEntry {
+  id: number
+  club_id: number
+  book_id: number
+  book: Book
+  status: BookShelfStatus
+  position: number
+  added_by_id: number | null
+  added_by_name: string
+  added_by_colour: string
+  average_rating: number | null
+  my_rating: number | null
+  ratings: BookRating[]
+  created_at: string
+  updated_at: string
+}
+
+export interface ClubQueueItem {
+  id: number
+  club_id: number
+  club_book_id: number
+  club_book: ClubBookEntry
+  position: number
+  created_at: string
+  updated_at: string
+}
+
+export interface BooksUser {
+  id: number
+  display_name: string
+  username: string
+  colour: string
+  avatar: string
+}

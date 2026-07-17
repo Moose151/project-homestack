@@ -7,6 +7,7 @@ import { AtlasPage } from './features/web/pages/AtlasPage'
 import { MeridianPage } from './features/web/pages/MeridianPage'
 import { CalendarPage } from './features/web/pages/CalendarPage'
 import { EducationPage } from './features/web/pages/EducationPage'
+import { BooksPage } from './features/web/pages/BooksPage'
 import { UsersPage } from './features/web/pages/UsersPage'
 import { SettingsPage } from './features/web/pages/SettingsPage'
 import { KioskApp } from './features/kiosk/KioskApp'
@@ -29,6 +30,7 @@ function WebRoutes({ isAdmin }: { isAdmin: boolean }) {
         <Route path="/atlas" element={<NodeRoute nodeKey="atlas"><AtlasPage /></NodeRoute>} />
         <Route path="/meridian" element={<NodeRoute nodeKey="meridian"><MeridianPage /></NodeRoute>} />
         <Route path="/education" element={<NodeRoute nodeKey="education"><EducationPage /></NodeRoute>} />
+        <Route path="/books" element={<NodeRoute nodeKey="books"><BooksPage /></NodeRoute>} />
         {isAdmin && <Route path="/users" element={<UsersPage />} />}
         {isAdmin && <Route path="/settings" element={<SettingsPage />} />}
         <Route path="*" element={<Navigate to="/hub" replace />} />

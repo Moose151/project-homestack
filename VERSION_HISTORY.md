@@ -1,11 +1,26 @@
 # HomeStack — Version History
 
-> **Current version: 0.5.2**
+> **Current version: 0.6.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
 >
 > **Rule:** bump the version and add a row here with every push to `main`.
+
+---
+
+## 0.6 — Books Node
+
+### 0.6.0 — 2026-07-17
+- New Books node: personal shelves for backlog, currently reading, and history.
+- Book details include title, author, pages, genre, ISBN, description, and cover URL.
+- One user rating/note per book, reused across personal shelves and book club history.
+- Book clubs: create/edit club name and colour, add/remove HomeStack users, and collaboratively add/remove/reorder books.
+- Club books track backlog, currently reading, and history; history shows member ratings and club average.
+- Up-next queue for clubs sits separately from the full backlog and can be ordered independently.
+- Club books also appear on a member's personal shelves, highlighted by club colour, with a filter to hide club items.
+
+**Deploy note:** `docker exec homestack-backend python manage.py migrate` (books `0001`, nodes `0004`, permissions `0015`).
 
 ---
 

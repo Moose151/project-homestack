@@ -62,6 +62,7 @@ LOCAL_APPS = [
     "apps.meridian",  # Milestone 2 — native chores/points/rewards node (D13, D14)
     "apps.achievements",  # Milestone 2 — cross-node badges, event-driven (D20)
     "apps.education",  # Milestone 3 — school/university tracking (uni-first V1 slice)
+    "apps.books",  # Books node — personal reading shelves and shared book clubs
 ]
 
 INSTALLED_APPS = [

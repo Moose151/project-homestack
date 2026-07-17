@@ -10,6 +10,7 @@ import type {
   EducationInstitution, EducationCourse, EducationAssessment, EducationClassSession,
   AssessmentNote, AssessmentFile, AcademicProfile, AcademicProfileResponse,
   NodeInfo, Household,
+  Book, BookClub, ClubBookEntry, ClubQueueItem, PersonalBookEntry, BookRating, BooksUser, BookShelfStatus,
 } from './types'
 
 type CourseWrite = Partial<{
@@ -42,6 +43,15 @@ type UserWrite = Partial<{
   username: string; display_name: string; role: string; email: string; colour: string
   avatar: string; is_child_account: boolean; is_active: boolean; pin: string; password: string
   link_person_id: number | null; create_person: boolean
+}>
+
+type BookWrite = Partial<{
+  title: string; author: string; pages: number | null; genre: string; isbn: string
+  description: string; cover_url: string
+}>
+
+type ShelfWrite = Partial<{
+  book_id: number; book: BookWrite; status: BookShelfStatus; position: number
 }>
 
 const BASE = '/api/v1'
@@ -435,6 +445,53 @@ export const api = {
     _fetch(`/education/classes/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteClassSession: (id: number): Promise<void> =>
     _fetch(`/education/classes/${id}/`, { method: 'DELETE' }),
+
+  // --- Books ---
+  getBooksUsers: (): Promise<BooksUser[]> => _fetch('/books/users/'),
+  searchBooks: (q: string): Promise<Book[]> => _fetch(`/books/books/${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  createBook: (data: BookWrite): Promise<Book> =>
+    _fetch('/books/books/', { method: 'POST', body: JSON.stringify(data) }),
+  updateBook: (id: number, data: BookWrite): Promise<Book> =>
+    _fetch(`/books/books/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteBook: (id: number): Promise<void> =>
+    _fetch(`/books/books/${id}/`, { method: 'DELETE' }),
+  upsertBookRating: (data: { book_id: number; rating?: number | null; notes?: string }): Promise<BookRating> =>
+    _fetch('/books/ratings/', { method: 'POST', body: JSON.stringify(data) }),
+  getPersonalBooks: (includeClubs = true): Promise<{ personal: PersonalBookEntry[]; club: ClubBookEntry[] }> =>
+    _fetch(`/books/personal/${includeClubs ? '' : '?include_clubs=0'}`),
+  createPersonalBook: (data: ShelfWrite): Promise<PersonalBookEntry> =>
+    _fetch('/books/personal/', { method: 'POST', body: JSON.stringify(data) }),
+  updatePersonalBook: (id: number, data: Partial<{ status: BookShelfStatus; position: number }>): Promise<PersonalBookEntry> =>
+    _fetch(`/books/personal/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePersonalBook: (id: number): Promise<void> =>
+    _fetch(`/books/personal/${id}/`, { method: 'DELETE' }),
+  getBookClubs: (): Promise<BookClub[]> => _fetch('/books/clubs/'),
+  createBookClub: (data: Partial<{ name: string; colour: string; description: string }>): Promise<BookClub> =>
+    _fetch('/books/clubs/', { method: 'POST', body: JSON.stringify(data) }),
+  updateBookClub: (id: number, data: Partial<{ name: string; colour: string; description: string }>): Promise<BookClub> =>
+    _fetch(`/books/clubs/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteBookClub: (id: number): Promise<void> =>
+    _fetch(`/books/clubs/${id}/`, { method: 'DELETE' }),
+  addBookClubMember: (clubId: number, userId: number): Promise<BookClub> =>
+    _fetch(`/books/clubs/${clubId}/members/`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
+  removeBookClubMember: (clubId: number, membershipId: number): Promise<void> =>
+    _fetch(`/books/clubs/${clubId}/members/${membershipId}/`, { method: 'DELETE' }),
+  getClubBooks: (clubId: number, status?: BookShelfStatus): Promise<ClubBookEntry[]> =>
+    _fetch(`/books/clubs/${clubId}/books/${status ? `?status=${status}` : ''}`),
+  createClubBook: (clubId: number, data: ShelfWrite): Promise<ClubBookEntry> =>
+    _fetch(`/books/clubs/${clubId}/books/`, { method: 'POST', body: JSON.stringify(data) }),
+  updateClubBook: (clubId: number, entryId: number, data: Partial<{ status: BookShelfStatus; position: number }>): Promise<ClubBookEntry[]> =>
+    _fetch(`/books/clubs/${clubId}/books/${entryId}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteClubBook: (clubId: number, entryId: number): Promise<void> =>
+    _fetch(`/books/clubs/${clubId}/books/${entryId}/`, { method: 'DELETE' }),
+  getClubQueue: (clubId: number): Promise<ClubQueueItem[]> =>
+    _fetch(`/books/clubs/${clubId}/queue/`),
+  addClubQueueItem: (clubId: number, clubBookId: number, position?: number): Promise<ClubQueueItem> =>
+    _fetch(`/books/clubs/${clubId}/queue/`, { method: 'POST', body: JSON.stringify({ club_book_id: clubBookId, position }) }),
+  updateClubQueueItem: (clubId: number, itemId: number, position: number): Promise<ClubQueueItem> =>
+    _fetch(`/books/clubs/${clubId}/queue/${itemId}/`, { method: 'PATCH', body: JSON.stringify({ position }) }),
+  deleteClubQueueItem: (clubId: number, itemId: number): Promise<void> =>
+    _fetch(`/books/clubs/${clubId}/queue/${itemId}/`, { method: 'DELETE' }),
 
   // --- Notifications ---
   getNotifications: (unreadOnly?: boolean): Promise<NotificationList> =>
