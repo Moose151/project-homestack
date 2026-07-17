@@ -728,9 +728,10 @@ function CourseStatusCard({ label, courses, onToggleComplete }: {
   )
 }
 
-function ProfileTab({ people, institutions, defaultPersonId, onError }: {
+function ProfileTab({ people, institutions, onInstitutionCreated, defaultPersonId, onError }: {
   people: Person[]
   institutions: EducationInstitution[]
+  onInstitutionCreated: (i: EducationInstitution) => void
   defaultPersonId: number | null
   onError: (m: string) => void
 }) {
@@ -739,6 +740,7 @@ function ProfileTab({ people, institutions, defaultPersonId, onError }: {
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<Partial<AcademicProfile>>({})
+  const [institutionInput, setInstitutionInput] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -749,7 +751,7 @@ function ProfileTab({ people, institutions, defaultPersonId, onError }: {
     if (!personId) return
     setLoading(true)
     api.getAcademicProfile(personId)
-      .then(d => { setData(d); setForm(d.profile) })
+      .then(d => { setData(d); setForm(d.profile); setInstitutionInput(d.profile.institution_name ?? '') })
       .catch(e => onError(errMsg(e)))
       .finally(() => setLoading(false))
   }, [personId, onError])
@@ -758,8 +760,24 @@ function ProfileTab({ people, institutions, defaultPersonId, onError }: {
     if (!personId || !data) return
     setSaving(true)
     try {
+      // Resolve institution name → id (find existing or create new)
+      let institutionId: number | null = form.institution_id ?? null
+      const trimmed = institutionInput.trim()
+      if (trimmed) {
+        const existing = institutions.find(i => i.name.toLowerCase() === trimmed.toLowerCase())
+        if (existing) {
+          institutionId = existing.id
+        } else {
+          const created = await api.createInstitution({ name: trimmed })
+          onInstitutionCreated(created)
+          institutionId = created.id
+        }
+      } else {
+        institutionId = null
+      }
+
       const updated = await api.updateAcademicProfile(personId, {
-        institution_id: form.institution_id ?? null,
+        institution_id: institutionId,
         programme_name: form.programme_name ?? '',
         credits_required: form.credits_required ?? 0,
         credits_per_course_default: form.credits_per_course_default ?? 6,
@@ -767,6 +785,7 @@ function ProfileTab({ people, institutions, defaultPersonId, onError }: {
         notes: form.notes ?? '',
       })
       setData(prev => prev ? { ...prev, profile: updated } : prev)
+      setInstitutionInput(updated.institution_name ?? '')
       setEditing(false)
     } catch (e) { onError(errMsg(e)) } finally { setSaving(false) }
   }
@@ -835,10 +854,19 @@ function ProfileTab({ people, institutions, defaultPersonId, onError }: {
                   </div>
                   <div>
                     <div className="text-xs text-muted-strong mb-1">Institution</div>
-                    <select className={inputCls} value={form.institution_id ?? ''} onChange={e => setForm(f => ({ ...f, institution_id: e.target.value ? Number(e.target.value) : null }))}>
-                      <option value="">None</option>
-                      {institutions.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                    </select>
+                    <input
+                      className={inputCls}
+                      list="institution-options"
+                      placeholder="e.g. UNSW"
+                      value={institutionInput}
+                      onChange={e => setInstitutionInput(e.target.value)}
+                    />
+                    <datalist id="institution-options">
+                      {institutions.map(i => <option key={i.id} value={i.name} />)}
+                    </datalist>
+                    {institutionInput.trim() && !institutions.some(i => i.name.toLowerCase() === institutionInput.trim().toLowerCase()) && (
+                      <p className="text-xs text-muted mt-1">New institution "{institutionInput.trim()}" will be created on save.</p>
+                    )}
                   </div>
                   <div>
                     <div className="text-xs text-muted-strong mb-1">Credits required to graduate (UOC)</div>
@@ -979,7 +1007,7 @@ export function EducationPage() {
         ))}
       </div>
 
-      {tab === 'profile' && <ProfileTab people={people} institutions={institutions} defaultPersonId={defaultAssignee} onError={setError} />}
+      {tab === 'profile' && <ProfileTab people={people} institutions={institutions} onInstitutionCreated={i => setInstitutions(prev => [...prev, i])} defaultPersonId={defaultAssignee} onError={setError} />}
       {tab === 'assignments' && <AssignmentsTab courses={courses} people={people} defaultAssignee={defaultAssignee} onError={setError} />}
       {tab === 'courses' && <CoursesTab courses={courses} reload={loadCourses} people={people} onError={setError} />}
       {tab === 'timetable' && <TimetableTab courses={courses} onError={setError} />}

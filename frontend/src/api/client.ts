@@ -424,7 +424,7 @@ export const api = {
 
   // --- Household ---
   getHousehold: (): Promise<Household> => _fetch('/household/'),
-  updateHousehold: (data: Partial<{ name: string; family_colour: string }>): Promise<Household> =>
+  updateHousehold: (data: Partial<{ name: string; family_colour: string; timezone: string }>): Promise<Household> =>
     _fetch('/household/', { method: 'PATCH', body: JSON.stringify(data) }),
 
   getClassSessions: (params?: { course?: number }): Promise<EducationClassSession[]> =>

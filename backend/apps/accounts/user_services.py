@@ -30,8 +30,9 @@ def _link_person(user: User, *, link_person_id: int | None, create_person: bool,
             raise UserAdminError("That person is already linked to another user.")
         person.linked_user = user
         person.colour = user.colour or person.colour
+        person.display_name = user.display_name or person.display_name
         person.updated_by = acting_user
-        person.save(update_fields=["linked_user", "colour", "updated_by", "updated_at"])
+        person.save(update_fields=["linked_user", "colour", "display_name", "updated_by", "updated_at"])
     elif create_person:
         Person.objects.create(
             household=get_active_household(),

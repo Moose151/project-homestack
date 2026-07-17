@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.5.1**
+> **Current version: 0.5.2**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,12 @@
 ---
 
 ## 0.5 — Education Node (M3)
+
+### 0.5.2 — 2026-07-17
+- User colour is now editable in the Users admin page (added colour picker to edit form; was previously read-only).
+- Person name sync fix: linking an existing person to a user account now copies the user's display name to the person (previously only colour was copied, leaving persons stuck with their original name e.g. "admin").
+- Education academic profile: institution field replaced with a free-text input + datalist autocomplete. Typing a new institution name creates it automatically on save; existing institutions still autocomplete.
+- Settings page expanded: Household card (name + timezone), Stacks toggles (read-only for non-managers), Family colour (unchanged), and a new Meridian card (points label + group goals / wishlist requests / auto-end streaks toggles) — Meridian card only shows when the stack is enabled.
 
 ### 0.5.1 — 2026-07-17
 - Assessment notes: per-assessment text notes (add, edit, delete) inline on the Assignments tab.

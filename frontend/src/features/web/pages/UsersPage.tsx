@@ -240,7 +240,11 @@ function EditUser({ u, onSaved, onError }: { u: AdminUser; onSaved: () => void; 
       <input className={input} type="password" inputMode="numeric" autoComplete="new-password" placeholder="Confirm new PIN" value={f.pin_confirm} onChange={e => set('pin_confirm', e.target.value)} />
       <input className={input} type="password" autoComplete="new-password" placeholder="Reset password (blank = keep)" value={f.password} onChange={e => set('password', e.target.value)} />
       <input className={input} type="password" autoComplete="new-password" placeholder="Confirm new password" value={f.password_confirm} onChange={e => set('password_confirm', e.target.value)} />
-      <div className="sm:col-span-2">
+      <div className="sm:col-span-2 flex items-center gap-3">
+        <input type="color" value={f.colour} onChange={e => set('colour', e.target.value)}
+          className="w-10 h-10 rounded-lg border border-line cursor-pointer p-0.5 flex-shrink-0" title="Accent colour" />
+        <span className="text-sm text-muted-strong">Accent colour</span>
+        <div className="flex-1" />
         <EmojiPicker value={f.avatar} colour={f.colour} onChange={e => set('avatar', e)} />
       </div>
       <div className="sm:col-span-2"><Button size="sm" loading={saving} onClick={save}>Save changes</Button></div>
