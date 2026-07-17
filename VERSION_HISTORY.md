@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.6.2**
+> **Current version: 0.6.3**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,11 @@
 ---
 
 ## 0.6 — Books Node
+
+### 0.6.3 — 2026-07-17
+- Books can now be edited inline from any individual shelf category.
+- Club book cards also expose the same edit action because club entries share the underlying book record.
+- Editable fields: title, author, pages, genre, ISBN, and description.
 
 ### 0.6.2 — 2026-07-17
 - Global web layout widened from a narrow centered column to a responsive full workspace (`max-width: 1600px`) so nodes use desktop real estate properly.

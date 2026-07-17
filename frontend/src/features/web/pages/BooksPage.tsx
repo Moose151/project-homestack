@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api } from '../../../api/client'
 import type {
-  BookClub, BookShelfStatus, BooksUser, ClubBookEntry, ClubQueueItem, PersonalBookEntry,
+  Book, BookClub, BookShelfStatus, BooksUser, ClubBookEntry, ClubQueueItem, PersonalBookEntry,
 } from '../../../api/types'
 import { Button } from '../../../components/Button'
 import { Card } from '../../../components/Card'
@@ -108,6 +108,71 @@ function RatingEditor({ bookId, rating, notes, onSaved }: {
   )
 }
 
+function EditBookPanel({ book, onCancel, onSaved }: {
+  book: Book
+  onCancel: () => void
+  onSaved: () => Promise<void>
+}) {
+  const [title, setTitle] = useState(book.title)
+  const [author, setAuthor] = useState(book.author)
+  const [pages, setPages] = useState(book.pages?.toString() || '')
+  const [genre, setGenre] = useState(book.genre)
+  const [isbn, setIsbn] = useState(book.isbn)
+  const [description, setDescription] = useState(book.description)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    setTitle(book.title)
+    setAuthor(book.author)
+    setPages(book.pages?.toString() || '')
+    setGenre(book.genre)
+    setIsbn(book.isbn)
+    setDescription(book.description)
+  }, [book.id, book.title, book.author, book.pages, book.genre, book.isbn, book.description])
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!title.trim()) return
+    setBusy(true)
+    try {
+      await api.updateBook(book.id, {
+        title: title.trim(),
+        author: author.trim(),
+        pages: pages ? Number(pages) : null,
+        genre: genre.trim(),
+        isbn: isbn.trim(),
+        description: description.trim(),
+      })
+      await onSaved()
+      onCancel()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-2 rounded-xl bg-sunken p-2">
+      <div className="grid sm:grid-cols-2 gap-2">
+        <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" />
+        <input className={inputCls} value={author} onChange={e => setAuthor(e.target.value)} placeholder="Author" />
+        <input className={inputCls} type="number" min={1} value={pages} onChange={e => setPages(e.target.value)} placeholder="Pages" />
+        <input className={inputCls} value={genre} onChange={e => setGenre(e.target.value)} placeholder="Genre" />
+      </div>
+      <input className={inputCls} value={isbn} onChange={e => setIsbn(e.target.value)} placeholder="ISBN" />
+      <textarea
+        className={`${inputCls} min-h-[72px] resize-none`}
+        value={description}
+        onChange={e => setDescription(e.target.value)}
+        placeholder="Description"
+      />
+      <div className="flex flex-wrap gap-2 justify-end">
+        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button type="submit" size="sm" loading={busy} disabled={!title.trim()}>Save book</Button>
+      </div>
+    </form>
+  )
+}
+
 function AddBookPanel({ mode, clubs, selectedClub, defaultStatus, onClose, onAdded }: {
   mode: Surface
   clubs: BookClub[]
@@ -190,6 +255,7 @@ function PersonalBookCard({ entry, clubs, onRefresh, onMove, onDelete, onAddToCl
   onAddToClub: (clubId: number) => Promise<void>
 }) {
   const [clubId, setClubId] = useState<number | ''>(clubs[0]?.id || '')
+  const [editing, setEditing] = useState(false)
 
   useEffect(() => setClubId(clubs[0]?.id || ''), [clubs.length])
 
@@ -197,8 +263,12 @@ function PersonalBookCard({ entry, clubs, onRefresh, onMove, onDelete, onAddToCl
     <div className="rounded-xl border border-line bg-surface p-3 space-y-3">
       <div className="flex items-start gap-2">
         <BookLine title={entry.book.title} author={entry.book.author} genre={entry.book.genre} pages={entry.book.pages} />
-        <button type="button" onClick={onDelete} className="ml-auto text-muted hover:text-danger text-xl leading-none" title="Remove">×</button>
+        <div className="ml-auto flex items-center gap-1">
+          <button type="button" onClick={() => setEditing(v => !v)} className="text-xs font-semibold text-muted hover:text-primary" title="Edit book">Edit</button>
+          <button type="button" onClick={onDelete} className="text-muted hover:text-danger text-xl leading-none" title="Remove">×</button>
+        </div>
       </div>
+      {editing && <EditBookPanel book={entry.book} onCancel={() => setEditing(false)} onSaved={onRefresh} />}
       <div className="grid sm:grid-cols-[1fr_auto] gap-2">
         <select className={inputCls} value={entry.status} onChange={e => onMove(e.target.value as BookShelfStatus)}>
           {statuses.map(s => <option key={s} value={s}>{shelfLabels[s]}</option>)}
@@ -227,12 +297,18 @@ function ClubBookCard({ entry, club, onRefresh, onMove, onDelete, onQueue }: {
   onDelete: () => Promise<void>
   onQueue: () => Promise<void>
 }) {
+  const [editing, setEditing] = useState(false)
+
   return (
     <div className="rounded-xl border border-line bg-surface p-3 space-y-3" style={{ borderLeftColor: entry.added_by_colour || club.colour, borderLeftWidth: 4 }}>
       <div className="flex items-start gap-2">
         <BookLine title={entry.book.title} author={entry.book.author} genre={entry.book.genre} pages={entry.book.pages} />
-        <button type="button" onClick={onDelete} className="ml-auto text-muted hover:text-danger text-xl leading-none" title="Remove">×</button>
+        <div className="ml-auto flex items-center gap-1">
+          <button type="button" onClick={() => setEditing(v => !v)} className="text-xs font-semibold text-muted hover:text-primary" title="Edit book">Edit</button>
+          <button type="button" onClick={onDelete} className="text-muted hover:text-danger text-xl leading-none" title="Remove">×</button>
+        </div>
       </div>
+      {editing && <EditBookPanel book={entry.book} onCancel={() => setEditing(false)} onSaved={onRefresh} />}
       <div className="grid sm:grid-cols-[1fr_auto] gap-2">
         <select className={inputCls} value={entry.status} onChange={e => onMove(e.target.value as BookShelfStatus)}>
           {statuses.map(s => <option key={s} value={s}>{shelfLabels[s]}</option>)}
