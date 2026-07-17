@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.6.0**
+> **Current version: 0.6.2**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,17 @@
 ---
 
 ## 0.6 — Books Node
+
+### 0.6.2 — 2026-07-17
+- Global web layout widened from a narrow centered column to a responsive full workspace (`max-width: 1600px`) so nodes use desktop real estate properly.
+- Books page now uses wider desktop grids with side panels for shelf counts, club items, and up-next, while keeping stacked mobile layout.
+- Added the Books accent colour to shared UI tokens.
+
+### 0.6.1 — 2026-07-17
+- Books page UX changed to tab navigation: top-level Individual / Book club tabs, then Backlog / Reading / Read tabs inside each view.
+- Added a top add-book control that selects the destination shelf when adding.
+- Each book now has a shelf dropdown that moves it between Backlog, Reading and Read.
+- Personal backlog books can be added directly to a selected book club.
 
 ### 0.6.0 — 2026-07-17
 - New Books node: personal shelves for backlog, currently reading, and history.

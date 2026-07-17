@@ -42,6 +42,7 @@
     --hs-accent-meridian: #d98324;
     --hs-accent-education: #2f9e6f;
     --hs-accent-calendar: #2b7fd0;
+    --hs-accent-books: #8B5CF6;
   }
 
   .dark {
@@ -72,6 +73,7 @@
     --hs-accent-meridian: #e0993f;
     --hs-accent-education: #52c093;
     --hs-accent-calendar: #6aa9e6;
+    --hs-accent-books: #a78bfa;
   }
 
   body {
