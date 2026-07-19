@@ -6,10 +6,12 @@ import type {
 } from '../../../api/types'
 import { Button } from '../../../components/Button'
 import { Card } from '../../../components/Card'
+import { fieldClass } from '../../../components/Field'
+import { PageHeader } from '../../../components/PageHeader'
 
 type Surface = 'personal' | 'club'
 
-const inputCls = 'w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 min-h-[44px]'
+const inputCls = fieldClass
 const shelfLabels: Record<BookShelfStatus, string> = { backlog: 'Backlog', reading: 'Reading', history: 'Read' }
 const statuses: BookShelfStatus[] = ['backlog', 'reading', 'history']
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
@@ -188,9 +190,24 @@ function AddBookPanel({ mode, clubs, selectedClub, defaultStatus, onClose, onAdd
   const [status, setStatus] = useState<BookShelfStatus>(defaultStatus)
   const [clubId, setClubId] = useState<number | ''>(selectedClub?.id || clubs[0]?.id || '')
   const [busy, setBusy] = useState(false)
+  const [matches, setMatches] = useState<Book[]>([])
+  const [picked, setPicked] = useState(false)
 
   useEffect(() => setStatus(defaultStatus), [defaultStatus])
   useEffect(() => setClubId(selectedClub?.id || clubs[0]?.id || ''), [selectedClub?.id, clubs.length])
+
+  // Suggest existing books as the title is typed, to avoid creating duplicate records.
+  useEffect(() => {
+    const q = title.trim()
+    if (picked || q.length < 2) { setMatches([]); return }
+    const id = setTimeout(() => { api.searchBooks(q).then(setMatches).catch(() => {}) }, 300)
+    return () => clearTimeout(id)
+  }, [title, picked])
+
+  const useExisting = (b: Book) => {
+    setTitle(b.title); setAuthor(b.author); setPages(b.pages?.toString() || ''); setGenre(b.genre)
+    setPicked(true); setMatches([])
+  }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -213,6 +230,8 @@ function AddBookPanel({ mode, clubs, selectedClub, defaultStatus, onClose, onAdd
       setAuthor('')
       setPages('')
       setGenre('')
+      setPicked(false)
+      setMatches([])
       await onAdded()
       onClose()
     } finally {
@@ -224,11 +243,23 @@ function AddBookPanel({ mode, clubs, selectedClub, defaultStatus, onClose, onAdd
     <Card>
       <form onSubmit={submit} className="space-y-3">
         <div className="grid md:grid-cols-[1.3fr_1fr_7rem_1fr] gap-2">
-          <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" />
+          <input className={inputCls} value={title} onChange={e => { setTitle(e.target.value); setPicked(false) }} placeholder="Title" />
           <input className={inputCls} value={author} onChange={e => setAuthor(e.target.value)} placeholder="Author" />
           <input className={inputCls} type="number" min={1} value={pages} onChange={e => setPages(e.target.value)} placeholder="Pages" />
           <input className={inputCls} value={genre} onChange={e => setGenre(e.target.value)} placeholder="Genre" />
         </div>
+        {matches.length > 0 && (
+          <div className="rounded-xl border border-line bg-surface p-2 text-sm">
+            <p className="px-1 pb-1 text-xs text-muted">Already in your library — reuse instead of adding a duplicate:</p>
+            {matches.slice(0, 4).map(b => (
+              <button key={b.id} type="button" onClick={() => useExisting(b)}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-sunken">
+                <span className="font-medium text-ink">{b.title}</span>
+                {b.author && <span className="text-xs text-muted">· {b.author}</span>}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="grid md:grid-cols-[1fr_1fr_auto_auto] gap-2 items-center">
           <select className={inputCls} value={status} onChange={e => setStatus(e.target.value as BookShelfStatus)}>
             {statuses.map(s => <option key={s} value={s}>{shelfLabels[s]}</option>)}
@@ -474,13 +505,12 @@ export function BooksPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-ink">Books</h1>
-          <p className="text-muted mt-1">Personal shelves and shared book clubs.</p>
-        </div>
-        <Button type="button" onClick={() => setShowAdd(v => !v)}>{showAdd ? 'Close' : '+ Add book'}</Button>
-      </div>
+      <PageHeader
+        title="Books"
+        icon="📚"
+        subtitle="Personal shelves and shared book clubs."
+        actions={<Button type="button" onClick={() => setShowAdd(v => !v)}>{showAdd ? 'Close' : '+ Add book'}</Button>}
+      />
 
       {error && <div className="rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">{error}</div>}
 
