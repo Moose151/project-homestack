@@ -8,6 +8,45 @@ type TaskFilter = 'all' | 'active' | 'pending' | 'hidden' | 'hot'
 
 const inputClass = 'px-3 py-2 rounded-xl border border-line bg-raised text-sm text-ink placeholder-muted outline-none focus:ring-2 focus:ring-primary'
 
+// Weekly recurrence as RRULE (D8): a repeating task re-arms on the chosen weekdays.
+const WEEKDAYS: { code: string; label: string }[] = [
+  { code: 'MO', label: 'Mon' }, { code: 'TU', label: 'Tue' }, { code: 'WE', label: 'Wed' },
+  { code: 'TH', label: 'Thu' }, { code: 'FR', label: 'Fri' }, { code: 'SA', label: 'Sat' }, { code: 'SU', label: 'Sun' },
+]
+
+function parseByday(rule: string): string[] {
+  const m = /BYDAY=([A-Z,]+)/.exec(rule || '')
+  return m ? m[1].split(',').filter(Boolean) : []
+}
+function buildRrule(days: string[]): string {
+  return days.length ? `FREQ=WEEKLY;BYDAY=${days.join(',')}` : ''
+}
+
+function WeekdayPicker({ days, onChange }: { days: string[]; onChange: (d: string[]) => void }) {
+  const toggle = (code: string) =>
+    onChange(days.includes(code) ? days.filter(d => d !== code) : [...days, code])
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-xs text-muted mr-1">Repeats weekly on</span>
+      {WEEKDAYS.map(d => (
+        <button
+          key={d.code}
+          type="button"
+          onClick={() => toggle(d.code)}
+          className={`h-8 w-9 rounded-lg text-xs font-semibold transition-colors ${
+            days.includes(d.code) ? 'bg-primary text-white' : 'bg-sunken text-muted hover:text-ink'
+          }`}
+        >
+          {d.label}
+        </button>
+      ))}
+      {days.length > 0 && (
+        <button type="button" onClick={() => onChange([])} className="ml-1 text-xs text-muted hover:text-danger">clear</button>
+      )}
+    </div>
+  )
+}
+
 function Badge({ children, className = 'bg-sunken text-muted-strong' }: { children: React.ReactNode; className?: string }) {
   return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${className}`}>{children}</span>
 }
@@ -259,6 +298,9 @@ function TaskRow({
           {categoryName && <Badge>{categoryName}</Badge>}
           <Badge>{task.completion_behavior === 'hide_after_approval' ? 'One-off' : 'Repeatable'}</Badge>
           <Badge>{task.completion_scope === 'household' ? 'Household' : 'Per person'}</Badge>
+          {task.recurrence_rule && (
+            <Badge className="bg-primary-soft text-primary">↻ {parseByday(task.recurrence_rule).map(d => WEEKDAYS.find(w => w.code === d)?.label).join(' ')}</Badge>
+          )}
         </div>
         {task.description && <p className="mt-1 max-w-xl text-xs text-muted line-clamp-2">{task.description}</p>}
         {pending.length > 0 && (
@@ -320,6 +362,7 @@ function TaskEditRow({ task, categories, people, onCancel, onSaved, onError }: {
     completion_behavior: task.completion_behavior,
     completion_scope: task.completion_scope,
   })
+  const [recurDays, setRecurDays] = useState<string[]>(parseByday(task.recurrence_rule))
   const [saving, setSaving] = useState(false)
   const set = (key: string, value: unknown) => setF(prev => ({ ...prev, [key]: value }))
 
@@ -338,6 +381,7 @@ function TaskEditRow({ task, categories, people, onCancel, onSaved, onError }: {
         hot_label: f.hot_label,
         completion_behavior: f.completion_behavior,
         completion_scope: f.completion_scope,
+        recurrence_rule: buildRrule(recurDays),
       })
       onSaved()
     } catch {
@@ -381,6 +425,9 @@ function TaskEditRow({ task, categories, people, onCancel, onSaved, onError }: {
               </>
             )}
           </div>
+          {f.completion_behavior === 'stay_active' && (
+            <div className="mt-3"><WeekdayPicker days={recurDays} onChange={setRecurDays} /></div>
+          )}
           <div className="mt-3 flex gap-2">
             <Button size="sm" loading={saving} disabled={!f.title.trim()} onClick={save}>Save</Button>
             <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
@@ -403,6 +450,7 @@ function NewTaskForm({ categories, people, onCreated, onError }: {
     completion_behavior: 'stay_active' as MeridianTask['completion_behavior'],
     completion_scope: 'per_person' as MeridianTask['completion_scope'],
   })
+  const [recurDays, setRecurDays] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: unknown) => setF(prev => ({ ...prev, [k]: v }))
 
@@ -422,6 +470,7 @@ function NewTaskForm({ categories, people, onCreated, onError }: {
         completion_scope: f.completion_scope,
         category_id: f.category_id ? Number(f.category_id) : null,
         assigned_to_person_id: f.assigned_to_person_id ? Number(f.assigned_to_person_id) : null,
+        recurrence_rule: buildRrule(recurDays),
       })
       onCreated()
     } catch {
@@ -461,6 +510,9 @@ function NewTaskForm({ categories, people, onCreated, onError }: {
             <input className={inputClass} type="number" min="0" placeholder="Bonus points" value={f.hot_bonus_points} onChange={e => set('hot_bonus_points', e.target.value)} />
             <input className={inputClass} placeholder="Hot label" value={f.hot_label} onChange={e => set('hot_label', e.target.value)} />
           </>
+        )}
+        {f.completion_behavior === 'stay_active' && (
+          <div className="sm:col-span-2 xl:col-span-4"><WeekdayPicker days={recurDays} onChange={setRecurDays} /></div>
         )}
         <div className="sm:col-span-2 xl:col-span-4">
           <Button type="submit" loading={saving} disabled={!f.title.trim()}>Create task</Button>

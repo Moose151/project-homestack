@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.7.3**
+> **Current version: 0.7.4**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,13 @@
 ---
 
 ## 0.7 — Node fleshing-out & shared UX parity
+
+### 0.7.4 — 2026-07-19
+- **Meridian** tasks gain a **weekly recurrence** picker (choose the weekdays a repeatable
+  task re-arms on) in both the create and edit forms — the backend already stored/honoured
+  the RRULE, but there was no way to set it. Repeating tasks now show a "↻ days" badge.
+- _Remaining Meridian parity (follow-up): photo evidence on completions and importing legacy
+  completion history._
 
 ### 0.7.3 — 2026-07-19
 - **Education** gains an **Institutions** management tab (add / edit / delete schools and
