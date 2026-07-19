@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.7.2**
+> **Current version: 0.7.3**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,13 @@
 ---
 
 ## 0.7 — Node fleshing-out & shared UX parity
+
+### 0.7.3 — 2026-07-19
+- **Education** gains an **Institutions** management tab (add / edit / delete schools and
+  universities) and an **education-wide search box** (courses, assignments, classes) wired
+  to the existing FTS endpoint.
+- _Remaining Education parity (follow-up): a dedicated Education Events model (excursions /
+  term dates / school events), plus notifications and outbound signals._
 
 ### 0.7.2 — 2026-07-19
 - **Atlas** gains a full **Notes** surface (browse / create / inline edit / delete, with

@@ -370,6 +370,8 @@ export const api = {
     _fetch(`/achievements/my-badges/${personId ? `?person_id=${personId}` : ''}`),
 
   // --- Education ---
+  searchEducation: (q: string): Promise<{ courses: EducationCourse[]; assessments: EducationAssessment[]; class_sessions: EducationClassSession[] }> =>
+    _fetch(`/education/search/?q=${encodeURIComponent(q)}`),
   getInstitutions: (): Promise<EducationInstitution[]> => _fetch('/education/institutions/'),
   createInstitution: (data: InstitutionWrite): Promise<EducationInstitution> =>
     _fetch('/education/institutions/', { method: 'POST', body: JSON.stringify(data) }),

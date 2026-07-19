@@ -9,8 +9,10 @@ import type {
 import type { Person } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
+import { Input, Textarea, Select } from '../../../components/Field'
 import { Tabs, type TabDef } from '../../../components/Tabs'
 import { PageHeader } from '../../../components/PageHeader'
+import { EmptyState } from '../../../components/EmptyState'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
 import { useAuth } from '../../auth/AuthContext'
@@ -957,14 +959,104 @@ function ProfileTab({ people, institutions, onInstitutionCreated, defaultPersonI
 // Page
 // ===========================================================================
 
-type Tab = 'profile' | 'assignments' | 'courses' | 'timetable'
+type Tab = 'profile' | 'assignments' | 'courses' | 'timetable' | 'institutions'
 
 const TABS: TabDef<Tab>[] = [
   { key: 'profile', label: 'My Profile' },
   { key: 'assignments', label: 'Assignments' },
   { key: 'courses', label: 'Courses' },
   { key: 'timetable', label: 'Timetable' },
+  { key: 'institutions', label: 'Institutions' },
 ]
+
+const INSTITUTION_TYPES = [
+  { key: 'school', label: 'School' },
+  { key: 'university', label: 'University' },
+  { key: 'tafe', label: 'TAFE' },
+  { key: 'other', label: 'Other' },
+]
+
+function InstitutionsTab({ institutions, onChange, onError }: {
+  institutions: EducationInstitution[]
+  onChange: (list: EducationInstitution[]) => void
+  onError: (m: string) => void
+}) {
+  const blank = { name: '', institution_type: 'university', location: '', notes: '' }
+  const [form, setForm] = useState(blank)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [busy, setBusy] = useState(false)
+  const set = (k: string, v: string) => setForm(prev => ({ ...prev, [k]: v }))
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!form.name.trim()) return
+    setBusy(true)
+    try {
+      if (editingId) {
+        const updated = await api.updateInstitution(editingId, form)
+        onChange(institutions.map(i => i.id === editingId ? updated : i))
+      } else {
+        const created = await api.createInstitution(form)
+        onChange([...institutions, created])
+      }
+      setForm(blank); setEditingId(null)
+    } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
+  }
+
+  const edit = (i: EducationInstitution) => {
+    setEditingId(i.id)
+    setForm({ name: i.name, institution_type: i.institution_type, location: i.location, notes: i.notes })
+  }
+
+  const remove = async (i: EducationInstitution) => {
+    if (!confirm(`Delete "${i.name}"?`)) return
+    try { await api.deleteInstitution(i.id); onChange(institutions.filter(x => x.id !== i.id)) }
+    catch (e) { onError(errMsg(e)) }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card title={editingId ? 'Edit institution' : 'Add institution'}>
+        <form onSubmit={submit} className="flex flex-col gap-2">
+          <Input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Name (e.g. University of…)" />
+          <div className="grid grid-cols-2 gap-2">
+            <Select value={form.institution_type} onChange={e => set('institution_type', e.target.value)}>
+              {INSTITUTION_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+            </Select>
+            <Input value={form.location} onChange={e => set('location', e.target.value)} placeholder="Location (optional)" />
+          </div>
+          <Textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Notes (optional)" rows={2} />
+          <div className="flex justify-end gap-2">
+            {editingId && <Button variant="ghost" size="sm" onClick={() => { setEditingId(null); setForm(blank) }}>Cancel</Button>}
+            <Button size="sm" type="submit" loading={busy} disabled={!form.name.trim()}>{editingId ? 'Save' : 'Add'}</Button>
+          </div>
+        </form>
+      </Card>
+
+      {institutions.length === 0 ? (
+        <EmptyState icon="🏫" title="No institutions yet" hint="Add the schools or universities your household attends." />
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {institutions.map(i => (
+            <Card key={i.id} className="group">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="font-bold text-ink">{i.name}</h3>
+                  <p className="text-xs capitalize text-muted">{i.institution_type}{i.location ? ` · ${i.location}` : ''}</p>
+                  {i.notes && <p className="mt-1 text-sm text-muted-strong">{i.notes}</p>}
+                </div>
+                <div className="flex flex-shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                  <button onClick={() => edit(i)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
+                  <button onClick={() => remove(i)} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger">Delete</button>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function EducationPage() {
   const { user } = useAuth()
@@ -973,17 +1065,29 @@ export function EducationPage() {
   const [people, setPeople] = useState<Person[]>([])
   const [institutions, setInstitutions] = useState<EducationInstitution[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<{ courses: EducationCourse[]; assessments: EducationAssessment[]; class_sessions: EducationClassSession[] } | null>(null)
 
   const loadCourses = () => api.getCourses().then(setCourses).catch(e => setError(errMsg(e)))
   useEffect(() => { loadCourses() }, [])
   useEffect(() => { api.getPeople().then(setPeople).catch(() => {}) }, [])
   useEffect(() => { api.getInstitutions().then(setInstitutions).catch(() => {}) }, [])
 
+  // Debounced education-wide FTS.
+  useEffect(() => {
+    const q = query.trim()
+    if (q.length < 2) { setResults(null); return }
+    const id = setTimeout(() => { api.searchEducation(q).then(setResults).catch(e => setError(errMsg(e))) }, 300)
+    return () => clearTimeout(id)
+  }, [query])
+
   const defaultAssignee = personIdForUser(people, user?.id)
 
   return (
     <div className="space-y-5 max-w-3xl mx-auto">
       <PageHeader title="Education" icon="🎓" subtitle="Your courses, deadlines and weekly timetable." />
+
+      <Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search courses, assignments and classes…" />
 
       {error && (
         <div className="flex items-center justify-between gap-3 bg-danger-soft text-danger text-sm rounded-xl px-4 py-2.5">
@@ -992,12 +1096,57 @@ export function EducationPage() {
         </div>
       )}
 
-      <Tabs tabs={TABS} active={tab} onChange={setTab} />
+      {results !== null ? (
+        <EducationSearchResults results={results} />
+      ) : (
+        <>
+          <Tabs tabs={TABS} active={tab} onChange={setTab} />
 
-      {tab === 'profile' && <ProfileTab people={people} institutions={institutions} onInstitutionCreated={i => setInstitutions(prev => [...prev, i])} defaultPersonId={defaultAssignee} onError={setError} />}
-      {tab === 'assignments' && <AssignmentsTab courses={courses} people={people} defaultAssignee={defaultAssignee} onError={setError} />}
-      {tab === 'courses' && <CoursesTab courses={courses} reload={loadCourses} people={people} onError={setError} />}
-      {tab === 'timetable' && <TimetableTab courses={courses} onError={setError} />}
+          {tab === 'profile' && <ProfileTab people={people} institutions={institutions} onInstitutionCreated={i => setInstitutions(prev => [...prev, i])} defaultPersonId={defaultAssignee} onError={setError} />}
+          {tab === 'assignments' && <AssignmentsTab courses={courses} people={people} defaultAssignee={defaultAssignee} onError={setError} />}
+          {tab === 'courses' && <CoursesTab courses={courses} reload={loadCourses} people={people} onError={setError} />}
+          {tab === 'timetable' && <TimetableTab courses={courses} onError={setError} />}
+          {tab === 'institutions' && <InstitutionsTab institutions={institutions} onChange={setInstitutions} onError={setError} />}
+        </>
+      )}
+    </div>
+  )
+}
+
+function EducationSearchResults({ results }: {
+  results: { courses: EducationCourse[]; assessments: EducationAssessment[]; class_sessions: EducationClassSession[] }
+}) {
+  const empty = !results.courses.length && !results.assessments.length && !results.class_sessions.length
+  if (empty) return <EmptyState icon="🔍" title="No matches" hint="Try a course code, assignment title or class name." />
+  return (
+    <div className="flex flex-col gap-4">
+      {results.courses.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Courses</p>
+          {results.courses.map(c => (
+            <Card key={`c${c.id}`}><span className="text-sm font-medium text-ink">{c.code ? `${c.code} · ` : ''}{c.name}</span></Card>
+          ))}
+        </div>
+      )}
+      {results.assessments.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Assignments</p>
+          {results.assessments.map(a => (
+            <Card key={`a${a.id}`}>
+              <span className="text-sm text-ink">{a.title}</span>
+              {a.due_at && <span className="ml-2 text-xs text-muted">{new Date(a.due_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
+            </Card>
+          ))}
+        </div>
+      )}
+      {results.class_sessions.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Classes</p>
+          {results.class_sessions.map(s => (
+            <Card key={`s${s.id}`}><span className="text-sm text-ink">{s.display_title}</span></Card>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
