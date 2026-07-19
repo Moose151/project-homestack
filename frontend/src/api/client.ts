@@ -169,8 +169,10 @@ export const api = {
 
   // --- Atlas notes ---
   getNotes: (): Promise<AtlasNote[]> => _fetch('/atlas/notes/'),
-  createNote: (data: { title: string; body?: string }): Promise<AtlasNote> =>
+  createNote: (data: { title: string; body?: string; visibility?: string }): Promise<AtlasNote> =>
     _fetch('/atlas/notes/', { method: 'POST', body: JSON.stringify(data) }),
+  updateNote: (id: number, data: Partial<{ title: string; body: string; visibility: string }>): Promise<AtlasNote> =>
+    _fetch(`/atlas/notes/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteNote: (id: number): Promise<void> => _fetch(`/atlas/notes/${id}/`, { method: 'DELETE' }),
 
   // --- Atlas reminders ---

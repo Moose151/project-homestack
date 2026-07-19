@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../../api/client'
-import type { AtlasList, AtlasListItem, AtlasReminder, AtlasSearchResults, Person } from '../../../api/types'
+import type { AtlasList, AtlasListItem, AtlasNote, AtlasReminder, AtlasSearchResults, Person } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
-import { Input } from '../../../components/Field'
+import { Input, Textarea, Select } from '../../../components/Field'
 import { Tabs } from '../../../components/Tabs'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
@@ -209,6 +209,142 @@ function ListCard({ list, people, defaultAssignee, onDeleted, onError }: {
 }
 
 // ---------------------------------------------------------------------------
+// Notes tab
+// ---------------------------------------------------------------------------
+
+function NoteCard({ note, onSaved, onDeleted, onError }: {
+  note: AtlasNote
+  onSaved: (n: AtlasNote) => void
+  onDeleted: (id: number) => void
+  onError: (m: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [title, setTitle] = useState(note.title)
+  const [body, setBody] = useState(note.body)
+  const [visibility, setVisibility] = useState(note.visibility)
+  const [saving, setSaving] = useState(false)
+
+  const save = async () => {
+    if (!title.trim()) return
+    setSaving(true)
+    try {
+      const updated = await api.updateNote(note.id, { title: title.trim(), body, visibility })
+      onSaved(updated)
+      setEditing(false)
+    } catch (e) { onError(errMsg(e)) } finally { setSaving(false) }
+  }
+
+  const remove = async () => {
+    if (!confirm(`Delete "${note.title}"?`)) return
+    try { await api.deleteNote(note.id); onDeleted(note.id) } catch (e) { onError(errMsg(e)) }
+  }
+
+  if (editing) {
+    return (
+      <Card>
+        <div className="flex flex-col gap-2">
+          <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" autoFocus />
+          <Textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Write something…" rows={5} />
+          <div className="flex items-center gap-2">
+            <Select value={visibility} onChange={e => setVisibility(e.target.value)} className="max-w-[10rem]">
+              <option value="household">Household</option>
+              <option value="private">Private</option>
+            </Select>
+            <div className="ml-auto flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => { setEditing(false); setTitle(note.title); setBody(note.body); setVisibility(note.visibility) }}>Cancel</Button>
+              <Button size="sm" onClick={save} loading={saving} disabled={!title.trim()}>Save</Button>
+            </div>
+          </div>
+        </div>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="group">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="font-bold text-ink">{note.title}</h3>
+            {note.visibility === 'private' && <span className="text-xs text-muted">🔒 Private</span>}
+          </div>
+          {note.body && <p className="mt-1 whitespace-pre-wrap text-sm text-muted-strong">{note.body}</p>}
+        </div>
+        <div className="flex flex-shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <button onClick={() => setEditing(true)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
+          <button onClick={remove} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger" aria-label="Delete">Delete</button>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function NotesTab({ onError }: { onError: (m: string) => void }) {
+  const [notes, setNotes] = useState<AtlasNote[]>([])
+  const [loading, setLoading] = useState(true)
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [visibility, setVisibility] = useState('household')
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    api.getNotes().then(setNotes).catch(e => onError(errMsg(e))).finally(() => setLoading(false))
+  }, [onError])
+
+  const create = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!title.trim()) return
+    setSaving(true)
+    try {
+      const n = await api.createNote({ title: title.trim(), body, visibility })
+      setNotes(prev => [n, ...prev])
+      setTitle(''); setBody(''); setVisibility('household'); setOpen(false)
+    } catch (e) { onError(errMsg(e)) } finally { setSaving(false) }
+  }
+
+  if (loading) return <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
+
+  return (
+    <div className="flex flex-col gap-4">
+      {open ? (
+        <Card title="New note">
+          <form onSubmit={create} className="flex flex-col gap-2">
+            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" autoFocus />
+            <Textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Write something…" rows={5} />
+            <div className="flex items-center gap-2">
+              <Select value={visibility} onChange={e => setVisibility(e.target.value)} className="max-w-[10rem]">
+                <option value="household">Household</option>
+                <option value="private">Private</option>
+              </Select>
+              <div className="ml-auto flex gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+                <Button size="sm" type="submit" loading={saving} disabled={!title.trim()}>Save note</Button>
+              </div>
+            </div>
+          </form>
+        </Card>
+      ) : (
+        <Button size="sm" onClick={() => setOpen(true)} className="self-start">+ New note</Button>
+      )}
+
+      {notes.length === 0 ? (
+        <EmptyState icon="📝" title="No notes yet" hint="Jot down anything you want to remember — recipes, ideas, passwords hints." />
+      ) : (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {notes.map(n => (
+            <NoteCard key={n.id} note={n}
+              onSaved={u => setNotes(prev => prev.map(x => x.id === u.id ? u : x))}
+              onDeleted={id => setNotes(prev => prev.filter(x => x.id !== id))}
+              onError={onError} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Reminders tab
 // ---------------------------------------------------------------------------
 
@@ -254,11 +390,10 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
     <div className="flex flex-col gap-4">
       <Card title="New reminder">
         <form onSubmit={create} className="flex flex-col gap-3">
-          <input
+          <Input
             value={title}
             onChange={e => setTitle(e.target.value)}
             placeholder="Reminder title"
-            className="w-full px-3 py-2.5 rounded-xl border border-line bg-raised text-sm text-ink placeholder-muted outline-none focus:ring-2 focus:ring-primary"
           />
           <DateTimeField value={dueAt} allDay={dueAllDay}
             onChange={({ value, allDay }) => { setDueAt(value); setDueAllDay(allDay) }} />
@@ -269,7 +404,7 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
       </Card>
 
       {reminders.length === 0 ? (
-        <p className="text-sm text-muted text-center py-6">No reminders yet.</p>
+        <EmptyState icon="⏰" title="No reminders yet" hint="Dated reminders also show on your Hub and Calendar." />
       ) : (
         <div className="flex flex-col gap-3">
           {reminders.map(r => (
@@ -359,7 +494,15 @@ function SearchResults({ results }: { results: AtlasSearchResults }) {
 // Atlas page
 // ---------------------------------------------------------------------------
 
-type Tab = 'lists' | 'reminders'
+type Tab = 'lists' | 'notes' | 'reminders'
+
+const LIST_TYPES = [
+  { key: 'todo', label: 'To-do' },
+  { key: 'grocery', label: 'Grocery' },
+  { key: 'shopping', label: 'Shopping' },
+  { key: 'checklist', label: 'Checklist' },
+  { key: 'general', label: 'General' },
+]
 
 export function AtlasPage() {
   const { user } = useAuth()
@@ -368,6 +511,7 @@ export function AtlasPage() {
   const [people, setPeople] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
   const [newTitle, setNewTitle] = useState('')
+  const [newType, setNewType] = useState('todo')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -395,10 +539,10 @@ export function AtlasPage() {
     if (!newTitle.trim()) return
     setCreating(true)
     try {
-      const list = await api.createList({ title: newTitle.trim(), list_type: 'todo' })
+      const list = await api.createList({ title: newTitle.trim(), list_type: newType })
       const full = await api.getList(list.id)
       setLists(prev => [full, ...prev])
-      setNewTitle('')
+      setNewTitle(''); setNewType('todo')
     } catch (e) {
       setError(errMsg(e))
     } finally {
@@ -429,7 +573,11 @@ export function AtlasPage() {
         <>
           {/* Tabs */}
           <Tabs
-            tabs={[{ key: 'lists', label: 'lists' }, { key: 'reminders', label: 'reminders' }]}
+            tabs={[
+              { key: 'lists', label: 'lists', badge: lists.length || undefined },
+              { key: 'notes', label: 'notes' },
+              { key: 'reminders', label: 'reminders' },
+            ]}
             active={tab}
             onChange={setTab}
             className="w-fit"
@@ -437,13 +585,16 @@ export function AtlasPage() {
 
           {tab === 'lists' ? (
             <div className="flex flex-col gap-4">
-              <form onSubmit={createList} className="flex gap-2">
+              <form onSubmit={createList} className="flex flex-wrap gap-2">
                 <Input
                   value={newTitle}
                   onChange={e => setNewTitle(e.target.value)}
                   placeholder="New list name…"
-                  className="flex-1"
+                  className="flex-1 min-w-[10rem]"
                 />
+                <Select value={newType} onChange={e => setNewType(e.target.value)} className="w-32">
+                  {LIST_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+                </Select>
                 <Button type="submit" loading={creating} disabled={!newTitle.trim()}>Create</Button>
               </form>
 
@@ -452,18 +603,22 @@ export function AtlasPage() {
               ) : lists.length === 0 ? (
                 <EmptyState icon="🗒" title="No lists yet" hint="Create your first list above to get started." />
               ) : (
-                lists.map(list => (
-                  <ListCard
-                    key={list.id}
-                    list={list}
-                    people={people}
-                    defaultAssignee={defaultAssignee}
-                    onDeleted={id => setLists(prev => prev.filter(l => l.id !== id))}
-                    onError={setError}
-                  />
-                ))
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  {lists.map(list => (
+                    <ListCard
+                      key={list.id}
+                      list={list}
+                      people={people}
+                      defaultAssignee={defaultAssignee}
+                      onDeleted={id => setLists(prev => prev.filter(l => l.id !== id))}
+                      onError={setError}
+                    />
+                  ))}
+                </div>
               )}
             </div>
+          ) : tab === 'notes' ? (
+            <NotesTab onError={setError} />
           ) : (
             <RemindersTab onError={setError} />
           )}

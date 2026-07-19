@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.7.1**
+> **Current version: 0.7.2**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,13 @@
 ---
 
 ## 0.7 — Node fleshing-out & shared UX parity
+
+### 0.7.2 — 2026-07-19
+- **Atlas** gains a full **Notes** surface (browse / create / inline edit / delete, with
+  household-or-private visibility) — previously notes only appeared in search.
+- **Create a list of any type** (to-do, grocery, shopping, checklist, general) from a picker
+  instead of always making a to-do list; lists now lay out in a responsive two-column grid.
+- Reminders form and empty states moved onto the shared kit.
 
 ### 0.7.1 — 2026-07-19
 - **Calendar** UX pass: event modal rebuilt on the shared Modal/Field kit; per-source
