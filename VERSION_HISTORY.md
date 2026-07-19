@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.7.0**
+> **Current version: 0.7.1**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,12 @@
 ---
 
 ## 0.7 — Node fleshing-out & shared UX parity
+
+### 0.7.1 — 2026-07-19
+- **Calendar** UX pass: event modal rebuilt on the shared Modal/Field kit; per-source
+  **layer toggles** and a **My events** filter; **household calendar defaults** (default
+  view, week-start, time format) an admin can set, with each user's own choices still
+  taking precedence; calmer empty states. New migration `core/0004`.
 
 ### 0.7.0 — 2026-07-19
 - **Shared UI kit**: new reusable primitives (`Field`/`Input`/`Textarea`/`Select`, `Tabs`,

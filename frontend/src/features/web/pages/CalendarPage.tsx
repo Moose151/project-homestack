@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../../api/client'
 import type { CalendarEvent, CalendarEventWrite, Person } from '../../../api/types'
 import { Button } from '../../../components/Button'
+import { Modal } from '../../../components/Modal'
+import { Field, Input, Select } from '../../../components/Field'
+import { PageHeader } from '../../../components/PageHeader'
+import { EmptyState } from '../../../components/EmptyState'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
 import { useAuth } from '../../auth/AuthContext'
@@ -98,66 +102,76 @@ function EventModal({
     try { await api.deleteEvent(event.id); onSaved() } catch (e) { onError(errMsg(e)) }
   }
 
-  const input = 'w-full px-3 py-2 rounded-xl border border-line bg-raised text-sm text-ink outline-none focus:ring-2 focus:ring-primary'
+  const title = event ? (synced ? 'Event' : 'Edit event') : 'New event'
+
+  if (synced) {
+    return (
+      <Modal title={title} onClose={onClose} size="sm">
+        <div className="flex flex-col gap-2 text-sm">
+          <p className="font-medium text-ink">{event!.title}</p>
+          <p className="text-muted">{new Date(event!.start_at).toLocaleString()}</p>
+          {event!.location && <p className="text-muted">📍 {event!.location}</p>}
+          <p className="mt-1 text-xs text-muted">
+            This event comes from <span className="font-medium capitalize">{event!.source_node}</span> and is edited there, not on the calendar.
+          </p>
+        </div>
+      </Modal>
+    )
+  }
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-surface rounded-2xl shadow-card border border-line w-full max-w-md p-6 flex flex-col gap-3" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-ink">{event ? (synced ? 'Event' : 'Edit event') : 'New event'}</h2>
-          <button onClick={onClose} className="text-muted hover:text-ink text-xl leading-none">×</button>
+    <Modal
+      title={title}
+      onClose={onClose}
+      footer={
+        <>
+          {event && <button onClick={remove} className="mr-auto text-sm text-danger hover:underline">Delete</button>}
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={save} loading={saving} disabled={!f.title.trim()}>Save</Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <Input placeholder="Title" value={f.title} onChange={e => set('title', e.target.value)} autoFocus />
+        <Field label="Start">
+          <DateTimeField
+            value={f.start_at}
+            allDay={f.is_all_day}
+            onChange={({ value, allDay }) => setF(prev => ({ ...prev, start_at: value ?? prev.start_at, is_all_day: allDay }))}
+          />
+        </Field>
+        <Field label="End (optional)">
+          <DateTimeField
+            value={f.end_at || null}
+            allDay={f.is_all_day}
+            allowAllDay={false}
+            onChange={({ value }) => set('end_at', value ?? '')}
+          />
+        </Field>
+        <Input placeholder="Location (optional)" value={f.location} onChange={e => set('location', e.target.value)} />
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Assigned to">
+            <AssigneeSelect people={people}
+              value={f.assigned_to_person_id || null}
+              onChange={v => set('assigned_to_person_id', v ?? 0)} />
+          </Field>
+          <Field label="Visibility">
+            <Select value={f.visibility} onChange={e => set('visibility', e.target.value)}>
+              <option value="household">Household</option>
+              <option value="private">Private</option>
+            </Select>
+          </Field>
         </div>
-
-        {synced ? (
-          <div className="flex flex-col gap-2 text-sm">
-            <p className="font-medium text-ink">{event!.title}</p>
-            <p className="text-muted">{new Date(event!.start_at).toLocaleString()}</p>
-            <p className="text-xs text-muted">
-              This event comes from <span className="capitalize font-medium">{event!.source_node}</span> and is edited there, not on the calendar.
-            </p>
+        <Field label="Colour">
+          <div className="flex items-center gap-2">
+            <input type="color" value={f.colour || '#6366F1'} onChange={e => set('colour', e.target.value)}
+              className="h-9 w-12 cursor-pointer rounded-lg border border-line p-0.5" />
+            <span className="text-xs text-muted">{f.colour ? 'Custom colour' : 'Uses person / family colour'}</span>
+            {f.colour && <button type="button" onClick={() => set('colour', '')} className="text-xs text-muted hover:text-danger">clear</button>}
           </div>
-        ) : (
-          <>
-            <input className={input} placeholder="Title" value={f.title} onChange={e => set('title', e.target.value)} autoFocus />
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted">Start</span>
-              <DateTimeField
-                value={f.start_at}
-                allDay={f.is_all_day}
-                onChange={({ value, allDay }) => setF(prev => ({ ...prev, start_at: value ?? prev.start_at, is_all_day: allDay }))}
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted">End (optional)</span>
-              <DateTimeField
-                value={f.end_at || null}
-                allDay={f.is_all_day}
-                allowAllDay={false}
-                onChange={({ value }) => set('end_at', value ?? '')}
-              />
-            </div>
-            <input className={input} placeholder="Location (optional)" value={f.location} onChange={e => set('location', e.target.value)} />
-            <div className="grid grid-cols-2 gap-2">
-              <AssigneeSelect className={input} people={people}
-                value={f.assigned_to_person_id || null}
-                onChange={v => set('assigned_to_person_id', v ?? 0)} />
-              <select className={input} value={f.visibility} onChange={e => set('visibility', e.target.value)}>
-                <option value="household">Household</option>
-                <option value="private">Private</option>
-              </select>
-            </div>
-            <label className="flex items-center gap-2 text-sm text-ink">
-              Colour <input type="color" value={f.colour || '#6366F1'} onChange={e => set('colour', e.target.value)} />
-              {f.colour && <button type="button" onClick={() => set('colour', '')} className="text-xs text-muted hover:text-danger">clear</button>}
-            </label>
-            <div className="flex items-center justify-between mt-1">
-              {event ? <button onClick={remove} className="text-sm text-danger hover:underline">Delete</button> : <span />}
-              <Button onClick={save} loading={saving} disabled={!f.title.trim()}>Save</Button>
-            </div>
-          </>
-        )}
+        </Field>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -198,7 +212,7 @@ function AgendaView({ events, colourFor, time24, onOpen }: {
     return [...m.entries()]
   }, [events])
 
-  if (events.length === 0) return <p className="text-sm text-muted text-center py-10">No upcoming events.</p>
+  if (events.length === 0) return <EmptyState icon="📅" title="No upcoming events" hint="Your next 60 days are clear." />
 
   return (
     <div className="flex flex-col gap-5">
@@ -248,14 +262,55 @@ export function CalendarPage() {
   const [people, setPeople] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [nodeFilter, setNodeFilter] = useState('')
+  const [hiddenSources, setHiddenSources] = useState<Set<string>>(new Set())
+  const [myOnly, setMyOnly] = useState(false)
   const [personFilter, setPersonFilter] = useState(0)
+  const [defaultsSaved, setDefaultsSaved] = useState(false)
   const [modal, setModal] = useState<{ event: CalendarEvent | null; date: Date | null } | null>(null)
+
+  // Which prefs the user has explicitly chosen (captured once, before the write-effects run,
+  // so we can fall back to household defaults only for prefs the user has never touched).
+  const storedRef = useRef({
+    view: localStorage.getItem('hs_cal_view') !== null,
+    weekStart: localStorage.getItem('hs_cal_weekstart') !== null,
+    time24: localStorage.getItem('hs_cal_24h') !== null,
+  })
+  const householdApplied = useRef(false)
 
   useEffect(() => { localStorage.setItem('hs_cal_view', view) }, [view])
   useEffect(() => { localStorage.setItem('hs_cal_weekstart', String(weekStart)) }, [weekStart])
   useEffect(() => { localStorage.setItem('hs_cal_24h', time24 ? '1' : '0') }, [time24])
   useEffect(() => { api.getPeople().then(setPeople).catch(() => {}) }, [])
+
+  // Household defaults (Core Calendar §15): apply once, only for prefs the user hasn't set.
+  useEffect(() => {
+    if (!household || householdApplied.current) return
+    householdApplied.current = true
+    if (!initialLinkedDate && !storedRef.current.view) setView(household.calendar_default_view)
+    if (!storedRef.current.weekStart) setWeekStart(household.calendar_week_start)
+    if (!storedRef.current.time24) setTime24(household.calendar_time_format === '24h')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [household])
+
+  const isAdmin = user?.role === 'admin'
+  const saveHouseholdDefaults = async () => {
+    try {
+      await api.updateHousehold({
+        calendar_default_view: view,
+        calendar_week_start: weekStart,
+        calendar_time_format: time24 ? '24h' : '12h',
+      })
+      setDefaultsSaved(true)
+      setTimeout(() => setDefaultsSaved(false), 2500)
+    } catch (e) { setError(errMsg(e)) }
+  }
+
+  const toggleSource = (src: string) =>
+    setHiddenSources(prev => {
+      const next = new Set(prev)
+      next.has(src) ? next.delete(src) : next.add(src)
+      return next
+    })
 
   // Window to fetch for the current view.
   const win = useMemo(() => {
@@ -279,14 +334,13 @@ export function CalendarPage() {
     api.getEvents({
       start: new Date(winStart).toISOString(),
       end: new Date(winEnd).toISOString(),
-      node: nodeFilter || undefined,
       person: personFilter || undefined,
     })
       .then(setEvents)
       .catch(e => setError(errMsg(e)))
       .finally(() => setLoading(false))
   }
-  useEffect(reload, [winStart, winEnd, nodeFilter, personFilter])
+  useEffect(reload, [winStart, winEnd, personFilter])
 
   const personColour = useMemo(() => {
     const m: Record<number, string> = {}
@@ -296,6 +350,16 @@ export function CalendarPage() {
 
   const familyColour = household?.family_colour || DEFAULT_COLOUR
   const defaultAssignee = personIdForUser(people, user?.id)
+
+  // Layer/visibility filters (Core Calendar §15): hide chosen source layers, or show only mine.
+  const visibleEvents = useMemo(
+    () => events.filter(e => {
+      if (hiddenSources.has(e.source_node || '__direct__')) return false
+      if (myOnly && defaultAssignee && e.assigned_to_person_id !== defaultAssignee) return false
+      return true
+    }),
+    [events, hiddenSources, myOnly, defaultAssignee],
+  )
 
   // Colour precedence: explicit event colour → assigned person's colour →
   // whole-family (unassigned) uses the household family colour.
@@ -309,19 +373,21 @@ export function CalendarPage() {
 
   const eventsByDay = useMemo(() => {
     const m = new Map<string, CalendarEvent[]>()
-    for (const e of events) {
+    for (const e of visibleEvents) {
       const k = new Date(e.start_at).toDateString()
       if (!m.has(k)) m.set(k, [])
       m.get(k)!.push(e)
     }
     return m
-  }, [events])
+  }, [visibleEvents])
   const dayEvents = (d: Date) => (eventsByDay.get(d.toDateString()) ?? [])
 
-  const nodesPresent = useMemo(
-    () => [...new Set(events.map(e => e.source_node).filter(Boolean))] as string[],
-    [events],
-  )
+  // Source layers present in the fetched window (node sources + "direct" for user-created events).
+  const layersPresent = useMemo(() => {
+    const set = new Set<string>()
+    for (const e of events) set.add(e.source_node || '__direct__')
+    return [...set]
+  }, [events])
 
   const step = (dir: -1 | 1) => {
     if (view === 'month') setAnchor(a => addMonths(a, dir))
@@ -348,10 +414,11 @@ export function CalendarPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-2xl font-extrabold tracking-tight text-ink">Calendar</h1>
-        <Button size="sm" onClick={() => openNew(view === 'day' ? anchor : new Date())}>+ New event</Button>
-      </div>
+      <PageHeader
+        title="Calendar"
+        icon="📅"
+        actions={<Button size="sm" onClick={() => openNew(view === 'day' ? anchor : new Date())}>+ New event</Button>}
+      />
 
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -373,20 +440,58 @@ export function CalendarPage() {
 
       {/* Filters + prefs */}
       <div className="flex items-center gap-2 flex-wrap text-sm">
-        <select value={nodeFilter} onChange={e => setNodeFilter(e.target.value)} className="px-2 py-1 rounded-lg border border-line bg-raised text-ink text-xs capitalize">
-          <option value="">All sources</option>
-          {nodesPresent.map(n => <option key={n} value={n}>{n}</option>)}
-        </select>
         <select value={personFilter} onChange={e => setPersonFilter(Number(e.target.value))} className="px-2 py-1 rounded-lg border border-line bg-raised text-ink text-xs">
           <option value={0}>Everyone</option>
           {people.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}
         </select>
+
+        {defaultAssignee && (
+          <button
+            onClick={() => setMyOnly(v => !v)}
+            className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${
+              myOnly ? 'border-primary bg-primary-soft text-primary' : 'border-line text-muted hover:text-ink'
+            }`}
+          >
+            My events
+          </button>
+        )}
+
+        {/* Source layer toggles */}
+        {layersPresent.map(src => {
+          const label = src === '__direct__' ? 'Direct' : src
+          const on = !hiddenSources.has(src)
+          const colour = src !== '__direct__' ? NODE_COLOUR[src] : undefined
+          return (
+            <button
+              key={src}
+              onClick={() => toggleSource(src)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium capitalize transition-colors ${
+                on ? 'border-line-strong text-ink' : 'border-line text-muted line-through opacity-60'
+              }`}
+              title={on ? `Hide ${label}` : `Show ${label}`}
+            >
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colour || DEFAULT_COLOUR }} />
+              {label}
+            </button>
+          )
+        })}
+
+        <span className="mx-1 h-4 w-px bg-line" />
         <button onClick={() => setWeekStart(w => (w === 1 ? 0 : 1))} className="px-2 py-1 rounded-lg border border-line text-xs text-muted hover:text-ink">
           Week starts {weekStart === 1 ? 'Mon' : 'Sun'}
         </button>
         <button onClick={() => setTime24(t => !t)} className="px-2 py-1 rounded-lg border border-line text-xs text-muted hover:text-ink">
           {time24 ? '24h' : '12h'}
         </button>
+        {isAdmin && (
+          <button
+            onClick={saveHouseholdDefaults}
+            className="px-2 py-1 rounded-lg border border-line text-xs text-muted hover:text-ink"
+            title="Make the current view, week-start and time format the household default"
+          >
+            {defaultsSaved ? 'Saved ✓' : 'Set as household default'}
+          </button>
+        )}
       </div>
 
       {error && (
@@ -442,7 +547,8 @@ export function CalendarPage() {
       ) : view === 'day' ? (
         <div className="flex flex-col gap-2">
           {dayEvents(anchor).length === 0 ? (
-            <p className="text-sm text-muted text-center py-10">Nothing scheduled. Tap “New event” to add something.</p>
+            <EmptyState icon="📅" title="Nothing scheduled" hint="Tap “New event” to add something to this day."
+              action={<Button size="sm" onClick={() => openNew(anchor)}>+ New event</Button>} />
           ) : dayEvents(anchor).map(e => (
             <button key={e.id} onClick={() => openEvent(e)} className="flex items-start gap-4 p-4 rounded-xl border border-line hover:bg-sunken text-left">
               <div className="w-16 text-xs text-primary font-semibold tabular-nums flex-shrink-0">{e.is_all_day ? 'All day' : fmtTime(e.start_at, time24)}</div>
@@ -455,7 +561,7 @@ export function CalendarPage() {
           ))}
         </div>
       ) : (
-        <AgendaView events={events} colourFor={colourFor} time24={time24} onOpen={openEvent} />
+        <AgendaView events={visibleEvents} colourFor={colourFor} time24={time24} onOpen={openEvent} />
       )}
 
       {/* Legend */}

@@ -559,6 +559,9 @@ export interface Household {
   timezone: string
   default_locale: string
   family_colour: string
+  calendar_default_view: 'month' | 'week' | 'day' | 'agenda'
+  calendar_week_start: 0 | 1
+  calendar_time_format: '12h' | '24h'
   created_at: string
   updated_at: string
 }

@@ -27,6 +27,19 @@ class Household(models.Model):
     default_locale = models.CharField(max_length=16, default="en-us")
     # Accent colour for household-wide ("whole family") calendar events/tasks.
     family_colour = models.CharField(max_length=20, blank=True, default="#7C6F5A")
+    # Household-level Calendar defaults (Core Calendar §15). A user's own saved prefs win;
+    # these are the fallback for anyone who hasn't chosen their own.
+    calendar_default_view = models.CharField(
+        max_length=10,
+        choices=[("month", "Month"), ("week", "Week"), ("day", "Day"), ("agenda", "Agenda")],
+        default="month",
+    )
+    calendar_week_start = models.PositiveSmallIntegerField(
+        choices=[(0, "Sunday"), (1, "Monday")], default=1
+    )
+    calendar_time_format = models.CharField(
+        max_length=3, choices=[("12h", "12-hour"), ("24h", "24-hour")], default="12h"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

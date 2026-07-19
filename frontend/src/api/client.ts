@@ -434,7 +434,7 @@ export const api = {
 
   // --- Household ---
   getHousehold: (): Promise<Household> => _fetch('/household/'),
-  updateHousehold: (data: Partial<{ name: string; family_colour: string; timezone: string }>): Promise<Household> =>
+  updateHousehold: (data: Partial<{ name: string; family_colour: string; timezone: string; calendar_default_view: string; calendar_week_start: number; calendar_time_format: string }>): Promise<Household> =>
     _fetch('/household/', { method: 'PATCH', body: JSON.stringify(data) }),
 
   getClassSessions: (params?: { course?: number }): Promise<EducationClassSession[]> =>

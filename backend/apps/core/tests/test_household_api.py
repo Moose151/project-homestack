@@ -75,6 +75,26 @@ class HouseholdPatchTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["timezone"], "Europe/London")
 
+    def test_admin_can_set_calendar_defaults(self):
+        _login(self.client, "admin2")
+        resp = self.client.patch(
+            self.url,
+            {"calendar_default_view": "week", "calendar_week_start": 0, "calendar_time_format": "24h"},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["calendar_default_view"], "week")
+        self.assertEqual(data["calendar_week_start"], 0)
+        self.assertEqual(data["calendar_time_format"], "24h")
+
+    def test_calendar_defaults_exposed_on_get(self):
+        _login(self.client, "admin2")
+        data = self.client.get(self.url).json()
+        self.assertIn("calendar_default_view", data)
+        self.assertIn("calendar_week_start", data)
+        self.assertIn("calendar_time_format", data)
+
     def test_manager_cannot_patch(self):
         _login(self.client, "manager2")
         resp = self.client.patch(self.url, {"name": "Hack"}, content_type="application/json")
