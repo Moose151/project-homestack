@@ -388,7 +388,8 @@ export interface HubWidget {
   name: string
   size: string
   supports_kiosk: boolean
-  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[]
+  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | AppNotification[]
+  meta?: { unread_count?: number }
 }
 
 export interface HubResponse {

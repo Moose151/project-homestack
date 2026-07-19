@@ -9,6 +9,8 @@ import type {
 import type { Person } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
+import { Tabs, type TabDef } from '../../../components/Tabs'
+import { PageHeader } from '../../../components/PageHeader'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
 import { useAuth } from '../../auth/AuthContext'
@@ -957,7 +959,7 @@ function ProfileTab({ people, institutions, onInstitutionCreated, defaultPersonI
 
 type Tab = 'profile' | 'assignments' | 'courses' | 'timetable'
 
-const TABS: { key: Tab; label: string }[] = [
+const TABS: TabDef<Tab>[] = [
   { key: 'profile', label: 'My Profile' },
   { key: 'assignments', label: 'Assignments' },
   { key: 'courses', label: 'Courses' },
@@ -981,10 +983,7 @@ export function EducationPage() {
 
   return (
     <div className="space-y-5 max-w-3xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-ink">Education</h1>
-        <p className="text-sm text-muted">Your courses, deadlines and weekly timetable.</p>
-      </div>
+      <PageHeader title="Education" icon="🎓" subtitle="Your courses, deadlines and weekly timetable." />
 
       {error && (
         <div className="flex items-center justify-between gap-3 bg-danger-soft text-danger text-sm rounded-xl px-4 py-2.5">
@@ -993,19 +992,7 @@ export function EducationPage() {
         </div>
       )}
 
-      <div className="flex gap-1 bg-sunken rounded-2xl p-1 overflow-x-auto">
-        {TABS.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex-1 min-w-[90px] px-3 py-2 rounded-xl text-sm font-semibold transition-colors ${
-              tab === t.key ? 'bg-surface text-primary shadow-soft' : 'text-muted-strong hover:text-ink'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs tabs={TABS} active={tab} onChange={setTab} />
 
       {tab === 'profile' && <ProfileTab people={people} institutions={institutions} onInstitutionCreated={i => setInstitutions(prev => [...prev, i])} defaultPersonId={defaultAssignee} onError={setError} />}
       {tab === 'assignments' && <AssignmentsTab courses={courses} people={people} defaultAssignee={defaultAssignee} onError={setError} />}

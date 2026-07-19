@@ -12,8 +12,11 @@ import type {
   CalendarEvent,
   EducationAssessment,
   EducationClassSession,
+  AppNotification,
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
+import { Input } from '../../../components/Field'
+import { Button } from '../../../components/Button'
 import { HubConfig } from './HubConfig'
 import { useAuth } from '../../auth/AuthContext'
 import { STACK_BY_KEY, softColour } from '../../../config/stacks'
@@ -234,10 +237,127 @@ function EducationClassesWidget({ items }: { items: EducationClassSession[] }) {
   )
 }
 
-function renderWidget(w: HubWidget) {
+const LEVEL_TONE: Record<string, string> = {
+  info: 'bg-primary-soft text-primary',
+  success: 'bg-success-soft text-success',
+  warning: 'bg-warning-soft text-warning',
+  danger: 'bg-danger-soft text-danger',
+}
+
+function NotificationsSummaryWidget({ items, unread }: { items: AppNotification[]; unread?: number }) {
+  if (!items.length) {
+    return <p className="text-sm text-muted">{unread ? `${unread} unread` : 'You’re all caught up ✓'}</p>
+  }
+  return (
+    <ul className="flex flex-col gap-2.5">
+      {items.slice(0, 5).map(n => {
+        const dot = LEVEL_TONE[n.level] ?? LEVEL_TONE.info
+        return (
+          <li key={n.id} className="flex items-start gap-2.5">
+            <span className={`mt-0.5 h-2 w-2 flex-shrink-0 rounded-full ${dot}`} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-ink">{n.title}</p>
+              {n.message && <p className="truncate text-xs text-muted">{n.message}</p>}
+            </div>
+          </li>
+        )
+      })}
+      {unread !== undefined && unread > items.length && (
+        <li className="text-xs text-muted">+{unread - items.length} more unread</li>
+      )}
+    </ul>
+  )
+}
+
+const QUICK_KINDS = [
+  { key: 'reminder', label: 'Reminder' },
+  { key: 'note', label: 'Note' },
+] as const
+type QuickKind = (typeof QUICK_KINDS)[number]['key']
+
+function QuickAddWidget({ onAdded }: { onAdded: () => void }) {
+  const [kind, setKind] = useState<QuickKind>('reminder')
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const title = text.trim()
+    if (!title) return
+    setBusy(true); setErr(null); setDone(null)
+    try {
+      if (kind === 'reminder') await api.createReminder({ title })
+      else await api.createNote({ title })
+      setText('')
+      setDone(kind === 'reminder' ? 'Reminder added ✓' : 'Note saved ✓')
+      onAdded()
+      setTimeout(() => setDone(null), 2500)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not save')
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-2.5">
+      <div className="flex gap-1 rounded-xl bg-sunken p-1">
+        {QUICK_KINDS.map(k => (
+          <button
+            key={k.key}
+            type="button"
+            onClick={() => setKind(k.key)}
+            className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+              kind === k.key ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'
+            }`}
+          >
+            {k.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <Input
+          value={text}
+          onChange={e => setText(e.target.value)}
+          placeholder={kind === 'reminder' ? 'Remind me to…' : 'Jot something down…'}
+          className="flex-1"
+        />
+        <Button type="submit" size="sm" loading={busy} disabled={!text.trim()}>Add</Button>
+      </div>
+      {done && <p className="text-xs text-success">{done}</p>}
+      {err && <p className="text-xs text-danger">{err}</p>}
+    </form>
+  )
+}
+
+// Small, local, offline set — no external data (Hub spec §6 ambient widget).
+const QUOTES = [
+  'Small steps every day add up to big journeys.',
+  'The best time to start was yesterday. The next best time is now.',
+  'A calm home is built one tidy corner at a time.',
+  'Done is better than perfect.',
+  'Be kind — everyone is fighting a battle you know nothing about.',
+  'Today is a good day to do a small good thing.',
+  'Progress, not perfection.',
+  'The little things? The little moments? They aren’t little.',
+]
+
+function DailyQuoteWidget() {
+  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000)
+  const quote = QUOTES[dayOfYear % QUOTES.length]
+  return <p className="py-1 text-sm italic leading-relaxed text-muted-strong">“{quote}”</p>
+}
+
+function renderWidget(w: HubWidget, onChanged: () => void) {
   switch (w.key) {
     case 'clock':
       return <ClockWidget />
+    case 'notifications_summary':
+      return <NotificationsSummaryWidget items={w.items as AppNotification[]} unread={w.meta?.unread_count} />
+    case 'quick_add':
+      return <QuickAddWidget onAdded={onChanged} />
+    case 'daily_quote':
+      return <DailyQuoteWidget />
     case 'calendar_upcoming':
       return <UpcomingWidget items={w.items as CalendarEvent[]} />
     case 'atlas_todos':
@@ -327,7 +447,7 @@ export function HubPage() {
                   <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: accent.colour }} />
                   <h3 className="text-sm font-bold text-ink truncate">{w.name}</h3>
                 </div>
-                <div className="p-4">{renderWidget(w)}</div>
+                <div className="p-4">{renderWidget(w, loadHub)}</div>
               </div>
             )
           })}

@@ -7,6 +7,8 @@ import { RoutinesTab } from './meridian/RoutinesTab'
 import { GoalsTab, WishlistTab } from './meridian/GoalsWishlistTabs'
 import { LeaderboardTab, SettingsTab } from './meridian/ReportsSettingsTabs'
 import { OverviewTab } from './meridian/OverviewTab'
+import { PageHeader } from '../../../components/PageHeader'
+import { Tabs, type TabDef } from '../../../components/Tabs'
 
 type Tab = 'overview' | 'tasks' | 'routines' | 'shop' | 'goals' | 'wishlist' | 'leaderboard' | 'settings'
 
@@ -20,31 +22,19 @@ export function MeridianPage() {
     api.getMeridianSettings().then(s => setPointsLabel(s.points_label || 'points')).catch(() => {})
   }, [])
 
-  const tabs: Tab[] = ['overview', 'tasks', 'routines', 'shop', 'goals', 'wishlist', 'leaderboard']
-  if (canManage) tabs.push('settings')
+  const tabKeys: Tab[] = ['overview', 'tasks', 'routines', 'shop', 'goals', 'wishlist', 'leaderboard']
+  if (canManage) tabKeys.push('settings')
+  const tabs: TabDef<Tab>[] = tabKeys.map(t => ({ key: t, label: t }))
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-ink">Meridian</h1>
-        <p className="mt-1 text-sm text-muted">
-          Approvals, setup and household progress for the Meridian points system.
-        </p>
-      </div>
+      <PageHeader
+        title="Meridian"
+        icon="⭐"
+        subtitle="Approvals, setup and household progress for the Meridian points system."
+      />
 
-      <div className="flex flex-wrap gap-1 bg-sunken p-1 rounded-xl w-fit">
-        {tabs.map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors capitalize ${
-              tab === t ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'
-            }`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+      <Tabs tabs={tabs} active={tab} onChange={setTab} className="w-fit" />
 
       {tab === 'overview' && (
         <OverviewTab

@@ -57,8 +57,20 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False) -> list[dict]:
             continue
 
         content: list = []
+        meta: dict = {}
 
-        if key == "atlas_todos":
+        if key == "notifications_summary":
+            from apps.notifications.selectors import list_for_user, unread_count
+            from apps.notifications.serializers import NotificationSerializer
+            recent = list_for_user(user, unread_only=True, limit=6)
+            content = NotificationSerializer(recent, many=True).data
+            meta = {"unread_count": unread_count(user)}
+
+        elif key in ("quick_add", "daily_quote"):
+            # Client-rendered ambient/utility widgets — own no domain data (Hub spec §6).
+            content = []
+
+        elif key == "atlas_todos":
             content = AtlasListItemSerializer(list_open_items(user, limit=20), many=True).data
 
         elif key == "atlas_reminders":
@@ -85,6 +97,7 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False) -> list[dict]:
             "size": hw.size,
             "supports_kiosk": hw.widget.supports_kiosk,
             "items": content,
+            "meta": meta,
         })
 
     return widgets

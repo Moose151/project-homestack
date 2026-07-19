@@ -1,11 +1,23 @@
 # HomeStack — Version History
 
-> **Current version: 0.6.3**
+> **Current version: 0.7.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
 >
 > **Rule:** bump the version and add a row here with every push to `main`.
+
+---
+
+## 0.7 — Node fleshing-out & shared UX parity
+
+### 0.7.0 — 2026-07-19
+- **Shared UI kit**: new reusable primitives (`Field`/`Input`/`Textarea`/`Select`, `Tabs`,
+  `Modal`, `EmptyState`, `Badge`, `PageHeader`) so every node shares one visual language.
+  Adopted across the Meridian, Atlas and Education tab bars, headers and inputs.
+- **Hub**: three new widgets — **Quick add** (add a reminder or note from the Hub),
+  **Notifications** summary (unread count + recent, web-only), and an opt-in ambient
+  **Thought for the day**. New seed migration `hub/0007`.
 
 ---
 

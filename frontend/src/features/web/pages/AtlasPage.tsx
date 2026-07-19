@@ -4,6 +4,10 @@ import { api } from '../../../api/client'
 import type { AtlasList, AtlasListItem, AtlasReminder, AtlasSearchResults, Person } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
+import { Input } from '../../../components/Field'
+import { Tabs } from '../../../components/Tabs'
+import { PageHeader } from '../../../components/PageHeader'
+import { EmptyState } from '../../../components/EmptyState'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
 import { useAuth } from '../../auth/AuthContext'
@@ -404,13 +408,12 @@ export function AtlasPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <h1 className="text-2xl font-extrabold tracking-tight text-ink">Atlas</h1>
+      <PageHeader title="Atlas" icon="🗒" subtitle="Notes, lists, checklists and reminders." />
 
-      <input
+      <Input
         value={query}
         onChange={e => setQuery(e.target.value)}
         placeholder="Search lists, items, notes, reminders…"
-        className="w-full px-4 py-2.5 rounded-xl border border-line bg-surface text-sm text-ink placeholder-muted outline-none focus:ring-2 focus:ring-primary"
       />
 
       {error && (
@@ -425,28 +428,21 @@ export function AtlasPage() {
       ) : (
         <>
           {/* Tabs */}
-          <div className="flex gap-1 bg-sunken p-1 rounded-xl w-fit">
-            {(['lists', 'reminders'] as Tab[]).map(t => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors capitalize ${
-                  tab === t ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            tabs={[{ key: 'lists', label: 'lists' }, { key: 'reminders', label: 'reminders' }]}
+            active={tab}
+            onChange={setTab}
+            className="w-fit"
+          />
 
           {tab === 'lists' ? (
             <div className="flex flex-col gap-4">
               <form onSubmit={createList} className="flex gap-2">
-                <input
+                <Input
                   value={newTitle}
                   onChange={e => setNewTitle(e.target.value)}
                   placeholder="New list name…"
-                  className="flex-1 px-4 py-2.5 rounded-xl border border-line bg-surface text-sm text-ink placeholder-muted outline-none focus:ring-2 focus:ring-primary"
+                  className="flex-1"
                 />
                 <Button type="submit" loading={creating} disabled={!newTitle.trim()}>Create</Button>
               </form>
@@ -454,7 +450,7 @@ export function AtlasPage() {
               {loading ? (
                 <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
               ) : lists.length === 0 ? (
-                <p className="text-sm text-muted text-center py-8">No lists yet. Create one above.</p>
+                <EmptyState icon="🗒" title="No lists yet" hint="Create your first list above to get started." />
               ) : (
                 lists.map(list => (
                   <ListCard

@@ -150,6 +150,22 @@ class HubContentTests(TestCase):
         for widget in resp.json()["widgets"]:
             self.assertTrue(widget["supports_kiosk"])
 
+    def test_quick_add_widget_present(self):
+        keys = [w["key"] for w in self.client.get(reverse("hub")).json()["widgets"]]
+        self.assertIn("quick_add", keys)
+
+    def test_notifications_summary_widget_shows_unread(self):
+        from apps.notifications.services import create_notification
+        create_notification(self.admin, title="Task approved", message="Nice work")
+        resp = self.client.get(reverse("hub"))
+        widget = next(w for w in resp.json()["widgets"] if w["key"] == "notifications_summary")
+        self.assertEqual(widget["meta"]["unread_count"], 1)
+        self.assertIn("Task approved", [n["title"] for n in widget["items"]])
+
+    def test_notifications_summary_is_not_kiosk_safe(self):
+        keys = [w["key"] for w in self.client.get(reverse("kiosk-hub")).json()["widgets"]]
+        self.assertNotIn("notifications_summary", keys)
+
 
 class KioskUsersTests(TestCase):
     """GET /auth/kiosk-users/ returns persons with linked users (no auth)."""
