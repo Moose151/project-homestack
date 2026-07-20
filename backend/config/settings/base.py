@@ -65,6 +65,7 @@ LOCAL_APPS = [
     "apps.books",  # Books node — personal reading shelves and shared book clubs
     "apps.home_wiki",  # Milestone 3 — household knowledge base (Node Spec 12)
     "apps.pets",  # Milestone 3 — pet profiles, treatments, vet appointments (Node Spec 13)
+    "apps.homestead",  # Home/property hub — maintenance, appliances, providers, improvements (Node Spec 25)
 ]
 
 INSTALLED_APPS = [

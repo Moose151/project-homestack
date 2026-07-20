@@ -10,6 +10,7 @@ import { EducationPage } from './features/web/pages/EducationPage'
 import { BooksPage } from './features/web/pages/BooksPage'
 import { HomeWikiPage } from './features/web/pages/HomeWikiPage'
 import { PetsPage } from './features/web/pages/PetsPage'
+import { HomesteadPage } from './features/web/pages/HomesteadPage'
 import { UsersPage } from './features/web/pages/UsersPage'
 import { SettingsPage } from './features/web/pages/SettingsPage'
 import { KioskApp } from './features/kiosk/KioskApp'
@@ -35,6 +36,7 @@ function WebRoutes({ isAdmin }: { isAdmin: boolean }) {
         <Route path="/books" element={<NodeRoute nodeKey="books"><BooksPage /></NodeRoute>} />
         <Route path="/wiki" element={<NodeRoute nodeKey="home_wiki"><HomeWikiPage /></NodeRoute>} />
         <Route path="/pets" element={<NodeRoute nodeKey="pets"><PetsPage /></NodeRoute>} />
+        <Route path="/homestead" element={<NodeRoute nodeKey="homestead"><HomesteadPage /></NodeRoute>} />
         {isAdmin && <Route path="/users" element={<UsersPage />} />}
         {isAdmin && <Route path="/settings" element={<SettingsPage />} />}
         <Route path="*" element={<Navigate to="/hub" replace />} />

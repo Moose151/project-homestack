@@ -388,7 +388,7 @@ export interface HubWidget {
   name: string
   size: string
   supports_kiosk: boolean
-  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | PetTreatment[] | PetAppointment[] | AppNotification[]
+  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | PetTreatment[] | PetAppointment[] | MaintenanceTask[] | Appliance[] | Improvement[] | AppNotification[]
   meta?: { unread_count?: number }
 }
 
@@ -654,6 +654,127 @@ export interface PetAppointment {
   visibility: string
   created_at: string
   updated_at: string
+}
+
+// ---------------------------------------------------------------------------
+// Homestead (home / property hub)
+// ---------------------------------------------------------------------------
+
+export type PropertyType = 'house' | 'flat' | 'bungalow' | 'maisonette' | 'other'
+export type Tenure = 'freehold' | 'leasehold' | 'share_of_freehold' | 'rented' | 'other' | 'unknown'
+
+export interface Property {
+  id: number
+  name: string
+  address: string
+  property_type: PropertyType
+  tenure: Tenure
+  purchase_date: string | null
+  move_in_date: string | null
+  year_built: string
+  is_primary: boolean
+  notes: string
+  water_shutoff: string
+  gas_shutoff: string
+  electricity_consumer_unit: string
+  boiler_location: string
+  visibility: string
+  created_at: string
+  updated_at: string
+}
+
+export type ProviderTrade =
+  | 'plumber' | 'electrician' | 'gas_engineer' | 'builder' | 'gardener'
+  | 'cleaner' | 'roofer' | 'pest_control' | 'handyman' | 'other'
+
+export interface ServiceProvider {
+  id: number
+  name: string
+  trade: ProviderTrade
+  company: string
+  phone: string
+  email: string
+  website: string
+  last_used_at: string | null
+  notes: string
+  visibility: string
+  created_at: string
+  updated_at: string
+}
+
+export type ApplianceCategory =
+  | 'appliance' | 'heating' | 'kitchen' | 'laundry' | 'electrical'
+  | 'plumbing' | 'security' | 'outdoor' | 'other'
+
+export interface Appliance {
+  id: number
+  name: string
+  category: ApplianceCategory
+  brand: string
+  model_number: string
+  serial_number: string
+  room: string
+  purchase_date: string | null
+  warranty_expires_at: string | null
+  warranty_provider: string
+  manual_url: string
+  notes: string
+  visibility: string
+  created_at: string
+  updated_at: string
+}
+
+export type MaintenanceCategory =
+  | 'heating' | 'plumbing' | 'electrical' | 'safety' | 'garden'
+  | 'exterior' | 'cleaning' | 'appliance' | 'renewal' | 'general'
+
+export interface MaintenanceTask {
+  id: number
+  appliance_id: number | null
+  provider_id: number | null
+  assigned_to_person_id: number | null
+  title: string
+  category: MaintenanceCategory
+  next_due_at: string | null
+  is_all_day: boolean
+  recurrence_rule: string
+  last_done_at: string | null
+  notes: string
+  is_overdue: boolean
+  calendar_event_id: number | null
+  visibility: string
+  created_at: string
+  updated_at: string
+}
+
+export type ImprovementStatus =
+  | 'idea' | 'planned' | 'in_progress' | 'on_hold' | 'done' | 'cancelled'
+export type ImprovementPriority = 'low' | 'medium' | 'high'
+
+export interface Improvement {
+  id: number
+  assigned_to_person_id: number | null
+  title: string
+  description: string
+  status: ImprovementStatus
+  priority: ImprovementPriority
+  room: string
+  target_date: string | null
+  is_all_day: boolean
+  project_ref: number | null
+  notes: string
+  is_open: boolean
+  calendar_event_id: number | null
+  visibility: string
+  created_at: string
+  updated_at: string
+}
+
+export interface HomesteadSearchResults {
+  appliances: Appliance[]
+  maintenance: MaintenanceTask[]
+  providers: ServiceProvider[]
+  improvements: Improvement[]
 }
 
 // ---------------------------------------------------------------------------

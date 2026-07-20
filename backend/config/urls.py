@@ -33,6 +33,7 @@ urlpatterns = [
     path("api/v1/books/", include("apps.books.urls")),
     path("api/v1/wiki/", include("apps.home_wiki.urls")),
     path("api/v1/pets/", include("apps.pets.urls")),
+    path("api/v1/homestead/", include("apps.homestead.urls")),
     path("api/v1/kiosk/meridian/", KioskMeridianView.as_view(), name="kiosk-meridian"),
     path("api/v1/hub/", include("apps.hub.urls")),
     path("api/v1/notifications/", include("apps.notifications.urls")),

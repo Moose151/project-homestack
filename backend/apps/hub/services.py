@@ -97,6 +97,9 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False) -> list[dict]:
         elif key.startswith("pets_"):
             content = _pets_widget_content(key, user)
 
+        elif key.startswith("homestead_"):
+            content = _homestead_widget_content(key, user)
+
         widgets.append({
             "key": key,
             "name": hw.widget.name,
@@ -205,6 +208,30 @@ def _pets_widget_content(key: str, user) -> list:
     if key == "pets_appointments":
         appointments = p.list_appointments(user, upcoming_only=True, limit=8)
         return PetAppointmentSerializer(appointments, many=True).data
+
+    return []
+
+
+def _homestead_widget_content(key: str, user) -> list:
+    """Assemble content for a Homestead hub widget (Node Spec 25), permission-filtered."""
+    from apps.homestead import selectors as h
+    from apps.homestead.serializers import (
+        ApplianceSerializer,
+        ImprovementSerializer,
+        MaintenanceTaskSerializer,
+    )
+
+    if key == "homestead_maintenance":
+        tasks = h.list_maintenance(user, due_only=True, limit=8)
+        return MaintenanceTaskSerializer(tasks, many=True).data
+
+    if key == "homestead_warranties":
+        appliances = h.list_appliances(user, expiring_only=True, limit=8)
+        return ApplianceSerializer(appliances, many=True).data
+
+    if key == "homestead_improvements":
+        improvements = h.list_improvements(user, open_only=True, limit=8)
+        return ImprovementSerializer(improvements, many=True).data
 
     return []
 

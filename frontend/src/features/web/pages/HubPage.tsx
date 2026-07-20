@@ -16,6 +16,9 @@ import type {
   WikiPage,
   PetTreatment,
   PetAppointment,
+  MaintenanceTask,
+  Appliance,
+  Improvement,
   AppNotification,
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
@@ -307,6 +310,56 @@ function PetAppointmentsWidget({ items }: { items: PetAppointment[] }) {
   )
 }
 
+function HomesteadMaintenanceWidget({ items }: { items: MaintenanceTask[] }) {
+  if (items.length === 0) return <p className="text-sm text-muted">Nothing due</p>
+  return (
+    <ul className="flex flex-col gap-2">
+      {items.slice(0, 6).map(t => (
+        <li key={t.id} className="flex items-center justify-between gap-3 text-sm">
+          <Link to="/homestead" className="text-ink truncate hover:text-primary">{t.title}</Link>
+          {t.next_due_at && (
+            <span className={`text-xs flex-shrink-0 ${t.is_overdue ? 'text-danger' : 'text-muted'}`}>
+              {new Date(t.next_due_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function HomesteadWarrantiesWidget({ items }: { items: Appliance[] }) {
+  if (items.length === 0) return <p className="text-sm text-muted">No warranties expiring soon</p>
+  return (
+    <ul className="flex flex-col gap-2">
+      {items.slice(0, 6).map(a => (
+        <li key={a.id} className="flex items-center justify-between gap-3 text-sm">
+          <Link to="/homestead" className="text-ink truncate hover:text-primary">{a.name}</Link>
+          {a.warranty_expires_at && (
+            <span className="text-xs text-muted flex-shrink-0">
+              {new Date(a.warranty_expires_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function HomesteadImprovementsWidget({ items }: { items: Improvement[] }) {
+  if (items.length === 0) return <p className="text-sm text-muted">No active improvements</p>
+  return (
+    <ul className="flex flex-col gap-2">
+      {items.slice(0, 6).map(i => (
+        <li key={i.id} className="flex items-center justify-between gap-3 text-sm">
+          <Link to="/homestead" className="text-ink truncate hover:text-primary">{i.title}</Link>
+          <span className="text-xs text-muted flex-shrink-0 capitalize">{i.status.replace('_', ' ')}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 const LEVEL_TONE: Record<string, string> = {
   info: 'bg-primary-soft text-primary',
   success: 'bg-success-soft text-success',
@@ -458,6 +511,12 @@ function renderWidget(w: HubWidget, onChanged: () => void) {
       return <PetRemindersWidget items={w.items as PetTreatment[]} />
     case 'pets_appointments':
       return <PetAppointmentsWidget items={w.items as PetAppointment[]} />
+    case 'homestead_maintenance':
+      return <HomesteadMaintenanceWidget items={w.items as MaintenanceTask[]} />
+    case 'homestead_warranties':
+      return <HomesteadWarrantiesWidget items={w.items as Appliance[]} />
+    case 'homestead_improvements':
+      return <HomesteadImprovementsWidget items={w.items as Improvement[]} />
     default:
       return <p className="text-sm text-muted">Nothing to show</p>
   }

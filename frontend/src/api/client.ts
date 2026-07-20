@@ -11,6 +11,7 @@ import type {
   AssessmentNote, AssessmentFile, AcademicProfile, AcademicProfileResponse,
   WikiCategory, WikiPage,
   Pet, PetTreatment, PetAppointment,
+  Property, ServiceProvider, Appliance, MaintenanceTask, Improvement, HomesteadSearchResults,
   NodeInfo, Household,
   Book, BookClub, ClubBookEntry, ClubQueueItem, PersonalBookEntry, BookRating, BooksUser, BookShelfStatus,
 } from './types'
@@ -66,6 +67,36 @@ type TreatmentWrite = Partial<{
 type AppointmentWrite = Partial<{
   pet_id: number; title: string; provider: string; location: string
   start_at: string; end_at: string | null; notes: string; visibility: string
+}>
+
+type PropertyWrite = Partial<{
+  name: string; address: string; property_type: string; tenure: string
+  purchase_date: string | null; move_in_date: string | null; year_built: string
+  is_primary: boolean; notes: string; water_shutoff: string; gas_shutoff: string
+  electricity_consumer_unit: string; boiler_location: string; visibility: string
+}>
+
+type ProviderWrite = Partial<{
+  name: string; trade: string; company: string; phone: string; email: string
+  website: string; last_used_at: string | null; notes: string; visibility: string
+}>
+
+type ApplianceWrite = Partial<{
+  name: string; category: string; brand: string; model_number: string; serial_number: string
+  room: string; purchase_date: string | null; warranty_expires_at: string | null
+  warranty_provider: string; manual_url: string; notes: string; visibility: string
+}>
+
+type MaintenanceWrite = Partial<{
+  appliance_id: number | null; provider_id: number | null; assigned_to_person_id: number | null
+  title: string; category: string; next_due_at: string | null; is_all_day: boolean
+  recurrence_rule: string; notes: string; visibility: string
+}>
+
+type ImprovementWrite = Partial<{
+  assigned_to_person_id: number | null; title: string; description: string; status: string
+  priority: string; room: string; target_date: string | null; is_all_day: boolean
+  project_ref: number | null; notes: string; visibility: string
 }>
 
 type InstitutionWrite = Partial<{
@@ -571,6 +602,55 @@ export const api = {
     _fetch(`/pets/appointments/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deletePetAppointment: (id: number): Promise<void> =>
     _fetch(`/pets/appointments/${id}/`, { method: 'DELETE' }),
+
+  // --- Homestead (home / property hub) ---
+  searchHomestead: (q: string): Promise<HomesteadSearchResults> =>
+    _fetch(`/homestead/search/?q=${encodeURIComponent(q)}`),
+
+  getProperties: (): Promise<Property[]> => _fetch('/homestead/properties/'),
+  createProperty: (data: PropertyWrite): Promise<Property> =>
+    _fetch('/homestead/properties/', { method: 'POST', body: JSON.stringify(data) }),
+  updateProperty: (id: number, data: PropertyWrite): Promise<Property> =>
+    _fetch(`/homestead/properties/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteProperty: (id: number): Promise<void> =>
+    _fetch(`/homestead/properties/${id}/`, { method: 'DELETE' }),
+
+  getProviders: (): Promise<ServiceProvider[]> => _fetch('/homestead/providers/'),
+  createProvider: (data: ProviderWrite): Promise<ServiceProvider> =>
+    _fetch('/homestead/providers/', { method: 'POST', body: JSON.stringify(data) }),
+  updateProvider: (id: number, data: ProviderWrite): Promise<ServiceProvider> =>
+    _fetch(`/homestead/providers/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteProvider: (id: number): Promise<void> =>
+    _fetch(`/homestead/providers/${id}/`, { method: 'DELETE' }),
+
+  getAppliances: (expiring = false): Promise<Appliance[]> =>
+    _fetch(`/homestead/appliances/${expiring ? '?expiring=1' : ''}`),
+  createAppliance: (data: ApplianceWrite): Promise<Appliance> =>
+    _fetch('/homestead/appliances/', { method: 'POST', body: JSON.stringify(data) }),
+  updateAppliance: (id: number, data: ApplianceWrite): Promise<Appliance> =>
+    _fetch(`/homestead/appliances/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteAppliance: (id: number): Promise<void> =>
+    _fetch(`/homestead/appliances/${id}/`, { method: 'DELETE' }),
+
+  getMaintenance: (due = false): Promise<MaintenanceTask[]> =>
+    _fetch(`/homestead/maintenance/${due ? '?due=1' : ''}`),
+  createMaintenance: (data: MaintenanceWrite): Promise<MaintenanceTask> =>
+    _fetch('/homestead/maintenance/', { method: 'POST', body: JSON.stringify(data) }),
+  updateMaintenance: (id: number, data: MaintenanceWrite): Promise<MaintenanceTask> =>
+    _fetch(`/homestead/maintenance/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  completeMaintenance: (id: number): Promise<MaintenanceTask> =>
+    _fetch(`/homestead/maintenance/${id}/complete/`, { method: 'POST' }),
+  deleteMaintenance: (id: number): Promise<void> =>
+    _fetch(`/homestead/maintenance/${id}/`, { method: 'DELETE' }),
+
+  getImprovements: (open = false): Promise<Improvement[]> =>
+    _fetch(`/homestead/improvements/${open ? '?open=1' : ''}`),
+  createImprovement: (data: ImprovementWrite): Promise<Improvement> =>
+    _fetch('/homestead/improvements/', { method: 'POST', body: JSON.stringify(data) }),
+  updateImprovement: (id: number, data: ImprovementWrite): Promise<Improvement> =>
+    _fetch(`/homestead/improvements/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteImprovement: (id: number): Promise<void> =>
+    _fetch(`/homestead/improvements/${id}/`, { method: 'DELETE' }),
 
   // --- Books ---
   getBooksUsers: (): Promise<BooksUser[]> => _fetch('/books/users/'),

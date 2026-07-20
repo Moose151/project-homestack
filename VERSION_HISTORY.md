@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.9.2**
+> **Current version: 0.10.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,28 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.10 — Homestead node
+
+### 0.10.0 — 2026-07-21
+- **New node: Homestead** — the household's home/property hub (Node Spec 25, decision **D21**).
+  Built for a new home purchase; folds the *home* scope of the planned Assets node into one warm
+  surface. Backend `apps/homestead`: `Property` (record + emergency info — water stopcock, gas
+  shut-off, consumer unit, boiler), `MaintenanceTask` (recurring/one-off upkeep + renewals;
+  `next_due_at` source of truth; RRULE; **mark done → advances to next occurrence**; Calendar sync,
+  D7/D8), `Appliance` (brand/model/serial, room, **warranty countdown**, manual link), 
+  `ServiceProvider` (trades directory), `Improvement` (status/priority/target-date; dormant
+  `project_ref` link to the future Projects node). No money fields — those come from Solace later.
+  Full layered app + FTS `search_homestead` + `homestead.*` permissions (perms `0018`) + three Hub
+  widgets `homestead_maintenance`/`homestead_warranties`/`homestead_improvements` (hub `0011`) +
+  publish-only signals + node catalogue (nodes `0005`, disabled by default). 28 tests.
+- **Aggregating-hub design**: Homestead is built to later surface Solace bills/rates and Projects
+  renovations (read-only, deep-linked) via the events bus — never importing another node's models
+  (D4). The Overview flags this as "coming soon".
+- Frontend: `/homestead` route (node-gated) + nav/accent; **five tabs** — Overview (property card +
+  emergency info + at-a-glance due/warranties/improvements + future-hub note), Maintenance (due
+  badges, one-tap Done, recurrence picker), Appliances (warranty-countdown cards), Improvements
+  (grouped by status), Contacts (trades directory) — plus Homestead-wide search and Hub renderers.
 
 ## 0.9 — Pets node
 
