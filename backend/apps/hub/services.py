@@ -94,6 +94,9 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False) -> list[dict]:
         elif key.startswith("wiki_"):
             content = _wiki_widget_content(key, user)
 
+        elif key.startswith("pets_"):
+            content = _pets_widget_content(key, user)
+
         widgets.append({
             "key": key,
             "name": hw.widget.name,
@@ -186,6 +189,22 @@ def _wiki_widget_content(key: str, user) -> list:
     if key == "wiki_recent":
         pages = w.list_pages(user, order_by_updated=True, limit=6)
         return WikiPageSerializer(pages, many=True).data
+
+    return []
+
+
+def _pets_widget_content(key: str, user) -> list:
+    """Assemble content for a Pets hub widget (Node Spec 8), permission-filtered."""
+    from apps.pets import selectors as p
+    from apps.pets.serializers import PetAppointmentSerializer, PetTreatmentSerializer
+
+    if key == "pets_reminders":
+        treatments = p.list_treatments(user, due_only=True, limit=8)
+        return PetTreatmentSerializer(treatments, many=True).data
+
+    if key == "pets_appointments":
+        appointments = p.list_appointments(user, upcoming_only=True, limit=8)
+        return PetAppointmentSerializer(appointments, many=True).data
 
     return []
 

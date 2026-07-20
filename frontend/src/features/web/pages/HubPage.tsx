@@ -14,6 +14,8 @@ import type {
   EducationClassSession,
   EducationEvent,
   WikiPage,
+  PetTreatment,
+  PetAppointment,
   AppNotification,
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
@@ -269,6 +271,42 @@ function WikiPagesWidget({ items, emptyLabel }: { items: WikiPage[]; emptyLabel:
   )
 }
 
+function PetRemindersWidget({ items }: { items: PetTreatment[] }) {
+  if (items.length === 0) return <p className="text-sm text-muted">Nothing due</p>
+  return (
+    <ul className="flex flex-col gap-2">
+      {items.slice(0, 6).map(t => (
+        <li key={t.id} className="flex items-center justify-between gap-3 text-sm">
+          <Link to="/pets" className="text-ink truncate hover:text-primary">
+            <span className="text-muted mr-1">{t.pet_name}</span>{t.display_name}
+          </Link>
+          {t.next_due_at && (
+            <span className={`text-xs flex-shrink-0 ${t.is_overdue ? 'text-danger' : 'text-muted'}`}>
+              {new Date(t.next_due_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function PetAppointmentsWidget({ items }: { items: PetAppointment[] }) {
+  if (items.length === 0) return <p className="text-sm text-muted">No appointments</p>
+  return (
+    <ul className="flex flex-col gap-2">
+      {items.slice(0, 6).map(a => (
+        <li key={a.id} className="flex items-center justify-between gap-3 text-sm">
+          <Link to="/pets" className="text-ink truncate hover:text-primary">
+            <span className="text-muted mr-1">{a.pet_name}</span>{a.display_title}
+          </Link>
+          <span className="text-xs text-muted flex-shrink-0">{new Date(a.start_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 const LEVEL_TONE: Record<string, string> = {
   info: 'bg-primary-soft text-primary',
   success: 'bg-success-soft text-success',
@@ -416,6 +454,10 @@ function renderWidget(w: HubWidget, onChanged: () => void) {
       return <WikiPagesWidget items={w.items as WikiPage[]} emptyLabel="No emergency info" />
     case 'wiki_recent':
       return <WikiPagesWidget items={w.items as WikiPage[]} emptyLabel="Nothing recent" />
+    case 'pets_reminders':
+      return <PetRemindersWidget items={w.items as PetTreatment[]} />
+    case 'pets_appointments':
+      return <PetAppointmentsWidget items={w.items as PetAppointment[]} />
     default:
       return <p className="text-sm text-muted">Nothing to show</p>
   }

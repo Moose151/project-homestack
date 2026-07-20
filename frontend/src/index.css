@@ -44,6 +44,7 @@
     --hs-accent-calendar: #2b7fd0;
     --hs-accent-books: #8B5CF6;
     --hs-accent-home_wiki: #0ca678;
+    --hs-accent-pets: #d9642c;
   }
 
   .dark {
@@ -76,6 +77,7 @@
     --hs-accent-calendar: #6aa9e6;
     --hs-accent-books: #a78bfa;
     --hs-accent-home_wiki: #38d9a9;
+    --hs-accent-pets: #e8894f;
   }
 
   body {

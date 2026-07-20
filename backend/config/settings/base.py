@@ -64,6 +64,7 @@ LOCAL_APPS = [
     "apps.education",  # Milestone 3 — school/university tracking (uni-first V1 slice)
     "apps.books",  # Books node — personal reading shelves and shared book clubs
     "apps.home_wiki",  # Milestone 3 — household knowledge base (Node Spec 12)
+    "apps.pets",  # Milestone 3 — pet profiles, treatments, vet appointments (Node Spec 13)
 ]
 
 INSTALLED_APPS = [

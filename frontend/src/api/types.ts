@@ -388,7 +388,7 @@ export interface HubWidget {
   name: string
   size: string
   supports_kiosk: boolean
-  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | AppNotification[]
+  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | PetTreatment[] | PetAppointment[] | AppNotification[]
   meta?: { unread_count?: number }
 }
 
@@ -588,6 +588,70 @@ export interface WikiPage {
   is_kiosk_safe: boolean
   visibility: string
   sensitivity: string
+  created_at: string
+  updated_at: string
+}
+
+// ---------------------------------------------------------------------------
+// Pets (Milestone 3 — pet care)
+// ---------------------------------------------------------------------------
+
+export type PetSpecies = 'dog' | 'cat' | 'bird' | 'fish' | 'reptile' | 'small_mammal' | 'other'
+export type TreatmentType = 'flea' | 'worming' | 'vaccination' | 'medication' | 'grooming' | 'other'
+
+export interface Pet {
+  id: number
+  name: string
+  species: PetSpecies
+  breed: string
+  avatar: string
+  colour: string
+  date_of_birth: string | null
+  adoption_date: string | null
+  notes: string
+  vet_name: string
+  vet_phone: string
+  microchip_number: string
+  insurance_provider: string
+  insurance_policy_number: string
+  food_notes: string
+  is_archived: boolean
+  visibility: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PetTreatment {
+  id: number
+  pet_id: number
+  pet_name: string
+  treatment_type: TreatmentType
+  name: string
+  display_name: string
+  last_done_at: string | null
+  next_due_at: string | null
+  recurrence_rule: string
+  notes: string
+  is_overdue: boolean
+  calendar_event_id: number | null
+  visibility: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PetAppointment {
+  id: number
+  pet_id: number
+  pet_name: string
+  title: string
+  display_title: string
+  provider: string
+  location: string
+  start_at: string
+  end_at: string | null
+  notes: string
+  calendar_event_id: number | null
+  visibility: string
   created_at: string
   updated_at: string
 }

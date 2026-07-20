@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.8.0**
+> **Current version: 0.9.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,21 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.9 — Pets node
+
+### 0.9.0 — 2026-07-20
+- **New node: Pets** — pet care tracking (Node Spec 13). Backend `apps/pets`: `Pet` profiles
+  (species/breed/photo, vet + microchip + insurance + food notes), `PetTreatment`
+  (flea/worming/vaccination/medication/grooming, `next_due_at` source of truth, RRULE
+  recurrence) and `PetAppointment` (vet visits) — both sync to the shared Calendar (D7).
+  Marking a treatment done stamps `last_done_at` and advances `next_due_at` to the next RRULE
+  occurrence (D8); non-recurring ones clear the reminder. Full layered app + FTS search +
+  `pets.*` permissions + two Hub widgets (reminders due, upcoming appointments) + domain
+  signals. Frontend: `/pets` route + nav stack, Pets tab (profile cards with inline treatments
+  & appointments, add/edit/delete), Reminders tab (all due, one-tap Done) and Appointments tab,
+  pet-wide search, and Hub renderers. Disabled by default — enable it in Settings.
+- **Milestone 3 complete** — Education, Home Wiki and Pets all shipped.
 
 ## 0.8 — Home Wiki node
 

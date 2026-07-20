@@ -10,6 +10,7 @@ import type {
   EducationInstitution, EducationCourse, EducationAssessment, EducationClassSession, EducationEvent,
   AssessmentNote, AssessmentFile, AcademicProfile, AcademicProfileResponse,
   WikiCategory, WikiPage,
+  Pet, PetTreatment, PetAppointment,
   NodeInfo, Household,
   Book, BookClub, ClubBookEntry, ClubQueueItem, PersonalBookEntry, BookRating, BooksUser, BookShelfStatus,
 } from './types'
@@ -46,6 +47,25 @@ type WikiPageWrite = Partial<{
   title: string; body: string; category_id: number | null; tags: string
   is_favourite: boolean; is_emergency: boolean; is_kiosk_safe: boolean
   visibility: string; sensitivity: string
+}>
+
+type PetWrite = Partial<{
+  name: string; species: string; breed: string; avatar: string; colour: string
+  date_of_birth: string | null; adoption_date: string | null; notes: string
+  vet_name: string; vet_phone: string; microchip_number: string
+  insurance_provider: string; insurance_policy_number: string; food_notes: string
+  is_archived: boolean; visibility: string
+}>
+
+type TreatmentWrite = Partial<{
+  pet_id: number; treatment_type: string; name: string
+  last_done_at: string | null; next_due_at: string | null
+  recurrence_rule: string; notes: string; visibility: string
+}>
+
+type AppointmentWrite = Partial<{
+  pet_id: number; title: string; provider: string; location: string
+  start_at: string; end_at: string | null; notes: string; visibility: string
 }>
 
 type InstitutionWrite = Partial<{
@@ -509,6 +529,48 @@ export const api = {
     _fetch(`/wiki/pages/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteWikiPage: (id: number): Promise<void> =>
     _fetch(`/wiki/pages/${id}/`, { method: 'DELETE' }),
+
+  // --- Pets ---
+  searchPets: (q: string): Promise<{ pets: Pet[]; treatments: PetTreatment[]; appointments: PetAppointment[] }> =>
+    _fetch(`/pets/search/?q=${encodeURIComponent(q)}`),
+  getPets: (includeArchived = false): Promise<Pet[]> =>
+    _fetch(`/pets/pets/${includeArchived ? '?archived=1' : ''}`),
+  createPet: (data: PetWrite): Promise<Pet> =>
+    _fetch('/pets/pets/', { method: 'POST', body: JSON.stringify(data) }),
+  updatePet: (id: number, data: PetWrite): Promise<Pet> =>
+    _fetch(`/pets/pets/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePet: (id: number): Promise<void> =>
+    _fetch(`/pets/pets/${id}/`, { method: 'DELETE' }),
+
+  getPetTreatments: (params?: { pet?: number; due?: boolean }): Promise<PetTreatment[]> => {
+    const q = new URLSearchParams()
+    if (params?.pet) q.set('pet', String(params.pet))
+    if (params?.due) q.set('due', '1')
+    const qs = q.toString()
+    return _fetch(`/pets/treatments/${qs ? `?${qs}` : ''}`)
+  },
+  createPetTreatment: (data: TreatmentWrite): Promise<PetTreatment> =>
+    _fetch('/pets/treatments/', { method: 'POST', body: JSON.stringify(data) }),
+  updatePetTreatment: (id: number, data: TreatmentWrite): Promise<PetTreatment> =>
+    _fetch(`/pets/treatments/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  completePetTreatment: (id: number): Promise<PetTreatment> =>
+    _fetch(`/pets/treatments/${id}/complete/`, { method: 'POST' }),
+  deletePetTreatment: (id: number): Promise<void> =>
+    _fetch(`/pets/treatments/${id}/`, { method: 'DELETE' }),
+
+  getPetAppointments: (params?: { pet?: number; upcoming?: boolean }): Promise<PetAppointment[]> => {
+    const q = new URLSearchParams()
+    if (params?.pet) q.set('pet', String(params.pet))
+    if (params?.upcoming) q.set('upcoming', '1')
+    const qs = q.toString()
+    return _fetch(`/pets/appointments/${qs ? `?${qs}` : ''}`)
+  },
+  createPetAppointment: (data: AppointmentWrite): Promise<PetAppointment> =>
+    _fetch('/pets/appointments/', { method: 'POST', body: JSON.stringify(data) }),
+  updatePetAppointment: (id: number, data: AppointmentWrite): Promise<PetAppointment> =>
+    _fetch(`/pets/appointments/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePetAppointment: (id: number): Promise<void> =>
+    _fetch(`/pets/appointments/${id}/`, { method: 'DELETE' }),
 
   // --- Books ---
   getBooksUsers: (): Promise<BooksUser[]> => _fetch('/books/users/'),
