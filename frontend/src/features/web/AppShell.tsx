@@ -104,7 +104,7 @@ export function AppShell() {
     <div className="min-h-screen flex">
       {/* Sidebar — md+ */}
       <aside className="hidden md:flex flex-col w-56 bg-surface/90 backdrop-blur border-r border-line fixed inset-y-0 left-0 z-20">
-        <div className="px-5 py-5 border-b border-line flex items-center gap-2">
+        <div className="px-5 h-16 border-b border-line flex items-center gap-2">
           <span className="inline-grid place-items-center w-9 h-9 rounded-xl bg-primary text-white shadow-soft">◇</span>
           <span className="text-xl font-extrabold tracking-tight text-ink">HomeStack</span>
         </div>
@@ -194,7 +194,7 @@ export function AppShell() {
 
       {/* Main content */}
       <div className="flex-1 md:ml-56 flex flex-col min-h-screen">
-        <header className="flex items-center justify-end gap-1 px-4 md:px-8 py-3 border-b border-line bg-surface/60 backdrop-blur sticky top-0 z-10">
+        <header className="flex items-center justify-end gap-1 px-4 md:px-8 h-16 border-b border-line bg-surface/60 backdrop-blur sticky top-0 z-10">
           <CalendarPeek />
           <NotificationBell />
         </header>

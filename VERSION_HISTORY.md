@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.9.0**
+> **Current version: 0.9.1**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,13 @@
 ---
 
 ## 0.9 — Pets node
+
+### 0.9.1 — 2026-07-20
+- **Layout polish**: the sidebar header and the top bar are now the same height so their
+  bottom borders line up across every page. **Books** page cleanups — native selects get
+  room for their dropdown arrow (the "Backlog" label was being clipped), the book-tile
+  controls are stacked so nothing is cramped, and the shelf toggle is grouped with the shelf
+  tabs instead of floating out to the right.
 
 ### 0.9.0 — 2026-07-20
 - **New node: Pets** — pet care tracking (Node Spec 13). Backend `apps/pets`: `Pet` profiles

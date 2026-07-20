@@ -12,6 +12,8 @@ import { PageHeader } from '../../../components/PageHeader'
 type Surface = 'personal' | 'club'
 
 const inputCls = fieldClass
+// Native selects need right padding so the dropdown arrow doesn't clip the label.
+const selectCls = `${fieldClass} pr-9 cursor-pointer`
 const shelfLabels: Record<BookShelfStatus, string> = { backlog: 'Backlog', reading: 'Reading', history: 'Read' }
 const statuses: BookShelfStatus[] = ['backlog', 'reading', 'history']
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
@@ -261,11 +263,11 @@ function AddBookPanel({ mode, clubs, selectedClub, defaultStatus, onClose, onAdd
           </div>
         )}
         <div className="grid md:grid-cols-[1fr_1fr_auto_auto] gap-2 items-center">
-          <select className={inputCls} value={status} onChange={e => setStatus(e.target.value as BookShelfStatus)}>
+          <select className={selectCls} value={status} onChange={e => setStatus(e.target.value as BookShelfStatus)}>
             {statuses.map(s => <option key={s} value={s}>{shelfLabels[s]}</option>)}
           </select>
           {mode === 'club' && (
-            <select className={inputCls} value={clubId} onChange={e => setClubId(Number(e.target.value))}>
+            <select className={selectCls} value={clubId} onChange={e => setClubId(Number(e.target.value))}>
               {clubs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           )}
@@ -300,16 +302,16 @@ function PersonalBookCard({ entry, clubs, onRefresh, onMove, onDelete, onAddToCl
         </div>
       </div>
       {editing && <EditBookPanel book={entry.book} onCancel={() => setEditing(false)} onSaved={onRefresh} />}
-      <div className="grid sm:grid-cols-[1fr_auto] gap-2">
-        <select className={inputCls} value={entry.status} onChange={e => onMove(e.target.value as BookShelfStatus)}>
+      <div className="space-y-2">
+        <select className={selectCls} value={entry.status} onChange={e => onMove(e.target.value as BookShelfStatus)}>
           {statuses.map(s => <option key={s} value={s}>{shelfLabels[s]}</option>)}
         </select>
         {entry.status === 'backlog' && clubs.length > 0 && (
           <div className="flex gap-2">
-            <select className={`${inputCls} min-w-[9rem]`} value={clubId} onChange={e => setClubId(Number(e.target.value))}>
+            <select className={selectCls} value={clubId} onChange={e => setClubId(Number(e.target.value))}>
               {clubs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <Button type="button" size="sm" variant="secondary" disabled={!clubId} onClick={() => onAddToClub(Number(clubId))}>
+            <Button type="button" size="sm" variant="secondary" className="flex-shrink-0 whitespace-nowrap" disabled={!clubId} onClick={() => onAddToClub(Number(clubId))}>
               Add to club
             </Button>
           </div>
@@ -340,12 +342,12 @@ function ClubBookCard({ entry, club, onRefresh, onMove, onDelete, onQueue }: {
         </div>
       </div>
       {editing && <EditBookPanel book={entry.book} onCancel={() => setEditing(false)} onSaved={onRefresh} />}
-      <div className="grid sm:grid-cols-[1fr_auto] gap-2">
-        <select className={inputCls} value={entry.status} onChange={e => onMove(e.target.value as BookShelfStatus)}>
+      <div className="flex items-center gap-2">
+        <select className={selectCls} value={entry.status} onChange={e => onMove(e.target.value as BookShelfStatus)}>
           {statuses.map(s => <option key={s} value={s}>{shelfLabels[s]}</option>)}
         </select>
         {entry.status === 'backlog' && (
-          <Button type="button" size="sm" variant="secondary" onClick={onQueue}>Add up next</Button>
+          <Button type="button" size="sm" variant="secondary" className="flex-shrink-0 whitespace-nowrap" onClick={onQueue}>Add up next</Button>
         )}
       </div>
       {entry.status === 'history' && (
@@ -558,7 +560,7 @@ export function BooksPage() {
         </div>
       )}
 
-      <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
         <div className="flex flex-wrap gap-2">
           {statuses.map(s => (
             <TabButton key={s} active={activeShelf === s} onClick={() => setActiveShelf(s)} colour={surface === 'club' ? selectedClub?.colour : undefined}>
