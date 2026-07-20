@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.9.1**
+> **Current version: 0.9.2**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,22 @@
 ---
 
 ## 0.9 — Pets node
+
+### 0.9.2 — 2026-07-21
+- **Calendar + Atlas web/mobile UX pass** (owner: the daily-use surfaces felt clunky on phone
+  and laptop). Functionality unchanged — this is a feel/entry pass.
+  - **Calendar**: the crowded filter row (person, my-events, source layers, week-start, 12/24h,
+    set-as-default) collapses into a single **Filter** popover with an active-filter count badge;
+    bigger nav (‹ Today ›) targets. New **inline quick-add** bar on Day and Agenda that parses a
+    time from the text (e.g. "Dentist 3pm") so the common case takes one line. The event modal now
+    shows just **Title + Start**, with end/location/assignee/colour/visibility tucked under
+    **"More options"** (auto-expanded when editing an event that already uses them). Week-view days
+    are shorter on mobile and tappable to add.
+  - **Atlas**: a unified **quick-capture** bar on top routes a line of text into a **To-do**
+    (into a chosen list), **Note**, or **Reminder** and jumps you to where it landed. List add-row
+    no longer wraps awkwardly on mobile (stacks input, then who + Add); the reminder form collapses
+    behind **"+ New reminder"** like notes; list cards show a "N to do" count.
+  - Shared: new `Popover` component and a small `parseQuickEvent` time parser.
 
 ### 0.9.1 — 2026-07-20
 - **Layout polish**: the sidebar header and the top bar are now the same height so their

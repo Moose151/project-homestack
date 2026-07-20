@@ -166,43 +166,50 @@ function ListCard({ list, people, defaultAssignee, onDeleted, onError }: {
       <div className="flex items-center justify-between mb-3">
         <div>
           <h3 className="font-bold text-ink">{list.title}</h3>
-          <span className="text-xs text-muted capitalize">{list.list_type}</span>
+          <span className="text-xs text-muted capitalize">{list.list_type} · {pending.length} to do</span>
         </div>
         <button onClick={deleteList} className="text-muted hover:text-danger transition-colors text-xl leading-none" aria-label="Delete list">×</button>
       </div>
 
-      <ul className="divide-y divide-line/60">
-        {pending.map(item => (
-          <ItemRow key={item.id} item={item} listId={list.id} people={people} onToggle={handleToggle} onDelete={handleDelete} onError={onError} />
-        ))}
-        {done.map(item => (
-          <ItemRow key={item.id} item={item} listId={list.id} people={people} onToggle={handleToggle} onDelete={handleDelete} onError={onError} />
-        ))}
-      </ul>
+      {items.length > 0 && (
+        <ul className="divide-y divide-line/60">
+          {pending.map(item => (
+            <ItemRow key={item.id} item={item} listId={list.id} people={people} onToggle={handleToggle} onDelete={handleDelete} onError={onError} />
+          ))}
+          {done.map(item => (
+            <ItemRow key={item.id} item={item} listId={list.id} people={people} onToggle={handleToggle} onDelete={handleDelete} onError={onError} />
+          ))}
+        </ul>
+      )}
 
-      <form onSubmit={addItem} className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-line">
-        {hasQty && (
+      {/* Add row: stacks on mobile (input, then who + add), inline from sm up. */}
+      <form onSubmit={addItem} className="mt-3 pt-3 border-t border-line flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          {hasQty && (
+            <input
+              value={qty}
+              onChange={e => setQty(e.target.value)}
+              placeholder="Qty"
+              className="w-14 text-sm bg-transparent text-ink placeholder-muted outline-none min-h-[40px] border-b border-line focus:border-primary"
+            />
+          )}
           <input
-            value={qty}
-            onChange={e => setQty(e.target.value)}
-            placeholder="Qty"
-            className="w-16 text-sm bg-transparent text-ink placeholder-muted outline-none min-h-[36px] border-b border-line focus:border-primary"
+            ref={inputRef}
+            value={newTitle}
+            onChange={e => setNewTitle(e.target.value)}
+            placeholder="Add item…"
+            className="flex-1 min-w-0 text-sm bg-transparent text-ink placeholder-muted outline-none min-h-[40px]"
           />
-        )}
-        <input
-          ref={inputRef}
-          value={newTitle}
-          onChange={e => setNewTitle(e.target.value)}
-          placeholder="Add item…"
-          className="flex-1 min-w-[8rem] text-sm bg-transparent text-ink placeholder-muted outline-none min-h-[36px]"
-        />
-        <AssigneeSelect
-          people={people}
-          value={assignee}
-          onChange={setAssignee}
-          className="text-sm rounded-lg border border-line bg-surface px-2 py-1.5 text-muted-strong min-h-[36px] max-w-[9rem]"
-        />
-        <Button type="submit" size="sm" loading={adding} disabled={!newTitle.trim()}>Add</Button>
+        </div>
+        <div className="flex items-center gap-2">
+          <AssigneeSelect
+            people={people}
+            value={assignee}
+            onChange={setAssignee}
+            className="flex-1 sm:flex-none text-sm rounded-lg border border-line bg-surface px-2 py-1.5 text-muted-strong min-h-[40px] max-w-[10rem]"
+          />
+          <Button type="submit" size="sm" loading={adding} disabled={!newTitle.trim()}>Add</Button>
+        </div>
       </form>
     </Card>
   )
@@ -354,6 +361,7 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
   const [title, setTitle] = useState('')
   const [dueAt, setDueAt] = useState<string | null>(null)
   const [dueAllDay, setDueAllDay] = useState(true)
+  const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -367,7 +375,7 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
     try {
       const r = await api.createReminder({ title: title.trim(), due_at: dueAt, is_all_day: dueAllDay })
       setReminders(prev => [...prev, r])
-      setTitle(''); setDueAt(null); setDueAllDay(true)
+      setTitle(''); setDueAt(null); setDueAllDay(true); setOpen(false)
     } catch (e) {
       onError(errMsg(e))
     } finally {
@@ -388,20 +396,26 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <Card title="New reminder">
-        <form onSubmit={create} className="flex flex-col gap-3">
-          <Input
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            placeholder="Reminder title"
-          />
-          <DateTimeField value={dueAt} allDay={dueAllDay}
-            onChange={({ value, allDay }) => { setDueAt(value); setDueAllDay(allDay) }} />
-          <div className="flex justify-end">
-            <Button type="submit" loading={saving} disabled={!title.trim()}>Save</Button>
-          </div>
-        </form>
-      </Card>
+      {open ? (
+        <Card title="New reminder">
+          <form onSubmit={create} className="flex flex-col gap-3">
+            <Input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="Reminder title"
+              autoFocus
+            />
+            <DateTimeField value={dueAt} allDay={dueAllDay}
+              onChange={({ value, allDay }) => { setDueAt(value); setDueAllDay(allDay) }} />
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="submit" size="sm" loading={saving} disabled={!title.trim()}>Save</Button>
+            </div>
+          </form>
+        </Card>
+      ) : (
+        <Button size="sm" onClick={() => setOpen(true)} className="self-start">+ New reminder</Button>
+      )}
 
       {reminders.length === 0 ? (
         <EmptyState icon="⏰" title="No reminders yet" hint="Dated reminders also show on your Hub and Calendar." />
@@ -428,6 +442,83 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
         </div>
       )}
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Quick capture — one bar that drops text into a list, note or reminder.
+// ---------------------------------------------------------------------------
+
+type CaptureKind = 'todo' | 'note' | 'reminder'
+
+function CaptureBar({ lists, onCapture }: {
+  lists: AtlasList[]
+  onCapture: (kind: CaptureKind, text: string, listId: number | null) => Promise<void>
+}) {
+  const [kind, setKind] = useState<CaptureKind>('todo')
+  const [text, setText] = useState('')
+  const [listId, setListId] = useState<number | null>(lists[0]?.id ?? null)
+  const [busy, setBusy] = useState(false)
+
+  // Keep a valid target list selected as lists load / change.
+  useEffect(() => {
+    if (kind !== 'todo') return
+    if (listId == null || !lists.some(l => l.id === listId)) setListId(lists[0]?.id ?? null)
+  }, [lists, kind, listId])
+
+  const noTarget = kind === 'todo' && listId == null
+  const canSubmit = !!text.trim() && !noTarget
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!canSubmit) return
+    setBusy(true)
+    try { await onCapture(kind, text.trim(), listId); setText('') } finally { setBusy(false) }
+  }
+
+  const seg = (k: CaptureKind, label: string) => (
+    <button
+      type="button"
+      onClick={() => setKind(k)}
+      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+        kind === k ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'
+      }`}
+    >
+      {label}
+    </button>
+  )
+
+  return (
+    <Card>
+      <form onSubmit={submit} className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <span className="pl-1 text-muted-strong" aria-hidden>✎</span>
+          <input
+            value={text}
+            onChange={e => setText(e.target.value)}
+            placeholder="Capture a quick to-do, note or reminder…"
+            className="min-h-[40px] flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted"
+          />
+          <Button type="submit" size="sm" loading={busy} disabled={!canSubmit}>Add</Button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1 bg-sunken p-1 rounded-xl">
+            {seg('todo', 'To-do')}
+            {seg('note', 'Note')}
+            {seg('reminder', 'Reminder')}
+          </div>
+          {kind === 'todo' && (
+            lists.length > 0 ? (
+              <Select value={listId ?? 0} onChange={e => setListId(Number(e.target.value))} className="!w-auto min-w-[9rem] !min-h-[38px] !py-1.5">
+                {lists.map(l => <option key={l.id} value={l.id}>{l.title}</option>)}
+              </Select>
+            ) : (
+              <span className="text-xs text-muted">Create a list first to capture to-dos.</span>
+            )
+          )}
+        </div>
+      </form>
+    </Card>
   )
 }
 
@@ -516,6 +607,9 @@ export function AtlasPage() {
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<AtlasSearchResults | null>(null)
+  // Remount only the affected list card / self-fetching tab after a quick capture.
+  const [cardRefresh, setCardRefresh] = useState<Record<number, number>>({})
+  const [captureTick, setCaptureTick] = useState(0)
 
   useEffect(() => {
     api.getLists().then(setLists).catch(e => setError(errMsg(e))).finally(() => setLoading(false))
@@ -550,9 +644,33 @@ export function AtlasPage() {
     }
   }
 
+  const capture = async (kind: CaptureKind, text: string, listId: number | null) => {
+    try {
+      if (kind === 'note') {
+        await api.createNote({ title: text, visibility: 'household' })
+        setCaptureTick(t => t + 1)
+        setTab('notes')
+      } else if (kind === 'reminder') {
+        await api.createReminder({ title: text, due_at: null, is_all_day: true })
+        setCaptureTick(t => t + 1)
+        setTab('reminders')
+      } else if (kind === 'todo' && listId != null) {
+        await api.createItem(listId, { title: text, assigned_to_person_id: defaultAssignee })
+        const full = await api.getList(listId)
+        setLists(prev => prev.map(l => l.id === listId ? full : l))
+        setCardRefresh(prev => ({ ...prev, [listId]: (prev[listId] ?? 0) + 1 }))
+        setTab('lists')
+      }
+    } catch (e) {
+      setError(errMsg(e))
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <PageHeader title="Atlas" icon="🗒" subtitle="Notes, lists, checklists and reminders." />
+
+      <CaptureBar lists={lists} onCapture={capture} />
 
       <Input
         value={query}
@@ -606,7 +724,7 @@ export function AtlasPage() {
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                   {lists.map(list => (
                     <ListCard
-                      key={list.id}
+                      key={`${list.id}:${cardRefresh[list.id] ?? 0}`}
                       list={list}
                       people={people}
                       defaultAssignee={defaultAssignee}
@@ -618,9 +736,9 @@ export function AtlasPage() {
               )}
             </div>
           ) : tab === 'notes' ? (
-            <NotesTab onError={setError} />
+            <NotesTab key={`notes-${captureTick}`} onError={setError} />
           ) : (
-            <RemindersTab onError={setError} />
+            <RemindersTab key={`reminders-${captureTick}`} onError={setError} />
           )}
         </>
       )}

@@ -7,7 +7,9 @@ import { Field, Input, Select } from '../../../components/Field'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
 import { DateTimeField } from '../../../components/DateTimeField'
+import { Popover } from '../../../components/Popover'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
+import { parseQuickEvent, quickEventPreview } from '../../../lib/quickParse'
 import { useAuth } from '../../auth/AuthContext'
 import { useStacks } from '../../stacks/StacksContext'
 
@@ -44,7 +46,8 @@ const NODE_COLOUR: Record<string, string> = { atlas: '#5b57d1', meridian: '#d983
 const DEFAULT_COLOUR = '#9CA3AF'
 
 // ---------------------------------------------------------------------------
-// Event modal (create / edit standalone events)
+// Event modal (create / edit standalone events) — common fields up top, the
+// rest collapsed under "More options" so the frequent case is just title + start.
 // ---------------------------------------------------------------------------
 
 function EventModal({
@@ -70,6 +73,10 @@ function EventModal({
     assigned_to_person_id: event ? (event.assigned_to_person_id ?? 0) : (defaultAssignee ?? 0),
     visibility: event?.visibility ?? 'household',
   })
+  // Reveal advanced fields automatically when editing an event that already uses them.
+  const [showMore, setShowMore] = useState(
+    !!(event && (event.end_at || event.location || event.assigned_to_person_id || event.colour || event.visibility === 'private')),
+  )
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: unknown) => setF(prev => ({ ...prev, [k]: v }))
 
@@ -140,38 +147,93 @@ function EventModal({
             onChange={({ value, allDay }) => setF(prev => ({ ...prev, start_at: value ?? prev.start_at, is_all_day: allDay }))}
           />
         </Field>
-        <Field label="End (optional)">
-          <DateTimeField
-            value={f.end_at || null}
-            allDay={f.is_all_day}
-            allowAllDay={false}
-            onChange={({ value }) => set('end_at', value ?? '')}
-          />
-        </Field>
-        <Input placeholder="Location (optional)" value={f.location} onChange={e => set('location', e.target.value)} />
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Assigned to">
-            <AssigneeSelect people={people}
-              value={f.assigned_to_person_id || null}
-              onChange={v => set('assigned_to_person_id', v ?? 0)} />
-          </Field>
-          <Field label="Visibility">
-            <Select value={f.visibility} onChange={e => set('visibility', e.target.value)}>
-              <option value="household">Household</option>
-              <option value="private">Private</option>
-            </Select>
-          </Field>
-        </div>
-        <Field label="Colour">
-          <div className="flex items-center gap-2">
-            <input type="color" value={f.colour || '#6366F1'} onChange={e => set('colour', e.target.value)}
-              className="h-9 w-12 cursor-pointer rounded-lg border border-line p-0.5" />
-            <span className="text-xs text-muted">{f.colour ? 'Custom colour' : 'Uses person / family colour'}</span>
-            {f.colour && <button type="button" onClick={() => set('colour', '')} className="text-xs text-muted hover:text-danger">clear</button>}
+
+        {!showMore ? (
+          <button
+            type="button"
+            onClick={() => setShowMore(true)}
+            className="self-start text-sm font-medium text-primary hover:underline"
+          >
+            ▾ More options
+          </button>
+        ) : (
+          <div className="flex flex-col gap-3 border-t border-line pt-3">
+            <Field label="End (optional)">
+              <DateTimeField
+                value={f.end_at || null}
+                allDay={f.is_all_day}
+                allowAllDay={false}
+                onChange={({ value }) => set('end_at', value ?? '')}
+              />
+            </Field>
+            <Field label="Location (optional)">
+              <Input placeholder="Where" value={f.location} onChange={e => set('location', e.target.value)} />
+            </Field>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Assigned to">
+                <AssigneeSelect people={people}
+                  value={f.assigned_to_person_id || null}
+                  onChange={v => set('assigned_to_person_id', v ?? 0)} />
+              </Field>
+              <Field label="Visibility">
+                <Select value={f.visibility} onChange={e => set('visibility', e.target.value)}>
+                  <option value="household">Household</option>
+                  <option value="private">Private</option>
+                </Select>
+              </Field>
+            </div>
+            <Field label="Colour">
+              <div className="flex items-center gap-2">
+                <input type="color" value={f.colour || '#6366F1'} onChange={e => set('colour', e.target.value)}
+                  className="h-9 w-12 cursor-pointer rounded-lg border border-line p-0.5" />
+                <span className="text-xs text-muted">{f.colour ? 'Custom colour' : 'Uses person / family colour'}</span>
+                {f.colour && <button type="button" onClick={() => set('colour', '')} className="text-xs text-muted hover:text-danger">clear</button>}
+              </div>
+            </Field>
           </div>
-        </Field>
+        )}
       </div>
     </Modal>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Inline quick-add (day + agenda views) — one line, parses a time from the text.
+// ---------------------------------------------------------------------------
+
+function QuickAddBar({ baseDate, time24, onAdd }: {
+  baseDate: Date
+  time24: boolean
+  onAdd: (text: string) => Promise<void>
+}) {
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const preview = quickEventPreview(text, baseDate, time24)
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const t = text.trim()
+    if (!t) return
+    setBusy(true)
+    try { await onAdd(t); setText('') } finally { setBusy(false) }
+  }
+
+  return (
+    <form onSubmit={submit} className="rounded-2xl border border-line bg-surface p-2">
+      <div className="flex items-center gap-2">
+        <span className="pl-1.5 text-muted-strong" aria-hidden>✎</span>
+        <input
+          value={text}
+          onChange={e => setText(e.target.value)}
+          placeholder="Quick add — e.g. “Dentist 3pm”"
+          className="min-h-[40px] flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted"
+        />
+        <Button type="submit" size="sm" loading={busy} disabled={!text.trim()}>Add</Button>
+      </div>
+      {preview && (
+        <p className="px-7 pb-1 text-xs text-muted">Adds to {preview} — open the event afterwards for more detail.</p>
+      )}
+    </form>
   )
 }
 
@@ -407,10 +469,30 @@ export function CalendarPage() {
   const openEvent = (e: CalendarEvent) => setModal({ event: e, date: null })
   const openNew = (d: Date | null) => setModal({ event: null, date: d })
 
+  const quickAdd = async (text: string) => {
+    const p = parseQuickEvent(text, view === 'day' ? anchor : new Date())
+    try {
+      await api.createEvent({
+        title: p.title,
+        start_at: p.startISO,
+        is_all_day: p.allDay,
+        assigned_to_person_id: defaultAssignee || undefined,
+      })
+      reload()
+    } catch (e) { setError(errMsg(e)) }
+  }
+
   const weekdayNames = useMemo(() => {
     const base = startOfWeek(new Date(), weekStart)
     return Array.from({ length: 7 }, (_, i) => addDays(base, i).toLocaleDateString(undefined, { weekday: 'short' }))
   }, [weekStart])
+
+  const activeFilters = (personFilter ? 1 : 0) + (myOnly ? 1 : 0) + hiddenSources.size
+
+  const chipCls = (on: boolean) =>
+    `flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium capitalize transition-colors ${
+      on ? 'border-line-strong text-ink' : 'border-line text-muted line-through opacity-60'
+    }`
 
   return (
     <div className="flex flex-col gap-4">
@@ -420,78 +502,97 @@ export function CalendarPage() {
         actions={<Button size="sm" onClick={() => openNew(view === 'day' ? anchor : new Date())}>+ New event</Button>}
       />
 
-      {/* Toolbar */}
+      {/* Toolbar: nav on the left, Filter + view switcher on the right */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-1">
-          <button onClick={() => step(-1)} className="px-2 py-1 rounded-lg hover:bg-sunken text-muted-strong" aria-label="Previous">‹</button>
-          <button onClick={() => setAnchor(new Date())} className="px-3 py-1 rounded-lg hover:bg-sunken text-sm font-medium text-ink">Today</button>
-          <button onClick={() => step(1)} className="px-2 py-1 rounded-lg hover:bg-sunken text-muted-strong" aria-label="Next">›</button>
+          <button onClick={() => step(-1)} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-sunken text-lg text-muted-strong" aria-label="Previous">‹</button>
+          <button onClick={() => setAnchor(new Date())} className="h-9 px-3 rounded-lg hover:bg-sunken text-sm font-medium text-ink">Today</button>
+          <button onClick={() => step(1)} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-sunken text-lg text-muted-strong" aria-label="Next">›</button>
           <span className="ml-2 text-sm font-semibold text-ink">{periodLabel()}</span>
         </div>
-        <div className="flex gap-1 bg-sunken p-1 rounded-xl">
-          {(['month', 'week', 'day', 'agenda'] as View[]).map(v => (
-            <button key={v} onClick={() => setView(v)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize transition-colors ${view === v ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'}`}>
-              {v}
-            </button>
-          ))}
+
+        <div className="flex items-center gap-2">
+          <Popover
+            panelClassName="w-72"
+            trigger={() => (
+              <>
+                <span>Filter</span>
+                {activeFilters > 0 && (
+                  <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">{activeFilters}</span>
+                )}
+              </>
+            )}
+          >
+            {() => (
+              <div className="flex flex-col gap-3 text-sm">
+                <Field label="Show">
+                  <select value={personFilter} onChange={e => setPersonFilter(Number(e.target.value))} className="w-full rounded-lg border border-line bg-surface px-2 py-2 text-sm text-ink">
+                    <option value={0}>Everyone</option>
+                    {people.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}
+                  </select>
+                </Field>
+
+                {defaultAssignee && (
+                  <button
+                    onClick={() => setMyOnly(v => !v)}
+                    className={`self-start px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                      myOnly ? 'border-primary bg-primary-soft text-primary' : 'border-line text-muted hover:text-ink'
+                    }`}
+                  >
+                    {myOnly ? '✓ My events only' : 'My events only'}
+                  </button>
+                )}
+
+                {layersPresent.length > 1 && (
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-strong">Layers</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {layersPresent.map(src => {
+                        const label = src === '__direct__' ? 'Direct' : src
+                        const on = !hiddenSources.has(src)
+                        const colour = src !== '__direct__' ? NODE_COLOUR[src] : undefined
+                        return (
+                          <button key={src} onClick={() => toggleSource(src)} className={chipCls(on)} title={on ? `Hide ${label}` : `Show ${label}`}>
+                            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colour || DEFAULT_COLOUR }} />
+                            {label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-1.5 border-t border-line pt-3">
+                  <button onClick={() => setWeekStart(w => (w === 1 ? 0 : 1))} className="px-2.5 py-1.5 rounded-lg border border-line text-xs text-muted hover:text-ink">
+                    Week starts {weekStart === 1 ? 'Mon' : 'Sun'}
+                  </button>
+                  <button onClick={() => setTime24(t => !t)} className="px-2.5 py-1.5 rounded-lg border border-line text-xs text-muted hover:text-ink">
+                    {time24 ? '24-hour' : '12-hour'}
+                  </button>
+                </div>
+
+                {isAdmin && (
+                  <button
+                    onClick={saveHouseholdDefaults}
+                    className="self-start px-2.5 py-1.5 rounded-lg border border-line text-xs text-muted hover:text-ink"
+                    title="Make the current view, week-start and time format the household default"
+                  >
+                    {defaultsSaved ? 'Saved ✓' : 'Set as household default'}
+                  </button>
+                )}
+              </div>
+            )}
+          </Popover>
+
+          <div className="flex gap-1 bg-sunken p-1 rounded-xl">
+            {(['month', 'week', 'day', 'agenda'] as View[]).map(v => (
+              <button key={v} onClick={() => setView(v)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-colors ${view === v ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'}`}>
+                {v}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-
-      {/* Filters + prefs */}
-      <div className="flex items-center gap-2 flex-wrap text-sm">
-        <select value={personFilter} onChange={e => setPersonFilter(Number(e.target.value))} className="px-2 py-1 rounded-lg border border-line bg-raised text-ink text-xs">
-          <option value={0}>Everyone</option>
-          {people.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}
-        </select>
-
-        {defaultAssignee && (
-          <button
-            onClick={() => setMyOnly(v => !v)}
-            className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${
-              myOnly ? 'border-primary bg-primary-soft text-primary' : 'border-line text-muted hover:text-ink'
-            }`}
-          >
-            My events
-          </button>
-        )}
-
-        {/* Source layer toggles */}
-        {layersPresent.map(src => {
-          const label = src === '__direct__' ? 'Direct' : src
-          const on = !hiddenSources.has(src)
-          const colour = src !== '__direct__' ? NODE_COLOUR[src] : undefined
-          return (
-            <button
-              key={src}
-              onClick={() => toggleSource(src)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium capitalize transition-colors ${
-                on ? 'border-line-strong text-ink' : 'border-line text-muted line-through opacity-60'
-              }`}
-              title={on ? `Hide ${label}` : `Show ${label}`}
-            >
-              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colour || DEFAULT_COLOUR }} />
-              {label}
-            </button>
-          )
-        })}
-
-        <span className="mx-1 h-4 w-px bg-line" />
-        <button onClick={() => setWeekStart(w => (w === 1 ? 0 : 1))} className="px-2 py-1 rounded-lg border border-line text-xs text-muted hover:text-ink">
-          Week starts {weekStart === 1 ? 'Mon' : 'Sun'}
-        </button>
-        <button onClick={() => setTime24(t => !t)} className="px-2 py-1 rounded-lg border border-line text-xs text-muted hover:text-ink">
-          {time24 ? '24h' : '12h'}
-        </button>
-        {isAdmin && (
-          <button
-            onClick={saveHouseholdDefaults}
-            className="px-2 py-1 rounded-lg border border-line text-xs text-muted hover:text-ink"
-            title="Make the current view, week-start and time format the household default"
-          >
-            {defaultsSaved ? 'Saved ✓' : 'Set as household default'}
-          </button>
-        )}
       </div>
 
       {error && (
@@ -499,6 +600,10 @@ export function CalendarPage() {
           <span>{error}</span>
           <button onClick={() => setError(null)} aria-label="Dismiss">×</button>
         </div>
+      )}
+
+      {(view === 'day' || view === 'agenda') && (
+        <QuickAddBar baseDate={view === 'day' ? anchor : new Date()} time24={time24} onAdd={quickAdd} />
       )}
 
       {loading ? (
@@ -534,21 +639,24 @@ export function CalendarPage() {
       ) : view === 'week' ? (
         <div className="grid grid-cols-1 sm:grid-cols-7 gap-2">
           {Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(anchor, weekStart), i)).map(d => (
-            <div key={d.toDateString()} className="rounded-xl border border-line p-2 min-h-[120px]">
+            <button
+              key={d.toDateString()}
+              onClick={() => openNew(d)}
+              className="rounded-xl border border-line p-2 min-h-[72px] sm:min-h-[120px] text-left hover:bg-sunken/40"
+            >
               <div className={`text-xs font-semibold mb-2 ${isToday(d) ? 'text-primary' : 'text-muted-strong'}`}>
                 {d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })}
               </div>
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1" onClick={ev => ev.stopPropagation()}>
                 {dayEvents(d).map(e => <EventChip key={e.id} event={e} colour={colourFor(e)} time24={time24} onClick={() => openEvent(e)} />)}
               </div>
-            </div>
+            </button>
           ))}
         </div>
       ) : view === 'day' ? (
         <div className="flex flex-col gap-2">
           {dayEvents(anchor).length === 0 ? (
-            <EmptyState icon="📅" title="Nothing scheduled" hint="Tap “New event” to add something to this day."
-              action={<Button size="sm" onClick={() => openNew(anchor)}>+ New event</Button>} />
+            <EmptyState icon="📅" title="Nothing scheduled" hint="Use the quick-add above, or “New event” for full details." />
           ) : dayEvents(anchor).map(e => (
             <button key={e.id} onClick={() => openEvent(e)} className="flex items-start gap-4 p-4 rounded-xl border border-line hover:bg-sunken text-left">
               <div className="w-16 text-xs text-primary font-semibold tabular-nums flex-shrink-0">{e.is_all_day ? 'All day' : fmtTime(e.start_at, time24)}</div>
