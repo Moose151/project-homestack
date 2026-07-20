@@ -937,6 +937,12 @@ class FullImportCommandTests(TestCase):
             {"user_meridian_id": 1, "points": 100, "reason": "earned",
              "transaction_type": "task_approved"},
         ],
+        "tasks": [{"title": "Tidy room", "points": 10, "assigned_user_meridian_id": 1}],
+        "task_completions": [
+            {"task_title": "Tidy room", "user_meridian_id": 1, "status": "approved",
+             "submitted_at": "2026-06-01T08:00:00Z", "reviewed_at": "2026-06-01T18:00:00Z",
+             "review_note": "Great work"},
+        ],
         "routines": [{"title": "Brush teeth", "points": 2, "assigned_user_meridian_id": 1}],
         "routine_completions": [
             {"routine_title": "Brush teeth", "user_meridian_id": 1, "completed_date": "2026-06-01"},
@@ -965,11 +971,16 @@ class FullImportCommandTests(TestCase):
         from django.core.management import call_command
         from apps.achievements.models import PersonBadge
         from apps.meridian.models import (
-            MeridianAllowance, MeridianGroupGoal, MeridianRoutine, MeridianWishlistItem,
+            MeridianAllowance, MeridianGroupGoal, MeridianRoutine,
+            MeridianTaskCompletion, MeridianWishlistItem,
         )
         call_command("import_meridian", file=self._write_export())
         person = Person.objects.get(display_name="Finn")
         self.assertEqual(services.get_points_balance(person.id), 100)
+        completion = MeridianTaskCompletion.objects.get(person=person, task__title="Tidy room")
+        self.assertEqual(completion.status, "approved")
+        self.assertEqual(completion.review_note, "Great work")
+        self.assertIsNotNone(completion.reviewed_at)
         self.assertEqual(services.get_total_earned(person.id), 100)  # task_approved counts
         self.assertEqual(MeridianRoutine.objects.count(), 1)
         self.assertTrue(services.completed_today(
@@ -982,10 +993,13 @@ class FullImportCommandTests(TestCase):
 
     def test_full_import_idempotent_entities(self):
         from django.core.management import call_command
-        from apps.meridian.models import MeridianRoutine, MeridianGroupGoal, MeridianWishlistItem
+        from apps.meridian.models import (
+            MeridianGroupGoal, MeridianRoutine, MeridianTaskCompletion, MeridianWishlistItem,
+        )
         path = self._write_export()
         call_command("import_meridian", file=path)
         call_command("import_meridian", file=path)
         self.assertEqual(MeridianRoutine.objects.count(), 1)
         self.assertEqual(MeridianGroupGoal.objects.count(), 1)
         self.assertEqual(MeridianWishlistItem.objects.count(), 1)
+        self.assertEqual(MeridianTaskCompletion.objects.count(), 1)

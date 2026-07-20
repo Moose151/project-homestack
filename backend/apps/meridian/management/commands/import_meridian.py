@@ -17,6 +17,10 @@ Expected export JSON shape (keys are tolerant; unknown keys are ignored)
   "tasks":   [{"title": "Tidy room", "description": "", "points": 10,
                "category_meridian_id": 1, "assigned_user_meridian_id": 1,
                "is_hot": false, "status": "available"}],
+  "task_completions": [{"task_title": "Tidy room", "user_meridian_id": 1,
+               "status": "approved", "submitted_at": "2026-01-05T08:30:00Z",
+               "reviewed_at": "2026-01-05T18:00:00Z", "rejection_reason": "",
+               "review_note": "Nicely done", "evidence_photo": ""}],
   "rewards": [{"name": "Movie night", "description": "", "cost_points": 30, "is_active": true}],
   "points_entries": [{"user_meridian_id": 1, "points": 10, "reason": "Imported balance"}],
   "reward_requests": [{"reward_name": "Movie night", "user_meridian_id": 1,
@@ -33,8 +37,22 @@ import json
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from datetime import date
+
+
+def _parse_dt(value):
+    """Parse an ISO datetime string into an aware datetime, or None."""
+    if not value:
+        return None
+    dt = parse_datetime(value)
+    if dt is None:
+        return None
+    if timezone.is_naive(dt):
+        dt = timezone.make_aware(dt, timezone.get_current_timezone())
+    return dt
 
 from apps.achievements.models import Badge, PersonBadge
 from apps.core.models import get_active_household
@@ -49,6 +67,7 @@ from apps.meridian.models import (
     MeridianRoutine,
     MeridianRoutineCompletion,
     MeridianTask,
+    MeridianTaskCompletion,
     MeridianWishlistContribution,
     MeridianWishlistItem,
     MeridianWishlistRequest,
@@ -98,7 +117,8 @@ class Command(BaseCommand):
 
     def _import(self, household, data: dict) -> dict:
         stats = {k: 0 for k in (
-            "people", "categories", "tasks", "rewards", "points_entries", "reward_requests",
+            "people", "categories", "tasks", "task_completions",
+            "rewards", "points_entries", "reward_requests",
             "routines", "routine_completions", "group_goals", "group_goal_contributions",
             "wishlist_items", "wishlist_contributions", "wishlist_requests",
             "badges", "allowances",
@@ -129,10 +149,11 @@ class Command(BaseCommand):
             stats["categories"] += int(created)
 
         # tasks
+        tasks_by_title: dict = {}
         for t in data.get("tasks", []):
             assignee = people_by_mid.get(t.get("assigned_user_meridian_id"))
             category = cats_by_mid.get(t.get("category_meridian_id"))
-            _, created = MeridianTask.objects.get_or_create(
+            task, created = MeridianTask.objects.get_or_create(
                 household=household, title=t["title"],
                 defaults={
                     "description": t.get("description", ""),
@@ -143,7 +164,29 @@ class Command(BaseCommand):
                     "status": t.get("status", MeridianTask.Status.AVAILABLE),
                 },
             )
+            tasks_by_title[t["title"]] = task
             stats["tasks"] += int(created)
+
+        # task completion history (idempotent by task + person + submitted_at).
+        # Legacy `reviewed_by` is a Meridian user id, which has no HomeStack User equivalent
+        # here, so it is left null; status/notes/evidence/timestamps are preserved as-is.
+        for tc in data.get("task_completions", []):
+            task = tasks_by_title.get(tc.get("task_title"))
+            person = people_by_mid.get(tc.get("user_meridian_id"))
+            submitted_at = _parse_dt(tc.get("submitted_at"))
+            if not task or not person or submitted_at is None:
+                continue
+            _, created = MeridianTaskCompletion.objects.get_or_create(
+                household=household, task=task, person=person, submitted_at=submitted_at,
+                defaults={
+                    "status": tc.get("status", MeridianTaskCompletion.Status.APPROVED),
+                    "reviewed_at": _parse_dt(tc.get("reviewed_at")),
+                    "rejection_reason": tc.get("rejection_reason", "") or "",
+                    "review_note": tc.get("review_note", "") or "",
+                    "evidence_photo": tc.get("evidence_photo", "") or "",
+                },
+            )
+            stats["task_completions"] += int(created)
 
         # rewards
         rewards_by_name: dict = {}
