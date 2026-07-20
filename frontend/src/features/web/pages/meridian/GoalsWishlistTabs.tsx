@@ -5,6 +5,7 @@ import type {
 } from '../../../../api/types'
 import { Card } from '../../../../components/Card'
 import { Button } from '../../../../components/Button'
+import { fieldClass } from '../../../../components/ui'
 import { useAuth } from '../../../auth/AuthContext'
 
 // Shared bits ---------------------------------------------------------------
@@ -29,7 +30,7 @@ function Contribute({ onContribute, disabled }: { onContribute: (n: number) => P
   return (
     <div className="flex gap-2">
       <input type="number" min="1" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Points"
-        className="w-24 px-3 py-1.5 rounded-xl border border-line bg-raised text-sm text-ink outline-none focus:ring-2 focus:ring-primary" />
+        className={`${fieldClass} !w-24`} />
       <Button size="sm" loading={busy} disabled={disabled} onClick={go}>Contribute</Button>
     </div>
   )
@@ -127,7 +128,7 @@ export function GoalsTab({ canManage, pointsLabel }: { canManage: boolean; point
 function NewGoalForm({ onCreated }: { onCreated: () => void }) {
   const [f, setF] = useState({ title: '', target_points: '100', description: '' })
   const [saving, setSaving] = useState(false)
-  const input = 'px-3 py-2 rounded-xl border border-line bg-raised text-sm text-ink placeholder-muted outline-none focus:ring-2 focus:ring-primary'
+  const input = fieldClass
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!f.title.trim()) return
@@ -192,7 +193,7 @@ export function WishlistTab({ canManage, pointsLabel }: { canManage: boolean; po
             setReqName(''); setMsg('Requested — a parent will set it up.'); reload()
           }}>
             <input value={reqName} onChange={e => setReqName(e.target.value)} placeholder="What would you like?"
-              className="flex-1 px-3 py-2 rounded-xl border border-line bg-raised text-sm text-ink outline-none focus:ring-2 focus:ring-primary" />
+              className={`${fieldClass} flex-1`} />
             <Button size="sm" type="submit" disabled={!reqName.trim()}>Request</Button>
           </form>
         </Card>

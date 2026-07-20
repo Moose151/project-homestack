@@ -3,10 +3,12 @@ import { api } from '../../../../api/client'
 import type { MeridianCategory, MeridianTask, MeridianTaskCompletion, Person } from '../../../../api/types'
 import { Card } from '../../../../components/Card'
 import { Button } from '../../../../components/Button'
+import { fieldClass } from '../../../../components/ui'
 
 type TaskFilter = 'all' | 'active' | 'pending' | 'hidden' | 'hot'
 
-const inputClass = 'px-3 py-2 rounded-xl border border-line bg-raised text-sm text-ink placeholder-muted outline-none focus:ring-2 focus:ring-primary'
+// Adopt the shared field look (single source of truth) so Meridian inputs match every node.
+const inputClass = fieldClass
 
 // Weekly recurrence as RRULE (D8): a repeating task re-arms on the chosen weekdays.
 const WEEKDAYS: { code: string; label: string }[] = [

@@ -3,11 +3,13 @@ import { api } from '../../../../api/client'
 import type { MeridianCategory, MeridianReward, MeridianRewardRequest, Person } from '../../../../api/types'
 import { Card } from '../../../../components/Card'
 import { Button } from '../../../../components/Button'
+import { fieldClass } from '../../../../components/ui'
 import { useAuth } from '../../../auth/AuthContext'
 
 type RewardFilter = 'active' | 'pending' | 'stock' | 'hidden' | 'all'
 
-const inputClass = 'px-3 py-2 rounded-xl border border-line bg-raised text-sm text-ink placeholder-muted outline-none focus:ring-2 focus:ring-primary'
+// Adopt the shared field look (single source of truth) so Meridian inputs match every node.
+const inputClass = fieldClass
 
 function Badge({ children, className = 'bg-sunken text-muted-strong' }: { children: React.ReactNode; className?: string }) {
   return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${className}`}>{children}</span>

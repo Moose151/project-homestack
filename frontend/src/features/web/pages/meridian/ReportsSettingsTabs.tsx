@@ -12,6 +12,7 @@ import type {
 } from '../../../../api/types'
 import { Card } from '../../../../components/Card'
 import { Button } from '../../../../components/Button'
+import { fieldClass } from '../../../../components/ui'
 
 // Leaderboard + recent activity + badge catalogue (mirrors legacy leaderboard.html + badges).
 
@@ -248,7 +249,7 @@ export function SettingsTab() {
             <span className="text-ink font-medium">Points label</span>
             <span className="text-xs text-muted">What points are called everywhere (e.g. points, stars, tokens).</span>
             <input value={s.points_label} onChange={e => set({ points_label: e.target.value })}
-              className="mt-1 px-3 py-2 rounded-xl border border-line bg-raised text-sm text-ink outline-none focus:ring-2 focus:ring-primary w-48" />
+              className={`${fieldClass} mt-1 !w-48`} />
           </label>
           {toggle('group_goals_enabled', 'Group goals', 'Let the household pool points toward shared goals.')}
           {toggle('wishlist_requests_enabled', 'Wishlist requests', 'Let children request items for their wishlist.')}
@@ -299,7 +300,7 @@ export function SettingsTab() {
                     <td className="py-2 pr-3 font-medium text-ink">{row.display_name}</td>
                     <td className="py-2 pr-3">
                       <input
-                        className="w-28 px-3 py-2 rounded-xl border border-line bg-raised text-sm text-ink outline-none focus:ring-2 focus:ring-primary"
+                        className={`${fieldClass} !w-28`}
                         type="number"
                         min="0"
                         value={row.amount}
@@ -308,7 +309,7 @@ export function SettingsTab() {
                     </td>
                     <td className="py-2 pr-3">
                       <select
-                        className="px-3 py-2 rounded-xl border border-line bg-raised text-sm text-ink outline-none focus:ring-2 focus:ring-primary"
+                        className={`${fieldClass} !w-auto`}
                         value={row.weekday}
                         onChange={e => setAllowance(row.person_id, { weekday: Number(e.target.value) })}
                       >
@@ -362,7 +363,7 @@ function CategoryPanel({
         <input
           value={value}
           onChange={e => onChange(e.target.value)}
-          className="min-w-0 flex-1 px-3 py-2 rounded-xl border border-line bg-raised text-sm text-ink placeholder-muted outline-none focus:ring-2 focus:ring-primary"
+          className={`${fieldClass} min-w-0 flex-1`}
           placeholder="New category"
         />
         <Button size="sm" disabled={!value.trim()} onClick={onCreate}>Add</Button>

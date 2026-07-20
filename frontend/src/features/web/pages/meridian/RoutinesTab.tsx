@@ -3,6 +3,7 @@ import { api } from '../../../../api/client'
 import type { MeridianRoutine, Person } from '../../../../api/types'
 import { Card } from '../../../../components/Card'
 import { Button } from '../../../../components/Button'
+import { fieldClass } from '../../../../components/ui'
 import { useAuth } from '../../../auth/AuthContext'
 
 // Mirrors the legacy routines.html: daily-habit cards with done-today + streak badges and a
@@ -111,7 +112,7 @@ function NewRoutineForm({ people, onCreated }: { people: Person[]; onCreated: ()
   const [f, setF] = useState({ title: '', points: '1', description: '', assigned_to_person_id: '' })
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: string) => setF(prev => ({ ...prev, [k]: v }))
-  const input = 'px-3 py-2 rounded-xl border border-line bg-raised text-sm text-ink placeholder-muted outline-none focus:ring-2 focus:ring-primary'
+  const input = fieldClass
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
