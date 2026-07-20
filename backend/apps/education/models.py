@@ -316,6 +316,93 @@ class EducationClassSession(CalendarSyncMixin, HouseholdBaseModel):
         return "education"
 
 
+class EducationEvent(CalendarSyncMixin, HouseholdBaseModel):
+    """A dated education event — excursion, school event, term date, exam session, milestone.
+
+    Distinct from assessments (which have a due date + status) and class sessions (the weekly
+    timetable): these are one-off or recurring calendar events that belong to school/uni life
+    but are not assessable work. Syncs to the shared calendar via the helper only (D7); may
+    recur via `recurrence_rule` (RRULE, D8) — e.g. a weekly assembly or fortnightly seminar.
+    """
+
+    class EventType(models.TextChoices):
+        EXCURSION = "excursion", "Excursion"
+        SCHOOL_EVENT = "school_event", "School event"
+        TERM_START = "term_start", "Term start"
+        TERM_END = "term_end", "Term end"
+        EXAM_SESSION = "exam_session", "Exam session"
+        MILESTONE = "milestone", "Milestone"
+        HOLIDAY = "holiday", "Holiday"
+        OTHER = "other", "Other"
+
+    title = models.CharField(max_length=255)
+    event_type = models.CharField(
+        max_length=20, choices=EventType.choices, default=EventType.SCHOOL_EVENT
+    )
+    course = models.ForeignKey(
+        EducationCourse,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="events",
+    )
+    institution = models.ForeignKey(
+        EducationInstitution,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="events",
+    )
+    assigned_to_person = models.ForeignKey(
+        "people.Person",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="education_events",
+    )
+    start_at = models.DateTimeField()
+    end_at = models.DateTimeField(null=True, blank=True)
+    is_all_day = models.BooleanField(default=True)  # most school events are all-day
+    location = models.CharField(max_length=255, blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    recurrence_rule = models.CharField(max_length=512, blank=True, default="")
+    calendar_event_id = models.PositiveBigIntegerField(null=True, blank=True)
+    visibility = models.CharField(
+        max_length=20, choices=Visibility.choices, default=Visibility.HOUSEHOLD
+    )
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "education event"
+        ordering = ["start_at"]
+
+    def __str__(self) -> str:
+        return self.title
+
+    # --- CalendarSyncMixin contract ---
+
+    def get_calendar_data(self) -> dict | None:
+        if not self.start_at:
+            return None
+        label = self.get_event_type_display()
+        return {
+            "title": f"{label}: {self.title}",
+            "start_at": self.start_at,
+            "end_at": self.end_at,
+            "is_all_day": self.is_all_day,
+            "description": self.description or self.location,
+            "recurrence_rule": self.recurrence_rule,
+            "visibility": self.visibility,
+            "colour": self.course.colour if self.course else "",
+            "assigned_to_person_id": self.assigned_to_person_id,
+        }
+
+    def get_calendar_node_key(self) -> str:
+        return "education"
+
+
 class EducationAcademicProfile(HouseholdBaseModel):
     """Per-person academic profile: institution enrolment, credit tracking, graduation goal.
 

@@ -13,6 +13,8 @@ from apps.education.views import (
     CourseDetailView,
     CourseListView,
     EducationSearchView,
+    EventDetailView,
+    EventListView,
     InstitutionDetailView,
     InstitutionListView,
 )
@@ -35,6 +37,9 @@ urlpatterns = [
 
     path("classes/", ClassSessionListView.as_view(), name="education-class-list"),
     path("classes/<int:session_id>/", ClassSessionDetailView.as_view(), name="education-class-detail"),
+
+    path("events/", EventListView.as_view(), name="education-event-list"),
+    path("events/<int:event_id>/", EventDetailView.as_view(), name="education-event-detail"),
 
     path("profile/<int:person_id>/", AcademicProfileView.as_view(), name="education-academic-profile"),
 ]

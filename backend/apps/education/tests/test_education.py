@@ -319,3 +319,98 @@ class AssessmentNotesTests(TestCase):
         url = f"/api/v1/education/assessments/{self.assessment.id}/notes/"
         res = self.client.get(url)
         self.assertEqual(res.status_code, 403)
+
+
+# ---------------------------------------------------------------------------
+# Education events (excursions, school events, term dates, milestones)
+# ---------------------------------------------------------------------------
+
+class EducationEventTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("admin", User.Role.ADMIN)
+        _login(self.client, "admin")
+        self.list_url = reverse("education-event-list")
+
+    def test_create_event_syncs_calendar(self):
+        from apps.education.services import create_event
+        e = create_event(
+            self.admin, title="Field trip", event_type="excursion", start_at=_future(),
+        )
+        e.refresh_from_db()
+        self.assertIsNotNone(e.calendar_event_id)
+        event = CalendarEvent.objects.get(pk=e.calendar_event_id)
+        self.assertEqual(event.source_node.key, "education")
+        self.assertIn("Field trip", event.title)
+
+    def test_update_and_delete_event_syncs_calendar(self):
+        from apps.education.services import create_event, delete_event, update_event
+        e = create_event(self.admin, title="Open day", start_at=_future(24))
+        new_start = _future(72)
+        update_event(self.admin, e, start_at=new_start)
+        self.assertEqual(CalendarEvent.objects.get(pk=e.calendar_event_id).start_at, new_start)
+        event_id = e.calendar_event_id
+        delete_event(self.admin, e)
+        self.assertFalse(CalendarEvent.objects.filter(pk=event_id).exists())
+
+    def test_event_crud_via_api(self):
+        res = self.client.post(
+            self.list_url,
+            {"title": "Term starts", "event_type": "term_start", "start_at": _future().isoformat()},
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 201)
+        event_id = res.json()["id"]
+
+        res = self.client.get(self.list_url)
+        self.assertTrue(any(e["title"] == "Term starts" for e in res.json()))
+
+        res = self.client.patch(
+            reverse("education-event-detail", args=[event_id]),
+            {"location": "Main hall"}, content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["location"], "Main hall")
+
+        res = self.client.delete(reverse("education-event-detail", args=[event_id]))
+        self.assertEqual(res.status_code, 204)
+
+    def test_start_at_required(self):
+        res = self.client.post(
+            self.list_url, {"title": "No date"}, content_type="application/json"
+        )
+        self.assertEqual(res.status_code, 400)
+
+    def test_events_hub_widget_lists_upcoming(self):
+        from apps.education.services import create_event
+        from apps.hub.services import _education_widget_content
+        create_event(self.admin, title="Sports day", start_at=_future())
+        create_event(self.admin, title="Last term", start_at=_future(-48))  # past → excluded
+        content = _education_widget_content("education_events", self.admin)
+        titles = [e["title"] for e in content]
+        self.assertIn("Sports day", titles)
+        self.assertNotIn("Last term", titles)
+
+    def test_search_includes_events(self):
+        from apps.education.services import create_event
+        create_event(self.admin, title="Graduation ceremony", start_at=_future())
+        res = self.client.get(reverse("education-search"), {"q": "Graduation"})
+        self.assertEqual(res.status_code, 200)
+        titles = [e["title"] for e in res.json()["events"]]
+        self.assertIn("Graduation ceremony", titles)
+
+    def test_assigned_person_notified_on_create(self):
+        from apps.education.services import create_event
+        from apps.notifications.models import Notification
+        from apps.people.models import Person
+        student_user = _make_user("student", User.Role.USER)
+        person = Person.objects.create(
+            household=self.admin.household, display_name="Student",
+            linked_user=student_user, created_by=self.admin, updated_by=self.admin,
+        )
+        create_event(
+            self.admin, title="Excursion", event_type="excursion",
+            start_at=_future(), assigned_to_person_id=person.id,
+        )
+        self.assertTrue(
+            Notification.objects.filter(recipient_user=student_user, source_node="education").exists()
+        )

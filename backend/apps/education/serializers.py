@@ -10,6 +10,7 @@ from apps.education.models import (
     EducationAssessmentNote,
     EducationClassSession,
     EducationCourse,
+    EducationEvent,
     EducationInstitution,
 )
 
@@ -101,6 +102,37 @@ class EducationClassSessionSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         if self.instance is None and not attrs.get("start_at"):
+            raise serializers.ValidationError({"start_at": "A start time is required."})
+        return attrs
+
+
+class EducationEventSerializer(serializers.ModelSerializer):
+    course_id = serializers.IntegerField(required=False, allow_null=True)
+    institution_id = serializers.IntegerField(required=False, allow_null=True)
+    assigned_to_person_id = serializers.IntegerField(required=False, allow_null=True)
+    course_name = serializers.CharField(source="course.name", read_only=True, default="")
+    course_code = serializers.CharField(source="course.code", read_only=True, default="")
+    institution_name = serializers.CharField(source="institution.name", read_only=True, default="")
+
+    class Meta:
+        model = EducationEvent
+        fields = [
+            "id", "title", "event_type", "course_id", "course_name", "course_code",
+            "institution_id", "institution_name", "assigned_to_person_id",
+            "start_at", "end_at", "is_all_day", "location", "description",
+            "recurrence_rule", "calendar_event_id", "visibility",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "id", "course_name", "course_code", "institution_name", "calendar_event_id",
+            "created_at", "updated_at",
+        ]
+
+    def validate_title(self, value: str) -> str:
+        return _non_blank(value)
+
+    def validate(self, attrs):
+        if not self.partial and not attrs.get("start_at"):
             raise serializers.ValidationError({"start_at": "A start time is required."})
         return attrs
 

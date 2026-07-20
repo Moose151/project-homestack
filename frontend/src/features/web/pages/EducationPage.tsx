@@ -4,7 +4,8 @@ import { api } from '../../../api/client'
 import type {
   AcademicProfile, AcademicProfileResponse,
   AssessmentFile, AssessmentNote, AssessmentPriority, AssessmentStatus, AssessmentType,
-  EducationAssessment, EducationClassSession, EducationCourse, EducationInstitution,
+  EducationAssessment, EducationClassSession, EducationCourse, EducationEvent,
+  EducationEventType, EducationInstitution,
 } from '../../../api/types'
 import type { Person } from '../../../api/types'
 import { Card } from '../../../components/Card'
@@ -35,6 +36,12 @@ const PRIORITY_TONE: Record<AssessmentPriority, string> = {
   low: 'bg-sunken text-muted-strong',
 }
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+const EVENT_TYPE_LABELS: Record<EducationEventType, string> = {
+  excursion: 'Excursion', school_event: 'School event', term_start: 'Term start',
+  term_end: 'Term end', exam_session: 'Exam session', milestone: 'Milestone',
+  holiday: 'Holiday', other: 'Other',
+}
 
 function dueLabel(iso: string | null, allDay = false) {
   if (!iso) return null
@@ -530,7 +537,7 @@ function CoursesTab({ courses, reload, people, onError }: {
       {courses.length === 0 ? (
         <Card><p className="text-sm text-muted py-4 text-center">No courses yet.</p></Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {courses.map(c => (
             <div key={c.id} className={`bg-surface rounded-2xl border p-4 group ${c.is_completed ? 'border-success/40 opacity-75' : 'border-line'}`}>
               <div className="flex items-start justify-between gap-2">
@@ -670,6 +677,142 @@ function TimetableTab({ courses, onError }: { courses: EducationCourse[]; onErro
             </Card>
           ))}
         </div>
+      )}
+    </div>
+  )
+}
+
+// ===========================================================================
+// Events (excursions, school events, term dates, milestones)
+// ===========================================================================
+
+function eventDateLabel(iso: string, allDay: boolean) {
+  const d = new Date(iso)
+  const date = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+  if (allDay) return date
+  return `${date} · ${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`
+}
+
+function EventsTab({ courses, people, institutions, defaultAssignee, onError }: {
+  courses: EducationCourse[]
+  people: Person[]
+  institutions: EducationInstitution[]
+  defaultAssignee: number | null
+  onError: (m: string) => void
+}) {
+  const [events, setEvents] = useState<EducationEvent[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showPast, setShowPast] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [title, setTitle] = useState('')
+  const [type, setType] = useState<EducationEventType>('school_event')
+  const [courseId, setCourseId] = useState('')
+  const [institutionId, setInstitutionId] = useState('')
+  const [start, setStart] = useState<string | null>(null)
+  const [allDay, setAllDay] = useState(true)
+  const [location, setLocation] = useState('')
+  const [assignee, setAssignee] = useState<number | null>(defaultAssignee)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => { setAssignee(prev => prev ?? defaultAssignee) }, [defaultAssignee])
+
+  useEffect(() => {
+    api.getEducationEvents(showPast ? undefined : { upcoming: true })
+      .then(setEvents).catch(e => onError(errMsg(e))).finally(() => setLoading(false))
+  }, [showPast, onError])
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!title.trim()) return
+    if (!start) { onError('A start date is required.'); return }
+    setBusy(true)
+    try {
+      const ev = await api.createEducationEvent({
+        title: title.trim(), event_type: type,
+        course_id: courseId ? Number(courseId) : null,
+        institution_id: institutionId ? Number(institutionId) : null,
+        assigned_to_person_id: assignee,
+        start_at: start, is_all_day: allDay, location: location.trim(),
+      })
+      setEvents(prev => [...prev, ev].sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime()))
+      setTitle(''); setStart(null); setLocation(''); setCourseId(''); setInstitutionId('')
+      setType('school_event'); setAllDay(true); setAssignee(defaultAssignee); setOpen(false)
+    } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
+  }
+  const remove = async (ev: EducationEvent) => {
+    if (!confirm('Delete this event?')) return
+    try { await api.deleteEducationEvent(ev.id); setEvents(prev => prev.filter(x => x.id !== ev.id)) }
+    catch (e) { onError(errMsg(e)) }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        {open ? null : <Button variant="secondary" onClick={() => setOpen(true)}>+ Add event</Button>}
+        <label className="flex items-center gap-2 text-sm text-muted-strong">
+          <input type="checkbox" checked={showPast} onChange={e => setShowPast(e.target.checked)} />
+          Show past events
+        </label>
+      </div>
+
+      {open && (
+        <form onSubmit={submit} className="space-y-3 bg-sunken rounded-2xl p-4">
+          <input autoFocus className={inputCls} placeholder="Event title (e.g. Field trip, Exam block)" value={title} onChange={e => setTitle(e.target.value)} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <select className={inputCls} value={type} onChange={e => setType(e.target.value as EducationEventType)}>
+              {Object.entries(EVENT_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+            <select className={inputCls} value={courseId} onChange={e => setCourseId(e.target.value)}>
+              <option value="">No course</option>
+              {courses.map(c => <option key={c.id} value={c.id}>{c.code || c.name}</option>)}
+            </select>
+            <select className={inputCls} value={institutionId} onChange={e => setInstitutionId(e.target.value)}>
+              <option value="">No institution</option>
+              {institutions.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+            </select>
+            <input className={inputCls} placeholder="Location (optional)" value={location} onChange={e => setLocation(e.target.value)} />
+            <div>
+              <div className="text-xs text-muted-strong mb-1">When</div>
+              <DateTimeField value={start} allDay={allDay}
+                onChange={({ value, allDay: ad }) => { setStart(value); setAllDay(ad) }} />
+            </div>
+            <div>
+              <div className="text-xs text-muted-strong mb-1">Assign to</div>
+              <AssigneeSelect people={people} value={assignee} onChange={setAssignee} className={inputCls} />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button type="submit" loading={busy}>Add event</Button>
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+          </div>
+        </form>
+      )}
+
+      {loading ? (
+        <Card><p className="text-sm text-muted">Loading…</p></Card>
+      ) : events.length === 0 ? (
+        <Card><p className="text-sm text-muted py-4 text-center">No events yet. Add excursions, exam blocks, term dates or milestones.</p></Card>
+      ) : (
+        <Card>
+          <ul className="divide-y divide-line -mt-1">
+            {events.map(ev => (
+              <li key={ev.id} className="flex items-start gap-3 py-3 group">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-ink">{ev.title}</div>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-sunken text-muted-strong">{EVENT_TYPE_LABELS[ev.event_type]}</span>
+                    {(ev.course_code || ev.course_name) && <span className="text-xs text-muted">{ev.course_code || ev.course_name}</span>}
+                    {ev.location && <span className="text-xs text-muted">{ev.location}</span>}
+                    <Link to={calendarDayHref(ev.start_at)} className="text-xs px-2 py-0.5 rounded-full font-medium bg-primary-soft text-primary">
+                      {eventDateLabel(ev.start_at, ev.is_all_day)}
+                    </Link>
+                  </div>
+                </div>
+                <button onClick={() => remove(ev)} className="opacity-0 group-hover:opacity-100 text-muted hover:text-danger transition-all text-lg leading-none flex-shrink-0" aria-label="Delete">×</button>
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
     </div>
   )
@@ -959,13 +1102,14 @@ function ProfileTab({ people, institutions, onInstitutionCreated, defaultPersonI
 // Page
 // ===========================================================================
 
-type Tab = 'profile' | 'assignments' | 'courses' | 'timetable' | 'institutions'
+type Tab = 'profile' | 'assignments' | 'courses' | 'timetable' | 'events' | 'institutions'
 
 const TABS: TabDef<Tab>[] = [
   { key: 'profile', label: 'My Profile' },
   { key: 'assignments', label: 'Assignments' },
   { key: 'courses', label: 'Courses' },
   { key: 'timetable', label: 'Timetable' },
+  { key: 'events', label: 'Events' },
   { key: 'institutions', label: 'Institutions' },
 ]
 
@@ -1036,7 +1180,7 @@ function InstitutionsTab({ institutions, onChange, onError }: {
       {institutions.length === 0 ? (
         <EmptyState icon="🏫" title="No institutions yet" hint="Add the schools or universities your household attends." />
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {institutions.map(i => (
             <Card key={i.id} className="group">
               <div className="flex items-start justify-between gap-2">
@@ -1066,7 +1210,7 @@ export function EducationPage() {
   const [institutions, setInstitutions] = useState<EducationInstitution[]>([])
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<{ courses: EducationCourse[]; assessments: EducationAssessment[]; class_sessions: EducationClassSession[] } | null>(null)
+  const [results, setResults] = useState<{ courses: EducationCourse[]; assessments: EducationAssessment[]; class_sessions: EducationClassSession[]; events: EducationEvent[] } | null>(null)
 
   const loadCourses = () => api.getCourses().then(setCourses).catch(e => setError(errMsg(e)))
   useEffect(() => { loadCourses() }, [])
@@ -1084,10 +1228,10 @@ export function EducationPage() {
   const defaultAssignee = personIdForUser(people, user?.id)
 
   return (
-    <div className="space-y-5 max-w-3xl mx-auto">
-      <PageHeader title="Education" icon="🎓" subtitle="Your courses, deadlines and weekly timetable." />
+    <div className="space-y-5 max-w-5xl mx-auto">
+      <PageHeader title="Education" icon="🎓" subtitle="Your courses, deadlines, timetable and events." />
 
-      <Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search courses, assignments and classes…" />
+      <Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search courses, assignments, classes and events…" />
 
       {error && (
         <div className="flex items-center justify-between gap-3 bg-danger-soft text-danger text-sm rounded-xl px-4 py-2.5">
@@ -1106,6 +1250,7 @@ export function EducationPage() {
           {tab === 'assignments' && <AssignmentsTab courses={courses} people={people} defaultAssignee={defaultAssignee} onError={setError} />}
           {tab === 'courses' && <CoursesTab courses={courses} reload={loadCourses} people={people} onError={setError} />}
           {tab === 'timetable' && <TimetableTab courses={courses} onError={setError} />}
+          {tab === 'events' && <EventsTab courses={courses} people={people} institutions={institutions} defaultAssignee={defaultAssignee} onError={setError} />}
           {tab === 'institutions' && <InstitutionsTab institutions={institutions} onChange={setInstitutions} onError={setError} />}
         </>
       )}
@@ -1114,10 +1259,10 @@ export function EducationPage() {
 }
 
 function EducationSearchResults({ results }: {
-  results: { courses: EducationCourse[]; assessments: EducationAssessment[]; class_sessions: EducationClassSession[] }
+  results: { courses: EducationCourse[]; assessments: EducationAssessment[]; class_sessions: EducationClassSession[]; events: EducationEvent[] }
 }) {
-  const empty = !results.courses.length && !results.assessments.length && !results.class_sessions.length
-  if (empty) return <EmptyState icon="🔍" title="No matches" hint="Try a course code, assignment title or class name." />
+  const empty = !results.courses.length && !results.assessments.length && !results.class_sessions.length && !results.events.length
+  if (empty) return <EmptyState icon="🔍" title="No matches" hint="Try a course code, assignment title, class or event name." />
   return (
     <div className="flex flex-col gap-4">
       {results.courses.length > 0 && (
@@ -1144,6 +1289,17 @@ function EducationSearchResults({ results }: {
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Classes</p>
           {results.class_sessions.map(s => (
             <Card key={`s${s.id}`}><span className="text-sm text-ink">{s.display_title}</span></Card>
+          ))}
+        </div>
+      )}
+      {results.events.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Events</p>
+          {results.events.map(ev => (
+            <Card key={`e${ev.id}`}>
+              <span className="text-sm text-ink">{ev.title}</span>
+              <span className="ml-2 text-xs text-muted">{new Date(ev.start_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+            </Card>
           ))}
         </div>
       )}

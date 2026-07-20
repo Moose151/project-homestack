@@ -12,6 +12,7 @@ from apps.education.models import (
     EducationAssessmentNote,
     EducationClassSession,
     EducationCourse,
+    EducationEvent,
     EducationInstitution,
 )
 from apps.permissions.visibility import apply_visibility
@@ -134,6 +135,32 @@ def get_class_session(pk: int) -> EducationClassSession | None:
 
 
 # ---------------------------------------------------------------------------
+# Education events
+# ---------------------------------------------------------------------------
+
+def list_events(
+    user=None, *, upcoming_only: bool = False, course_id: int | None = None,
+    person_id: int | None = None, limit: int | None = None,
+):
+    qs = EducationEvent.objects.select_related("course", "institution").order_by("start_at")
+    if upcoming_only:
+        qs = qs.filter(start_at__gte=timezone.now())
+    if course_id is not None:
+        qs = qs.filter(course_id=course_id)
+    if person_id is not None:
+        qs = qs.filter(assigned_to_person_id=person_id)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    if limit is not None:
+        qs = qs[:limit]
+    return list(qs)
+
+
+def get_event(pk: int) -> EducationEvent | None:
+    return EducationEvent.objects.filter(pk=pk).first()
+
+
+# ---------------------------------------------------------------------------
 # Academic profiles
 # ---------------------------------------------------------------------------
 
@@ -182,14 +209,17 @@ def search_education(user, query: str) -> dict:
     courses_qs = _search(EducationCourse.objects.all(), query, ["name", "code", "teacher", "description"])
     assessments_qs = _search(EducationAssessment.objects.all(), query, ["title", "description"])
     sessions_qs = _search(EducationClassSession.objects.all(), query, ["title", "location"])
+    events_qs = _search(EducationEvent.objects.all(), query, ["title", "location", "description"])
 
     if user is not None:
         courses_qs = apply_visibility(courses_qs, user)
         assessments_qs = apply_visibility(assessments_qs, user)
         sessions_qs = apply_visibility(sessions_qs, user)
+        events_qs = apply_visibility(events_qs, user)
 
     return {
         "courses": list(courses_qs.order_by("name")),
         "assessments": list(assessments_qs.order_by("due_at", "-updated_at")),
         "class_sessions": list(sessions_qs.order_by("start_at")),
+        "events": list(events_qs.order_by("start_at")),
     }

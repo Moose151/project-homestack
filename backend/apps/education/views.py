@@ -15,6 +15,7 @@ from apps.education.serializers import (
     EducationAssessmentSerializer,
     EducationClassSessionSerializer,
     EducationCourseSerializer,
+    EducationEventSerializer,
     EducationInstitutionSerializer,
 )
 from apps.permissions.drf import HomeStackPermission
@@ -42,12 +43,13 @@ class EducationSearchView(APIView):
     def get(self, request: Request) -> Response:
         query = (request.query_params.get("q") or "").strip()
         if not query:
-            return Response({"courses": [], "assessments": [], "class_sessions": []})
+            return Response({"courses": [], "assessments": [], "class_sessions": [], "events": []})
         r = selectors.search_education(request.user, query)
         return Response({
             "courses": EducationCourseSerializer(r["courses"], many=True).data,
             "assessments": EducationAssessmentSerializer(r["assessments"], many=True).data,
             "class_sessions": EducationClassSessionSerializer(r["class_sessions"], many=True).data,
+            "events": EducationEventSerializer(r["events"], many=True).data,
         })
 
 
@@ -328,6 +330,53 @@ class ClassSessionDetailView(APIView):
 
     def delete(self, request: Request, session_id: int) -> Response:
         services.delete_class_session(request.user, self._get(session_id))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Education events
+# ---------------------------------------------------------------------------
+
+class EventListView(APIView):
+    permission_classes = [_EduPerm]
+
+    def get(self, request: Request) -> Response:
+        events = selectors.list_events(
+            request.user,
+            upcoming_only=request.query_params.get("upcoming") == "1",
+            course_id=_int_param(request, "course"),
+            person_id=_int_param(request, "person"),
+        )
+        return Response(EducationEventSerializer(events, many=True).data)
+
+    def post(self, request: Request) -> Response:
+        serializer = EducationEventSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        obj = services.create_event(request.user, **serializer.validated_data)
+        return Response(EducationEventSerializer(obj).data, status=status.HTTP_201_CREATED)
+
+
+class EventDetailView(APIView):
+    permission_classes = [_EduPerm]
+
+    def _get(self, pk: int):
+        obj = selectors.get_event(pk)
+        if obj is None:
+            raise NotFound()
+        return obj
+
+    def get(self, request: Request, event_id: int) -> Response:
+        return Response(EducationEventSerializer(self._get(event_id)).data)
+
+    def patch(self, request: Request, event_id: int) -> Response:
+        obj = self._get(event_id)
+        serializer = EducationEventSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        obj = services.update_event(request.user, obj, **serializer.validated_data)
+        return Response(EducationEventSerializer(obj).data)
+
+    def delete(self, request: Request, event_id: int) -> Response:
+        services.delete_event(request.user, self._get(event_id))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

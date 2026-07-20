@@ -4,6 +4,7 @@ from apps.education.models import (
     EducationAssessment,
     EducationClassSession,
     EducationCourse,
+    EducationEvent,
     EducationInstitution,
 )
 
@@ -32,3 +33,10 @@ class EducationAssessmentAdmin(admin.ModelAdmin):
 class EducationClassSessionAdmin(admin.ModelAdmin):
     list_display = ("display_title", "course", "start_at", "location")
     search_fields = ("title", "location")
+
+
+@admin.register(EducationEvent)
+class EducationEventAdmin(admin.ModelAdmin):
+    list_display = ("title", "event_type", "course", "institution", "start_at", "location")
+    search_fields = ("title", "location")
+    list_filter = ("event_type",)

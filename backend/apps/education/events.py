@@ -22,3 +22,9 @@ def class_session_created(session_id: int, household_id: int) -> None:
     publish("education.class_session_created", payload={
         "session_id": session_id, "household_id": household_id,
     })
+
+
+def school_event_created(event_id: int, household_id: int) -> None:
+    publish("education.school_event_created", payload={
+        "event_id": event_id, "household_id": household_id,
+    })
