@@ -63,6 +63,7 @@ LOCAL_APPS = [
     "apps.achievements",  # Milestone 2 — cross-node badges, event-driven (D20)
     "apps.education",  # Milestone 3 — school/university tracking (uni-first V1 slice)
     "apps.books",  # Books node — personal reading shelves and shared book clubs
+    "apps.home_wiki",  # Milestone 3 — household knowledge base (Node Spec 12)
 ]
 
 INSTALLED_APPS = [

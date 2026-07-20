@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.7.5**
+> **Current version: 0.8.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -9,7 +9,44 @@
 
 ---
 
+## 0.8 — Home Wiki node
+
+### 0.8.0 — 2026-07-20
+- **New node: Home Wiki** — the household knowledge base for persistent reference info (WiFi,
+  bin night, emergency contacts, appliance how-tos). Backend `apps/home_wiki`: `WikiCategory`
+  (admin-manageable, 12 seeded defaults) + `WikiPage` (title/body, category, comma tags,
+  favourite/emergency/kiosk-safe flags, visibility + sensitivity). Full layered app + FTS
+  search + `homewiki.*` permissions + three Hub widgets (favourites, emergency, recently
+  updated) + domain signals. Frontend: `/wiki` route + nav stack, Pages tab (filter by
+  All/Favourites/Emergency + category, create/edit/delete, expandable bodies, pin favourites)
+  and Categories tab (add/hide/delete for admins), wiki-wide search, and Hub renderers.
+  Disabled by default — enable it in Settings.
+
 ## 0.7 — Node fleshing-out & shared UX parity
+
+### 0.7.8 — 2026-07-20
+- **Meridian import**: the `import_meridian` command now imports **legacy task-completion
+  history** (`task_completions`) into `MeridianTaskCompletion` — status, submitted/reviewed
+  timestamps, rejection reason, review note and evidence path are preserved. Idempotent
+  (deduped by task + person + submitted time) and dry-runnable like the rest of the importer.
+
+### 0.7.7 — 2026-07-20
+- **Meridian** form inputs across all the large sub-tabs (Tasks, Shop, Routines, Goals &
+  Wishlist, Reports & Settings) now use the shared field styling instead of hand-rolled input
+  classes — one visual language, matching every other node, with larger touch targets.
+
+### 0.7.6 — 2026-07-20
+- **Education** gains an **Events** surface — excursions, school events, term start/end, exam
+  blocks, holidays and milestones. Events sync to the shared Calendar (all-day by default) and
+  can be tied to a course or institution and assigned to a person. New **Events** tab on the
+  Education page, an **education_events** Hub widget (upcoming events), and events are now
+  included in Education search.
+- **Education notifications & signals**: creating an assignment or event now notifies the
+  assigned person (when it isn't their own), and the node publishes its domain signals
+  (`assessment_created`, `assessment_completed`, `class_session_created`, `school_event_created`)
+  onto the event bus.
+- **Education layout**: the page now uses the wider desktop container (matching the other
+  nodes) with three-column course/institution grids on large screens.
 
 ### 0.7.5 — 2026-07-19
 - **Books**: the add-book form now suggests existing books as you type the title, so you can

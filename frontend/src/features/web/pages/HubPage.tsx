@@ -12,6 +12,8 @@ import type {
   CalendarEvent,
   EducationAssessment,
   EducationClassSession,
+  EducationEvent,
+  WikiPage,
   AppNotification,
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
@@ -237,6 +239,36 @@ function EducationClassesWidget({ items }: { items: EducationClassSession[] }) {
   )
 }
 
+function EducationEventsWidget({ items }: { items: EducationEvent[] }) {
+  if (items.length === 0) return <p className="text-sm text-muted">No upcoming events</p>
+  return (
+    <ul className="flex flex-col gap-2">
+      {items.slice(0, 6).map(ev => (
+        <li key={ev.id} className="flex items-center justify-between gap-3 text-sm">
+          <span className="text-ink truncate">{ev.title}</span>
+          <Link to={calendarDayHref(ev.start_at)} className="text-xs text-primary hover:underline flex-shrink-0">
+            {new Date(ev.start_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function WikiPagesWidget({ items, emptyLabel }: { items: WikiPage[]; emptyLabel: string }) {
+  if (items.length === 0) return <p className="text-sm text-muted">{emptyLabel}</p>
+  return (
+    <ul className="flex flex-col gap-2">
+      {items.slice(0, 6).map(p => (
+        <li key={p.id} className="flex items-center justify-between gap-3 text-sm">
+          <Link to="/wiki" className="text-ink truncate hover:text-primary">{p.title}</Link>
+          {p.category_name && <span className="text-xs text-muted flex-shrink-0">{p.category_name}</span>}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 const LEVEL_TONE: Record<string, string> = {
   info: 'bg-primary-soft text-primary',
   success: 'bg-success-soft text-success',
@@ -376,6 +408,14 @@ function renderWidget(w: HubWidget, onChanged: () => void) {
       return <EducationDeadlinesWidget items={w.items as EducationAssessment[]} />
     case 'education_classes':
       return <EducationClassesWidget items={w.items as EducationClassSession[]} />
+    case 'education_events':
+      return <EducationEventsWidget items={w.items as EducationEvent[]} />
+    case 'wiki_favourites':
+      return <WikiPagesWidget items={w.items as WikiPage[]} emptyLabel="No favourite pages" />
+    case 'wiki_emergency':
+      return <WikiPagesWidget items={w.items as WikiPage[]} emptyLabel="No emergency info" />
+    case 'wiki_recent':
+      return <WikiPagesWidget items={w.items as WikiPage[]} emptyLabel="Nothing recent" />
     default:
       return <p className="text-sm text-muted">Nothing to show</p>
   }

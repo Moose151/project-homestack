@@ -91,6 +91,9 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False) -> list[dict]:
         elif key.startswith("education_"):
             content = _education_widget_content(key, user)
 
+        elif key.startswith("wiki_"):
+            content = _wiki_widget_content(key, user)
+
         widgets.append({
             "key": key,
             "name": hw.widget.name,
@@ -149,6 +152,7 @@ def _education_widget_content(key: str, user) -> list:
     from apps.education.serializers import (
         EducationAssessmentSerializer,
         EducationClassSessionSerializer,
+        EducationEventSerializer,
     )
 
     if key == "education_deadlines":
@@ -158,6 +162,30 @@ def _education_widget_content(key: str, user) -> list:
     if key == "education_classes":
         sessions = e.list_class_sessions(user)[:10]
         return EducationClassSessionSerializer(sessions, many=True).data
+
+    if key == "education_events":
+        events = e.list_events(user, upcoming_only=True, limit=10)
+        return EducationEventSerializer(events, many=True).data
+
+    return []
+
+
+def _wiki_widget_content(key: str, user) -> list:
+    """Assemble content for a Home Wiki hub widget (Node Spec 8), permission-filtered."""
+    from apps.home_wiki import selectors as w
+    from apps.home_wiki.serializers import WikiPageSerializer
+
+    if key == "wiki_favourites":
+        pages = w.list_pages(user, favourites_only=True, limit=8)
+        return WikiPageSerializer(pages, many=True).data
+
+    if key == "wiki_emergency":
+        pages = w.list_pages(user, emergency_only=True, limit=8)
+        return WikiPageSerializer(pages, many=True).data
+
+    if key == "wiki_recent":
+        pages = w.list_pages(user, order_by_updated=True, limit=6)
+        return WikiPageSerializer(pages, many=True).data
 
     return []
 

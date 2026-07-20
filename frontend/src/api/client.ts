@@ -7,8 +7,9 @@ import type {
   MeridianWishlistItem, MeridianWishlistRequest, MeridianSettings,
   MeridianReports, MeridianAllowanceRow, Badge, PersonBadge, NotificationList, Person, AdminUser,
   AtlasSearchResults,
-  EducationInstitution, EducationCourse, EducationAssessment, EducationClassSession,
+  EducationInstitution, EducationCourse, EducationAssessment, EducationClassSession, EducationEvent,
   AssessmentNote, AssessmentFile, AcademicProfile, AcademicProfileResponse,
+  WikiCategory, WikiPage,
   NodeInfo, Household,
   Book, BookClub, ClubBookEntry, ClubQueueItem, PersonalBookEntry, BookRating, BooksUser, BookShelfStatus,
 } from './types'
@@ -28,6 +29,23 @@ type AssessmentWrite = Partial<{
 type ClassSessionWrite = Partial<{
   title: string; course_id: number | null; student_id: number | null; location: string
   start_at: string; end_at: string | null; recurrence_rule: string; visibility: string
+}>
+
+type EventWrite = Partial<{
+  title: string; event_type: string; course_id: number | null; institution_id: number | null
+  assigned_to_person_id: number | null; start_at: string; end_at: string | null
+  is_all_day: boolean; location: string; description: string; recurrence_rule: string
+  visibility: string
+}>
+
+type WikiCategoryWrite = Partial<{
+  name: string; colour: string; icon: string; display_order: number; is_hidden: boolean
+}>
+
+type WikiPageWrite = Partial<{
+  title: string; body: string; category_id: number | null; tags: string
+  is_favourite: boolean; is_emergency: boolean; is_kiosk_safe: boolean
+  visibility: string; sensitivity: string
 }>
 
 type InstitutionWrite = Partial<{
@@ -371,7 +389,7 @@ export const api = {
     _fetch(`/achievements/my-badges/${personId ? `?person_id=${personId}` : ''}`),
 
   // --- Education ---
-  searchEducation: (q: string): Promise<{ courses: EducationCourse[]; assessments: EducationAssessment[]; class_sessions: EducationClassSession[] }> =>
+  searchEducation: (q: string): Promise<{ courses: EducationCourse[]; assessments: EducationAssessment[]; class_sessions: EducationClassSession[]; events: EducationEvent[] }> =>
     _fetch(`/education/search/?q=${encodeURIComponent(q)}`),
   getInstitutions: (): Promise<EducationInstitution[]> => _fetch('/education/institutions/'),
   createInstitution: (data: InstitutionWrite): Promise<EducationInstitution> =>
@@ -450,6 +468,47 @@ export const api = {
     _fetch(`/education/classes/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteClassSession: (id: number): Promise<void> =>
     _fetch(`/education/classes/${id}/`, { method: 'DELETE' }),
+
+  getEducationEvents: (params?: { upcoming?: boolean; course?: number }): Promise<EducationEvent[]> => {
+    const q = new URLSearchParams()
+    if (params?.upcoming) q.set('upcoming', '1')
+    if (params?.course) q.set('course', String(params.course))
+    const qs = q.toString()
+    return _fetch(`/education/events/${qs ? `?${qs}` : ''}`)
+  },
+  createEducationEvent: (data: EventWrite): Promise<EducationEvent> =>
+    _fetch('/education/events/', { method: 'POST', body: JSON.stringify(data) }),
+  updateEducationEvent: (id: number, data: EventWrite): Promise<EducationEvent> =>
+    _fetch(`/education/events/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteEducationEvent: (id: number): Promise<void> =>
+    _fetch(`/education/events/${id}/`, { method: 'DELETE' }),
+
+  // --- Home Wiki ---
+  searchWiki: (q: string): Promise<{ pages: WikiPage[] }> =>
+    _fetch(`/wiki/search/?q=${encodeURIComponent(q)}`),
+  getWikiCategories: (includeHidden = false): Promise<WikiCategory[]> =>
+    _fetch(`/wiki/categories/${includeHidden ? '?hidden=1' : ''}`),
+  createWikiCategory: (data: WikiCategoryWrite): Promise<WikiCategory> =>
+    _fetch('/wiki/categories/', { method: 'POST', body: JSON.stringify(data) }),
+  updateWikiCategory: (id: number, data: WikiCategoryWrite): Promise<WikiCategory> =>
+    _fetch(`/wiki/categories/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteWikiCategory: (id: number): Promise<void> =>
+    _fetch(`/wiki/categories/${id}/`, { method: 'DELETE' }),
+  getWikiPages: (params?: { category?: number; favourites?: boolean; emergency?: boolean; recent?: boolean }): Promise<WikiPage[]> => {
+    const q = new URLSearchParams()
+    if (params?.category) q.set('category', String(params.category))
+    if (params?.favourites) q.set('favourites', '1')
+    if (params?.emergency) q.set('emergency', '1')
+    if (params?.recent) q.set('recent', '1')
+    const qs = q.toString()
+    return _fetch(`/wiki/pages/${qs ? `?${qs}` : ''}`)
+  },
+  createWikiPage: (data: WikiPageWrite): Promise<WikiPage> =>
+    _fetch('/wiki/pages/', { method: 'POST', body: JSON.stringify(data) }),
+  updateWikiPage: (id: number, data: WikiPageWrite): Promise<WikiPage> =>
+    _fetch(`/wiki/pages/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteWikiPage: (id: number): Promise<void> =>
+    _fetch(`/wiki/pages/${id}/`, { method: 'DELETE' }),
 
   // --- Books ---
   getBooksUsers: (): Promise<BooksUser[]> => _fetch('/books/users/'),

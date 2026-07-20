@@ -388,7 +388,7 @@ export interface HubWidget {
   name: string
   size: string
   supports_kiosk: boolean
-  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | AppNotification[]
+  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | AppNotification[]
   meta?: { unread_count?: number }
 }
 
@@ -489,6 +489,32 @@ export interface EducationClassSession {
   updated_at: string
 }
 
+export type EducationEventType =
+  | 'excursion' | 'school_event' | 'term_start' | 'term_end'
+  | 'exam_session' | 'milestone' | 'holiday' | 'other'
+
+export interface EducationEvent {
+  id: number
+  title: string
+  event_type: EducationEventType
+  course_id: number | null
+  course_name: string
+  course_code: string
+  institution_id: number | null
+  institution_name: string
+  assigned_to_person_id: number | null
+  start_at: string
+  end_at: string | null
+  is_all_day: boolean
+  location: string
+  description: string
+  recurrence_rule: string
+  calendar_event_id: number | null
+  visibility: string
+  created_at: string
+  updated_at: string
+}
+
 export interface AcademicProfile {
   id: number
   person_id: number
@@ -528,6 +554,40 @@ export interface AssessmentFile {
   file_url: string
   original_filename: string
   file_size: number
+  created_at: string
+  updated_at: string
+}
+
+// ---------------------------------------------------------------------------
+// Home Wiki (Milestone 3 — household knowledge base)
+// ---------------------------------------------------------------------------
+
+export interface WikiCategory {
+  id: number
+  name: string
+  colour: string
+  icon: string
+  display_order: number
+  is_hidden: boolean
+  page_count?: number
+  created_at: string
+  updated_at: string
+}
+
+export interface WikiPage {
+  id: number
+  title: string
+  body: string
+  category_id: number | null
+  category_name: string
+  category_colour: string
+  tags: string
+  tag_list: string[]
+  is_favourite: boolean
+  is_emergency: boolean
+  is_kiosk_safe: boolean
+  visibility: string
+  sensitivity: string
   created_at: string
   updated_at: string
 }
