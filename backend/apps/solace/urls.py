@@ -8,6 +8,8 @@ from apps.solace.views import (
     BucketListView,
     ChecklistDetailView,
     ChecklistListView,
+    PayCycleChecklistView,
+    PayCyclePlanView,
     PaydayDetailView,
     PaydayListView,
     PurchaseDetailView,
@@ -19,6 +21,8 @@ from apps.solace.views import (
 
 urlpatterns = [
     path("search/", SolaceSearchView.as_view(), name="solace-search"),
+    path("plan/", PayCyclePlanView.as_view(), name="solace-plan"),
+    path("plan/checklist/", PayCycleChecklistView.as_view(), name="solace-plan-checklist"),
     path("bills/", BillListView.as_view(), name="solace-bill-list"),
     path("bills/<int:bill_id>/", BillDetailView.as_view(), name="solace-bill-detail"),
     path("bills/<int:bill_id>/paid/", BillPaidView.as_view(), name="solace-bill-paid"),

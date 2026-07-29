@@ -2,6 +2,7 @@
 import io
 import sqlite3
 import tempfile
+from datetime import datetime
 
 from django.core.management import call_command
 from django.test import TestCase
@@ -15,6 +16,7 @@ from apps.scheduling.models import CalendarEvent
 from apps.solace.services import (
     create_bill,
     create_bucket,
+    create_payday,
     create_purchase,
     create_subscription,
     delete_bill,
@@ -125,6 +127,108 @@ class SolaceCrudAndCalendarTests(TestCase):
         event = CalendarEvent.objects.get(pk=sub.calendar_event_id)
         self.assertEqual(event.source_node.key, "solace")
         self.assertEqual(event.sensitivity, "financial")
+
+
+class SolacePayCyclePlanTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("planner", User.Role.ADMIN)
+        _login(self.client, "planner")
+        _reauth(self.client)
+        create_payday(
+            self.admin,
+            title="Alex pay",
+            expected_amount="2000.00",
+            pay_at=timezone.make_aware(datetime(2026, 8, 1, 9)),
+            recurrence_rule="FREQ=WEEKLY;INTERVAL=2",
+        )
+        create_payday(
+            self.admin,
+            title="Sam pay",
+            expected_amount="1000.00",
+            pay_at=timezone.make_aware(datetime(2026, 8, 2, 9)),
+            recurrence_rule="FREQ=WEEKLY;INTERVAL=2",
+        )
+        self.bills = create_bucket(
+            self.admin,
+            name="Bills",
+            category="Bills",
+            allocation_method=BudgetBucket.AllocationMethod.PERCENTAGE,
+            allocation_value="25.00",
+            rounding_increment="10.00",
+            position=10,
+        )
+        self.savings = create_bucket(
+            self.admin,
+            name="Savings",
+            category="Savings",
+            allocation_method=BudgetBucket.AllocationMethod.FIXED,
+            allocation_value="300.00",
+            rounding_increment="1.00",
+            position=20,
+        )
+
+    def test_plan_splits_percentage_and_fixed_rules_by_income(self):
+        resp = self.client.get(reverse("solace-plan"), {"date": "2026-08-03"})
+        self.assertEqual(resp.status_code, 200)
+        plan = resp.json()
+        self.assertEqual(plan["cycle_start"], "2026-08-01")
+        self.assertEqual(plan["cycle_end"], "2026-08-14")
+        self.assertEqual(plan["income_total"], "3000.00")
+        self.assertEqual(plan["allocated_total"], "1050.00")
+        self.assertEqual(plan["remaining"], "1950.00")
+        self.assertEqual(
+            [(row["bucket_name"], row["amount"]) for row in plan["buckets"]],
+            [("Bills", "750.00"), ("Savings", "300.00")],
+        )
+        self.assertEqual(
+            [row["amount"] for row in plan["sources"][0]["allocations"]],
+            ["500.00", "200.00"],
+        )
+        self.assertEqual(
+            [row["amount"] for row in plan["sources"][1]["allocations"]],
+            ["250.00", "100.00"],
+        )
+
+    def test_plan_can_generate_an_idempotent_cycle_checklist(self):
+        url = reverse("solace-plan-checklist")
+        resp = self.client.post(f"{url}?date=2026-08-03")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.json()), 2)
+        self.assertEqual(PaydayChecklistItem.objects.count(), 2)
+        bills_item = PaydayChecklistItem.objects.get(bucket=self.bills)
+        self.assertEqual(bills_item.cycle_start.isoformat(), "2026-08-01")
+        self.assertEqual(bills_item.amount_hint, 750)
+        bills_item.is_complete = True
+        bills_item.save(update_fields=["is_complete"])
+
+        resp = self.client.post(f"{url}?date=2026-08-03")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(PaydayChecklistItem.objects.count(), 2)
+        bills_item.refresh_from_db()
+        self.assertTrue(bills_item.is_complete)
+
+    def test_invalid_plan_date_is_rejected(self):
+        resp = self.client.get(reverse("solace-plan"), {"date": "03/08/2026"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_paused_payday_is_excluded_from_plan_and_calendar(self):
+        payday = Payday.objects.get(title="Sam pay")
+        resp = self.client.patch(
+            reverse("solace-payday-detail", args=[payday.id]),
+            {"is_active": False},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(CalendarEvent.objects.filter(pk=payday.calendar_event_id).exists())
+        plan = self.client.get(reverse("solace-plan"), {"date": "2026-08-03"}).json()
+        self.assertEqual(plan["income_total"], "2000.00")
+        self.assertEqual([row["title"] for row in plan["sources"]], ["Alex pay"])
+
+    def test_plan_requires_fresh_password_reauthentication(self):
+        self.client.post(reverse("auth-logout"))
+        _login(self.client, "planner")
+        resp = self.client.get(reverse("solace-plan"), {"date": "2026-08-03"})
+        self.assertEqual(resp.status_code, 403)
 
 
 class SolaceSearchHubAuditTests(TestCase):
@@ -271,6 +375,10 @@ class SolaceImportTests(TestCase):
         self.assertEqual(Bill.objects.get().category, "utilities")
         self.assertEqual(Subscription.objects.get().name, "Streaming")
         self.assertEqual(PaydayChecklistItem.objects.get().title, "Transfer to Bills")
+        self.assertEqual(BudgetBucket.objects.get().allocation_method, "percentage")
+        self.assertEqual(BudgetBucket.objects.get().allocation_value, 25)
+        self.assertEqual(BudgetBucket.objects.get().rounding_increment, 10)
+        self.assertEqual(PaydayChecklistItem.objects.get().cycle_start.isoformat(), "2026-08-01")
 
         out = io.StringIO()
         call_command("import_solace", "--sqlite-db", db_path, stdout=out)

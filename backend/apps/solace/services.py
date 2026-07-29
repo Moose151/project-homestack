@@ -1,6 +1,9 @@
 """solace services — write operations for the native finance node."""
 from __future__ import annotations
 
+from datetime import date
+
+from django.db import transaction
 from django.utils import timezone
 
 from apps.accounts.models import User
@@ -24,22 +27,24 @@ _BILL_FIELDS = {
 }
 _PAYDAY_FIELDS = {
     "title", "expected_amount", "pay_at", "is_all_day", "recurrence_rule", "received_at",
-    "notes", "visibility", "sensitivity",
+    "is_active", "notes", "visibility", "sensitivity",
 }
 _PURCHASE_FIELDS = {
     "name", "category", "target_amount", "saved_amount", "target_date", "is_all_day",
     "status", "priority", "notes", "visibility", "sensitivity",
 }
 _BUCKET_FIELDS = {
-    "name", "category", "target_amount", "current_amount", "notes", "visibility", "sensitivity",
+    "name", "category", "target_amount", "current_amount", "allocation_method",
+    "allocation_value", "rounding_increment", "cap_to_remaining", "is_active", "position",
+    "notes", "visibility", "sensitivity",
 }
 _SUBSCRIPTION_FIELDS = {
     "name", "provider", "amount", "billing_cycle", "next_renewal_at", "is_all_day",
     "recurrence_rule", "is_active", "notes", "visibility", "sensitivity",
 }
 _CHECKLIST_FIELDS = {
-    "title", "bucket_id", "bill_id", "amount_hint", "position", "is_complete",
-    "completed_at", "notes", "visibility", "sensitivity",
+    "title", "cycle_start", "source_key", "bucket_id", "bill_id", "amount_hint", "position",
+    "is_complete", "completed_at", "notes", "visibility", "sensitivity",
 }
 
 
@@ -205,3 +210,43 @@ def delete_checklist_item(acting_user: User, obj: PaydayChecklistItem) -> None:
     obj.updated_by = acting_user
     obj.save(update_fields=["updated_by", "updated_at"])
     obj.soft_delete()
+
+
+@transaction.atomic
+def generate_plan_checklist(acting_user: User, plan: dict) -> list[PaydayChecklistItem]:
+    """Create or refresh transfer checklist rows for one calculated pay cycle."""
+    household = get_active_household()
+    cycle_start = date.fromisoformat(plan["cycle_start"])
+    generated = []
+    for position, row in enumerate(plan["buckets"], start=1):
+        source_key = f"pay-plan:bucket:{row['bucket_id']}"
+        obj, _ = PaydayChecklistItem.objects.update_or_create(
+            household=household,
+            cycle_start=cycle_start,
+            source_key=source_key,
+            defaults={
+                "title": f"Transfer to {row['bucket_name']}",
+                "bucket_id": row["bucket_id"],
+                "amount_hint": row["amount"],
+                "position": position * 10,
+                "notes": (
+                    f"Generated from the Solace pay-cycle plan for "
+                    f"{plan['cycle_start']} to {plan['cycle_end']}."
+                ),
+                "updated_by": acting_user,
+            },
+            create_defaults={
+                "title": f"Transfer to {row['bucket_name']}",
+                "bucket_id": row["bucket_id"],
+                "amount_hint": row["amount"],
+                "position": position * 10,
+                "notes": (
+                    f"Generated from the Solace pay-cycle plan for "
+                    f"{plan['cycle_start']} to {plan['cycle_end']}."
+                ),
+                "created_by": acting_user,
+                "updated_by": acting_user,
+            },
+        )
+        generated.append(obj)
+    return generated

@@ -108,6 +108,7 @@ class Payday(CalendarSyncMixin, HouseholdBaseModel):
     is_all_day = models.BooleanField(default=True)
     recurrence_rule = models.CharField(max_length=512, blank=True, default="")
     received_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
     notes = models.TextField(blank=True, default="")
     calendar_event_id = models.PositiveBigIntegerField(null=True, blank=True)
     visibility = models.CharField(max_length=20, choices=Visibility.choices, default=Visibility.SENSITIVE)
@@ -123,7 +124,7 @@ class Payday(CalendarSyncMixin, HouseholdBaseModel):
         return self.title
 
     def get_calendar_data(self) -> dict | None:
-        if not self.pay_at:
+        if not self.pay_at or not self.is_active:
             return None
         return {
             "title": self.title,
@@ -210,10 +211,24 @@ class PlannedPurchase(CalendarSyncMixin, HouseholdBaseModel):
 
 
 class BudgetBucket(HouseholdBaseModel):
+    class AllocationMethod(models.TextChoices):
+        PERCENTAGE = "percentage", "Percentage of pay"
+        FIXED = "fixed", "Fixed household amount"
+
     name = models.CharField(max_length=200)
     category = models.CharField(max_length=100, blank=True, default="")
     target_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     current_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    allocation_method = models.CharField(
+        max_length=20,
+        choices=AllocationMethod.choices,
+        default=AllocationMethod.PERCENTAGE,
+    )
+    allocation_value = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    rounding_increment = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal("1.00"))
+    cap_to_remaining = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True)
+    position = models.PositiveSmallIntegerField(default=0)
     notes = models.TextField(blank=True, default="")
     visibility = models.CharField(max_length=20, choices=Visibility.choices, default=Visibility.SENSITIVE)
     sensitivity = models.CharField(max_length=20, choices=Sensitivity.choices, default=Sensitivity.FINANCIAL)
@@ -222,7 +237,7 @@ class BudgetBucket(HouseholdBaseModel):
     all_objects = AllObjectsManager()
 
     class Meta:
-        ordering = ["name"]
+        ordering = ["position", "name"]
 
     def __str__(self) -> str:
         return self.name
@@ -292,6 +307,8 @@ class Subscription(CalendarSyncMixin, HouseholdBaseModel):
 
 class PaydayChecklistItem(HouseholdBaseModel):
     title = models.CharField(max_length=200)
+    cycle_start = models.DateField(null=True, blank=True)
+    source_key = models.CharField(max_length=120, blank=True, default="")
     bucket = models.ForeignKey(
         BudgetBucket, on_delete=models.SET_NULL, null=True, blank=True, related_name="checklist_items"
     )
@@ -310,7 +327,18 @@ class PaydayChecklistItem(HouseholdBaseModel):
     all_objects = AllObjectsManager()
 
     class Meta:
-        ordering = ["is_complete", "position", "title"]
+        ordering = ["-cycle_start", "is_complete", "position", "title"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["household", "cycle_start", "source_key"],
+                condition=(
+                    models.Q(deleted_at__isnull=True)
+                    & models.Q(cycle_start__isnull=False)
+                    & ~models.Q(source_key="")
+                ),
+                name="unique_active_solace_cycle_checklist_source",
+            )
+        ]
 
     def __str__(self) -> str:
         return self.title

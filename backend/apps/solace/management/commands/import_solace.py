@@ -220,6 +220,7 @@ class Command(BaseCommand):
             "paydays": 0,
             "planned_purchases": 0,
             "buckets": 0,
+            "bucket_rules_enriched": 0,
             "checklist_items": 0,
             "skipped_inactive": 0,
         }
@@ -302,6 +303,31 @@ class Command(BaseCommand):
                 stats["skipped_inactive"] += 1
                 continue
             if BudgetBucket.objects.filter(name=row["name"]).exists():
+                existing = BudgetBucket.objects.get(name=row["name"])
+                if existing.allocation_value == 0:
+                    fixed = row.get("fixed_amount")
+                    existing.allocation_method = (
+                        BudgetBucket.AllocationMethod.FIXED
+                        if fixed not in (None, "")
+                        else BudgetBucket.AllocationMethod.PERCENTAGE
+                    )
+                    existing.allocation_value = _money(
+                        fixed if fixed not in (None, "") else row.get("percentage")
+                    )
+                    existing.rounding_increment = _money(row.get("rounding_increment") or 1)
+                    existing.cap_to_remaining = _bool(row.get("cap_to_remaining"))
+                    existing.position = int(row.get("sort_order") or 0)
+                    existing.save(
+                        update_fields=[
+                            "allocation_method",
+                            "allocation_value",
+                            "rounding_increment",
+                            "cap_to_remaining",
+                            "position",
+                            "updated_at",
+                        ]
+                    )
+                    stats["bucket_rules_enriched"] += 1
                 continue
             fixed = row.get("fixed_amount")
             notes = (
@@ -315,8 +341,19 @@ class Command(BaseCommand):
                 system_user,
                 name=row["name"],
                 category=row.get("bucket_type") or "",
-                target_amount=_money(fixed or 0),
+                target_amount=Decimal("0.00"),
                 current_amount=Decimal("0.00"),
+                allocation_method=(
+                    BudgetBucket.AllocationMethod.FIXED
+                    if fixed not in (None, "")
+                    else BudgetBucket.AllocationMethod.PERCENTAGE
+                ),
+                allocation_value=_money(
+                    fixed if fixed not in (None, "") else row.get("percentage")
+                ),
+                rounding_increment=_money(row.get("rounding_increment") or 1),
+                cap_to_remaining=_bool(row.get("cap_to_remaining")),
+                position=int(row.get("sort_order") or 0),
                 notes=notes,
             )
             stats["buckets"] += 1
@@ -331,6 +368,8 @@ class Command(BaseCommand):
             create_checklist_item(
                 system_user,
                 title=title,
+                cycle_start=_parse_date(latest_cycle),
+                source_key=row.get("item_key") or "",
                 amount_hint=_money(row.get("amount")),
                 position=int(row.get("sort_order") or 0),
                 is_complete=_bool(row.get("completed")),

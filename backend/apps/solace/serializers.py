@@ -44,7 +44,7 @@ class PaydaySerializer(serializers.ModelSerializer):
         model = Payday
         fields = [
             "id", "title", "expected_amount", "pay_at", "is_all_day", "recurrence_rule",
-            "received_at", "notes", "calendar_event_id", "visibility", "sensitivity",
+            "received_at", "is_active", "notes", "calendar_event_id", "visibility", "sensitivity",
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "calendar_event_id", "created_at", "updated_at"]
@@ -83,8 +83,9 @@ class BudgetBucketSerializer(serializers.ModelSerializer):
         model = BudgetBucket
         fields = [
             "id", "name", "category", "target_amount", "current_amount",
-            "remaining_amount", "progress_percent", "notes", "visibility", "sensitivity",
-            "created_at", "updated_at",
+            "remaining_amount", "progress_percent", "allocation_method", "allocation_value",
+            "rounding_increment", "cap_to_remaining", "is_active", "position",
+            "notes", "visibility", "sensitivity", "created_at", "updated_at",
         ]
         read_only_fields = [
             "id", "remaining_amount", "progress_percent", "created_at", "updated_at",
@@ -92,6 +93,16 @@ class BudgetBucketSerializer(serializers.ModelSerializer):
 
     def validate_name(self, value: str) -> str:
         return _non_blank(value)
+
+    def validate_allocation_value(self, value):
+        if value < 0:
+            raise serializers.ValidationError("Allocation value cannot be negative.")
+        return value
+
+    def validate_rounding_increment(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Rounding increment must be greater than zero.")
+        return value
 
 
 class SubscriptionSerializer(serializers.ModelSerializer):
@@ -115,11 +126,14 @@ class PaydayChecklistItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaydayChecklistItem
         fields = [
-            "id", "title", "bucket_id", "bill_id", "amount_hint", "position",
-            "is_complete", "completed_at", "notes", "visibility", "sensitivity",
+            "id", "title", "cycle_start", "source_key", "bucket_id", "bill_id",
+            "amount_hint", "position", "is_complete", "completed_at",
+            "notes", "visibility", "sensitivity",
             "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "completed_at", "created_at", "updated_at"]
+        read_only_fields = [
+            "id", "cycle_start", "source_key", "completed_at", "created_at", "updated_at",
+        ]
 
     def validate_title(self, value: str) -> str:
         return _non_blank(value)

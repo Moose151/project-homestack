@@ -178,11 +178,15 @@ GET    /api/v1/kiosk/meridian/                  # kid task/reward cards
 Sensitive; re-auth required; hidden from children/users by default; access audited.
 ```
 GET/POST/GET/PATCH/DELETE  /api/v1/solace/bills/[{bill_id}/]
-POST   /api/v1/solace/bills/{bill_id}/mark-paid/
-GET/POST  /api/v1/solace/paydays/
-GET/POST  /api/v1/solace/planned-purchases/
-GET/POST  /api/v1/solace/buckets/
-GET/POST  /api/v1/solace/subscriptions/
+POST   /api/v1/solace/bills/{bill_id}/paid/
+GET/POST/PATCH/DELETE  /api/v1/solace/paydays/[{payday_id}/]
+GET/POST/PATCH/DELETE  /api/v1/solace/purchases/[{purchase_id}/]
+GET/POST/PATCH/DELETE  /api/v1/solace/buckets/[{bucket_id}/]
+GET/POST/PATCH/DELETE  /api/v1/solace/subscriptions/[{subscription_id}/]
+GET/POST/PATCH/DELETE  /api/v1/solace/checklist/[{item_id}/]
+GET    /api/v1/solace/plan/                   # current pay-cycle transfer calculation
+POST   /api/v1/solace/plan/checklist/         # idempotently generate cycle transfers
+GET    /api/v1/solace/search/?q=
 ```
 
 ## 16. Later nodes

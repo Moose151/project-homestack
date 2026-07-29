@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from django.db import connection
-from django.db.models import Q
+from django.db.models import Max, Q
 from django.utils import timezone
 
 from apps.permissions.visibility import apply_visibility
@@ -43,10 +43,18 @@ def get_bill(pk: int) -> Bill | None:
     return Bill.objects.filter(pk=pk).first()
 
 
-def list_paydays(user=None, *, upcoming_only: bool = False, limit: int | None = None):
+def list_paydays(
+    user=None,
+    *,
+    upcoming_only: bool = False,
+    active_only: bool = False,
+    limit: int | None = None,
+):
     qs = Payday.objects.order_by("pay_at", "title")
     if upcoming_only:
         qs = qs.filter(pay_at__isnull=False, pay_at__gte=timezone.now())
+    if active_only:
+        qs = qs.filter(is_active=True)
     if user is not None:
         qs = apply_visibility(qs, user)
     if limit is not None:
@@ -73,8 +81,10 @@ def get_purchase(pk: int) -> PlannedPurchase | None:
     return PlannedPurchase.objects.filter(pk=pk).first()
 
 
-def list_buckets(user=None, *, limit: int | None = None):
-    qs = BudgetBucket.objects.order_by("name")
+def list_buckets(user=None, *, active_only: bool = False, limit: int | None = None):
+    qs = BudgetBucket.objects.order_by("position", "name")
+    if active_only:
+        qs = qs.filter(is_active=True)
     if user is not None:
         qs = apply_visibility(qs, user)
     if limit is not None:
@@ -101,12 +111,22 @@ def get_subscription(pk: int) -> Subscription | None:
     return Subscription.objects.filter(pk=pk).first()
 
 
-def list_checklist_items(user=None, *, incomplete_only: bool = False, limit: int | None = None):
+def list_checklist_items(
+    user=None,
+    *,
+    incomplete_only: bool = False,
+    latest_cycle_only: bool = False,
+    limit: int | None = None,
+):
     qs = PaydayChecklistItem.objects.select_related("bucket", "bill").order_by(
-        "is_complete", "position", "title"
+        "-cycle_start", "is_complete", "position", "title"
     )
     if incomplete_only:
         qs = qs.filter(is_complete=False)
+    if latest_cycle_only:
+        latest_cycle = qs.aggregate(value=Max("cycle_start"))["value"]
+        if latest_cycle:
+            qs = qs.filter(Q(cycle_start__isnull=True) | Q(cycle_start=latest_cycle))
     if user is not None:
         qs = apply_visibility(qs, user)
     if limit is not None:
@@ -116,6 +136,16 @@ def list_checklist_items(user=None, *, incomplete_only: bool = False, limit: int
 
 def get_checklist_item(pk: int) -> PaydayChecklistItem | None:
     return PaydayChecklistItem.objects.filter(pk=pk).first()
+
+
+def get_pay_cycle_plan(user, *, as_of=None) -> dict:
+    from apps.solace.budget_engine import build_pay_cycle_plan
+
+    return build_pay_cycle_plan(
+        list_paydays(user, active_only=True),
+        list_buckets(user, active_only=True),
+        as_of=as_of,
+    )
 
 
 def search_solace(user, query: str) -> dict:

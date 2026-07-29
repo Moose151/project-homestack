@@ -1,8 +1,10 @@
 """solace views — thin API layer with finance re-auth/audit gate."""
 from __future__ import annotations
 
+from datetime import date
+
 from rest_framework import status
-from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -56,6 +58,30 @@ class SolaceSearchView(SolaceAccessMixin, APIView):
             "subscriptions": SubscriptionSerializer(r["subscriptions"], many=True).data,
             "checklist": PaydayChecklistItemSerializer(r["checklist"], many=True).data,
         })
+
+
+def _plan_date(request: Request):
+    value = (request.query_params.get("date") or "").strip()
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise ValidationError({"date": "Use YYYY-MM-DD."}) from exc
+
+
+class PayCyclePlanView(SolaceAccessMixin, APIView):
+    def get(self, request: Request) -> Response:
+        return Response(selectors.get_pay_cycle_plan(request.user, as_of=_plan_date(request)))
+
+
+class PayCycleChecklistView(SolaceAccessMixin, APIView):
+    permission_action = "edit"
+
+    def post(self, request: Request) -> Response:
+        plan = selectors.get_pay_cycle_plan(request.user, as_of=_plan_date(request))
+        items = services.generate_plan_checklist(request.user, plan)
+        return Response(PaydayChecklistItemSerializer(items, many=True).data)
 
 
 class BillListView(SolaceAccessMixin, APIView):
@@ -215,7 +241,11 @@ class SubscriptionDetailView(SolaceAccessMixin, APIView):
 
 class ChecklistListView(SolaceAccessMixin, APIView):
     def get(self, request: Request) -> Response:
-        items = selectors.list_checklist_items(request.user, incomplete_only=request.query_params.get("incomplete") == "1")
+        items = selectors.list_checklist_items(
+            request.user,
+            incomplete_only=request.query_params.get("incomplete") == "1",
+            latest_cycle_only=request.query_params.get("latest") == "1",
+        )
         return Response(PaydayChecklistItemSerializer(items, many=True).data)
 
     def post(self, request: Request) -> Response:

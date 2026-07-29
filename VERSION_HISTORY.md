@@ -1,11 +1,36 @@
 # HomeStack — Version History
 
-> **Current version: 0.12.0**
+> **Current version: 0.13.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
 >
 > **Rule:** bump the version and add a row here with every push to `main`.
+
+---
+
+## 0.13 — Solace pay-cycle planning
+
+### 0.13.0 — 2026-07-29
+- **Native pay-cycle planner** — restored the standalone Solace app's core household question:
+  how much each income source should transfer into each bucket this fortnight. The protected
+  plan groups recurring paydays in the current 14-day cycle, applies percentage rules per income,
+  splits fixed household amounts proportionally, rounds transfers, caps them to remaining pay,
+  and shows household plus per-income totals.
+- **Structured bucket rules** — buckets now store allocation method/value, rounding increment,
+  active state, order and remaining-pay protection instead of burying legacy rules in notes.
+  Rules can be created and edited from Solace. Paydays can be paused without deleting them or
+  leaving stale Calendar entries.
+- **Payday checklist generation** — one action turns the calculated bucket totals into
+  cycle-specific checklist items. Generation is idempotent and refreshes amounts without
+  resetting completed items; the UI defaults to permanent items plus the latest generated cycle.
+- **Safe legacy enrichment** — rerunning the idempotent `import_solace` command enriches
+  previously imported buckets whose structured allocation value is still zero. New imports
+  preserve legacy percentages, fixed amounts, rounding, caps, order and checklist cycle keys.
+- Every planner/checklist request remains permission-controlled, password re-authenticated and
+  audited. Four new regression tests cover calculations, idempotence, inactive income and
+  re-authentication.
+- Database migration required: `solace.0003_budget_planner`.
 
 ---
 

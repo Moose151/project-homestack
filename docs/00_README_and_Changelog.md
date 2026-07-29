@@ -162,6 +162,7 @@ respects D4/D15.
 
 | Date | Change |
 |------|--------|
+| 2026-07-29 | Shipped native Solace pay-cycle planning (v0.13.0): structured bucket allocation rules, per-income/household transfer calculations, pausable income sources and idempotent cycle-checklist generation. No new architectural decision. |
 | 2026-07-29 | Shipped the daily-use experience milestone (v0.12.0): permission-aware global search, universal quick-create, URL-backed navigation state, custom mobile navigation, route splitting/caching, session-expiry reliability, responsive/accessibility consistency and API response timing. No new architectural decision. |
 | 2026-07-28 | Updated **D21**: Homestead now owns protected home insurance/account context and mirrors active costs to linked Solace bills through events (v0.11.2). |
 | 2026-07-21 | Added **D21** (Homestead is the home/property hub; folds the *home* scope of the planned Assets node). Added node spec `25_Node_Homestead.md`. Shipped the Homestead node end-to-end (v0.10.0). |

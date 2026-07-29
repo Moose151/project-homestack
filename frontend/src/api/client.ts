@@ -14,7 +14,7 @@ import type {
   Property, ServiceProvider, Appliance, MaintenanceTask, Improvement, HomesteadSearchResults,
   InsurancePolicy, HouseholdCost,
   SolaceBill, SolacePayday, SolacePurchase, SolaceBucket, SolaceSubscription,
-  SolaceChecklistItem, SolaceSearchResults,
+  SolaceChecklistItem, SolacePayCyclePlan, SolaceSearchResults,
   GlobalSearchResponse,
   NodeInfo, Household,
   Book, BookClub, ClubBookEntry, ClubQueueItem, PersonalBookEntry, BookRating, BooksUser, BookShelfStatus,
@@ -125,7 +125,8 @@ type SolaceBillWrite = Partial<{
 
 type SolacePaydayWrite = Partial<{
   title: string; expected_amount: string; pay_at: string | null; is_all_day: boolean
-  recurrence_rule: string; received_at: string | null; notes: string; visibility: string; sensitivity: string
+  recurrence_rule: string; received_at: string | null; is_active: boolean
+  notes: string; visibility: string; sensitivity: string
 }>
 
 type SolacePurchaseWrite = Partial<{
@@ -136,6 +137,8 @@ type SolacePurchaseWrite = Partial<{
 
 type SolaceBucketWrite = Partial<{
   name: string; category: string; target_amount: string; current_amount: string
+  allocation_method: 'percentage' | 'fixed'; allocation_value: string
+  rounding_increment: string; cap_to_remaining: boolean; is_active: boolean; position: number
   notes: string; visibility: string; sensitivity: string
 }>
 
@@ -810,6 +813,12 @@ export const api = {
   // --- Solace (finance) ---
   searchSolace: (q: string): Promise<SolaceSearchResults> =>
     _fetch(`/solace/search/?q=${encodeURIComponent(q)}`),
+  getSolacePlan: (date?: string): Promise<SolacePayCyclePlan> =>
+    _fetch(`/solace/plan/${date ? `?date=${encodeURIComponent(date)}` : ''}`),
+  generateSolacePlanChecklist: (date?: string): Promise<SolaceChecklistItem[]> =>
+    _fetch(`/solace/plan/checklist/${date ? `?date=${encodeURIComponent(date)}` : ''}`, {
+      method: 'POST',
+    }),
   getSolaceBills: (params?: { upcoming?: boolean; unpaid?: boolean }): Promise<SolaceBill[]> => {
     const q = new URLSearchParams()
     if (params?.upcoming) q.set('upcoming', '1')
@@ -829,6 +838,8 @@ export const api = {
     _fetch(`/solace/paydays/${upcoming ? '?upcoming=1' : ''}`),
   createSolacePayday: (data: SolacePaydayWrite): Promise<SolacePayday> =>
     _fetch('/solace/paydays/', { method: 'POST', body: JSON.stringify(data) }),
+  updateSolacePayday: (id: number, data: SolacePaydayWrite): Promise<SolacePayday> =>
+    _fetch(`/solace/paydays/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   getSolacePurchases: (open = false): Promise<SolacePurchase[]> =>
     _fetch(`/solace/purchases/${open ? '?open=1' : ''}`),
   createSolacePurchase: (data: SolacePurchaseWrite): Promise<SolacePurchase> =>
@@ -842,8 +853,12 @@ export const api = {
     _fetch(`/solace/subscriptions/${active ? '?active=1' : ''}`),
   createSolaceSubscription: (data: SolaceSubscriptionWrite): Promise<SolaceSubscription> =>
     _fetch('/solace/subscriptions/', { method: 'POST', body: JSON.stringify(data) }),
-  getSolaceChecklist: (incomplete = false): Promise<SolaceChecklistItem[]> =>
-    _fetch(`/solace/checklist/${incomplete ? '?incomplete=1' : ''}`),
+  getSolaceChecklist: (incomplete = false, latest = true): Promise<SolaceChecklistItem[]> => {
+    const query = new URLSearchParams()
+    if (incomplete) query.set('incomplete', '1')
+    if (latest) query.set('latest', '1')
+    return _fetch(`/solace/checklist/${query.size ? `?${query}` : ''}`)
+  },
   createSolaceChecklistItem: (data: SolaceChecklistWrite): Promise<SolaceChecklistItem> =>
     _fetch('/solace/checklist/', { method: 'POST', body: JSON.stringify(data) }),
   updateSolaceChecklistItem: (id: number, data: SolaceChecklistWrite): Promise<SolaceChecklistItem> =>

@@ -864,6 +864,7 @@ export interface SolacePayday {
   is_all_day: boolean
   recurrence_rule: string
   received_at: string | null
+  is_active: boolean
   notes: string
   calendar_event_id: number | null
   visibility: string
@@ -901,6 +902,12 @@ export interface SolaceBucket {
   current_amount: string
   remaining_amount: string
   progress_percent: number
+  allocation_method: 'percentage' | 'fixed'
+  allocation_value: string
+  rounding_increment: string
+  cap_to_remaining: boolean
+  is_active: boolean
+  position: number
   notes: string
   visibility: string
   sensitivity: string
@@ -929,6 +936,8 @@ export interface SolaceSubscription {
 export interface SolaceChecklistItem {
   id: number
   title: string
+  cycle_start: string | null
+  source_key: string
   bucket_id: number | null
   bill_id: number | null
   amount_hint: string
@@ -949,6 +958,44 @@ export interface SolaceSearchResults {
   buckets: SolaceBucket[]
   subscriptions: SolaceSubscription[]
   checklist: SolaceChecklistItem[]
+}
+
+export interface SolacePlanAllocation {
+  bucket_id: number
+  bucket_name: string
+  category: string
+  allocation_method: 'percentage' | 'fixed'
+  allocation_value: string
+  raw_amount: string
+  amount: string
+  capped: boolean
+}
+
+export interface SolacePlanSource {
+  payday_id: number
+  title: string
+  pay_dates: string[]
+  income_total: string
+  allocated_total: string
+  remaining: string
+  allocations: SolacePlanAllocation[]
+}
+
+export interface SolacePlanBucket {
+  bucket_id: number
+  bucket_name: string
+  category: string
+  amount: string
+}
+
+export interface SolacePayCyclePlan {
+  cycle_start: string
+  cycle_end: string
+  income_total: string
+  allocated_total: string
+  remaining: string
+  sources: SolacePlanSource[]
+  buckets: SolacePlanBucket[]
 }
 
 export interface GlobalSearchResult {

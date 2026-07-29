@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../../api/client'
 import type {
   SolaceBill, SolaceBucket, SolaceChecklistItem, SolacePayday,
-  SolacePurchase, SolaceSubscription,
+  SolacePayCyclePlan, SolacePurchase, SolaceSubscription,
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
@@ -20,8 +20,8 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, 
 const dateOnly = (iso: string | null) => iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'No date'
 const fromLocalInput = (value: string) => value ? new Date(value).toISOString() : null
 
-type Tab = 'overview' | 'bills' | 'buckets' | 'subscriptions' | 'purchases' | 'paydays' | 'checklist'
-const TAB_KEYS: Tab[] = ['overview', 'bills', 'buckets', 'subscriptions', 'purchases', 'paydays', 'checklist']
+type Tab = 'overview' | 'plan' | 'bills' | 'buckets' | 'subscriptions' | 'purchases' | 'paydays' | 'checklist'
+const TAB_KEYS: Tab[] = ['overview', 'plan', 'bills', 'buckets', 'subscriptions', 'purchases', 'paydays', 'checklist']
 
 const BILL_CATS = ['mortgage', 'utilities', 'insurance', 'council', 'debt', 'subscription', 'childcare', 'other']
 const RECURRENCE = [
@@ -171,31 +171,125 @@ function BillsTab({ bills, reload, onChange, onError }: {
 }
 
 function BucketForm({ onCreated }: { onCreated: () => void }) {
-  const [f, setF] = useState({ name: '', category: '', target_amount: '', current_amount: '' })
+  const [f, setF] = useState({
+    name: '', category: '', target_amount: '', current_amount: '',
+    allocation_method: 'percentage' as 'percentage' | 'fixed',
+    allocation_value: '', rounding_increment: '1.00', cap_to_remaining: true,
+  })
   const [saving, setSaving] = useState(false)
-  const set = (k: string, v: string) => setF(prev => ({ ...prev, [k]: v }))
+  const set = (k: string, v: string | boolean) => setF(prev => ({ ...prev, [k]: v }))
   const save = async () => {
     setSaving(true)
     try {
-      await api.createSolaceBucket({ ...f, target_amount: f.target_amount || '0.00', current_amount: f.current_amount || '0.00' })
-      setF({ name: '', category: '', target_amount: '', current_amount: '' })
+      await api.createSolaceBucket({
+        ...f,
+        target_amount: f.target_amount || '0.00',
+        current_amount: f.current_amount || '0.00',
+        allocation_value: f.allocation_value || '0.00',
+      })
+      setF({
+        name: '', category: '', target_amount: '', current_amount: '',
+        allocation_method: 'percentage', allocation_value: '',
+        rounding_increment: '1.00', cap_to_remaining: true,
+      })
       onCreated()
     } finally { setSaving(false) }
   }
   return (
     <Card className="p-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_0.8fr_0.8fr_auto]">
+      <h3 className="mb-3 font-semibold text-ink">New bucket and pay rule</h3>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[1.3fr_1fr_0.9fr_0.8fr_0.8fr_0.8fr_auto]">
         <Field label="Bucket"><Input value={f.name} onChange={e => set('name', e.target.value)} placeholder="Emergency fund" /></Field>
         <Field label="Category"><Input value={f.category} onChange={e => set('category', e.target.value)} /></Field>
-        <Field label="Target"><Input type="number" step="0.01" value={f.target_amount} onChange={e => set('target_amount', e.target.value)} /></Field>
-        <Field label="Current"><Input type="number" step="0.01" value={f.current_amount} onChange={e => set('current_amount', e.target.value)} /></Field>
+        <Field label="Pay rule">
+          <Select value={f.allocation_method} onChange={e => set('allocation_method', e.target.value)}>
+            <option value="percentage">Percentage</option>
+            <option value="fixed">Fixed total</option>
+          </Select>
+        </Field>
+        <Field label={f.allocation_method === 'percentage' ? 'Percent' : 'Amount'}>
+          <Input type="number" min="0" step="0.01" value={f.allocation_value} onChange={e => set('allocation_value', e.target.value)} />
+        </Field>
+        <Field label="Round to">
+          <Select value={f.rounding_increment} onChange={e => set('rounding_increment', e.target.value)}>
+            {['0.01', '1.00', '5.00', '10.00'].map(v => <option key={v} value={v}>{money(v)}</option>)}
+          </Select>
+        </Field>
+        <Field label="Goal"><Input type="number" min="0" step="0.01" value={f.target_amount} onChange={e => set('target_amount', e.target.value)} /></Field>
+        <Field label="Saved"><Input type="number" min="0" step="0.01" value={f.current_amount} onChange={e => set('current_amount', e.target.value)} /></Field>
         <div className="flex items-end"><Button onClick={save} loading={saving} disabled={!f.name.trim()} className="w-full">Add</Button></div>
       </div>
+      <label className="mt-3 flex items-center gap-2 text-sm text-muted">
+        <input type="checkbox" checked={f.cap_to_remaining} onChange={e => set('cap_to_remaining', e.target.checked)} />
+        Never allocate more than the remaining pay
+      </label>
     </Card>
   )
 }
 
-function BucketsTab({ buckets, reload }: { buckets: SolaceBucket[]; reload: () => void }) {
+function BucketRuleEditor({ bucket, reload, onError }: {
+  bucket: SolaceBucket; reload: () => void; onError: (message: string) => void
+}) {
+  const [method, setMethod] = useState(bucket.allocation_method)
+  const [value, setValue] = useState(bucket.allocation_value)
+  const [rounding, setRounding] = useState(bucket.rounding_increment)
+  const [capRemaining, setCapRemaining] = useState(bucket.cap_to_remaining)
+  const [active, setActive] = useState(bucket.is_active)
+  const [saving, setSaving] = useState(false)
+  const save = async () => {
+    setSaving(true)
+    try {
+      await api.updateSolaceBucket(bucket.id, {
+        allocation_method: method,
+        allocation_value: value || '0.00',
+        rounding_increment: rounding,
+        cap_to_remaining: capRemaining,
+        is_active: active,
+      })
+      reload()
+    } catch (e) {
+      onError(errMsg(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <details className="mt-4 border-t border-line pt-3">
+      <summary className="cursor-pointer text-sm font-medium text-primary">Allocation settings</summary>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <Field label="Rule">
+          <Select value={method} onChange={e => setMethod(e.target.value as 'percentage' | 'fixed')}>
+            <option value="percentage">Percentage</option>
+            <option value="fixed">Fixed household total</option>
+          </Select>
+        </Field>
+        <Field label={method === 'percentage' ? 'Percent' : 'Amount'}>
+          <Input type="number" min="0" step="0.01" value={value} onChange={e => setValue(e.target.value)} />
+        </Field>
+        <Field label="Round to">
+          <Select value={rounding} onChange={e => setRounding(e.target.value)}>
+            {['0.01', '1.00', '5.00', '10.00'].map(v => <option key={v} value={v}>{money(v)}</option>)}
+          </Select>
+        </Field>
+        <div className="flex flex-col justify-end gap-2 pb-1 text-sm text-muted">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={capRemaining} onChange={e => setCapRemaining(e.target.checked)} />
+            Cap to remaining pay
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
+            Include in pay plan
+          </label>
+        </div>
+      </div>
+      <Button className="mt-3" size="sm" onClick={save} loading={saving}>Save rule</Button>
+    </details>
+  )
+}
+
+function BucketsTab({ buckets, reload, onError }: {
+  buckets: SolaceBucket[]; reload: () => void; onError: (message: string) => void
+}) {
   return (
     <div className="flex flex-col gap-4">
       <BucketForm onCreated={reload} />
@@ -211,6 +305,14 @@ function BucketsTab({ buckets, reload }: { buckets: SolaceBucket[]; reload: () =
                 <div className="h-full bg-primary" style={{ width: `${b.progress_percent}%` }} />
               </div>
               <p className="mt-2 text-sm text-muted">{money(b.current_amount)} of {money(b.target_amount)}</p>
+              <p className="mt-2 text-sm font-medium text-ink">
+                {b.is_active
+                  ? b.allocation_method === 'fixed'
+                    ? `${money(b.allocation_value)} per household pay cycle`
+                    : `${Number(b.allocation_value)}% of each pay`
+                  : 'Excluded from pay plan'}
+              </p>
+              <BucketRuleEditor bucket={b} reload={reload} onError={onError} />
             </Card>
           ))}
         </div>
@@ -310,14 +412,20 @@ function PurchasesTab({ purchases, reload }: { purchases: SolacePurchase[]; relo
 }
 
 function PaydayForm({ onCreated }: { onCreated: () => void }) {
-  const [f, setF] = useState({ title: 'Payday', expected_amount: '', pay_at: '', recurrence_rule: 'FREQ=MONTHLY' })
+  const [f, setF] = useState({ title: 'Payday', expected_amount: '', pay_at: '', recurrence_rule: 'FREQ=WEEKLY;INTERVAL=2' })
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: string) => setF(prev => ({ ...prev, [k]: v }))
   const save = async () => {
     setSaving(true)
     try {
-      await api.createSolacePayday({ ...f, expected_amount: f.expected_amount || '0.00', pay_at: fromLocalInput(f.pay_at), is_all_day: true })
-      setF({ title: 'Payday', expected_amount: '', pay_at: '', recurrence_rule: 'FREQ=MONTHLY' })
+      await api.createSolacePayday({
+        ...f,
+        expected_amount: f.expected_amount || '0.00',
+        pay_at: fromLocalInput(f.pay_at),
+        is_all_day: true,
+        is_active: true,
+      })
+      setF({ title: 'Payday', expected_amount: '', pay_at: '', recurrence_rule: 'FREQ=WEEKLY;INTERVAL=2' })
       onCreated()
     } finally { setSaving(false) }
   }
@@ -334,7 +442,17 @@ function PaydayForm({ onCreated }: { onCreated: () => void }) {
   )
 }
 
-function PaydaysTab({ paydays, reload }: { paydays: SolacePayday[]; reload: () => void }) {
+function PaydaysTab({ paydays, reload, onError }: {
+  paydays: SolacePayday[]; reload: () => void; onError: (message: string) => void
+}) {
+  const toggle = async (payday: SolacePayday) => {
+    try {
+      await api.updateSolacePayday(payday.id, { is_active: !payday.is_active })
+      reload()
+    } catch (e) {
+      onError(errMsg(e))
+    }
+  }
   return (
     <div className="flex flex-col gap-4">
       <PaydayForm onCreated={reload} />
@@ -343,7 +461,13 @@ function PaydaysTab({ paydays, reload }: { paydays: SolacePayday[]; reload: () =
           <Card key={p.id} className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div><h3 className="font-semibold text-ink">{p.title}</h3><p className="text-sm text-muted">{money(p.expected_amount)}</p></div>
+              <Badge tone={p.is_active ? 'success' : 'neutral'}>{p.is_active ? 'Included' : 'Paused'}</Badge>
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-3">
               <DueBadge iso={p.pay_at} />
+              <Button size="sm" variant="ghost" onClick={() => toggle(p)}>
+                {p.is_active ? 'Pause' : 'Include'}
+              </Button>
             </div>
           </Card>
         ))}
@@ -388,8 +512,14 @@ function ChecklistTab({ items, reload, onChange, onError }: {
       <div className="grid gap-2">
         {items.map(item => (
           <button key={item.id} onClick={() => toggle(item)} className="flex items-center justify-between rounded-lg border border-line bg-surface px-4 py-3 text-left hover:bg-sunken/40">
-            <span className={item.is_complete ? 'text-muted line-through' : 'text-ink'}>{item.title}</span>
-            <Badge tone={item.is_complete ? 'success' : 'neutral'}>{item.is_complete ? 'Done' : 'Todo'}</Badge>
+            <span className={item.is_complete ? 'text-muted line-through' : 'text-ink'}>
+              {item.title}
+              {Number(item.amount_hint) > 0 && <span className="ml-2 text-sm text-muted">{money(item.amount_hint)}</span>}
+            </span>
+            <div className="flex items-center gap-2">
+              {item.cycle_start && <span className="hidden text-xs text-muted sm:inline">{dateOnly(item.cycle_start)}</span>}
+              <Badge tone={item.is_complete ? 'success' : 'neutral'}>{item.is_complete ? 'Done' : 'Todo'}</Badge>
+            </div>
           </button>
         ))}
       </div>
@@ -424,6 +554,98 @@ function Overview({ bills, buckets, subscriptions, purchases, onTab }: {
   )
 }
 
+function PayPlan({ plan, generating, onGenerate, onTab }: {
+  plan: SolacePayCyclePlan | null
+  generating: boolean
+  onGenerate: () => void
+  onTab: (tab: Tab) => void
+}) {
+  if (!plan || plan.sources.length === 0) {
+    return (
+      <EmptyState
+        icon="🧮"
+        title="No income in this pay cycle"
+        hint="Add a payday with its next date, amount and repeat pattern to calculate the household split."
+        action={<Button onClick={() => onTab('paydays')}>Add payday</Button>}
+      />
+    )
+  }
+  return (
+    <div className="space-y-4">
+      <Card className="p-4">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+          <div>
+            <p className="text-sm font-medium text-muted">Pay cycle</p>
+            <h2 className="text-lg font-bold text-ink">{dateOnly(plan.cycle_start)} – {dateOnly(plan.cycle_end)}</h2>
+          </div>
+          <Button onClick={onGenerate} loading={generating} disabled={plan.buckets.length === 0}>
+            Create payday checklist
+          </Button>
+        </div>
+      </Card>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[
+          ['Expected income', money(plan.income_total)],
+          ['Bucket transfers', money(plan.allocated_total)],
+          ['Remaining after transfers', money(plan.remaining)],
+        ].map(([label, value]) => (
+          <Card key={label} className="p-4">
+            <p className="text-2xl font-extrabold text-ink">{value}</p>
+            <p className="mt-1 text-sm text-muted">{label}</p>
+          </Card>
+        ))}
+      </div>
+      {plan.buckets.length === 0 ? (
+        <EmptyState
+          icon="🪣"
+          title="No active allocation rules"
+          hint="Set a percentage or fixed pay-cycle amount on at least one bucket."
+          action={<Button onClick={() => onTab('buckets')}>Configure buckets</Button>}
+        />
+      ) : (
+        <Card className="divide-y divide-line">
+          {plan.buckets.map(bucket => (
+            <div key={bucket.bucket_id} className="flex items-center justify-between gap-3 px-4 py-3">
+              <div>
+                <p className="font-semibold text-ink">{bucket.bucket_name}</p>
+                <p className="text-sm text-muted">{bucket.category || 'Set-aside'}</p>
+              </div>
+              <p className="text-lg font-bold text-ink">{money(bucket.amount)}</p>
+            </div>
+          ))}
+        </Card>
+      )}
+      <div className="grid gap-3 lg:grid-cols-2">
+        {plan.sources.map(source => (
+          <Card key={source.payday_id} className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-ink">{source.title}</h3>
+                <p className="text-sm text-muted">
+                  {source.pay_dates.map(dateOnly).join(', ')}
+                </p>
+              </div>
+              <p className="font-bold text-ink">{money(source.income_total)}</p>
+            </div>
+            <div className="mt-3 space-y-2 border-t border-line pt-3 text-sm">
+              {source.allocations.filter(row => Number(row.amount) > 0).map(row => (
+                <div key={row.bucket_id} className="flex justify-between gap-3">
+                  <span className="text-muted">{row.bucket_name}{row.capped ? ' (capped)' : ''}</span>
+                  <span className="font-medium text-ink">{money(row.amount)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between gap-3 border-t border-line pt-2">
+                <span className="font-medium text-muted">Remaining</span>
+                <span className="font-bold text-ink">{money(source.remaining)}</span>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function SolacePage() {
   const [unlocked, setUnlocked] = useState(false)
   const [tab, setTab] = useUrlTab<Tab>('overview', TAB_KEYS)
@@ -435,16 +657,19 @@ export function SolacePage() {
   const [buckets, setBuckets] = useState<SolaceBucket[]>([])
   const [subscriptions, setSubscriptions] = useState<SolaceSubscription[]>([])
   const [checklist, setChecklist] = useState<SolaceChecklistItem[]>([])
+  const [plan, setPlan] = useState<SolacePayCyclePlan | null>(null)
+  const [generatingChecklist, setGeneratingChecklist] = useState(false)
   const [q, setQ] = useUrlQueryState()
 
   const load = async () => {
     setLoading(true); setError('')
     try {
-      const [bs, ps, pu, bu, su, ch] = await Promise.all([
+      const [bs, ps, pu, bu, su, ch, pl] = await Promise.all([
         api.getSolaceBills(), api.getSolacePaydays(), api.getSolacePurchases(),
         api.getSolaceBuckets(), api.getSolaceSubscriptions(), api.getSolaceChecklist(),
+        api.getSolacePlan(),
       ])
-      setBills(bs); setPaydays(ps); setPurchases(pu); setBuckets(bu); setSubscriptions(su); setChecklist(ch)
+      setBills(bs); setPaydays(ps); setPurchases(pu); setBuckets(bu); setSubscriptions(su); setChecklist(ch); setPlan(pl)
       setUnlocked(true)
     } catch (e) {
       setError(errMsg(e))
@@ -470,6 +695,19 @@ export function SolacePage() {
     } catch (e) { setError(errMsg(e)) }
   }
 
+  const generateChecklist = async () => {
+    setGeneratingChecklist(true); setError('')
+    try {
+      const items = await api.generateSolacePlanChecklist()
+      setChecklist(items)
+      setTab('checklist')
+    } catch (e) {
+      setError(errMsg(e))
+    } finally {
+      setGeneratingChecklist(false)
+    }
+  }
+
   if (!unlocked) return <ReauthGate onUnlock={() => setUnlocked(true)} />
 
   return (
@@ -484,6 +722,7 @@ export function SolacePage() {
       <Tabs
         tabs={[
           { key: 'overview', label: 'Overview' },
+          { key: 'plan', label: 'Pay plan' },
           { key: 'bills', label: 'Bills' },
           { key: 'buckets', label: 'Buckets' },
           { key: 'subscriptions', label: 'Subscriptions' },
@@ -495,11 +734,12 @@ export function SolacePage() {
         onChange={k => setTab(k as Tab)}
       />
       {tab === 'overview' && <Overview bills={bills} buckets={buckets} subscriptions={subscriptions} purchases={purchases} onTab={setTab} />}
+      {tab === 'plan' && <PayPlan plan={plan} generating={generatingChecklist} onGenerate={generateChecklist} onTab={setTab} />}
       {tab === 'bills' && <BillsTab bills={bills} reload={load} onChange={setBills} onError={setError} />}
-      {tab === 'buckets' && <BucketsTab buckets={buckets} reload={load} />}
+      {tab === 'buckets' && <BucketsTab buckets={buckets} reload={load} onError={setError} />}
       {tab === 'subscriptions' && <SubscriptionsTab subscriptions={subscriptions} reload={load} />}
       {tab === 'purchases' && <PurchasesTab purchases={purchases} reload={load} />}
-      {tab === 'paydays' && <PaydaysTab paydays={paydays} reload={load} />}
+      {tab === 'paydays' && <PaydaysTab paydays={paydays} reload={load} onError={setError} />}
       {tab === 'checklist' && <ChecklistTab items={checklist} reload={load} onChange={setChecklist} onError={setError} />}
     </div>
   )

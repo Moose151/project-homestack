@@ -96,8 +96,8 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: Daily-use experience milestone complete (2026-07-29, v0.12.0) — live household
-validation and targeted workflow refinement are next; kiosk work remains deferred.**
+**Phase: Solace pay-cycle planning complete locally (2026-07-29, v0.13.0) — deploy/live
+validation and remaining cutover features are next; kiosk work remains deferred.**
 
 > **Owner direction, 2026-07-29.** Focus on usability, functionality, response time, navigation
 > and layout across the responsive web app. v0.12.0 delivers the shared foundation: route
@@ -192,7 +192,7 @@ validation and targeted workflow refinement are next; kiosk work remains deferre
   response-time, reliability, layout and accessibility foundation delivered across all web
   surfaces. Kiosk equivalents remain deferred.
 - [ ] Milestone 4: security maturation.
-- [~] **Milestone 5: native Solace — initial native shell + importer shipped (2026-07-21, v0.11.1).**
+- [~] **Milestone 5: native Solace — shell, importer and pay planner shipped (v0.13.0).**
   Backend `apps/solace` covers bills, paydays, planned purchases, budget buckets/set-asides,
   subscriptions and payday checklist items. All rows default to `visibility="sensitive"` +
   `sensitivity="financial"`. Bills/paydays/subscriptions/planned purchases sync to Calendar via
@@ -203,8 +203,11 @@ validation and targeted workflow refinement are next; kiosk work remains deferre
   `/solace` route shipped with password unlock, overview, search and tabs. `import_solace`
   now dry-runs/imports the local legacy SQLite DB (`/home/moose/Documents/project-solace`):
   recurring bills/subscriptions, paydays, planned purchases, buckets and latest payday-checklist
-  cycle. **Still to do for full M5/cutover:** notifications, attachments, richer edit/delete UI,
-  live dry-run/apply against the home server, and retirement of the standalone app.
+  cycle. v0.13.0 restores native fortnightly pay planning with structured percentage/fixed
+  bucket rules, proportional household fixed amounts, rounding/caps, per-income splits and
+  idempotent cycle-checklist generation. **Still to do for full M5/cutover:** notifications,
+  attachments, richer edit/delete UI, live dry-run/apply against the home server, and retirement
+  of the standalone app.
 - [~] **Homestead node — SHIPPED (2026-07-21; costs & cover v0.11.2, decision D21).** The household's home/property
   hub (maintenance, appliances/warranties, service contacts, improvements + property record). Folds the
   *home* scope of the planned **Assets** node. Protected insurance + rates/water/gas/utility cost
@@ -212,14 +215,13 @@ validation and targeted workflow refinement are next; kiosk work remains deferre
   See spec `25_Node_Homestead.md`.
 - [ ] Milestone 6: Inventory, Assets (non-home only, or retire — see D21), Hearth, Travel, Projects, Health.
 
-## 6. Active task — live daily-use validation
+## 6. Active task — deploy and validate Solace v0.13.0
 
-**Immediate next concrete step:** deploy v0.12.0 to the home server and walk through the common
-phone and laptop journeys: login → Hub → search/create → Calendar/Atlas → Solace unlock → Users
-self-password reset. Use the browser Network panel's `Server-Timing` values and backend
-`Slow API request` warnings to identify real response-time outliers. Record concrete friction
-before doing further surface-specific redesign. No migration is introduced by v0.12.0, but the
-backend and frontend images both need rebuilding.
+**Immediate next concrete step:** deploy v0.13.0, run `migrate` for
+`solace.0003_budget_planner`, then rerun the Solace importer dry-run/apply so existing imported
+buckets gain structured transfer rules. In Solace: verify Paydays → Buckets allocation settings
+→ Pay plan totals → Create payday checklist → complete/reload checklist. Confirm the two-person
+fixed-amount split matches the standalone app before retiring it.
 
 **Working rhythm (proven this milestone):** small workstream → backend (models/migration/services/
 selectors/serializers/views/urls) → tests → frontend (types/client → UI) → `tsc` + `npm run build`
@@ -349,6 +351,7 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-07-28 | Assistant | Homestead | **Costs & cover shipped (v0.11.2).** Added protected `InsurancePolicy` and `HouseholdCost` records (rates/water/gas/electricity/mortgage/strata/waste/internet), full CRUD, premiums/amounts, policy/account numbers, excess details, renewals/due dates and annualised UI summary/search. Every active row mirrors exactly one source-linked Solace `Bill` through events (D4); update/deactivate/delete stays in sync and financial Calendar rows remain Solace-owned. Finance endpoints require both Homestead + Solace permission, password re-auth and audit. General pass fixed detail visibility enforcement, touch-only missing actions and Cancel buttons submitting forms. **Full backend suite: 521 green; frontend production build clean.** | **Deploy:** run `docker exec homestack-backend python manage.py migrate` (Homestead `0002`, Solace `0002`) and rebuild frontend. Then live-test Costs & cover with an admin account. Future: document attachments, meter readings, notifications, Projects links. |
 | 2026-07-28 | Assistant | Fix | **Recurring pet/home completion dependency fix (v0.11.3).** Production traceback from `POST /pets/treatments/1/complete/` showed `ModuleNotFoundError: dateutil`. `Pets` and `Homestead` RRULE completion logic already used `python-dateutil`, but it was present only in the local environment and missing from `backend/requirements.txt`, so the Docker image could not run it. Added pinned `python-dateutil==2.9.0.post0`; recurring-treatment tests green. | **Deploy requires a backend image rebuild** so pip installs the dependency; a restart alone is not enough. Then retry the flea-treatment Done action. |
 | 2026-07-29 | Assistant | Daily UX | **Daily-use experience milestone shipped (v0.12.0).** Navigation: contextual shell header, global Search (`Ctrl/⌘ K`) + Create, custom mobile bottom bar, URL-backed node tabs, scroll restoration and working quick-create deep links. Functionality: canonical permission-aware `/api/v1/search/` aggregates Calendar + enabled nodes in one request; locked Solace is reported without searching/leaking it. Performance: route lazy-loading cut initial JS ~543→245 KB (gzip 137→75 KB); shared People/Users/Nodes/Household requests dedupe/cache with auth-boundary clearing; API `Server-Timing` + >500 ms slow logging. Reliability: self-password reset preserves the Django session; global auth-expiry, offline/network, retry/load/error states. Layout/accessibility: shared Hub/admin headers, focus-trapped mobile sheets, keyboard tabs, touch/focus/reduced-motion improvements. Fast actions: optimistic Atlas/Solace completion and Undo for paid bills. **526 backend tests green; production frontend build clean; no migration drift.** | **Deploy:** rebuild backend + frontend images; **no database migration is introduced by v0.12.0** (running the standard `migrate` remains safe). Hard-refresh once after deploy so the new split frontend assets replace the old bundle. Then live-test common phone/laptop journeys and use `Server-Timing`/slow logs for the next targeted pass. |
+| 2026-07-29 | Assistant | M5 | **Solace pay-cycle planning built (v0.13.0).** Ported the standalone app's core pay-split workflow into the native protected node. New pure budget engine calculates the current 14-day cycle, recurring income occurrences, per-income percentage allocations, proportional shares of fixed household allocations, rounding and remaining-pay caps. Buckets now hold structured allocation rules/order/active state; paydays can be paused; the new Pay plan tab shows household and source breakdowns and creates idempotent cycle-specific checklist transfers without resetting completed rows. The importer now preserves/enriches legacy bucket rules and checklist cycle/source keys. All routes remain permission/re-auth/audit gated. **530 backend tests green; production frontend build clean; no migration drift.** | **Deploy:** rebuild backend/frontend, run `migrate` (`solace.0003_budget_planner`), rerun `import_solace` dry-run/apply to enrich already imported zero-rule buckets, then verify real two-income totals against standalone Solace. Remaining M5: richer edit/delete, notifications, attachments and cutover. |
 
 ### Session notes (free-form, optional)
 
