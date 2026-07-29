@@ -3,6 +3,7 @@ from django.urls import path
 from apps.solace.views import (
     BillDetailView,
     BillListView,
+    BillOccurrenceActionView,
     BillPaidView,
     BucketDetailView,
     BucketListView,
@@ -15,12 +16,19 @@ from apps.solace.views import (
     PurchaseDetailView,
     PurchaseListView,
     SolaceSearchView,
+    SolaceScheduleView,
     SubscriptionDetailView,
     SubscriptionListView,
 )
 
 urlpatterns = [
     path("search/", SolaceSearchView.as_view(), name="solace-search"),
+    path("schedule/", SolaceScheduleView.as_view(), name="solace-schedule"),
+    path(
+        "occurrences/<int:occurrence_id>/<str:action>/",
+        BillOccurrenceActionView.as_view(),
+        name="solace-occurrence-action",
+    ),
     path("plan/", PayCyclePlanView.as_view(), name="solace-plan"),
     path("plan/checklist/", PayCycleChecklistView.as_view(), name="solace-plan-checklist"),
     path("bills/", BillListView.as_view(), name="solace-bill-list"),

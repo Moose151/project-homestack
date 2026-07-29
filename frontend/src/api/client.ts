@@ -13,7 +13,8 @@ import type {
   Pet, PetTreatment, PetAppointment,
   Property, ServiceProvider, Appliance, MaintenanceTask, Improvement, HomesteadSearchResults,
   InsurancePolicy, HouseholdCost,
-  SolaceBill, SolacePayday, SolacePurchase, SolaceBucket, SolaceSubscription,
+  SolaceBill, SolaceBillOccurrence, SolacePayday, SolacePurchase, SolaceSchedule,
+  SolaceBucket, SolaceSubscription,
   SolaceChecklistItem, SolacePayCyclePlan, SolaceSearchResults,
   GlobalSearchResponse,
   NodeInfo, Household,
@@ -120,6 +121,7 @@ type HouseholdCostWrite = Partial<{
 type SolaceBillWrite = Partial<{
   name: string; category: string; provider: string; amount: string
   due_at: string | null; is_all_day: boolean; recurrence_rule: string
+  is_active: boolean; include_in_set_aside: boolean
   is_paid: boolean; paid_at: string | null; notes: string; visibility: string; sensitivity: string
 }>
 
@@ -819,6 +821,13 @@ export const api = {
     _fetch(`/solace/plan/checklist/${date ? `?date=${encodeURIComponent(date)}` : ''}`, {
       method: 'POST',
     }),
+  getSolaceSchedule: (start: string, end: string): Promise<SolaceSchedule> =>
+    _fetch(`/solace/schedule/?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`),
+  updateSolaceOccurrence: (
+    id: number,
+    action: 'paid' | 'unpaid' | 'skip',
+  ): Promise<SolaceBillOccurrence> =>
+    _fetch(`/solace/occurrences/${id}/${action}/`, { method: 'POST' }),
   getSolaceBills: (params?: { upcoming?: boolean; unpaid?: boolean }): Promise<SolaceBill[]> => {
     const q = new URLSearchParams()
     if (params?.upcoming) q.set('upcoming', '1')

@@ -2,7 +2,7 @@
 import io
 import sqlite3
 import tempfile
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from django.core.management import call_command
 from django.test import TestCase
@@ -22,7 +22,17 @@ from apps.solace.services import (
     delete_bill,
     mark_bill_paid,
 )
-from apps.solace.models import Bill, BudgetBucket, Payday, PaydayChecklistItem, PlannedPurchase, Subscription
+from apps.solace.bill_schedule import annual_cost, fortnightly_cost, occurrence_datetimes
+from apps.solace.models import (
+    Bill,
+    BillOccurrence,
+    BudgetBucket,
+    Payday,
+    PaydayChecklistItem,
+    PlannedPurchase,
+    Subscription,
+)
+from apps.solace.services import update_bill
 
 
 def _make_user(username, role=User.Role.ADMIN, is_child=False) -> User:
@@ -127,6 +137,98 @@ class SolaceCrudAndCalendarTests(TestCase):
         event = CalendarEvent.objects.get(pk=sub.calendar_event_id)
         self.assertEqual(event.source_node.key, "solace")
         self.assertEqual(event.sensitivity, "financial")
+
+    def test_monthly_occurrences_clamp_to_month_end_without_drifting(self):
+        bill = create_bill(
+            self.admin,
+            name="Month end",
+            amount="100.00",
+            due_at=timezone.make_aware(datetime(2027, 1, 31, 9)),
+            recurrence_rule="FREQ=MONTHLY;BYMONTHDAY=31",
+        )
+        values = occurrence_datetimes(
+            bill,
+            date(2027, 1, 1),
+            date(2027, 4, 30),
+        )
+        self.assertEqual(
+            [timezone.localdate(value).isoformat() for value in values],
+            ["2027-01-31", "2027-02-28", "2027-03-31", "2027-04-30"],
+        )
+        self.assertEqual(annual_cost(bill), 1200)
+        self.assertEqual(str(fortnightly_cost(bill)), "46.15")
+
+    def test_recurring_occurrence_can_be_paid_restored_and_skipped(self):
+        bill = create_bill(
+            self.admin,
+            name="Weekly bill",
+            amount="25.00",
+            due_at=timezone.now() + timedelta(days=1),
+            recurrence_rule="FREQ=WEEKLY",
+        )
+        occurrence = bill.occurrences.first()
+        event_id = bill.calendar_event_id
+        paid = self.client.post(
+            reverse("solace-occurrence-action", args=[occurrence.id, "paid"])
+        )
+        self.assertEqual(paid.status_code, 200)
+        self.assertEqual(paid.json()["status"], "paid")
+        self.assertTrue(CalendarEvent.objects.filter(pk=event_id).exists())
+
+        unpaid = self.client.post(
+            reverse("solace-occurrence-action", args=[occurrence.id, "unpaid"])
+        )
+        self.assertEqual(unpaid.json()["status"], "upcoming")
+        skipped = self.client.post(
+            reverse("solace-occurrence-action", args=[occurrence.id, "skip"])
+        )
+        self.assertEqual(skipped.json()["status"], "skipped")
+
+    def test_bill_edit_refreshes_future_unpaid_occurrences_only(self):
+        bill = create_bill(
+            self.admin,
+            name="Changing bill",
+            amount="100.00",
+            due_at=timezone.now() + timedelta(days=1),
+            recurrence_rule="FREQ=WEEKLY",
+        )
+        first, second = list(bill.occurrences.all()[:2])
+        self.client.post(reverse("solace-occurrence-action", args=[first.id, "paid"]))
+        update_bill(self.admin, bill, amount="125.00")
+        first.refresh_from_db()
+        self.assertEqual(first.status, "paid")
+        self.assertEqual(first.amount, 100)
+        refreshed_second = BillOccurrence.objects.filter(
+            bill=bill,
+            due_at=second.due_at,
+        ).get()
+        self.assertEqual(refreshed_second.amount, 125)
+
+    def test_month_schedule_combines_bills_and_income(self):
+        create_bill(
+            self.admin,
+            name="Rent",
+            amount="800.00",
+            due_at=timezone.make_aware(datetime(2026, 8, 3, 9)),
+            recurrence_rule="FREQ=MONTHLY",
+        )
+        create_payday(
+            self.admin,
+            title="Household pay",
+            expected_amount="2400.00",
+            pay_at=timezone.make_aware(datetime(2026, 8, 1, 9)),
+            recurrence_rule="FREQ=WEEKLY;INTERVAL=2",
+        )
+        resp = self.client.get(
+            reverse("solace-schedule"),
+            {"start": "2026-08-01", "end": "2026-08-31"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["occurrences"][0]["bill_name"], "Rent")
+        self.assertEqual(data["summary"]["bills_total"], "800.00")
+        self.assertEqual(data["summary"]["income_total"], "7200.00")
+        self.assertEqual(len(data["income_events"]), 3)
 
 
 class SolacePayCyclePlanTests(TestCase):
@@ -379,9 +481,16 @@ class SolaceImportTests(TestCase):
         self.assertEqual(BudgetBucket.objects.get().allocation_value, 25)
         self.assertEqual(BudgetBucket.objects.get().rounding_increment, 10)
         self.assertEqual(PaydayChecklistItem.objects.get().cycle_start.isoformat(), "2026-08-01")
+        imported_occurrence = BillOccurrence.objects.get(
+            bill__name="Electricity",
+            due_at__date=date(2026, 8, 12),
+        )
+        self.assertEqual(imported_occurrence.amount, 120.5)
+        occurrence_count = BillOccurrence.objects.count()
 
         out = io.StringIO()
         call_command("import_solace", "--sqlite-db", db_path, stdout=out)
         self.assertIn("bills: 0", out.getvalue())
         self.assertEqual(Bill.objects.count(), 1)
         self.assertEqual(Subscription.objects.count(), 1)
+        self.assertEqual(BillOccurrence.objects.count(), occurrence_count)

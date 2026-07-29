@@ -8,6 +8,7 @@ from django.utils import timezone
 from apps.permissions.visibility import apply_visibility
 from apps.solace.models import (
     Bill,
+    BillOccurrence,
     BudgetBucket,
     Payday,
     PaydayChecklistItem,
@@ -26,12 +27,21 @@ def _search(qs, query: str, fields: list[str]):
     return qs.filter(clause)
 
 
-def list_bills(user=None, *, upcoming_only: bool = False, unpaid_only: bool = False, limit: int | None = None):
+def list_bills(
+    user=None,
+    *,
+    upcoming_only: bool = False,
+    unpaid_only: bool = False,
+    active_only: bool = False,
+    limit: int | None = None,
+):
     qs = Bill.objects.order_by("due_at", "name")
     if upcoming_only:
         qs = qs.filter(due_at__isnull=False)
     if unpaid_only:
         qs = qs.filter(is_paid=False)
+    if active_only:
+        qs = qs.filter(is_active=True)
     if user is not None:
         qs = apply_visibility(qs, user)
     if limit is not None:
@@ -41,6 +51,25 @@ def list_bills(user=None, *, upcoming_only: bool = False, unpaid_only: bool = Fa
 
 def get_bill(pk: int) -> Bill | None:
     return Bill.objects.filter(pk=pk).first()
+
+
+def list_bill_occurrences(user, *, start, end, status: str = ""):
+    qs = BillOccurrence.objects.select_related("bill").filter(
+        bill__deleted_at__isnull=True,
+        due_at__date__gte=start,
+        due_at__date__lte=end,
+    )
+    if status:
+        qs = qs.filter(status=status)
+    return list(apply_visibility(qs, user).order_by("due_at", "bill__name"))
+
+
+def get_bill_occurrence(user, pk: int) -> BillOccurrence | None:
+    qs = BillOccurrence.objects.select_related("bill").filter(
+        pk=pk,
+        bill__deleted_at__isnull=True,
+    )
+    return apply_visibility(qs, user).first()
 
 
 def list_paydays(

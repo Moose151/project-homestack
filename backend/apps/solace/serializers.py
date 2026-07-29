@@ -5,6 +5,7 @@ from rest_framework import serializers
 
 from apps.solace.models import (
     Bill,
+    BillOccurrence,
     BudgetBucket,
     Payday,
     PaydayChecklistItem,
@@ -21,22 +22,64 @@ def _non_blank(value: str) -> str:
 
 class BillSerializer(serializers.ModelSerializer):
     is_overdue = serializers.BooleanField(read_only=True)
+    next_due_at = serializers.SerializerMethodField()
+    next_occurrence_id = serializers.SerializerMethodField()
+    annual_amount = serializers.SerializerMethodField()
+    fortnightly_amount = serializers.SerializerMethodField()
 
     class Meta:
         model = Bill
         fields = [
             "id", "name", "category", "provider", "amount", "due_at", "is_all_day",
             "recurrence_rule", "is_paid", "paid_at", "notes", "is_overdue",
+            "is_active", "include_in_set_aside", "next_due_at", "next_occurrence_id",
+            "annual_amount", "fortnightly_amount",
             "source_node", "source_record_type", "source_record_id",
             "calendar_event_id", "visibility", "sensitivity", "created_at", "updated_at",
         ]
         read_only_fields = [
-            "id", "is_overdue", "source_node", "source_record_type", "source_record_id",
+            "id", "is_overdue", "next_due_at", "next_occurrence_id",
+            "annual_amount", "fortnightly_amount",
+            "source_node", "source_record_type", "source_record_id",
             "calendar_event_id", "created_at", "updated_at",
         ]
 
     def validate_name(self, value: str) -> str:
         return _non_blank(value)
+
+    def get_next_due_at(self, obj):
+        occurrence = obj.occurrences.filter(status=BillOccurrence.Status.UPCOMING).first()
+        return occurrence.due_at if occurrence else None
+
+    def get_next_occurrence_id(self, obj):
+        occurrence = obj.occurrences.filter(status=BillOccurrence.Status.UPCOMING).first()
+        return occurrence.id if occurrence else None
+
+    def get_annual_amount(self, obj):
+        from apps.solace.bill_schedule import annual_cost
+
+        return f"{annual_cost(obj):.2f}"
+
+    def get_fortnightly_amount(self, obj):
+        from apps.solace.bill_schedule import fortnightly_cost
+
+        return f"{fortnightly_cost(obj):.2f}"
+
+
+class BillOccurrenceSerializer(serializers.ModelSerializer):
+    bill_id = serializers.IntegerField(read_only=True)
+    bill_name = serializers.CharField(source="bill.name", read_only=True)
+    bill_category = serializers.CharField(source="bill.category", read_only=True)
+    is_overdue = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = BillOccurrence
+        fields = [
+            "id", "bill_id", "bill_name", "bill_category", "due_at", "amount",
+            "status", "paid_at", "notes", "is_overdue", "visibility", "sensitivity",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = fields
 
 
 class PaydaySerializer(serializers.ModelSerializer):

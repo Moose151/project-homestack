@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from apps.solace.models import (
     Bill,
+    BillOccurrence,
     BudgetBucket,
     Payday,
     PaydayChecklistItem,
@@ -20,6 +21,7 @@ class BillAdmin(admin.ModelAdmin):
 
 
 admin.site.register(Payday)
+admin.site.register(BillOccurrence)
 admin.site.register(PlannedPurchase)
 admin.site.register(BudgetBucket)
 admin.site.register(Subscription)

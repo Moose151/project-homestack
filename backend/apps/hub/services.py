@@ -257,9 +257,24 @@ def _solace_widget_content(key: str, user) -> list:
         return []
 
     if key == "solace_bills_due":
-        return BillSerializer(
-            s.list_bills(user, upcoming_only=True, unpaid_only=True, limit=8), many=True
-        ).data
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from apps.solace.bill_schedule import ensure_bill_occurrences
+
+        bills = s.list_bills(user, upcoming_only=True, unpaid_only=True, active_only=True)
+        today = timezone.localdate()
+        for bill in bills:
+            ensure_bill_occurrences(bill, today - timedelta(days=30), today + timedelta(days=90))
+        bills.sort(
+            key=lambda bill: (
+                bill.occurrences.filter(status="upcoming").values_list("due_at", flat=True).first()
+                or bill.due_at
+                or timezone.now() + timedelta(days=3650)
+            )
+        )
+        return BillSerializer(bills[:8], many=True).data
 
     if key == "solace_subscriptions":
         return SubscriptionSerializer(

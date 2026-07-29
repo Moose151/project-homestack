@@ -48,6 +48,8 @@ class Bill(CalendarSyncMixin, HouseholdBaseModel):
     due_at = models.DateTimeField(null=True, blank=True)
     is_all_day = models.BooleanField(default=True)
     recurrence_rule = models.CharField(max_length=512, blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    include_in_set_aside = models.BooleanField(default=True)
     is_paid = models.BooleanField(default=False)
     paid_at = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True, default="")
@@ -81,10 +83,18 @@ class Bill(CalendarSyncMixin, HouseholdBaseModel):
 
     @property
     def is_overdue(self) -> bool:
-        return bool(self.due_at and not self.is_paid and self.due_at < timezone.now())
+        occurrence = self.occurrences.filter(status=BillOccurrence.Status.UPCOMING).first()
+        if occurrence:
+            return occurrence.is_overdue
+        return bool(
+            self.due_at
+            and not self.recurrence_rule
+            and not self.is_paid
+            and self.due_at < timezone.now()
+        )
 
     def get_calendar_data(self) -> dict | None:
-        if not self.due_at or self.is_paid:
+        if not self.due_at or not self.is_active or (self.is_paid and not self.recurrence_rule):
             return None
         return {
             "title": f"Bill: {self.name}",
@@ -99,6 +109,42 @@ class Bill(CalendarSyncMixin, HouseholdBaseModel):
 
     def get_calendar_node_key(self) -> str:
         return "solace"
+
+
+class BillOccurrence(HouseholdBaseModel):
+    class Status(models.TextChoices):
+        UPCOMING = "upcoming", "Upcoming"
+        PAID = "paid", "Paid"
+        SKIPPED = "skipped", "Skipped"
+
+    bill = models.ForeignKey(Bill, on_delete=models.CASCADE, related_name="occurrences")
+    due_at = models.DateTimeField()
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.UPCOMING)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True, default="")
+    visibility = models.CharField(max_length=20, choices=Visibility.choices, default=Visibility.SENSITIVE)
+    sensitivity = models.CharField(max_length=20, choices=Sensitivity.choices, default=Sensitivity.FINANCIAL)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        ordering = ["due_at", "bill__name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["household", "bill", "due_at"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="unique_active_solace_bill_occurrence",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.bill.name} — {self.due_at:%Y-%m-%d}"
+
+    @property
+    def is_overdue(self) -> bool:
+        return self.status == self.Status.UPCOMING and self.due_at < timezone.now()
 
 
 class Payday(CalendarSyncMixin, HouseholdBaseModel):

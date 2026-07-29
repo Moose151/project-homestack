@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
+from datetime import timedelta
 
 from django.db import transaction
 from django.utils import timezone
@@ -12,6 +13,7 @@ from apps.scheduling.helpers import delete_event_for, sync_event_for
 from apps.solace import events
 from apps.solace.models import (
     Bill,
+    BillOccurrence,
     BudgetBucket,
     Payday,
     PaydayChecklistItem,
@@ -22,7 +24,8 @@ from apps.solace.models import (
 
 _BILL_FIELDS = {
     "name", "category", "provider", "amount", "due_at", "is_all_day", "recurrence_rule",
-    "is_paid", "paid_at", "notes", "source_node", "source_record_type",
+    "is_active", "include_in_set_aside", "is_paid", "paid_at", "notes",
+    "source_node", "source_record_type",
     "source_record_id", "visibility", "sensitivity",
 }
 _PAYDAY_FIELDS = {
@@ -52,21 +55,41 @@ def create_bill(acting_user: User, **data) -> Bill:
     obj = Bill(household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data)
     obj.save()
     sync_event_for(obj)
+    from apps.solace.bill_schedule import ensure_bill_occurrences
+
+    today = timezone.localdate()
+    ensure_bill_occurrences(obj, today - timedelta(days=90), today + timedelta(days=550))
     events.bill_created(obj.id, obj.household_id)
     return obj
 
 
 def update_bill(acting_user: User, obj: Bill, **data) -> Bill:
+    schedule_changed = bool(
+        {"amount", "due_at", "recurrence_rule", "is_active"} & set(data)
+    )
     for key, val in data.items():
         if key in _BILL_FIELDS:
             setattr(obj, key, val)
     obj.updated_by = acting_user
     obj.save()
     sync_event_for(obj)
+    if schedule_changed:
+        from apps.solace.bill_schedule import refresh_future_occurrences
+
+        refresh_future_occurrences(obj)
     return obj
 
 
 def mark_bill_paid(acting_user: User, obj: Bill) -> Bill:
+    from apps.solace.bill_schedule import ensure_bill_occurrences
+
+    today = timezone.localdate()
+    ensure_bill_occurrences(obj, today - timedelta(days=365), today + timedelta(days=550))
+    occurrence = obj.occurrences.filter(status=BillOccurrence.Status.UPCOMING).first()
+    if occurrence is not None:
+        mark_occurrence_paid(acting_user, occurrence)
+        obj.refresh_from_db()
+        return obj
     obj.is_paid = True
     obj.paid_at = timezone.now()
     obj.updated_by = acting_user
@@ -78,9 +101,49 @@ def mark_bill_paid(acting_user: User, obj: Bill) -> Bill:
 
 def delete_bill(acting_user: User, obj: Bill) -> None:
     delete_event_for(obj)
+    obj.occurrences.update(deleted_at=timezone.now(), updated_by=acting_user)
     obj.updated_by = acting_user
     obj.save(update_fields=["updated_by", "updated_at"])
     obj.soft_delete()
+
+
+def mark_occurrence_paid(acting_user: User, obj: BillOccurrence) -> BillOccurrence:
+    obj.status = BillOccurrence.Status.PAID
+    obj.paid_at = timezone.now()
+    obj.updated_by = acting_user
+    obj.save()
+    if not obj.bill.recurrence_rule:
+        bill = obj.bill
+        bill.is_paid = True
+        bill.paid_at = obj.paid_at
+        bill.updated_by = acting_user
+        bill.save()
+        sync_event_for(bill)
+    events.bill_paid(obj.bill_id, obj.household_id)
+    return obj
+
+
+def mark_occurrence_unpaid(acting_user: User, obj: BillOccurrence) -> BillOccurrence:
+    obj.status = BillOccurrence.Status.UPCOMING
+    obj.paid_at = None
+    obj.updated_by = acting_user
+    obj.save()
+    if not obj.bill.recurrence_rule:
+        bill = obj.bill
+        bill.is_paid = False
+        bill.paid_at = None
+        bill.updated_by = acting_user
+        bill.save()
+        sync_event_for(bill)
+    return obj
+
+
+def skip_occurrence(acting_user: User, obj: BillOccurrence) -> BillOccurrence:
+    obj.status = BillOccurrence.Status.SKIPPED
+    obj.paid_at = None
+    obj.updated_by = acting_user
+    obj.save()
+    return obj
 
 
 def create_payday(acting_user: User, **data) -> Payday:

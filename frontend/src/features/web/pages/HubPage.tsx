@@ -20,6 +20,9 @@ import type {
   Appliance,
   Improvement,
   AppNotification,
+  SolaceBill,
+  SolacePurchase,
+  SolaceSubscription,
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Input } from '../../../components/Field'
@@ -42,6 +45,7 @@ function widgetAccent(key: string): { colour: string; icon: string } {
   if (key.startsWith('atlas')) return pick('atlas')
   if (key.startsWith('meridian')) return pick('meridian')
   if (key.startsWith('education')) return pick('education')
+  if (key.startsWith('solace')) return pick('solace')
   if (key === 'calendar_upcoming') return pick('calendar')
   return { colour: STACK_BY_KEY.hub.colour, icon: '' } // clock, greeting, other core widgets
 }
@@ -394,6 +398,67 @@ function NotificationsSummaryWidget({ items, unread }: { items: AppNotification[
   )
 }
 
+function SolaceBillsWidget({ items }: { items: SolaceBill[] }) {
+  if (!items.length) return <p className="text-sm text-muted">No unpaid bills due</p>
+  return (
+    <ul className="space-y-2.5">
+      {items.slice(0, 6).map(bill => (
+        <li key={bill.id} className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-ink">{bill.name}</p>
+            <p className="text-xs text-muted">{moneyLabel(bill.amount)}</p>
+          </div>
+          <Link to="/solace?tab=bills" className="shrink-0 text-xs text-primary hover:underline">
+            {formatDue(bill.next_due_at || bill.due_at)}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function SolaceSubscriptionsWidget({ items }: { items: SolaceSubscription[] }) {
+  if (!items.length) return <p className="text-sm text-muted">No active subscriptions</p>
+  return (
+    <ul className="space-y-2.5">
+      {items.slice(0, 6).map(item => (
+        <li key={item.id} className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-ink">{item.name}</p>
+            <p className="text-xs text-muted">{moneyLabel(item.amount)} · {item.billing_cycle}</p>
+          </div>
+          <Link to="/solace?tab=subscriptions" className="shrink-0 text-xs text-primary hover:underline">
+            {formatDue(item.next_renewal_at)}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function SolacePurchasesWidget({ items }: { items: SolacePurchase[] }) {
+  if (!items.length) return <p className="text-sm text-muted">No planned purchases</p>
+  return (
+    <ul className="space-y-2.5">
+      {items.slice(0, 6).map(item => (
+        <li key={item.id} className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-ink">{item.name}</p>
+            <p className="text-xs text-muted">{moneyLabel(item.saved_amount)} of {moneyLabel(item.target_amount)}</p>
+          </div>
+          <Link to="/solace?tab=purchases" className="shrink-0 text-xs text-primary hover:underline">
+            {item.progress_percent}%
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function moneyLabel(value: string | number) {
+  return Number(value || 0).toLocaleString(undefined, { style: 'currency', currency: 'AUD' })
+}
+
 const QUICK_KINDS = [
   { key: 'reminder', label: 'Reminder' },
   { key: 'note', label: 'Note' },
@@ -519,6 +584,12 @@ function renderWidget(w: HubWidget, onChanged: () => void) {
       return <HomesteadWarrantiesWidget items={w.items as Appliance[]} />
     case 'homestead_improvements':
       return <HomesteadImprovementsWidget items={w.items as Improvement[]} />
+    case 'solace_bills_due':
+      return <SolaceBillsWidget items={w.items as SolaceBill[]} />
+    case 'solace_subscriptions':
+      return <SolaceSubscriptionsWidget items={w.items as SolaceSubscription[]} />
+    case 'solace_planned_purchases':
+      return <SolacePurchasesWidget items={w.items as SolacePurchase[]} />
     default:
       return <p className="text-sm text-muted">Nothing to show</p>
   }

@@ -186,6 +186,8 @@ GET/POST/PATCH/DELETE  /api/v1/solace/subscriptions/[{subscription_id}/]
 GET/POST/PATCH/DELETE  /api/v1/solace/checklist/[{item_id}/]
 GET    /api/v1/solace/plan/                   # current pay-cycle transfer calculation
 POST   /api/v1/solace/plan/checklist/         # idempotently generate cycle transfers
+GET    /api/v1/solace/schedule/?start=&end=   # bill occurrences + expected income
+POST   /api/v1/solace/occurrences/{id}/{paid|unpaid|skip}/
 GET    /api/v1/solace/search/?q=
 ```
 

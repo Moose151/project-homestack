@@ -37,6 +37,9 @@ payday checklist, calendar/list views, categories, authentication, backups.
 - Permission-controlled Hub finance widgets; subscription tracking; attachment support.
 - Native pay-cycle planning: recurring paydays feed percentage/fixed bucket allocation rules,
   fixed household amounts split proportionally by income, with one-click cycle checklist creation.
+- Recurring bills materialise independent due-date occurrences. Each occurrence can be paid,
+  restored or skipped without changing the recurrence definition; the Solace Schedule combines
+  monthly bill occurrences and expected income in calendar/list views.
 
 ## 5. Permissions (strong)
 
@@ -77,7 +80,8 @@ and a short timeout are required.
 
 ## 10. Data model
 
-`solace_bills` (`recurrence_rule`, `calendar_event_id`), `solace_paydays`,
+`solace_bills` (`recurrence_rule`, `calendar_event_id`), `solace_bill_occurrences`,
+`solace_paydays`,
 `solace_planned_purchases`, `solace_buckets`, `solace_subscriptions`,
 `solace_payday_checklist_items`. Inherit `HouseholdBaseModel`; all `sensitivity = financial`.
 Bucket records also hold their pay-cycle allocation method/value, rounding, active/order and

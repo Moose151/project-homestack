@@ -842,10 +842,16 @@ export interface SolaceBill {
   due_at: string | null
   is_all_day: boolean
   recurrence_rule: string
+  is_active: boolean
+  include_in_set_aside: boolean
   is_paid: boolean
   paid_at: string | null
   notes: string
   is_overdue: boolean
+  next_due_at: string | null
+  next_occurrence_id: number | null
+  annual_amount: string
+  fortnightly_amount: string
   source_node: string
   source_record_type: string
   source_record_id: number | null
@@ -854,6 +860,44 @@ export interface SolaceBill {
   sensitivity: string
   created_at: string
   updated_at: string
+}
+
+export interface SolaceBillOccurrence {
+  id: number
+  bill_id: number
+  bill_name: string
+  bill_category: string
+  due_at: string
+  amount: string
+  status: 'upcoming' | 'paid' | 'skipped'
+  paid_at: string | null
+  notes: string
+  is_overdue: boolean
+  visibility: string
+  sensitivity: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SolaceIncomeEvent {
+  payday_id: number
+  title: string
+  due_at: string
+  amount: string
+}
+
+export interface SolaceSchedule {
+  start: string
+  end: string
+  occurrences: SolaceBillOccurrence[]
+  income_events: SolaceIncomeEvent[]
+  summary: {
+    bills_total: string
+    paid_total: string
+    unpaid_total: string
+    skipped_total: string
+    income_total: string
+  }
 }
 
 export interface SolacePayday {

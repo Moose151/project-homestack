@@ -1,7 +1,8 @@
 """solace views — thin API layer with finance re-auth/audit gate."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
+from decimal import Decimal
 
 from rest_framework import status
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
@@ -15,6 +16,7 @@ from apps.nodes.models import Node
 from apps.permissions.drf import HomeStackPermission
 from apps.solace import selectors, services
 from apps.solace.serializers import (
+    BillOccurrenceSerializer,
     BillSerializer,
     BudgetBucketSerializer,
     PaydayChecklistItemSerializer,
@@ -84,6 +86,95 @@ class PayCycleChecklistView(SolaceAccessMixin, APIView):
         return Response(PaydayChecklistItemSerializer(items, many=True).data)
 
 
+def _schedule_range(request: Request) -> tuple[date, date]:
+    today = date.today()
+    start_value = (request.query_params.get("start") or "").strip()
+    end_value = (request.query_params.get("end") or "").strip()
+    try:
+        start = date.fromisoformat(start_value) if start_value else today.replace(day=1)
+        if end_value:
+            end = date.fromisoformat(end_value)
+        else:
+            next_month = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
+            end = next_month - timedelta(days=1)
+    except ValueError as exc:
+        raise ValidationError({"date": "Schedule dates must use YYYY-MM-DD."}) from exc
+    if end < start:
+        raise ValidationError({"end": "End date must be on or after start date."})
+    if end - start > timedelta(days=370):
+        raise ValidationError({"end": "Schedule windows cannot exceed 370 days."})
+    return start, end
+
+
+class SolaceScheduleView(SolaceAccessMixin, APIView):
+    def get(self, request: Request) -> Response:
+        from apps.solace.bill_schedule import ensure_bill_occurrences
+        from apps.solace.budget_engine import payday_occurrences
+
+        start, end = _schedule_range(request)
+        for bill in selectors.list_bills(request.user, active_only=True):
+            ensure_bill_occurrences(bill, start, end)
+        occurrences = selectors.list_bill_occurrences(request.user, start=start, end=end)
+        income_events = []
+        for payday in selectors.list_paydays(request.user, active_only=True):
+            for due_at in payday_occurrences(payday, start, end):
+                income_events.append(
+                    {
+                        "payday_id": payday.id,
+                        "title": payday.title,
+                        "due_at": due_at,
+                        "amount": f"{payday.expected_amount:.2f}",
+                    }
+                )
+        income_events.sort(key=lambda row: (row["due_at"], row["title"].lower()))
+        bills_total = sum((row.amount for row in occurrences), Decimal("0.00"))
+        paid_total = sum(
+            (row.amount for row in occurrences if row.status == row.Status.PAID),
+            Decimal("0.00"),
+        )
+        skipped_total = sum(
+            (row.amount for row in occurrences if row.status == row.Status.SKIPPED),
+            Decimal("0.00"),
+        )
+        income_total = sum(
+            (Decimal(row["amount"]) for row in income_events),
+            Decimal("0.00"),
+        )
+        return Response(
+            {
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                "occurrences": BillOccurrenceSerializer(occurrences, many=True).data,
+                "income_events": income_events,
+                "summary": {
+                    "bills_total": f"{bills_total:.2f}",
+                    "paid_total": f"{paid_total:.2f}",
+                    "unpaid_total": f"{bills_total - paid_total - skipped_total:.2f}",
+                    "skipped_total": f"{skipped_total:.2f}",
+                    "income_total": f"{income_total:.2f}",
+                },
+            }
+        )
+
+
+class BillOccurrenceActionView(SolaceAccessMixin, APIView):
+    permission_action = "edit"
+
+    def post(self, request: Request, occurrence_id: int, action: str) -> Response:
+        occurrence = selectors.get_bill_occurrence(request.user, occurrence_id)
+        if occurrence is None:
+            raise NotFound()
+        actions = {
+            "paid": services.mark_occurrence_paid,
+            "unpaid": services.mark_occurrence_unpaid,
+            "skip": services.skip_occurrence,
+        }
+        handler = actions.get(action)
+        if handler is None:
+            raise NotFound()
+        return Response(BillOccurrenceSerializer(handler(request.user, occurrence)).data)
+
+
 class BillListView(SolaceAccessMixin, APIView):
     def get(self, request: Request) -> Response:
         bills = selectors.list_bills(
@@ -91,6 +182,15 @@ class BillListView(SolaceAccessMixin, APIView):
             upcoming_only=request.query_params.get("upcoming") == "1",
             unpaid_only=request.query_params.get("unpaid") == "1",
         )
+        from apps.solace.bill_schedule import ensure_bill_occurrences
+
+        today = date.today()
+        for bill in bills:
+            ensure_bill_occurrences(
+                bill,
+                today - timedelta(days=365),
+                today + timedelta(days=550),
+            )
         return Response(BillSerializer(bills, many=True).data)
 
     def post(self, request: Request) -> Response:

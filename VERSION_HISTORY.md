@@ -1,11 +1,35 @@
 # HomeStack — Version History
 
-> **Current version: 0.13.0**
+> **Current version: 0.14.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
 >
 > **Rule:** bump the version and add a row here with every push to `main`.
+
+---
+
+## 0.14 — Solace recurring bill schedule
+
+### 0.14.0 — 2026-07-29
+- **Correct recurring bill lifecycle** — bills remain recurrence definitions while independent
+  `BillOccurrence` rows carry each due date's upcoming/paid/skipped state. Paying one recurring
+  occurrence no longer permanently pays the whole bill or removes its recurring Calendar mirror.
+  One-off bills retain their existing paid/Undo behaviour.
+- **Month-end-safe generation** — weekly, fortnightly, monthly, quarterly, six-monthly and yearly
+  schedules materialise idempotently. Monthly rules clamp dates such as the 31st to the end of a
+  short month without drifting future occurrences away from the intended day.
+- **Native Schedule screen** — Solace now combines bill occurrences and expected income in a
+  previous/current/next monthly calendar or action-oriented list. It shows bill, paid, unpaid,
+  skipped and income totals and supports Paid, Mark unpaid, Skip and Restore actions.
+- **Bill management parity** — Bills can be created, edited, paused, deleted and included/excluded
+  from set-aside calculations on the responsive web screen. Cards show annualised and fortnightly
+  cost; the page summarizes active annual cost, fortnightly set-aside and category count.
+- **Hub and import completion** — the three existing Solace Hub widgets now have working finance
+  renderers. Rerunning `import_solace` imports legacy bill-occurrence dates, amounts and statuses
+  idempotently in addition to the previously supported records.
+- Added `docs/SOLACE_PARITY_CHECKLIST.md` as the live standalone-to-native gap tracker.
+- Database migration required: `solace.0004_bill_occurrences`.
 
 ---
 

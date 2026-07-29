@@ -22,7 +22,15 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.models import get_active_household
-from apps.solace.models import Bill, BudgetBucket, Payday, PaydayChecklistItem, PlannedPurchase, Subscription
+from apps.solace.models import (
+    Bill,
+    BillOccurrence,
+    BudgetBucket,
+    Payday,
+    PaydayChecklistItem,
+    PlannedPurchase,
+    Subscription,
+)
 from apps.solace.services import (
     create_bill,
     create_bucket,
@@ -216,6 +224,7 @@ class Command(BaseCommand):
     def _import(self, data: LegacyData) -> dict[str, int]:
         stats = {
             "bills": 0,
+            "bill_occurrences": 0,
             "subscriptions": 0,
             "paydays": 0,
             "planned_purchases": 0,
@@ -252,18 +261,43 @@ class Command(BaseCommand):
                 )
                 stats["subscriptions"] += 1
             else:
-                if Bill.objects.filter(name=row["name"]).exists():
-                    continue
-                create_bill(
-                    system_user,
-                    name=row["name"],
-                    category=_bill_category(category),
-                    due_at=due_at,
-                    is_paid=False,
-                    paid_at=_latest_paid_at(occurrences),
-                    **common,
-                )
-                stats["bills"] += 1
+                bill = Bill.objects.filter(name=row["name"]).first()
+                if bill is None:
+                    bill = create_bill(
+                        system_user,
+                        name=row["name"],
+                        category=_bill_category(category),
+                        due_at=due_at,
+                        is_active=True,
+                        include_in_set_aside=_bool(row.get("include_in_set_aside")),
+                        is_paid=False,
+                        paid_at=_latest_paid_at(occurrences),
+                        **common,
+                    )
+                    stats["bills"] += 1
+                for occurrence in occurrences:
+                    occurrence_due = _parse_dt(occurrence.get("due_date"))
+                    if occurrence_due is None:
+                        continue
+                    legacy_status = (occurrence.get("status") or "Upcoming").lower()
+                    occurrence_status = {
+                        "paid": BillOccurrence.Status.PAID,
+                        "skipped": BillOccurrence.Status.SKIPPED,
+                    }.get(legacy_status, BillOccurrence.Status.UPCOMING)
+                    _, created = BillOccurrence.objects.update_or_create(
+                        bill=bill,
+                        due_at=occurrence_due,
+                        defaults={
+                            "household": bill.household,
+                            "amount": _money(occurrence.get("amount") or bill.amount),
+                            "status": occurrence_status,
+                            "paid_at": _parse_dt(occurrence.get("paid_date")),
+                            "notes": occurrence.get("notes") or "",
+                            "visibility": bill.visibility,
+                            "sensitivity": bill.sensitivity,
+                        },
+                    )
+                    stats["bill_occurrences"] += int(created)
 
         for row in data.incomes:
             if not _bool(row.get("active")):

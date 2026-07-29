@@ -40,7 +40,7 @@ def _day_bounds(start: date, end: date) -> tuple[datetime, datetime]:
     )
 
 
-def _payday_occurrences(payday: Payday, cycle_start: date, cycle_end: date) -> list[datetime]:
+def payday_occurrences(payday: Payday, cycle_start: date, cycle_end: date) -> list[datetime]:
     if not payday.pay_at:
         return []
     start_at, end_at = _day_bounds(cycle_start, cycle_end)
@@ -84,7 +84,7 @@ def build_pay_cycle_plan(
     source_rows: dict[int, Payday] = {}
     for payday in dated_paydays:
         source_rows[payday.id] = payday
-        for occurrence in _payday_occurrences(payday, cycle_start, cycle_end):
+        for occurrence in payday_occurrences(payday, cycle_start, cycle_end):
             source_income[payday.id] += _money(payday.expected_amount)
             source_dates[payday.id].append(occurrence.isoformat())
 
