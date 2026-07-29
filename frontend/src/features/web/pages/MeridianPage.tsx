@@ -9,14 +9,18 @@ import { LeaderboardTab, SettingsTab } from './meridian/ReportsSettingsTabs'
 import { OverviewTab } from './meridian/OverviewTab'
 import { PageHeader } from '../../../components/PageHeader'
 import { Tabs, type TabDef } from '../../../components/Tabs'
+import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
+import { Input } from '../../../components/Field'
 
 type Tab = 'overview' | 'tasks' | 'routines' | 'shop' | 'goals' | 'wishlist' | 'leaderboard' | 'settings'
+const TAB_KEYS: Tab[] = ['overview', 'tasks', 'routines', 'shop', 'goals', 'wishlist', 'leaderboard', 'settings']
 
 export function MeridianPage() {
   const { user } = useAuth()
   const canManage = user?.role === 'admin' || user?.role === 'manager'
-  const [tab, setTab] = useState<Tab>('overview')
+  const [tab, setTab] = useUrlTab<Tab>('overview', TAB_KEYS)
   const [pointsLabel, setPointsLabel] = useState('points')
+  const [query, setQuery] = useUrlQueryState()
 
   useEffect(() => {
     api.getMeridianSettings().then(s => setPointsLabel(s.points_label || 'points')).catch(() => {})
@@ -34,6 +38,8 @@ export function MeridianPage() {
         subtitle="Approvals, setup and household progress for the Meridian points system."
       />
 
+      <Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search Meridian tasks and rewards…" />
+
       <Tabs tabs={tabs} active={tab} onChange={setTab} className="w-fit" />
 
       {tab === 'overview' && (
@@ -44,9 +50,9 @@ export function MeridianPage() {
           onOpenShop={() => setTab('shop')}
         />
       )}
-      {tab === 'tasks' && <TasksTab canManage={canManage} pointsLabel={pointsLabel} />}
+      {tab === 'tasks' && <TasksTab canManage={canManage} pointsLabel={pointsLabel} searchQuery={query} />}
       {tab === 'routines' && <RoutinesTab canManage={canManage} pointsLabel={pointsLabel} />}
-      {tab === 'shop' && <ShopTab canManage={canManage} pointsLabel={pointsLabel} />}
+      {tab === 'shop' && <ShopTab canManage={canManage} pointsLabel={pointsLabel} searchQuery={query} />}
       {tab === 'goals' && <GoalsTab canManage={canManage} pointsLabel={pointsLabel} />}
       {tab === 'wishlist' && <WishlistTab canManage={canManage} pointsLabel={pointsLabel} />}
       {tab === 'leaderboard' && <LeaderboardTab pointsLabel={pointsLabel} />}

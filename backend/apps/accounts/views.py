@@ -8,6 +8,7 @@ Endpoints (API spec §2):
   GET  /api/v1/auth/me/
   POST /api/v1/auth/reauth/
 """
+from django.contrib.auth import update_session_auth_hash
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
@@ -83,6 +84,8 @@ class MeView(APIView):
         serializer = UserWriteSerializer(data=filtered, partial=True)
         serializer.is_valid(raise_exception=True)
         user = update_user_account(request.user, request.user, **serializer.validated_data)
+        if serializer.validated_data.get("password"):
+            update_session_auth_hash(request._request, user)
         return Response(UserSerializer(user).data)
 
 

@@ -6,8 +6,9 @@ import type {
 } from '../../../api/types'
 import { Button } from '../../../components/Button'
 import { Card } from '../../../components/Card'
-import { fieldClass } from '../../../components/Field'
+import { fieldClass, Input } from '../../../components/Field'
 import { PageHeader } from '../../../components/PageHeader'
+import { useUrlAction, useUrlQueryState } from '../../../hooks/useUrlTab'
 
 type Surface = 'personal' | 'club'
 
@@ -426,7 +427,9 @@ export function BooksPage() {
   const [surface, setSurface] = useState<Surface>('personal')
   const [activeShelf, setActiveShelf] = useState<BookShelfStatus>('backlog')
   const [showAdd, setShowAdd] = useState(false)
+  useUrlAction('book', () => setShowAdd(true))
   const [showClubItems, setShowClubItems] = useState(true)
+  const [query, setQuery] = useUrlQueryState()
   const [personal, setPersonal] = useState<PersonalBookEntry[]>([])
   const [clubShelf, setClubShelf] = useState<ClubBookEntry[]>([])
   const [clubs, setClubs] = useState<BookClub[]>([])
@@ -487,15 +490,23 @@ export function BooksPage() {
   useEffect(() => { loadCore() }, [showClubItems])
   useEffect(() => { loadClub(selectedClub?.id) }, [selectedClub?.id])
 
-  const personalItems = sorted(personal.filter(i => i.status === activeShelf))
-  const clubShelfItems = sorted(clubShelf.filter(i => i.status === activeShelf))
+  const matchesQuery = (book: Book) => {
+    const q = query.trim().toLowerCase()
+    return !q || `${book.title} ${book.author} ${book.genre}`.toLowerCase().includes(q)
+  }
+  const personalItems = sorted(personal.filter(i => i.status === activeShelf && matchesQuery(i.book)))
+  const clubShelfItems = sorted(clubShelf.filter(i => i.status === activeShelf && matchesQuery(i.book)))
   const visibleClubBooks = useMemo(() => {
-    const items = sorted(clubBooks.filter(i => i.status === activeShelf))
+    const q = query.trim().toLowerCase()
+    const items = sorted(clubBooks.filter(i =>
+      i.status === activeShelf
+      && (!q || `${i.book.title} ${i.book.author} ${i.book.genre}`.toLowerCase().includes(q)),
+    ))
     if (activeShelf === 'history' && sortHistoryByRating) {
       return [...items].sort((a, b) => (b.average_rating ?? -1) - (a.average_rating ?? -1))
     }
     return items
-  }, [clubBooks, activeShelf, sortHistoryByRating])
+  }, [clubBooks, activeShelf, sortHistoryByRating, query])
   const personalCounts = statuses.map(s => ({
     status: s,
     count: personal.filter(i => i.status === s).length,
@@ -513,6 +524,8 @@ export function BooksPage() {
         subtitle="Personal shelves and shared book clubs."
         actions={<Button type="button" onClick={() => setShowAdd(v => !v)}>{showAdd ? 'Close' : '+ Add book'}</Button>}
       />
+
+      <Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search your books and clubs…" />
 
       {error && <div className="rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">{error}</div>}
 

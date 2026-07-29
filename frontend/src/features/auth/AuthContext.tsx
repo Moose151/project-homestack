@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { api } from '../../api/client'
+import { api, AUTH_EXPIRED_EVENT } from '../../api/client'
 import type { AuthUser } from '../../api/types'
 
 interface AuthState {
@@ -21,6 +21,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(setUser)
       .catch(() => setUser(null))
       .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    const expire = () => setUser(null)
+    window.addEventListener(AUTH_EXPIRED_EVENT, expire)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, expire)
   }, [])
 
   const login = (u: AuthUser) => setUser(u)

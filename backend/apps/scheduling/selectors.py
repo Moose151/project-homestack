@@ -1,6 +1,9 @@
 """scheduling selectors — read-only queries (Coding Standards §6)."""
 from __future__ import annotations
 
+from django.db import connection
+from django.db.models import Q
+
 from apps.permissions.visibility import apply_visibility
 from apps.scheduling.models import CalendarEvent
 
@@ -42,3 +45,25 @@ def list_events(
 
 def get_event(pk: int) -> CalendarEvent | None:
     return CalendarEvent.objects.filter(pk=pk).first()
+
+
+def search_events(user, query: str, *, sensitive_unlocked: bool = False) -> list[CalendarEvent]:
+    """Permission-filtered search over live Calendar rows for global search (D9)."""
+    qs = CalendarEvent.objects.select_related("source_node")
+    if connection.vendor == "postgresql":
+        from django.contrib.postgres.search import SearchQuery, SearchVector
+        qs = qs.annotate(
+            _search=SearchVector("title", "description", "location")
+        ).filter(_search=SearchQuery(query))
+    else:
+        qs = qs.filter(
+            Q(title__icontains=query)
+            | Q(description__icontains=query)
+            | Q(location__icontains=query)
+        )
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    if not sensitive_unlocked:
+        qs = qs.exclude(sensitivity__in=["financial", "health", "document", "private"])
+        qs = qs.exclude(visibility="sensitive")
+    return list(qs.order_by("start_at")[:20])

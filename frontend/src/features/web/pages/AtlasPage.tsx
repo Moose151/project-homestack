@@ -11,6 +11,7 @@ import { EmptyState } from '../../../components/EmptyState'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
 import { useAuth } from '../../auth/AuthContext'
+import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -61,12 +62,19 @@ function ItemRow({
 
   const toggle = async () => {
     setBusy(true)
+    const optimistic: AtlasListItem = {
+      ...item,
+      is_complete: !item.is_complete,
+      completed_at: item.is_complete ? null : new Date().toISOString(),
+    }
+    onToggle(optimistic)
     try {
       const updated = item.is_complete
         ? await api.uncompleteItem(listId, item.id)
         : await api.completeItem(listId, item.id)
       onToggle(updated)
     } catch (e) {
+      onToggle(item)
       onError(errMsg(e))
     } finally {
       setBusy(false)
@@ -653,12 +661,13 @@ function SearchResults({ results }: { results: AtlasSearchResults }) {
 // ---------------------------------------------------------------------------
 
 type Tab = 'lists' | 'notes' | 'reminders'
+const TAB_KEYS: Tab[] = ['lists', 'notes', 'reminders']
 
 const LIST_TYPES = Object.entries(LIST_TYPE_META).map(([key, m]) => ({ key, label: m.label, icon: m.icon }))
 
 export function AtlasPage() {
   const { user } = useAuth()
-  const [tab, setTab] = useState<Tab>('lists')
+  const [tab, setTab] = useUrlTab<Tab>('lists', TAB_KEYS)
   const [lists, setLists] = useState<AtlasList[]>([])
   const [people, setPeople] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
@@ -666,7 +675,7 @@ export function AtlasPage() {
   const [newType, setNewType] = useState('todo')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useUrlQueryState()
   const [results, setResults] = useState<AtlasSearchResults | null>(null)
   // Remount only the affected list card / self-fetching tab after a quick capture.
   const [cardRefresh, setCardRefresh] = useState<Record<number, number>>({})

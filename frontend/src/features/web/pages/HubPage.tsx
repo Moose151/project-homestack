@@ -27,6 +27,8 @@ import { Button } from '../../../components/Button'
 import { HubConfig } from './HubConfig'
 import { useAuth } from '../../auth/AuthContext'
 import { STACK_BY_KEY, softColour } from '../../../config/stacks'
+import { PageHeader } from '../../../components/PageHeader'
+import { InlineAlert, PageSkeleton } from '../../../components/PageState'
 
 const SIZE_SPAN: Record<string, string> = {
   small: 'sm:col-span-1',
@@ -266,7 +268,7 @@ function WikiPagesWidget({ items, emptyLabel }: { items: WikiPage[]; emptyLabel:
     <ul className="flex flex-col gap-2">
       {items.slice(0, 6).map(p => (
         <li key={p.id} className="flex items-center justify-between gap-3 text-sm">
-          <Link to="/wiki" className="text-ink truncate hover:text-primary">{p.title}</Link>
+          <Link to={`/wiki?q=${encodeURIComponent(p.title)}`} className="text-ink truncate hover:text-primary">{p.title}</Link>
           {p.category_name && <span className="text-xs text-muted flex-shrink-0">{p.category_name}</span>}
         </li>
       ))}
@@ -280,7 +282,7 @@ function PetRemindersWidget({ items }: { items: PetTreatment[] }) {
     <ul className="flex flex-col gap-2">
       {items.slice(0, 6).map(t => (
         <li key={t.id} className="flex items-center justify-between gap-3 text-sm">
-          <Link to="/pets" className="text-ink truncate hover:text-primary">
+          <Link to={`/pets?tab=reminders&q=${encodeURIComponent(t.display_name)}`} className="text-ink truncate hover:text-primary">
             <span className="text-muted mr-1">{t.pet_name}</span>{t.display_name}
           </Link>
           {t.next_due_at && (
@@ -300,7 +302,7 @@ function PetAppointmentsWidget({ items }: { items: PetAppointment[] }) {
     <ul className="flex flex-col gap-2">
       {items.slice(0, 6).map(a => (
         <li key={a.id} className="flex items-center justify-between gap-3 text-sm">
-          <Link to="/pets" className="text-ink truncate hover:text-primary">
+          <Link to={`/pets?tab=appointments&q=${encodeURIComponent(a.display_title)}`} className="text-ink truncate hover:text-primary">
             <span className="text-muted mr-1">{a.pet_name}</span>{a.display_title}
           </Link>
           <span className="text-xs text-muted flex-shrink-0">{new Date(a.start_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
@@ -316,7 +318,7 @@ function HomesteadMaintenanceWidget({ items }: { items: MaintenanceTask[] }) {
     <ul className="flex flex-col gap-2">
       {items.slice(0, 6).map(t => (
         <li key={t.id} className="flex items-center justify-between gap-3 text-sm">
-          <Link to="/homestead" className="text-ink truncate hover:text-primary">{t.title}</Link>
+          <Link to={`/homestead?tab=maintenance&q=${encodeURIComponent(t.title)}`} className="text-ink truncate hover:text-primary">{t.title}</Link>
           {t.next_due_at && (
             <span className={`text-xs flex-shrink-0 ${t.is_overdue ? 'text-danger' : 'text-muted'}`}>
               {new Date(t.next_due_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
@@ -334,7 +336,7 @@ function HomesteadWarrantiesWidget({ items }: { items: Appliance[] }) {
     <ul className="flex flex-col gap-2">
       {items.slice(0, 6).map(a => (
         <li key={a.id} className="flex items-center justify-between gap-3 text-sm">
-          <Link to="/homestead" className="text-ink truncate hover:text-primary">{a.name}</Link>
+          <Link to={`/homestead?tab=appliances&q=${encodeURIComponent(a.name)}`} className="text-ink truncate hover:text-primary">{a.name}</Link>
           {a.warranty_expires_at && (
             <span className="text-xs text-muted flex-shrink-0">
               {new Date(a.warranty_expires_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
@@ -352,7 +354,7 @@ function HomesteadImprovementsWidget({ items }: { items: Improvement[] }) {
     <ul className="flex flex-col gap-2">
       {items.slice(0, 6).map(i => (
         <li key={i.id} className="flex items-center justify-between gap-3 text-sm">
-          <Link to="/homestead" className="text-ink truncate hover:text-primary">{i.title}</Link>
+          <Link to={`/homestead?tab=improvements&q=${encodeURIComponent(i.title)}`} className="text-ink truncate hover:text-primary">{i.title}</Link>
           <span className="text-xs text-muted flex-shrink-0 capitalize">{i.status.replace('_', ' ')}</span>
         </li>
       ))}
@@ -535,37 +537,27 @@ export function HubPage() {
   const greeting =
     now.getHours() < 12 ? 'Good morning' : now.getHours() < 18 ? 'Good afternoon' : 'Good evening'
 
-  if (error) return <div className="text-danger text-sm">{error}</div>
-
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-ink">
-            {greeting}{user ? `, ${user.display_name}` : ''}
-          </h1>
-          <p className="text-muted text-sm mt-0.5">
-            {now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
-          </p>
-        </div>
-        <button
+      <PageHeader
+        title={`${greeting}${user ? `, ${user.display_name}` : ''}`}
+        subtitle={now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+        actions={<button
           onClick={() => setConfiguring(c => !c)}
           className="text-sm text-muted hover:text-ink transition-colors px-3 py-1.5 rounded-xl hover:bg-sunken whitespace-nowrap"
         >
           {configuring ? 'Done' : '⚙ Customise'}
-        </button>
-      </div>
+        </button>}
+      />
+
+      {error && <InlineAlert message={error} onRetry={loadHub} onDismiss={() => setError(null)} />}
 
       {configuring && (
         <HubConfig isAdmin={user?.role === 'admin'} onChanged={loadHub} />
       )}
 
       {!data ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {[1, 2, 3].map(i => (
-            <div key={i} className={`h-36 rounded-2xl bg-sunken animate-pulse ${i === 1 ? 'sm:col-span-2' : ''}`} />
-          ))}
-        </div>
+        <PageSkeleton />
       ) : data.widgets.length === 0 ? (
         <Card>
           <p className="text-muted text-sm text-center py-4">

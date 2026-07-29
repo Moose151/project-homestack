@@ -96,8 +96,15 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: Owner re-prioritisation (2026-07-14) — Education node (uni-first) + core-surface
-web/mobile polish are now the priority; kiosk work is deferred.**
+**Phase: Daily-use experience milestone complete (2026-07-29, v0.12.0) — live household
+validation and targeted workflow refinement are next; kiosk work remains deferred.**
+
+> **Owner direction, 2026-07-29.** Focus on usability, functionality, response time, navigation
+> and layout across the responsive web app. v0.12.0 delivers the shared foundation: route
+> splitting/caching, global search + quick-create, persistent URL tabs, custom mobile navigation,
+> consistent page/load/error states, session reliability, responsive accessibility and
+> optimistic high-frequency actions. Next work should be driven by real home-server use and
+> measured slow-request logs rather than another broad speculative redesign.
 
 > **Owner direction, 2026-07-14 (new term started).** Two changes to priorities:
 > 1. **Build the school/education side now** so it's usable this university term — track
@@ -181,10 +188,9 @@ web/mobile polish are now the priority; kiosk work is deferred.**
     **Still to do for the fuller node:** institution management UI (API exists, no dedicated
     screen), assessment edit form (only status/quick-actions inline so far), person/student
     assignment UI, FTS search box, and the deferred school-child/kiosk features.
-- [~] Milestone 2.5 follow-up: **web/mobile UX pass on Calendar + Atlas (tasks/lists)** (owner
-  2026-07-14). M2.5 closed the functionality gap; this reopens a **quality/feel pass on web and
-  small screens** — the surfaces are "clunky" for daily phone/laptop use. Kiosk equivalents are
-  **deferred**.
+- [x] **Daily-use web/mobile experience pass (v0.12.0, 2026-07-29).** Shared navigation,
+  response-time, reliability, layout and accessibility foundation delivered across all web
+  surfaces. Kiosk equivalents remain deferred.
 - [ ] Milestone 4: security maturation.
 - [~] **Milestone 5: native Solace — initial native shell + importer shipped (2026-07-21, v0.11.1).**
   Backend `apps/solace` covers bills, paydays, planned purchases, budget buckets/set-asides,
@@ -206,21 +212,14 @@ web/mobile polish are now the priority; kiosk work is deferred.**
   See spec `25_Node_Homestead.md`.
 - [ ] Milestone 6: Inventory, Assets (non-home only, or retire — see D21), Hearth, Travel, Projects, Health.
 
-## 6. Active task — Meridian parity/cockpit revisit
+## 6. Active task — live daily-use validation
 
-**Tracking doc:** `04_Development_Roadmap.md` Milestone 2 revisit note +
-`MILESTONE_2_Checklist.md` Phase 2.9b / Phase 2.19 revisit notes. Reference app:
-`/home/instructor/Documents/new/project-meridian`.
-
-**Immediate next concrete step:** continue reshaping Meridian as an adult/admin cockpit over
-HomeStack as source of truth. Behaviour parity first, then UI polish. Shipped so far:
-`MeridianTaskCompletion` model/API, Overview approval/monitoring tab, adult task-management tab,
-and adult Shop/Rewards management (reward setup, stock, visibility/archive, approvals, monitoring).
-Reports/history now includes completion history and ledger panels. Settings now includes task and
-reward category management, reward-category linking, and allowance config UI. Next recommended
-slice: a live run-through of the Meridian adult cockpit on the home server, then decide whether to
-continue deeper parity (photo evidence/importing legacy completion history/recurrence UI) or move
-back to M3.
+**Immediate next concrete step:** deploy v0.12.0 to the home server and walk through the common
+phone and laptop journeys: login → Hub → search/create → Calendar/Atlas → Solace unlock → Users
+self-password reset. Use the browser Network panel's `Server-Timing` values and backend
+`Slow API request` warnings to identify real response-time outliers. Record concrete friction
+before doing further surface-specific redesign. No migration is introduced by v0.12.0, but the
+backend and frontend images both need rebuilding.
 
 **Working rhythm (proven this milestone):** small workstream → backend (models/migration/services/
 selectors/serializers/views/urls) → tests → frontend (types/client → UI) → `tsc` + `npm run build`
@@ -349,6 +348,7 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-07-21 | Assistant | M5 | **Solace legacy importer shipped (v0.11.1).** Found local standalone Solace at `/home/moose/Documents/project-solace`; live data is SQLite at `instance/solace.db`. Added `import_solace`: `python manage.py import_solace --sqlite-db /home/moose/Documents/project-solace/instance/solace.db --dry-run`. Dry-run rolls back inside a transaction; apply mode is idempotent by natural keys. Maps legacy `RecurringBill` to native `Bill`, except category `Subscriptions` → native `Subscription`; `IncomeSource` → `Payday`; `PlannedPurchase` → native purchases; active `Bucket` transfer rules → bucket notes/targets; latest `PaydayChecklistItem.cycle_start` only → native checklist, preserving legacy cycle/key in notes. RRULEs are generated from legacy frequency/due-day; dated records use Solace services so Calendar sync stays on the helper (D7). Added importer tests. **513 backend tests green; `npm run build` clean.** | **Deploy:** after migrations, run importer dry-run first, then apply if counts look right. Next: richer edit/delete UI, notifications/attachments, and live cutover/retire standalone Solace. |
 | 2026-07-28 | Assistant | Homestead | **Costs & cover shipped (v0.11.2).** Added protected `InsurancePolicy` and `HouseholdCost` records (rates/water/gas/electricity/mortgage/strata/waste/internet), full CRUD, premiums/amounts, policy/account numbers, excess details, renewals/due dates and annualised UI summary/search. Every active row mirrors exactly one source-linked Solace `Bill` through events (D4); update/deactivate/delete stays in sync and financial Calendar rows remain Solace-owned. Finance endpoints require both Homestead + Solace permission, password re-auth and audit. General pass fixed detail visibility enforcement, touch-only missing actions and Cancel buttons submitting forms. **Full backend suite: 521 green; frontend production build clean.** | **Deploy:** run `docker exec homestack-backend python manage.py migrate` (Homestead `0002`, Solace `0002`) and rebuild frontend. Then live-test Costs & cover with an admin account. Future: document attachments, meter readings, notifications, Projects links. |
 | 2026-07-28 | Assistant | Fix | **Recurring pet/home completion dependency fix (v0.11.3).** Production traceback from `POST /pets/treatments/1/complete/` showed `ModuleNotFoundError: dateutil`. `Pets` and `Homestead` RRULE completion logic already used `python-dateutil`, but it was present only in the local environment and missing from `backend/requirements.txt`, so the Docker image could not run it. Added pinned `python-dateutil==2.9.0.post0`; recurring-treatment tests green. | **Deploy requires a backend image rebuild** so pip installs the dependency; a restart alone is not enough. Then retry the flea-treatment Done action. |
+| 2026-07-29 | Assistant | Daily UX | **Daily-use experience milestone shipped (v0.12.0).** Navigation: contextual shell header, global Search (`Ctrl/⌘ K`) + Create, custom mobile bottom bar, URL-backed node tabs, scroll restoration and working quick-create deep links. Functionality: canonical permission-aware `/api/v1/search/` aggregates Calendar + enabled nodes in one request; locked Solace is reported without searching/leaking it. Performance: route lazy-loading cut initial JS ~543→245 KB (gzip 137→75 KB); shared People/Users/Nodes/Household requests dedupe/cache with auth-boundary clearing; API `Server-Timing` + >500 ms slow logging. Reliability: self-password reset preserves the Django session; global auth-expiry, offline/network, retry/load/error states. Layout/accessibility: shared Hub/admin headers, focus-trapped mobile sheets, keyboard tabs, touch/focus/reduced-motion improvements. Fast actions: optimistic Atlas/Solace completion and Undo for paid bills. **526 backend tests green; production frontend build clean; no migration drift.** | **Deploy:** rebuild backend + frontend images; **no database migration is introduced by v0.12.0** (running the standard `migrate` remains safe). Hard-refresh once after deploy so the new split frontend assets replace the old bundle. Then live-test common phone/laptop journeys and use `Server-Timing`/slow logs for the next targeted pass. |
 
 ### Session notes (free-form, optional)
 

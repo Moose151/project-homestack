@@ -17,6 +17,7 @@ import { EmptyState } from '../../../components/EmptyState'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
 import { useAuth } from '../../auth/AuthContext'
+import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -1204,12 +1205,12 @@ function InstitutionsTab({ institutions, onChange, onError }: {
 
 export function EducationPage() {
   const { user } = useAuth()
-  const [tab, setTab] = useState<Tab>('profile')
+  const [tab, setTab] = useUrlTab<Tab>('profile', TABS.map(item => item.key))
   const [courses, setCourses] = useState<EducationCourse[]>([])
   const [people, setPeople] = useState<Person[]>([])
   const [institutions, setInstitutions] = useState<EducationInstitution[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useUrlQueryState()
   const [results, setResults] = useState<{ courses: EducationCourse[]; assessments: EducationAssessment[]; class_sessions: EducationClassSession[]; events: EducationEvent[] } | null>(null)
 
   const loadCourses = () => api.getCourses().then(setCourses).catch(e => setError(errMsg(e)))

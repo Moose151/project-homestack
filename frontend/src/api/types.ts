@@ -951,6 +951,20 @@ export interface SolaceSearchResults {
   checklist: SolaceChecklistItem[]
 }
 
+export interface GlobalSearchResult {
+  node: string
+  kind: string
+  id: number
+  title: string
+  subtitle: string
+  route: string
+}
+
+export interface GlobalSearchResponse {
+  results: GlobalSearchResult[]
+  locked_nodes: string[]
+}
+
 // ---------------------------------------------------------------------------
 // Nodes (stacks) + household
 // ---------------------------------------------------------------------------

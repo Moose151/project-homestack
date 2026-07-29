@@ -8,25 +8,31 @@ interface StacksCtx {
   enabledKeys: Set<string>
   household: Household | null
   loading: boolean
+  error: string | null
   refresh: () => Promise<void>
 }
 
 const Ctx = createContext<StacksCtx>({
-  nodes: [], enabledKeys: new Set(), household: null, loading: true, refresh: async () => {},
+  nodes: [], enabledKeys: new Set(), household: null, loading: true, error: null, refresh: async () => {},
 })
 
 export function StacksProvider({ children }: { children: ReactNode }) {
   const [nodes, setNodes] = useState<NodeInfo[]>([])
   const [household, setHousehold] = useState<Household | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    const [n, h] = await Promise.all([
-      api.getNodes().catch(() => [] as NodeInfo[]),
-      api.getHousehold().catch(() => null),
+    setError(null)
+    const [nodesResult, householdResult] = await Promise.allSettled([
+      api.getNodes(),
+      api.getHousehold(),
     ])
-    setNodes(n)
-    setHousehold(h)
+    if (nodesResult.status === 'fulfilled') setNodes(nodesResult.value)
+    if (householdResult.status === 'fulfilled') setHousehold(householdResult.value)
+    if (nodesResult.status === 'rejected' || householdResult.status === 'rejected') {
+      setError('Some household settings could not be loaded.')
+    }
     setLoading(false)
   }, [])
 
@@ -35,7 +41,7 @@ export function StacksProvider({ children }: { children: ReactNode }) {
   const enabledKeys = new Set(nodes.filter(n => n.is_enabled && !n.is_hidden).map(n => n.key))
 
   return (
-    <Ctx.Provider value={{ nodes, enabledKeys, household, loading, refresh }}>
+    <Ctx.Provider value={{ nodes, enabledKeys, household, loading, error, refresh }}>
       {children}
     </Ctx.Provider>
   )

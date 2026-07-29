@@ -118,6 +118,24 @@ class MeTests(TestCase):
         self.assertNotIn("password", data)
         self.assertNotIn("pin_hash", data)
 
+    def test_password_change_preserves_session(self):
+        self.client.post(self.login_url, {"username": "alice", "pin": "1234"}, content_type="application/json")
+        resp = self.client.patch(
+            self.me_url,
+            {"password": "new-alice-password!"},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self.client.get(self.me_url).status_code, 200)
+        self.assertEqual(
+            self.client.post(
+                reverse("auth-reauth"),
+                {"password": "new-alice-password!"},
+                content_type="application/json",
+            ).status_code,
+            200,
+        )
+
 
 class ReauthTests(TestCase):
     def setUp(self):

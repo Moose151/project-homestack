@@ -6,6 +6,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { STACK_BY_KEY, softColour } from '../../../config/stacks'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
+import { PageHeader } from '../../../components/PageHeader'
 
 const COMMON_TIMEZONES = [
   'UTC', 'Australia/Sydney', 'Australia/Melbourne', 'Australia/Brisbane',
@@ -83,10 +84,7 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-5 max-w-2xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-ink">Settings</h1>
-        <p className="text-sm text-muted">Household-wide configuration. Applies to everyone.</p>
-      </div>
+      <PageHeader title="Settings" icon="⚙️" subtitle="Household-wide configuration. Applies to everyone." />
 
       {error && (
         <div className="flex items-center justify-between gap-3 bg-danger-soft text-danger text-sm rounded-xl px-4 py-2.5">

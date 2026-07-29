@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import type { CSSProperties } from 'react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
@@ -11,8 +11,13 @@ import { STACKS, softColour } from '../../config/stacks'
 import { APP_VERSION } from '../../config/version'
 import { api } from '../../api/client'
 import type { AuthUser } from '../../api/types'
+import { ConnectionBanner } from '../../components/ConnectionBanner'
+import { GlobalSearch } from '../../components/GlobalSearch'
+import { QuickCreate } from '../../components/QuickCreate'
+import { useScrollRestoration } from '../../hooks/useScrollRestoration'
+import { InlineAlert } from '../../components/PageState'
 
-interface NavItem { label: string; route: string; icon: string; colour: string }
+interface NavItem { key: string; label: string; route: string; icon: string; colour: string }
 
 // How many stacks (in STACKS order) get a dedicated slot in the mobile bottom bar
 // before the rest collapse into the "More" sheet. Keeps the bar to 5 tap targets.
@@ -113,31 +118,63 @@ function SectionLabel({ children }: { children: string }) {
 
 export function AppShell() {
   const { user, logout, updateUser } = useAuth()
+  const location = useLocation()
   const [dark, setDark] = useDarkMode()
   const [editingProfile, setEditingProfile] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
-  const { enabledKeys } = useStacks()
+  const [customisingNav, setCustomisingNav] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [quickOpen, setQuickOpen] = useState(false)
+  const [mobileKeys, setMobileKeys] = useState<string[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('hs-mobile-nav') || '[]')
+      return Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string') : []
+    } catch {
+      return []
+    }
+  })
+  const { enabledKeys, error: stacksError, refresh: refreshStacks } = useStacks()
+  useScrollRestoration()
 
   // Core surfaces (Hub, Calendar) always show; node-backed stacks only when enabled.
   const coreNav: NavItem[] = STACKS
     .filter(s => !s.isNode)
-    .map(s => ({ label: s.label, route: s.route, icon: s.icon, colour: s.colour }))
+    .map(s => ({ key: s.key, label: s.label, route: s.route, icon: s.icon, colour: s.colour }))
   const nodeNav: NavItem[] = STACKS
     .filter(s => s.isNode && enabledKeys.has(s.key))
-    .map(s => ({ label: s.label, route: s.route, icon: s.icon, colour: s.colour }))
+    .map(s => ({ key: s.key, label: s.label, route: s.route, icon: s.icon, colour: s.colour }))
   const stackNav: NavItem[] = [...coreNav, ...nodeNav]
 
   const adminNav: NavItem[] = user?.role === 'admin'
     ? [
-        { label: 'Users', route: '/users', icon: '👥', colour: 'var(--hs-muted-strong)' },
-        { label: 'Settings', route: '/settings', icon: '⚙️', colour: 'var(--hs-muted-strong)' },
+        { key: 'users', label: 'Users', route: '/users', icon: '👥', colour: 'var(--hs-muted-strong)' },
+        { key: 'settings', label: 'Settings', route: '/settings', icon: '⚙️', colour: 'var(--hs-muted-strong)' },
       ]
     : []
 
   // Mobile bottom bar: a few primary stacks get their own slot; everything else
   // (remaining stacks + admin + utilities) lives behind the "More" sheet.
-  const mobilePrimary = stackNav.slice(0, MOBILE_PRIMARY_SLOTS)
-  const mobileOverflow = stackNav.slice(MOBILE_PRIMARY_SLOTS)
+  const availableKeys = new Set(stackNav.map(item => item.key))
+  const effectiveMobileKeys = mobileKeys.length
+    ? mobileKeys.filter(key => availableKeys.has(key)).slice(0, MOBILE_PRIMARY_SLOTS)
+    : stackNav.slice(0, MOBILE_PRIMARY_SLOTS).map(item => item.key)
+  const mobilePrimary = effectiveMobileKeys
+    .map(key => stackNav.find(item => item.key === key))
+    .filter((item): item is NavItem => Boolean(item))
+  const mobileOverflow = stackNav.filter(item => !effectiveMobileKeys.includes(item.key))
+  const currentNav = [...stackNav, ...adminNav].find(item => location.pathname.startsWith(item.route))
+
+  const toggleMobileKey = (key: string) => {
+    setMobileKeys(previous => {
+      const current = previous.filter(item => availableKeys.has(item))
+      const effective = current.length ? current : effectiveMobileKeys
+      const next = effective.includes(key)
+        ? effective.filter(item => item !== key)
+        : effective.length < MOBILE_PRIMARY_SLOTS ? [...effective, key] : effective
+      localStorage.setItem('hs-mobile-nav', JSON.stringify(next))
+      return next
+    })
+  }
 
   // Close the More sheet on Escape.
   useEffect(() => {
@@ -146,6 +183,21 @@ export function AppShell() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [moreOpen])
+
+  useEffect(() => {
+    setMoreOpen(false)
+  }, [location.pathname, location.search])
+
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown', shortcut)
+    return () => window.removeEventListener('keydown', shortcut)
+  }, [])
 
   return (
     <div className="min-h-screen flex">
@@ -220,15 +272,40 @@ export function AppShell() {
       {/* Main content */}
       <div className="flex-1 md:ml-56 flex flex-col min-h-screen">
         <header className="flex items-center gap-1 px-4 md:px-8 h-16 border-b border-line bg-surface/60 backdrop-blur sticky top-0 z-10">
-          {/* Mobile brand — the sidebar (which holds the wordmark) is hidden on small screens. */}
-          <div className="flex items-center gap-2 md:hidden mr-auto">
+          <div className="flex min-w-0 items-center gap-2 mr-auto">
             <span className="inline-grid place-items-center w-8 h-8 rounded-lg bg-primary text-white shadow-soft text-sm">◇</span>
-            <span className="text-lg font-extrabold tracking-tight text-ink">HomeStack</span>
+            <div className="min-w-0">
+              <span className="block truncate text-sm font-extrabold tracking-tight text-ink md:text-base">
+                {currentNav?.label || 'HomeStack'}
+              </span>
+              <span className="hidden text-[10px] font-medium uppercase tracking-wider text-muted md:block">HomeStack</span>
+            </div>
           </div>
-          <div className="hidden md:block mr-auto" />
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="grid h-9 min-w-9 place-items-center rounded-xl px-2 text-muted transition-colors hover:bg-sunken hover:text-ink md:flex md:gap-2"
+            aria-label="Search HomeStack"
+            title="Search (Ctrl/⌘ K)"
+          >
+            <span>⌕</span><span className="hidden text-xs font-semibold lg:inline">Search</span>
+          </button>
+          <button
+            onClick={() => setQuickOpen(true)}
+            className="grid h-9 min-w-9 place-items-center rounded-xl bg-primary px-2 text-white shadow-soft transition-colors hover:bg-primary-hover md:flex md:gap-1"
+            aria-label="Create something"
+            title="Create something"
+          >
+            <span className="text-lg leading-none">＋</span><span className="hidden text-xs font-semibold lg:inline">Create</span>
+          </button>
           <CalendarPeek />
           <NotificationBell />
         </header>
+        <ConnectionBanner />
+        {stacksError && (
+          <div className="px-4 pt-4 md:px-8">
+            <InlineAlert message={stacksError} onRetry={refreshStacks} />
+          </div>
+        )}
         <main className="flex-1 w-full px-4 py-5 sm:px-5 md:px-8 lg:px-10 xl:px-12 md:py-8 max-w-[1600px] mx-auto pb-24 md:pb-8">
           <Outlet />
         </main>
@@ -274,23 +351,50 @@ export function AppShell() {
 
             <div className="p-4 space-y-5">
               {mobileOverflow.length > 0 && (
-                <div className="grid grid-cols-4 gap-2">
-                  {mobileOverflow.map(item => (
-                    <NavLink
-                      key={item.route}
-                      to={item.route}
-                      onClick={() => setMoreOpen(false)}
-                      style={({ isActive }) => (isActive ? { background: softColour(item.colour, '22'), color: item.colour } : undefined)}
-                      className={({ isActive }) =>
-                        `flex flex-col items-center gap-1.5 py-3 px-1 rounded-2xl text-[11px] font-semibold text-center transition-colors ${
-                          isActive ? '' : 'text-muted-strong hover:bg-sunken'
-                        }`
+                <div>
+                  <div className="mb-2 flex items-center justify-between gap-3 px-1">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-muted/70">All stacks</p>
+                    <button onClick={() => setCustomisingNav(value => !value)} className="text-xs font-semibold text-primary">
+                      {customisingNav ? 'Done' : 'Edit bottom bar'}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {(customisingNav ? stackNav : mobileOverflow).map(item => {
+                      const pinned = effectiveMobileKeys.includes(item.key)
+                      if (customisingNav) {
+                        return (
+                          <button
+                            key={item.route}
+                            onClick={() => toggleMobileKey(item.key)}
+                            disabled={!pinned && effectiveMobileKeys.length >= MOBILE_PRIMARY_SLOTS}
+                            className={`relative flex flex-col items-center gap-1.5 rounded-2xl px-1 py-3 text-center text-[11px] font-semibold transition-colors ${
+                              pinned ? 'bg-primary-soft text-primary ring-1 ring-primary/30' : 'text-muted-strong hover:bg-sunken disabled:opacity-40'
+                            }`}
+                          >
+                            <span className="text-2xl">{item.icon}</span>
+                            <span className="max-w-full truncate">{item.label}</span>
+                            <span className="absolute right-1.5 top-1 text-[10px]">{pinned ? '✓' : '+'}</span>
+                          </button>
+                        )
                       }
-                    >
-                      <span className="text-2xl">{item.icon}</span>
-                      <span className="truncate max-w-full">{item.label}</span>
-                    </NavLink>
-                  ))}
+                      return (
+                        <NavLink
+                          key={item.route}
+                          to={item.route}
+                          onClick={() => setMoreOpen(false)}
+                          style={({ isActive }) => (isActive ? { background: softColour(item.colour, '22'), color: item.colour } : undefined)}
+                          className={({ isActive }) =>
+                            `flex flex-col items-center gap-1.5 py-3 px-1 rounded-2xl text-[11px] font-semibold text-center transition-colors ${
+                              isActive ? '' : 'text-muted-strong hover:bg-sunken'
+                            }`
+                          }
+                        >
+                          <span className="text-2xl">{item.icon}</span>
+                          <span className="truncate max-w-full">{item.label}</span>
+                        </NavLink>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
 
@@ -360,6 +464,8 @@ export function AppShell() {
           </div>
         </div>
       )}
+      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} enabledKeys={enabledKeys} />
+      <QuickCreate open={quickOpen} onClose={() => setQuickOpen(false)} enabledKeys={enabledKeys} />
     </div>
   )
 }

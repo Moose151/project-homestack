@@ -96,6 +96,26 @@ class UserManagementCRUDTests(TestCase):
         self.assertEqual(target.role, "manager")
         self.assertTrue(target.check_pin("9999"))
 
+    def test_reset_own_password_preserves_session_and_allows_reauth(self):
+        resp = self.client.patch(
+            reverse("user-detail", args=[self.admin.id]),
+            {"password": "new-admin-password!"},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.check_password("new-admin-password!"))
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+        self.assertEqual(
+            self.client.post(
+                reverse("auth-reauth"),
+                {"password": "new-admin-password!"},
+                content_type="application/json",
+            ).status_code,
+            200,
+        )
+
     def test_deactivate_user(self):
         target = _make_user("bob", role=User.Role.USER)
         resp = self.client.delete(reverse("user-detail", args=[target.id]))

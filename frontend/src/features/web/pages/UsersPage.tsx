@@ -5,6 +5,8 @@ import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { Avatar } from '../../../components/Avatar'
 import { useAuth } from '../../auth/AuthContext'
+import { PageHeader } from '../../../components/PageHeader'
+import { InlineAlert, PageSkeleton } from '../../../components/PageState'
 
 const ROLES = ['admin', 'manager', 'user', 'guest'] as const
 const ROLE_BADGE: Record<string, string> = {
@@ -50,7 +52,7 @@ function EmojiPicker({ value, colour, onChange }: { value: string; colour: strin
 }
 
 export function UsersPage() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const [users, setUsers] = useState<AdminUser[]>([])
   const [people, setPeople] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
@@ -59,28 +61,44 @@ export function UsersPage() {
   const [err, setErr] = useState<string | null>(null)
 
   const reload = async () => {
-    const [u, p] = await Promise.all([api.getUsers().catch(() => []), api.getPeople().catch(() => [])])
-    setUsers(u); setPeople(p); setLoading(false)
+    setLoading(true)
+    try {
+      const [u, p] = await Promise.all([api.getUsers(), api.getPeople()])
+      setUsers(u)
+      setPeople(p)
+      setErr(null)
+    } catch (e) {
+      const message = e instanceof Error ? e.message : ''
+      if (/\b401\b|Authentication credentials were not provided/i.test(message)) {
+        await logout()
+        return
+      }
+      setErr(e instanceof Error ? cleanErr(e.message) : 'Could not load users.')
+    } finally {
+      setLoading(false)
+    }
   }
   useEffect(() => { reload() }, [])
 
   if (user?.role !== 'admin') {
     return <p className="text-sm text-muted">Only admins can manage users.</p>
   }
-  if (loading) return <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
+  if (loading) return <PageSkeleton cards={2} />
 
   const unlinkedPeople = people.filter(p => p.linked_user_id == null)
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-extrabold tracking-tight text-ink">Users</h1>
-        <Button size="sm" onClick={() => { setShowForm(s => !s); setErr(null) }}>
+      <PageHeader
+        title="Users"
+        icon="👥"
+        subtitle="Accounts, roles, login PINs and re-authentication passwords."
+        actions={<Button size="sm" onClick={() => { setShowForm(s => !s); setErr(null) }}>
           {showForm ? 'Close' : 'New user'}
-        </Button>
-      </div>
+        </Button>}
+      />
 
-      {err && <p className="text-sm text-danger">{err}</p>}
+      {err && <InlineAlert message={err} onRetry={reload} onDismiss={() => setErr(null)} />}
 
       {showForm && (
         <UserForm people={unlinkedPeople} onError={setErr}
@@ -253,6 +271,7 @@ function EditUser({ u, onSaved, onError }: { u: AdminUser; onSaved: () => void; 
 }
 
 function cleanErr(msg: string): string {
+  if (!msg.includes('{')) return msg
   try {
     const json = JSON.parse(msg.slice(msg.indexOf('{')))
     if (json.detail) return typeof json.detail === 'string' ? json.detail : JSON.stringify(json.detail)

@@ -12,6 +12,7 @@ import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSel
 import { parseQuickEvent, quickEventPreview } from '../../../lib/quickParse'
 import { useAuth } from '../../auth/AuthContext'
 import { useStacks } from '../../stacks/StacksContext'
+import { useUrlAction } from '../../../hooks/useUrlTab'
 
 // ---------------------------------------------------------------------------
 // Date helpers (no external deps)
@@ -329,6 +330,7 @@ export function CalendarPage() {
   const [personFilter, setPersonFilter] = useState(0)
   const [defaultsSaved, setDefaultsSaved] = useState(false)
   const [modal, setModal] = useState<{ event: CalendarEvent | null; date: Date | null } | null>(null)
+  useUrlAction('event', () => setModal({ event: null, date: initialLinkedDate ?? new Date() }))
 
   // Which prefs the user has explicitly chosen (captured once, before the write-effects run,
   // so we can fall back to household defaults only for prefs the user has never touched).

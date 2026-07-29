@@ -15,6 +15,7 @@ import type {
   InsurancePolicy, HouseholdCost,
   SolaceBill, SolacePayday, SolacePurchase, SolaceBucket, SolaceSubscription,
   SolaceChecklistItem, SolaceSearchResults,
+  GlobalSearchResponse,
   NodeInfo, Household,
   Book, BookClub, ClubBookEntry, ClubQueueItem, PersonalBookEntry, BookRating, BooksUser, BookShelfStatus,
 } from './types'
@@ -174,6 +175,68 @@ type ShelfWrite = Partial<{
 }>
 
 const BASE = '/api/v1'
+export const AUTH_EXPIRED_EVENT = 'homestack:auth-expired'
+
+export class ApiError extends Error {
+  status: number
+  detail: string
+
+  constructor(status: number, statusText: string, detail: string) {
+    let readable = detail
+    try {
+      const parsed = JSON.parse(detail)
+      readable = typeof parsed.detail === 'string'
+        ? parsed.detail
+        : Object.values(parsed).flat().join(' ')
+    } catch {
+      // Plain-text API errors are already readable.
+    }
+    super(readable || `${status} ${statusText}`)
+    this.name = 'ApiError'
+    this.status = status
+    this.detail = detail
+  }
+}
+
+type CacheEntry = { expiresAt: number; value?: unknown; request?: Promise<unknown> }
+const sharedGetCache = new Map<string, CacheEntry>()
+
+function clearSharedCache(...paths: string[]) {
+  paths.forEach(path => sharedGetCache.delete(path))
+}
+
+function cachedGet<T>(path: string, ttlMs = 30_000): Promise<T> {
+  const now = Date.now()
+  const cached = sharedGetCache.get(path)
+  if (cached?.value !== undefined && cached.expiresAt > now) {
+    return Promise.resolve(cached.value as T)
+  }
+  if (cached?.request && cached.expiresAt > now) {
+    return cached.request as Promise<T>
+  }
+  const request = _fetch<T>(path)
+    .then(value => {
+      sharedGetCache.set(path, { value, expiresAt: Date.now() + ttlMs })
+      return value
+    })
+    .catch(error => {
+      sharedGetCache.delete(path)
+      throw error
+    })
+  sharedGetCache.set(path, { request, expiresAt: now + ttlMs })
+  return request
+}
+
+function apiError(path: string, status: number, statusText: string, detail: string): ApiError {
+  const isAuthEndpoint = path.startsWith('/auth/')
+  const sessionExpired = (status === 401 || status === 403)
+    && /not authenticated|authentication credentials were not provided/i.test(detail)
+  if (!isAuthEndpoint && sessionExpired) {
+    sharedGetCache.clear()
+    window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
+  }
+  return new ApiError(status, statusText, detail)
+}
 
 // Django/DRF SessionAuthentication enforces CSRF on unsafe methods. The token is
 // delivered in the `csrftoken` cookie (set by the GET /auth/me/ call on app load)
@@ -192,14 +255,19 @@ async function _fetch<T>(path: string, init?: RequestInit): Promise<T> {
     const token = getCookie('csrftoken')
     if (token) csrfHeader['X-CSRFToken'] = token
   }
-  const res = await fetch(`${BASE}${path}`, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...csrfHeader, ...init?.headers },
-    ...init,
-  })
+  let res: Response
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...csrfHeader, ...init?.headers },
+      ...init,
+    })
+  } catch {
+    throw new Error('HomeStack could not reach the server. Check your connection and try again.')
+  }
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(`${res.status} ${res.statusText}: ${text}`)
+    throw apiError(path, res.status, res.statusText, text)
   }
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
@@ -213,14 +281,19 @@ async function _fetchRaw<T>(path: string, init?: RequestInit): Promise<T> {
     const token = getCookie('csrftoken')
     if (token) csrfHeader['X-CSRFToken'] = token
   }
-  const res = await fetch(`${BASE}${path}`, {
-    credentials: 'include',
-    headers: { ...csrfHeader, ...init?.headers },
-    ...init,
-  })
+  let res: Response
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      credentials: 'include',
+      headers: { ...csrfHeader, ...init?.headers },
+      ...init,
+    })
+  } catch {
+    throw new Error('HomeStack could not reach the server. Check your connection and try again.')
+  }
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(`${res.status} ${res.statusText}: ${text}`)
+    throw apiError(path, res.status, res.statusText, text)
   }
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
@@ -230,27 +303,36 @@ export const api = {
   // --- Auth ---
   getKioskUsers: (): Promise<KioskUser[]> => _fetch('/auth/kiosk-users/'),
   pinLogin: (username: string, pin: string): Promise<AuthUser> =>
-    _fetch('/auth/pin-login/', { method: 'POST', body: JSON.stringify({ username, pin }) }),
+    _fetch<AuthUser>('/auth/pin-login/', { method: 'POST', body: JSON.stringify({ username, pin }) })
+      .then(value => { sharedGetCache.clear(); return value }),
   passwordLogin: (username: string, password: string): Promise<AuthUser> =>
-    _fetch('/auth/password-login/', { method: 'POST', body: JSON.stringify({ username, password }) }),
-  logout: (): Promise<void> => _fetch('/auth/logout/', { method: 'POST' }),
+    _fetch<AuthUser>('/auth/password-login/', { method: 'POST', body: JSON.stringify({ username, password }) })
+      .then(value => { sharedGetCache.clear(); return value }),
+  logout: (): Promise<void> =>
+    _fetch<void>('/auth/logout/', { method: 'POST' })
+      .finally(() => sharedGetCache.clear()),
   me: (): Promise<AuthUser> => _fetch('/auth/me/'),
   patchMe: (data: Partial<{ display_name: string; colour: string; avatar: string; pin: string; password: string }>): Promise<AuthUser> =>
     _fetch('/auth/me/', { method: 'PATCH', body: JSON.stringify(data) }),
   reauth: (password: string): Promise<void> =>
     _fetch('/auth/reauth/', { method: 'POST', body: JSON.stringify({ password }) }),
+  globalSearch: (q: string): Promise<GlobalSearchResponse> =>
+    _fetch(`/search/?q=${encodeURIComponent(q)}`),
 
   // --- People ---
-  getPeople: (): Promise<Person[]> => _fetch('/people/'),
+  getPeople: (): Promise<Person[]> => cachedGet('/people/'),
 
   // --- User management (admin) ---
-  getUsers: (): Promise<AdminUser[]> => _fetch('/users/'),
+  getUsers: (): Promise<AdminUser[]> => cachedGet('/users/', 15_000),
   createUser: (data: UserWrite): Promise<AdminUser> =>
-    _fetch('/users/', { method: 'POST', body: JSON.stringify(data) }),
+    _fetch<AdminUser>('/users/', { method: 'POST', body: JSON.stringify(data) })
+      .then(value => { clearSharedCache('/users/', '/people/'); return value }),
   updateUser: (id: number, data: UserWrite): Promise<AdminUser> =>
-    _fetch(`/users/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+    _fetch<AdminUser>(`/users/${id}/`, { method: 'PATCH', body: JSON.stringify(data) })
+      .then(value => { clearSharedCache('/users/', '/people/'); return value }),
   deactivateUser: (id: number): Promise<void> =>
-    _fetch(`/users/${id}/`, { method: 'DELETE' }),
+    _fetch<void>(`/users/${id}/`, { method: 'DELETE' })
+      .then(value => { clearSharedCache('/users/', '/people/'); return value }),
 
   // --- Hub ---
   hub: (): Promise<HubResponse> => _fetch('/hub/'),
@@ -552,14 +634,19 @@ export const api = {
     _fetch(`/education/profile/${personId}/`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   // --- Nodes (stacks) ---
-  getNodes: (): Promise<NodeInfo[]> => _fetch('/nodes/'),
-  enableNode: (key: string): Promise<NodeInfo> => _fetch(`/nodes/${key}/enable/`, { method: 'POST' }),
-  disableNode: (key: string): Promise<NodeInfo> => _fetch(`/nodes/${key}/disable/`, { method: 'POST' }),
+  getNodes: (): Promise<NodeInfo[]> => cachedGet('/nodes/', 30_000),
+  enableNode: (key: string): Promise<NodeInfo> =>
+    _fetch<NodeInfo>(`/nodes/${key}/enable/`, { method: 'POST' })
+      .then(value => { clearSharedCache('/nodes/'); return value }),
+  disableNode: (key: string): Promise<NodeInfo> =>
+    _fetch<NodeInfo>(`/nodes/${key}/disable/`, { method: 'POST' })
+      .then(value => { clearSharedCache('/nodes/'); return value }),
 
   // --- Household ---
-  getHousehold: (): Promise<Household> => _fetch('/household/'),
+  getHousehold: (): Promise<Household> => cachedGet('/household/', 30_000),
   updateHousehold: (data: Partial<{ name: string; family_colour: string; timezone: string; calendar_default_view: string; calendar_week_start: number; calendar_time_format: string }>): Promise<Household> =>
-    _fetch('/household/', { method: 'PATCH', body: JSON.stringify(data) }),
+    _fetch<Household>('/household/', { method: 'PATCH', body: JSON.stringify(data) })
+      .then(value => { clearSharedCache('/household/'); return value }),
 
   getClassSessions: (params?: { course?: number }): Promise<EducationClassSession[]> =>
     _fetch(`/education/classes/${params?.course ? `?course=${params.course}` : ''}`),

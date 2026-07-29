@@ -4,6 +4,7 @@ import type {
   SelectHTMLAttributes,
   ReactNode,
 } from 'react'
+import { forwardRef } from 'react'
 
 // Shared form-control styling so every node's inputs look identical (UI/UX §5).
 // One source of truth for the "field" look — do not hand-roll input classes per page.
@@ -47,9 +48,11 @@ export function Field({
   )
 }
 
-export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={`${fieldClass} ${className}`} {...props} />
-}
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
+  function Input({ className = '', ...props }, ref) {
+    return <input ref={ref} className={`${fieldClass} ${className}`} {...props} />
+  },
+)
 
 export function Textarea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea className={`${fieldClass} min-h-[80px] py-2 leading-relaxed ${className}`} {...props} />

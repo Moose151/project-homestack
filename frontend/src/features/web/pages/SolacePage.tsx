@@ -11,6 +11,8 @@ import { Tabs } from '../../../components/Tabs'
 import { Badge, type BadgeTone } from '../../../components/Badge'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
+import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
+import { UndoToast } from '../../../components/UndoToast'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 const money = (v: string | number) => Number(v || 0).toLocaleString(undefined, { style: 'currency', currency: 'AUD' })
@@ -19,6 +21,7 @@ const dateOnly = (iso: string | null) => iso ? new Date(iso).toLocaleDateString(
 const fromLocalInput = (value: string) => value ? new Date(value).toISOString() : null
 
 type Tab = 'overview' | 'bills' | 'buckets' | 'subscriptions' | 'purchases' | 'paydays' | 'checklist'
+const TAB_KEYS: Tab[] = ['overview', 'bills', 'buckets', 'subscriptions', 'purchases', 'paydays', 'checklist']
 
 const BILL_CATS = ['mortgage', 'utilities', 'insurance', 'council', 'debt', 'subscription', 'childcare', 'other']
 const RECURRENCE = [
@@ -110,9 +113,36 @@ function BillForm({ onCreated }: { onCreated: () => void }) {
   )
 }
 
-function BillsTab({ bills, reload, onError }: { bills: SolaceBill[]; reload: () => void; onError: (m: string) => void }) {
-  const pay = async (id: number) => {
-    try { await api.markSolaceBillPaid(id); reload() } catch (e) { onError(errMsg(e)) }
+function BillsTab({ bills, reload, onChange, onError }: {
+  bills: SolaceBill[]
+  reload: () => void
+  onChange: (bills: SolaceBill[]) => void
+  onError: (m: string) => void
+}) {
+  const [undoBill, setUndoBill] = useState<SolaceBill | null>(null)
+  const pay = async (bill: SolaceBill) => {
+    const optimistic = { ...bill, is_paid: true, paid_at: new Date().toISOString() }
+    onChange(bills.map(row => row.id === bill.id ? optimistic : row))
+    try {
+      const updated = await api.markSolaceBillPaid(bill.id)
+      onChange(bills.map(row => row.id === bill.id ? updated : row))
+      setUndoBill(bill)
+    } catch (e) {
+      onChange(bills)
+      onError(errMsg(e))
+    }
+  }
+  const undo = async () => {
+    if (!undoBill) return
+    const previous = undoBill
+    setUndoBill(null)
+    onChange(bills.map(row => row.id === previous.id ? previous : row))
+    try {
+      const updated = await api.updateSolaceBill(previous.id, { is_paid: false, paid_at: null })
+      onChange(bills.map(row => row.id === previous.id ? updated : row))
+    } catch (e) {
+      onError(errMsg(e))
+    }
   }
   return (
     <div className="flex flex-col gap-4">
@@ -130,11 +160,12 @@ function BillsTab({ bills, reload, onError }: { bills: SolaceBill[]; reload: () 
                 <DueBadge iso={b.due_at} paid={b.is_paid} />
               </div>
               {b.notes && <p className="mt-3 text-sm text-muted">{b.notes}</p>}
-              {!b.is_paid && <Button size="sm" variant="ghost" className="mt-3" onClick={() => pay(b.id)}>Mark paid</Button>}
+              {!b.is_paid && <Button size="sm" variant="ghost" className="mt-3" onClick={() => pay(b)}>Mark paid</Button>}
             </Card>
           ))}
         </div>
       )}
+      {undoBill && <UndoToast message={`${undoBill.name} marked paid`} onUndo={undo} onDismiss={() => setUndoBill(null)} />}
     </div>
   )
 }
@@ -321,7 +352,12 @@ function PaydaysTab({ paydays, reload }: { paydays: SolacePayday[]; reload: () =
   )
 }
 
-function ChecklistTab({ items, reload, onError }: { items: SolaceChecklistItem[]; reload: () => void; onError: (m: string) => void }) {
+function ChecklistTab({ items, reload, onChange, onError }: {
+  items: SolaceChecklistItem[]
+  reload: () => void
+  onChange: (items: SolaceChecklistItem[]) => void
+  onError: (m: string) => void
+}) {
   const [title, setTitle] = useState('')
   const [saving, setSaving] = useState(false)
   const add = async () => {
@@ -331,8 +367,15 @@ function ChecklistTab({ items, reload, onError }: { items: SolaceChecklistItem[]
     finally { setSaving(false) }
   }
   const toggle = async (item: SolaceChecklistItem) => {
-    try { await api.updateSolaceChecklistItem(item.id, { is_complete: !item.is_complete }); reload() }
-    catch (e) { onError(errMsg(e)) }
+    const optimistic = { ...item, is_complete: !item.is_complete }
+    onChange(items.map(row => row.id === item.id ? optimistic : row))
+    try {
+      const updated = await api.updateSolaceChecklistItem(item.id, { is_complete: !item.is_complete })
+      onChange(items.map(row => row.id === item.id ? updated : row))
+    } catch (e) {
+      onChange(items)
+      onError(errMsg(e))
+    }
   }
   return (
     <div className="flex flex-col gap-4">
@@ -383,7 +426,7 @@ function Overview({ bills, buckets, subscriptions, purchases, onTab }: {
 
 export function SolacePage() {
   const [unlocked, setUnlocked] = useState(false)
-  const [tab, setTab] = useState<Tab>('overview')
+  const [tab, setTab] = useUrlTab<Tab>('overview', TAB_KEYS)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [bills, setBills] = useState<SolaceBill[]>([])
@@ -392,7 +435,7 @@ export function SolacePage() {
   const [buckets, setBuckets] = useState<SolaceBucket[]>([])
   const [subscriptions, setSubscriptions] = useState<SolaceSubscription[]>([])
   const [checklist, setChecklist] = useState<SolaceChecklistItem[]>([])
-  const [q, setQ] = useState('')
+  const [q, setQ] = useUrlQueryState()
 
   const load = async () => {
     setLoading(true); setError('')
@@ -411,7 +454,13 @@ export function SolacePage() {
     }
   }
 
-  useEffect(() => { if (unlocked) load() }, [unlocked])
+  useEffect(() => {
+    if (!unlocked) return
+    if (q.trim()) search()
+    else load()
+    // Unlock is the transition that triggers the initial protected load/search.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unlocked])
 
   const search = async () => {
     if (!q.trim()) return load()
@@ -424,7 +473,7 @@ export function SolacePage() {
   if (!unlocked) return <ReauthGate onUnlock={() => setUnlocked(true)} />
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 space-y-5">
+    <div className="max-w-5xl mx-auto space-y-5">
       <PageHeader title="Solace" subtitle="Bills, set-asides and planned purchases" icon="💸" />
       {error && <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
       <div className="flex flex-col gap-2 sm:flex-row">
@@ -446,12 +495,12 @@ export function SolacePage() {
         onChange={k => setTab(k as Tab)}
       />
       {tab === 'overview' && <Overview bills={bills} buckets={buckets} subscriptions={subscriptions} purchases={purchases} onTab={setTab} />}
-      {tab === 'bills' && <BillsTab bills={bills} reload={load} onError={setError} />}
+      {tab === 'bills' && <BillsTab bills={bills} reload={load} onChange={setBills} onError={setError} />}
       {tab === 'buckets' && <BucketsTab buckets={buckets} reload={load} />}
       {tab === 'subscriptions' && <SubscriptionsTab subscriptions={subscriptions} reload={load} />}
       {tab === 'purchases' && <PurchasesTab purchases={purchases} reload={load} />}
       {tab === 'paydays' && <PaydaysTab paydays={paydays} reload={load} />}
-      {tab === 'checklist' && <ChecklistTab items={checklist} reload={load} onError={setError} />}
+      {tab === 'checklist' && <ChecklistTab items={checklist} reload={load} onChange={setChecklist} onError={setError} />}
     </div>
   )
 }

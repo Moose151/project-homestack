@@ -15,7 +15,11 @@ function Badge({ children, className = 'bg-sunken text-muted-strong' }: { childr
   return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${className}`}>{children}</span>
 }
 
-export function ShopTab({ canManage, pointsLabel }: { canManage: boolean; pointsLabel: string }) {
+export function ShopTab({ canManage, pointsLabel, searchQuery = '' }: {
+  canManage: boolean
+  pointsLabel: string
+  searchQuery?: string
+}) {
   const { user } = useAuth()
   const [rewards, setRewards] = useState<MeridianReward[]>([])
   const [requests, setRequests] = useState<MeridianRewardRequest[]>([])
@@ -66,6 +70,8 @@ export function ShopTab({ canManage, pointsLabel }: { canManage: boolean; points
   }, [requests])
 
   const visible = useMemo(() => rewards.filter(r => {
+    const query = searchQuery.trim().toLowerCase()
+    if (query && !`${r.name} ${r.description}`.toLowerCase().includes(query)) return false
     const out = r.remaining_stock !== null && r.remaining_stock <= 0
     if (filter === 'active' && (!r.is_active || r.is_archived)) return false
     if (filter === 'pending' && !pendingByReward.has(r.id)) return false
@@ -73,7 +79,7 @@ export function ShopTab({ canManage, pointsLabel }: { canManage: boolean; points
     if (filter === 'hidden' && r.is_active && !r.is_archived) return false
     if (categoryId && r.category_id !== Number(categoryId)) return false
     return true
-  }), [rewards, filter, categoryId, pendingByReward])
+  }), [rewards, filter, categoryId, pendingByReward, searchQuery])
 
   const categoryName = (id: number | null) => categories.find(c => c.id === id)?.name || ''
 
@@ -115,7 +121,11 @@ export function ShopTab({ canManage, pointsLabel }: { canManage: boolean; points
   if (!canManage) {
     return (
       <ShopperView
-        rewards={rewards.filter(r => r.is_active && !r.is_archived)}
+        rewards={rewards.filter(r => {
+          const query = searchQuery.trim().toLowerCase()
+          return r.is_active && !r.is_archived
+            && (!query || `${r.name} ${r.description}`.toLowerCase().includes(query))
+        })}
         balance={balance}
         pointsLabel={pointsLabel}
         cart={cart}

@@ -1,3 +1,5 @@
+import { useRef } from 'react'
+
 export interface TabDef<T extends string = string> {
   key: T
   label: string
@@ -17,15 +19,32 @@ export function Tabs<T extends string>({
   onChange: (key: T) => void
   className?: string
 }) {
+  const buttons = useRef<Array<HTMLButtonElement | null>>([])
+  const moveFocus = (index: number, direction: number) => {
+    const next = (index + direction + tabs.length) % tabs.length
+    buttons.current[next]?.focus()
+    onChange(tabs[next].key)
+  }
+
   return (
-    <div className={`flex gap-1 rounded-2xl bg-sunken p-1 overflow-x-auto ${className}`}>
-      {tabs.map(t => {
+    <div className={`flex gap-1 rounded-2xl bg-sunken p-1 overflow-x-auto ${className}`} role="tablist">
+      {tabs.map((t, index) => {
         const isActive = t.key === active
         return (
           <button
             key={t.key}
+            ref={element => { buttons.current[index] = element }}
             onClick={() => onChange(t.key)}
-            className={`flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold capitalize transition-colors ${
+            onKeyDown={event => {
+              if (event.key === 'ArrowRight') { event.preventDefault(); moveFocus(index, 1) }
+              if (event.key === 'ArrowLeft') { event.preventDefault(); moveFocus(index, -1) }
+              if (event.key === 'Home') { event.preventDefault(); buttons.current[0]?.focus(); onChange(tabs[0].key) }
+              if (event.key === 'End') { event.preventDefault(); buttons.current[tabs.length - 1]?.focus(); onChange(tabs[tabs.length - 1].key) }
+            }}
+            role="tab"
+            aria-selected={isActive}
+            tabIndex={isActive ? 0 : -1}
+            className={`flex min-h-[40px] items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold capitalize transition-colors ${
               isActive ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'
             }`}
           >

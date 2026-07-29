@@ -4,6 +4,7 @@ import type { MeridianCategory, MeridianTask, MeridianTaskCompletion, Person } f
 import { Card } from '../../../../components/Card'
 import { Button } from '../../../../components/Button'
 import { fieldClass } from '../../../../components/ui'
+import { useUrlAction } from '../../../../hooks/useUrlTab'
 
 type TaskFilter = 'all' | 'active' | 'pending' | 'hidden' | 'hot'
 
@@ -53,7 +54,11 @@ function Badge({ children, className = 'bg-sunken text-muted-strong' }: { childr
   return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${className}`}>{children}</span>
 }
 
-export function TasksTab({ canManage, pointsLabel }: { canManage: boolean; pointsLabel: string }) {
+export function TasksTab({ canManage, pointsLabel, searchQuery = '' }: {
+  canManage: boolean
+  pointsLabel: string
+  searchQuery?: string
+}) {
   const [tasks, setTasks] = useState<MeridianTask[]>([])
   const [categories, setCategories] = useState<MeridianCategory[]>([])
   const [people, setPeople] = useState<Person[]>([])
@@ -63,6 +68,7 @@ export function TasksTab({ canManage, pointsLabel }: { canManage: boolean; point
   const [categoryId, setCategoryId] = useState('')
   const [personId, setPersonId] = useState('')
   const [showForm, setShowForm] = useState(false)
+  useUrlAction('task', () => setShowForm(true))
   const [editingId, setEditingId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -100,6 +106,8 @@ export function TasksTab({ canManage, pointsLabel }: { canManage: boolean; point
   }, [completions])
 
   const visible = useMemo(() => tasks.filter(t => {
+    const query = searchQuery.trim().toLowerCase()
+    if (query && !`${t.title} ${t.description}`.toLowerCase().includes(query)) return false
     if (filter === 'active' && (!t.is_active || t.is_archived)) return false
     if (filter === 'pending' && !pendingByTask.has(t.id) && t.status !== 'pending') return false
     if (filter === 'hidden' && t.is_active && !t.is_archived) return false
@@ -107,7 +115,7 @@ export function TasksTab({ canManage, pointsLabel }: { canManage: boolean; point
     if (categoryId && t.category_id !== Number(categoryId)) return false
     if (personId && t.assigned_to_person_id !== Number(personId)) return false
     return true
-  }), [tasks, filter, categoryId, personId, pendingByTask])
+  }), [tasks, filter, categoryId, personId, pendingByTask, searchQuery])
 
   const setFailure = () => setError('That change did not save. Refresh and try again.')
 

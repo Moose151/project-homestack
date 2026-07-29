@@ -8,6 +8,7 @@ import { Tabs, type TabDef } from '../../../components/Tabs'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
 import { useAuth } from '../../auth/AuthContext'
+import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -365,10 +366,10 @@ const TABS: TabDef<Tab>[] = [
 export function HomeWikiPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin' || user?.role === 'manager'
-  const [tab, setTab] = useState<Tab>('pages')
+  const [tab, setTab] = useUrlTab<Tab>('pages', TABS.map(item => item.key))
   const [categories, setCategories] = useState<WikiCategory[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useUrlQueryState()
   const [results, setResults] = useState<WikiPage[] | null>(null)
 
   useEffect(() => { api.getWikiCategories(isAdmin).then(setCategories).catch(() => {}) }, [isAdmin])

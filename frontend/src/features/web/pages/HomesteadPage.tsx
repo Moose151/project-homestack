@@ -14,6 +14,7 @@ import { EmptyState } from '../../../components/EmptyState'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
 import { useAuth } from '../../auth/AuthContext'
+import { useUrlAction, useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ')
@@ -247,6 +248,7 @@ function MaintenanceTab({ people, defaultAssignee, onError }: {
   const [providers, setProviders] = useState<ServiceProvider[]>([])
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
+  useUrlAction('maintenance', () => setOpen(true))
   const [editId, setEditId] = useState<number | null>(null)
   const blank = {
     title: '', category: 'general', next_due_at: null as string | null, is_all_day: true,
@@ -1158,13 +1160,14 @@ function SearchResults({ results }: { results: HomesteadSearchResults }) {
 // ---------------------------------------------------------------------------
 
 type Tab = 'overview' | 'maintenance' | 'appliances' | 'improvements' | 'contacts' | 'finances'
+const TAB_KEYS: Tab[] = ['overview', 'maintenance', 'appliances', 'improvements', 'contacts', 'finances']
 
 export function HomesteadPage() {
   const { user } = useAuth()
-  const [tab, setTab] = useState<Tab>('overview')
+  const [tab, setTab] = useUrlTab<Tab>('overview', TAB_KEYS)
   const [people, setPeople] = useState<Person[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useUrlQueryState()
   const [results, setResults] = useState<HomesteadSearchResults | null>(null)
 
   useEffect(() => { api.getPeople().then(setPeople).catch(() => {}) }, [])

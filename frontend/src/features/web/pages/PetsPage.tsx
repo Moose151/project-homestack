@@ -10,6 +10,7 @@ import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { useAuth } from '../../auth/AuthContext'
+import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -404,10 +405,10 @@ const TABS: TabDef<Tab>[] = [
 
 export function PetsPage() {
   const { user } = useAuth()
-  const [tab, setTab] = useState<Tab>('pets')
+  const [tab, setTab] = useUrlTab<Tab>('pets', TABS.map(item => item.key))
   const [pets, setPets] = useState<Pet[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useUrlQueryState()
   const [results, setResults] = useState<{ pets: Pet[]; treatments: PetTreatment[]; appointments: PetAppointment[] } | null>(null)
 
   const load = () => api.getPets().then(setPets).catch(e => setError(errMsg(e)))

@@ -1,6 +1,7 @@
 """User-management views (admin-only via the `users` resource). Thin over user_services."""
 from __future__ import annotations
 
+from django.contrib.auth import update_session_auth_hash
 from rest_framework import status
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.request import Request
@@ -52,6 +53,8 @@ class UserDetailView(APIView):
         s = UserWriteSerializer(data=request.data, partial=True)
         s.is_valid(raise_exception=True)
         user = _guard(user_services.update_user_account, request.user, user, **s.validated_data)
+        if user.id == request.user.id and s.validated_data.get("password"):
+            update_session_auth_hash(request._request, user)
         return Response(UserAdminSerializer(user).data)
 
     def delete(self, request: Request, user_id: int) -> Response:

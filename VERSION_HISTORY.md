@@ -1,11 +1,40 @@
 # HomeStack — Version History
 
-> **Current version: 0.11.3**
+> **Current version: 0.12.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
 >
 > **Rule:** bump the version and add a row here with every push to `main`.
+
+---
+
+## 0.12 — Daily-use experience
+
+### 0.12.0 — 2026-07-29
+- **Navigation and findability** — the app shell now shows the current surface, provides
+  global **Search** (`Ctrl/⌘ K`) and **Create** actions, supports a user-customisable mobile
+  bottom bar, restores scroll position on browser Back, and keeps node tabs in the URL so
+  refreshes and deep links retain context.
+- **Permission-aware global search** — implemented the canonical `/api/v1/search/?q=` endpoint
+  across Calendar and every enabled/permitted node. Results are normalized and deep-linked;
+  Solace is reported as locked until password re-authentication and is never searched or leaked
+  while locked. Search uses one request instead of fan-out from the browser.
+- **Response time** — route-level lazy loading reduced the initial production bundle from about
+  543 KB to 245 KB (gzip 137 KB to 75 KB). Shared People/Users/Nodes/Household requests are
+  deduplicated and briefly cached with auth-boundary invalidation. API responses expose
+  `Server-Timing`, with calls over 500 ms logged for diagnosis.
+- **Reliability** — resetting the currently logged-in admin's password now refreshes Django's
+  session authentication hash, so Users no longer blanks and the new password immediately
+  unlocks Solace. Expired sessions are handled centrally; network, offline, loading, retry and
+  empty states are visible instead of silently becoming empty data.
+- **Responsive/accessibility pass** — consistent headers on Hub/admin surfaces, mobile
+  bottom-sheet dialogs, focus trapping/restoration, keyboard-operable tabs, stronger focus
+  rings, coarse-pointer touch targets and reduced-motion support.
+- **Faster daily actions** — universal quick-create deep-links to working forms; Atlas
+  completion and Solace checklist/bill actions update optimistically; marking a bill paid
+  offers Undo. Hub and global-search results deep-link to the relevant surface/tab.
+- No database migration is required for this release.
 
 ---
 

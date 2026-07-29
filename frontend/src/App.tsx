@@ -1,21 +1,35 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './features/auth/AuthContext'
 import { LoginPage } from './features/auth/LoginPage'
 import { AppShell } from './features/web/AppShell'
-import { HubPage } from './features/web/pages/HubPage'
-import { AtlasPage } from './features/web/pages/AtlasPage'
-import { MeridianPage } from './features/web/pages/MeridianPage'
-import { CalendarPage } from './features/web/pages/CalendarPage'
-import { EducationPage } from './features/web/pages/EducationPage'
-import { BooksPage } from './features/web/pages/BooksPage'
-import { HomeWikiPage } from './features/web/pages/HomeWikiPage'
-import { PetsPage } from './features/web/pages/PetsPage'
-import { HomesteadPage } from './features/web/pages/HomesteadPage'
-import { SolacePage } from './features/web/pages/SolacePage'
-import { UsersPage } from './features/web/pages/UsersPage'
-import { SettingsPage } from './features/web/pages/SettingsPage'
-import { KioskApp } from './features/kiosk/KioskApp'
 import { StacksProvider, useStacks } from './features/stacks/StacksContext'
+
+const HubPage = lazy(() => import('./features/web/pages/HubPage').then(m => ({ default: m.HubPage })))
+const AtlasPage = lazy(() => import('./features/web/pages/AtlasPage').then(m => ({ default: m.AtlasPage })))
+const MeridianPage = lazy(() => import('./features/web/pages/MeridianPage').then(m => ({ default: m.MeridianPage })))
+const CalendarPage = lazy(() => import('./features/web/pages/CalendarPage').then(m => ({ default: m.CalendarPage })))
+const EducationPage = lazy(() => import('./features/web/pages/EducationPage').then(m => ({ default: m.EducationPage })))
+const BooksPage = lazy(() => import('./features/web/pages/BooksPage').then(m => ({ default: m.BooksPage })))
+const HomeWikiPage = lazy(() => import('./features/web/pages/HomeWikiPage').then(m => ({ default: m.HomeWikiPage })))
+const PetsPage = lazy(() => import('./features/web/pages/PetsPage').then(m => ({ default: m.PetsPage })))
+const HomesteadPage = lazy(() => import('./features/web/pages/HomesteadPage').then(m => ({ default: m.HomesteadPage })))
+const SolacePage = lazy(() => import('./features/web/pages/SolacePage').then(m => ({ default: m.SolacePage })))
+const UsersPage = lazy(() => import('./features/web/pages/UsersPage').then(m => ({ default: m.UsersPage })))
+const SettingsPage = lazy(() => import('./features/web/pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
+const KioskApp = lazy(() => import('./features/kiosk/KioskApp').then(m => ({ default: m.KioskApp })))
+
+function RouteFallback() {
+  return (
+    <div className="grid min-h-[14rem] place-items-center">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+    </div>
+  )
+}
+
+function Deferred({ children }: { children: React.ReactNode }) {
+  return <Suspense fallback={<RouteFallback />}>{children}</Suspense>
+}
 
 // Node-backed stacks are only routable when the household has them enabled.
 function NodeRoute({ nodeKey, children }: { nodeKey: string; children: React.ReactNode }) {
@@ -29,18 +43,18 @@ function WebRoutes({ isAdmin }: { isAdmin: boolean }) {
     <Routes>
       <Route element={<AppShell />}>
         <Route path="/" element={<Navigate to="/hub" replace />} />
-        <Route path="/hub" element={<HubPage />} />
-        <Route path="/calendar" element={<CalendarPage />} />
-        <Route path="/atlas" element={<NodeRoute nodeKey="atlas"><AtlasPage /></NodeRoute>} />
-        <Route path="/meridian" element={<NodeRoute nodeKey="meridian"><MeridianPage /></NodeRoute>} />
-        <Route path="/education" element={<NodeRoute nodeKey="education"><EducationPage /></NodeRoute>} />
-        <Route path="/books" element={<NodeRoute nodeKey="books"><BooksPage /></NodeRoute>} />
-        <Route path="/wiki" element={<NodeRoute nodeKey="home_wiki"><HomeWikiPage /></NodeRoute>} />
-        <Route path="/pets" element={<NodeRoute nodeKey="pets"><PetsPage /></NodeRoute>} />
-        <Route path="/homestead" element={<NodeRoute nodeKey="homestead"><HomesteadPage /></NodeRoute>} />
-        <Route path="/solace" element={<NodeRoute nodeKey="solace"><SolacePage /></NodeRoute>} />
-        {isAdmin && <Route path="/users" element={<UsersPage />} />}
-        {isAdmin && <Route path="/settings" element={<SettingsPage />} />}
+        <Route path="/hub" element={<Deferred><HubPage /></Deferred>} />
+        <Route path="/calendar" element={<Deferred><CalendarPage /></Deferred>} />
+        <Route path="/atlas" element={<NodeRoute nodeKey="atlas"><Deferred><AtlasPage /></Deferred></NodeRoute>} />
+        <Route path="/meridian" element={<NodeRoute nodeKey="meridian"><Deferred><MeridianPage /></Deferred></NodeRoute>} />
+        <Route path="/education" element={<NodeRoute nodeKey="education"><Deferred><EducationPage /></Deferred></NodeRoute>} />
+        <Route path="/books" element={<NodeRoute nodeKey="books"><Deferred><BooksPage /></Deferred></NodeRoute>} />
+        <Route path="/wiki" element={<NodeRoute nodeKey="home_wiki"><Deferred><HomeWikiPage /></Deferred></NodeRoute>} />
+        <Route path="/pets" element={<NodeRoute nodeKey="pets"><Deferred><PetsPage /></Deferred></NodeRoute>} />
+        <Route path="/homestead" element={<NodeRoute nodeKey="homestead"><Deferred><HomesteadPage /></Deferred></NodeRoute>} />
+        <Route path="/solace" element={<NodeRoute nodeKey="solace"><Deferred><SolacePage /></Deferred></NodeRoute>} />
+        {isAdmin && <Route path="/users" element={<Deferred><UsersPage /></Deferred>} />}
+        {isAdmin && <Route path="/settings" element={<Deferred><SettingsPage /></Deferred>} />}
         <Route path="*" element={<Navigate to="/hub" replace />} />
       </Route>
     </Routes>
@@ -70,7 +84,7 @@ function WebApp() {
 export default function App() {
   return (
     <Routes>
-      <Route path="/kiosk/*" element={<KioskApp />} />
+      <Route path="/kiosk/*" element={<Deferred><KioskApp /></Deferred>} />
       <Route
         path="/*"
         element={
