@@ -22,10 +22,13 @@ from apps.homestead.services import (
     create_maintenance,
     create_property,
     create_provider,
+    create_household_cost,
+    create_insurance_policy,
     delete_maintenance,
     update_improvement,
 )
 from apps.scheduling.models import CalendarEvent
+from apps.solace.models import Bill
 
 
 def _make_user(username, role=User.Role.ADMIN, is_child=False) -> User:
@@ -43,6 +46,14 @@ def _login(client, username, pin="1234"):
     client.post(
         reverse("auth-pin-login"),
         {"username": username, "pin": pin},
+        content_type="application/json",
+    )
+
+
+def _reauth(client, password="pass123!"):
+    client.post(
+        reverse("auth-reauth"),
+        {"password": password},
         content_type="application/json",
     )
 
@@ -96,6 +107,32 @@ class HomesteadPermissionTests(TestCase):
         task = create_maintenance(self.admin, title="Service boiler")
         resp = self.client.delete(reverse("homestead-maintenance-detail", args=[task.id]))
         self.assertEqual(resp.status_code, 204)
+
+
+class HomesteadFinancePermissionTests(TestCase):
+    """Costs and policy data need Homestead + Solace permission and password re-auth."""
+
+    def setUp(self):
+        self.admin = _make_user("finance_admin", User.Role.ADMIN)
+        self.manager = _make_user("finance_manager", User.Role.MANAGER)
+        self.url = reverse("homestead-insurance-list")
+
+    def test_unauthenticated_rejected(self):
+        self.assertIn(self.client.get(self.url).status_code, [401, 403])
+
+    def test_admin_requires_password_reauth(self):
+        _login(self.client, "finance_admin")
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+    def test_admin_can_view_after_reauth(self):
+        _login(self.client, "finance_admin")
+        _reauth(self.client)
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+
+    def test_manager_is_not_granted_solace_access_by_default(self):
+        _login(self.client, "finance_manager")
+        _reauth(self.client)
+        self.assertIn(self.client.get(self.url).status_code, [401, 403])
 
 
 # ---------------------------------------------------------------------------
@@ -262,6 +299,126 @@ class HomesteadVisibilityTests(TestCase):
     def test_child_cannot_see_private_appliance(self):
         from apps.homestead.selectors import list_appliances
         self.assertNotIn("Safe", [a.name for a in list_appliances(self.child)])
+
+    def test_private_detail_cannot_be_edited_by_another_user(self):
+        appliance = create_appliance(
+            self.owner, name="Alarm code", category="security", visibility="private"
+        )
+        _login(self.client, "other")
+        resp = self.client.patch(
+            reverse("homestead-appliance-detail", args=[appliance.id]),
+            {"name": "Changed"},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 404)
+
+
+# ---------------------------------------------------------------------------
+# Costs & cover → Solace bridge (D4)
+# ---------------------------------------------------------------------------
+
+class HomesteadFinanceSyncTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("home_finance_admin", User.Role.ADMIN)
+        _login(self.client, "home_finance_admin")
+        _reauth(self.client)
+
+    def test_insurance_policy_crud_syncs_linked_solace_bill(self):
+        renewal = _future().isoformat()
+        resp = self.client.post(
+            reverse("homestead-insurance-list"),
+            {
+                "name": "Home and contents",
+                "policy_type": "building_contents",
+                "provider": "Cover Co",
+                "policy_number": "POL-123",
+                "premium_amount": "1450.25",
+                "billing_cycle": "yearly",
+                "next_renewal_at": renewal,
+                "standard_excess": "750.00",
+                "additional_excesses": "Flood: $1,500",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201)
+        policy_id = resp.json()["id"]
+        bill = Bill.objects.get(
+            source_node="homestead",
+            source_record_type="insurance_policy",
+            source_record_id=policy_id,
+        )
+        self.assertEqual(str(bill.amount), "1450.25")
+        self.assertEqual(bill.category, "insurance")
+        self.assertEqual(bill.recurrence_rule, "FREQ=YEARLY")
+        self.assertEqual(resp.json()["solace_bill_ref"], bill.id)
+
+        resp = self.client.patch(
+            reverse("homestead-insurance-detail", args=[policy_id]),
+            {"premium_amount": "1525.00"},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        bill.refresh_from_db()
+        self.assertEqual(str(bill.amount), "1525.00")
+
+        resp = self.client.patch(
+            reverse("homestead-insurance-detail", args=[policy_id]),
+            {"is_active": False},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(resp.json()["solace_bill_ref"])
+        self.assertFalse(Bill.objects.filter(pk=bill.id).exists())
+
+        resp = self.client.patch(
+            reverse("homestead-insurance-detail", args=[policy_id]),
+            {"is_active": True},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.json()["solace_bill_ref"], bill.id)
+        self.assertTrue(Bill.objects.filter(pk=bill.id).exists())
+
+        resp = self.client.delete(reverse("homestead-insurance-detail", args=[policy_id]))
+        self.assertEqual(resp.status_code, 204)
+        self.assertFalse(Bill.objects.filter(pk=bill.id).exists())
+
+    def test_rates_water_and_gas_map_to_solace_categories(self):
+        cases = [
+            ("rates", "Council rates", "council"),
+            ("water", "Water", "utilities"),
+            ("gas", "Gas", "utilities"),
+        ]
+        for cost_type, name, expected_category in cases:
+            with self.subTest(cost_type=cost_type):
+                cost = create_household_cost(
+                    self.admin,
+                    name=name,
+                    cost_type=cost_type,
+                    amount="240.00",
+                    billing_cycle="quarterly",
+                    next_due_at=_future(),
+                )
+                bill = Bill.objects.get(
+                    source_node="homestead",
+                    source_record_type="household_cost",
+                    source_record_id=cost.id,
+                )
+                self.assertEqual(bill.category, expected_category)
+                self.assertEqual(bill.recurrence_rule, "FREQ=MONTHLY;INTERVAL=3")
+                self.assertEqual(cost.solace_bill_ref, bill.id)
+
+    def test_policy_service_creates_financial_calendar_event_only_in_solace(self):
+        policy = create_insurance_policy(
+            self.admin,
+            name="Building insurance",
+            premium_amount="900.00",
+            next_renewal_at=_future(),
+            billing_cycle="yearly",
+        )
+        bill = Bill.objects.get(pk=policy.solace_bill_ref)
+        event = CalendarEvent.objects.get(pk=bill.calendar_event_id)
+        self.assertEqual(event.source_node.key, "solace")
+        self.assertEqual(event.sensitivity, "financial")
 
 
 # ---------------------------------------------------------------------------

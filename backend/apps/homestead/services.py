@@ -12,7 +12,9 @@ from apps.core.models import get_active_household
 from apps.homestead import events
 from apps.homestead.models import (
     Appliance,
+    HouseholdCost,
     Improvement,
+    InsurancePolicy,
     MaintenanceTask,
     Property,
     ServiceProvider,
@@ -222,6 +224,92 @@ def update_improvement(acting_user: User, obj: Improvement, **data) -> Improveme
 
 def delete_improvement(acting_user: User, obj: Improvement) -> None:
     delete_event_for(obj)
+    obj.updated_by = acting_user
+    obj.save(update_fields=["updated_by", "updated_at"])
+    obj.soft_delete()
+
+
+# ---------------------------------------------------------------------------
+# Insurance policies
+# ---------------------------------------------------------------------------
+
+_POLICY_FIELDS = {
+    "name", "policy_type", "provider", "policy_number", "premium_amount",
+    "billing_cycle", "next_renewal_at", "recurrence_rule", "standard_excess",
+    "additional_excesses", "coverage_summary", "contact_phone", "portal_url",
+    "is_active", "notes", "visibility",
+}
+
+
+def create_insurance_policy(acting_user: User, **data) -> InsurancePolicy:
+    obj = InsurancePolicy(
+        household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
+    )
+    obj.save()
+    events.insurance_policy_saved(obj, acting_user.id)
+    obj.refresh_from_db()
+    return obj
+
+
+def update_insurance_policy(
+    acting_user: User, obj: InsurancePolicy, **data
+) -> InsurancePolicy:
+    for key, val in data.items():
+        if key in _POLICY_FIELDS:
+            setattr(obj, key, val)
+    obj.updated_by = acting_user
+    obj.save()
+    events.insurance_policy_saved(obj, acting_user.id)
+    obj.refresh_from_db()
+    return obj
+
+
+def delete_insurance_policy(acting_user: User, obj: InsurancePolicy) -> None:
+    events.home_finance_record_deleted(
+        "insurance_policy", obj.id, obj.household_id, acting_user.id
+    )
+    obj.updated_by = acting_user
+    obj.save(update_fields=["updated_by", "updated_at"])
+    obj.soft_delete()
+
+
+# ---------------------------------------------------------------------------
+# Household costs
+# ---------------------------------------------------------------------------
+
+_COST_FIELDS = {
+    "name", "cost_type", "provider", "account_number", "amount", "billing_cycle",
+    "next_due_at", "recurrence_rule", "is_active", "notes", "visibility",
+}
+
+
+def create_household_cost(acting_user: User, **data) -> HouseholdCost:
+    obj = HouseholdCost(
+        household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
+    )
+    obj.save()
+    events.household_cost_saved(obj, acting_user.id)
+    obj.refresh_from_db()
+    return obj
+
+
+def update_household_cost(
+    acting_user: User, obj: HouseholdCost, **data
+) -> HouseholdCost:
+    for key, val in data.items():
+        if key in _COST_FIELDS:
+            setattr(obj, key, val)
+    obj.updated_by = acting_user
+    obj.save()
+    events.household_cost_saved(obj, acting_user.id)
+    obj.refresh_from_db()
+    return obj
+
+
+def delete_household_cost(acting_user: User, obj: HouseholdCost) -> None:
+    events.home_finance_record_deleted(
+        "household_cost", obj.id, obj.household_id, acting_user.id
+    )
     obj.updated_by = acting_user
     obj.save(update_fields=["updated_by", "updated_at"])
     obj.soft_delete()

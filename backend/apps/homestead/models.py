@@ -16,6 +16,8 @@ maintenance carries an RRULE (D8). Nothing household-specific is hardcoded (D15)
 """
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.db import models
 
 from apps.core.models import AllObjectsManager, HouseholdBaseModel, HouseholdManager
@@ -300,3 +302,120 @@ class Improvement(CalendarSyncMixin, HouseholdBaseModel):
 
     def get_calendar_node_key(self) -> str:
         return "homestead"
+
+
+class InsurancePolicy(HouseholdBaseModel):
+    """Home-related cover, mirrored into Solace as a linked recurring bill.
+
+    Homestead owns the policy details and renewal workflow. Solace receives the premium,
+    provider and renewal date through the event boundary so it can include the cost in the
+    household budget without either node importing the other's models (D4).
+    """
+
+    class PolicyType(models.TextChoices):
+        BUILDING = "building", "Building"
+        CONTENTS = "contents", "Contents"
+        BUILDING_CONTENTS = "building_contents", "Building & contents"
+        LANDLORD = "landlord", "Landlord"
+        MORTGAGE_PROTECTION = "mortgage_protection", "Mortgage protection"
+        OTHER = "other", "Other"
+
+    class BillingCycle(models.TextChoices):
+        WEEKLY = "weekly", "Weekly"
+        FORTNIGHTLY = "fortnightly", "Fortnightly"
+        MONTHLY = "monthly", "Monthly"
+        QUARTERLY = "quarterly", "Quarterly"
+        HALF_YEARLY = "half_yearly", "Every 6 months"
+        YEARLY = "yearly", "Yearly"
+        OTHER = "other", "Other"
+
+    name = models.CharField(max_length=200)
+    policy_type = models.CharField(
+        max_length=30, choices=PolicyType.choices, default=PolicyType.BUILDING_CONTENTS
+    )
+    provider = models.CharField(max_length=200, blank=True, default="")
+    policy_number = models.CharField(max_length=160, blank=True, default="")
+    premium_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal("0.00")
+    )
+    billing_cycle = models.CharField(
+        max_length=20, choices=BillingCycle.choices, default=BillingCycle.YEARLY
+    )
+    next_renewal_at = models.DateTimeField(null=True, blank=True)
+    recurrence_rule = models.CharField(max_length=512, blank=True, default="")
+    standard_excess = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal("0.00")
+    )
+    additional_excesses = models.TextField(blank=True, default="")
+    coverage_summary = models.TextField(blank=True, default="")
+    contact_phone = models.CharField(max_length=50, blank=True, default="")
+    portal_url = models.CharField(max_length=500, blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    solace_bill_ref = models.PositiveBigIntegerField(null=True, blank=True, editable=False)
+    notes = models.TextField(blank=True, default="")
+    visibility = models.CharField(
+        max_length=20, choices=Visibility.choices, default=Visibility.SENSITIVE
+    )
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "insurance policy"
+        verbose_name_plural = "insurance policies"
+        ordering = ["next_renewal_at", "name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class HouseholdCost(HouseholdBaseModel):
+    """A recurring home cost/account, mirrored into a linked Solace bill."""
+
+    class CostType(models.TextChoices):
+        RATES = "rates", "Council rates"
+        WATER = "water", "Water"
+        GAS = "gas", "Gas"
+        ELECTRICITY = "electricity", "Electricity"
+        MORTGAGE = "mortgage", "Mortgage / rent"
+        BODY_CORPORATE = "body_corporate", "Body corporate / strata"
+        WASTE = "waste", "Waste"
+        INTERNET = "internet", "Internet"
+        OTHER = "other", "Other"
+
+    class BillingCycle(models.TextChoices):
+        WEEKLY = "weekly", "Weekly"
+        FORTNIGHTLY = "fortnightly", "Fortnightly"
+        MONTHLY = "monthly", "Monthly"
+        QUARTERLY = "quarterly", "Quarterly"
+        HALF_YEARLY = "half_yearly", "Every 6 months"
+        YEARLY = "yearly", "Yearly"
+        VARIABLE = "variable", "Variable / usage based"
+        OTHER = "other", "Other"
+
+    name = models.CharField(max_length=200)
+    cost_type = models.CharField(max_length=30, choices=CostType.choices, default=CostType.OTHER)
+    provider = models.CharField(max_length=200, blank=True, default="")
+    account_number = models.CharField(max_length=160, blank=True, default="")
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    billing_cycle = models.CharField(
+        max_length=20, choices=BillingCycle.choices, default=BillingCycle.QUARTERLY
+    )
+    next_due_at = models.DateTimeField(null=True, blank=True)
+    recurrence_rule = models.CharField(max_length=512, blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    solace_bill_ref = models.PositiveBigIntegerField(null=True, blank=True, editable=False)
+    notes = models.TextField(blank=True, default="")
+    visibility = models.CharField(
+        max_length=20, choices=Visibility.choices, default=Visibility.SENSITIVE
+    )
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "household cost"
+        ordering = ["next_due_at", "name"]
+
+    def __str__(self) -> str:
+        return self.name

@@ -2,7 +2,9 @@ from django.contrib import admin
 
 from apps.homestead.models import (
     Appliance,
+    HouseholdCost,
     Improvement,
+    InsurancePolicy,
     MaintenanceTask,
     Property,
     ServiceProvider,
@@ -42,3 +44,23 @@ class ImprovementAdmin(admin.ModelAdmin):
     list_display = ("title", "status", "priority", "room", "target_date")
     search_fields = ("title", "description", "notes")
     list_filter = ("status", "priority")
+
+
+@admin.register(InsurancePolicy)
+class InsurancePolicyAdmin(admin.ModelAdmin):
+    list_display = (
+        "name", "policy_type", "provider", "premium_amount",
+        "next_renewal_at", "is_active", "solace_bill_ref",
+    )
+    search_fields = ("name", "provider", "policy_number", "notes")
+    list_filter = ("policy_type", "billing_cycle", "is_active")
+
+
+@admin.register(HouseholdCost)
+class HouseholdCostAdmin(admin.ModelAdmin):
+    list_display = (
+        "name", "cost_type", "provider", "amount",
+        "next_due_at", "is_active", "solace_bill_ref",
+    )
+    search_fields = ("name", "provider", "account_number", "notes")
+    list_filter = ("cost_type", "billing_cycle", "is_active")

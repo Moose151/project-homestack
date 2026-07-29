@@ -29,6 +29,16 @@ function calendarDayHref(iso: string | null) {
   return `/calendar?date=${new Date(iso).toISOString().slice(0, 10)}`
 }
 
+// One source of truth for list-type label + glyph (used by cards and the create form).
+const LIST_TYPE_META: Record<string, { label: string; icon: string }> = {
+  todo: { label: 'To-do', icon: '✓' },
+  grocery: { label: 'Grocery', icon: '🛒' },
+  shopping: { label: 'Shopping', icon: '🛍️' },
+  checklist: { label: 'Checklist', icon: '☑️' },
+  general: { label: 'General', icon: '📋' },
+}
+const listTypeMeta = (t: string) => LIST_TYPE_META[t] ?? { label: t, icon: '•' }
+
 // ---------------------------------------------------------------------------
 // List item row
 // ---------------------------------------------------------------------------
@@ -64,21 +74,26 @@ function ItemRow({
   }
 
   return (
-    <li className="flex items-center gap-3 py-2 group">
+    <li className="flex items-center gap-2 group">
+      {/* Whole checkbox+title is one tap target (comfortable on mobile). */}
       <button
         onClick={toggle}
         disabled={busy}
-        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-          item.is_complete ? 'bg-success border-success text-white' : 'border-line-strong hover:border-success'
-        }`}
-        aria-label={item.is_complete ? 'Uncheck' : 'Check'}
+        className="flex flex-1 min-w-0 items-center gap-3 py-2.5 min-h-[44px] text-left disabled:opacity-60"
+        aria-label={item.is_complete ? 'Mark not done' : 'Mark done'}
       >
-        {item.is_complete && <span className="text-xs">✓</span>}
+        <span
+          className={`w-6 h-6 rounded-full border-2 grid place-items-center flex-shrink-0 transition-all ${
+            item.is_complete ? 'bg-success border-success text-white' : 'border-line-strong group-hover:border-success'
+          }`}
+        >
+          {item.is_complete && <span className="text-xs">✓</span>}
+        </span>
+        <span className={`flex-1 min-w-0 truncate text-sm ${item.is_complete ? 'line-through text-muted' : 'text-ink'}`}>
+          {item.quantity && <span className="text-muted-strong font-medium mr-1.5">{item.quantity}×</span>}
+          {item.title}
+        </span>
       </button>
-      <span className={`flex-1 text-sm ${item.is_complete ? 'line-through text-muted' : 'text-ink'}`}>
-        {item.quantity && <span className="text-muted-strong font-medium mr-1.5">{item.quantity}×</span>}
-        {item.title}
-      </span>
       {assignee && !item.is_complete && (
         <span className="flex items-center gap-1 text-xs text-muted-strong flex-shrink-0" title={`Assigned to ${assignee.display_name}`}>
           <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: assignee.colour || 'var(--hs-muted)' }} />
@@ -115,8 +130,10 @@ function ListCard({ list, people, defaultAssignee, onDeleted, onError }: {
   const [qty, setQty] = useState('')
   const [assignee, setAssignee] = useState<number | null>(defaultAssignee)
   const [adding, setAdding] = useState(false)
+  const [showDone, setShowDone] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const hasQty = list.list_type === 'grocery' || list.list_type === 'shopping'
+  const meta = listTypeMeta(list.list_type)
 
   const addItem = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -160,26 +177,62 @@ function ListCard({ list, people, defaultAssignee, onDeleted, onError }: {
 
   const pending = items.filter(i => !i.is_complete)
   const done = items.filter(i => i.is_complete)
+  const total = items.length
+  const pct = total ? Math.round((done.length / total) * 100) : 0
 
   return (
     <Card>
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h3 className="font-bold text-ink">{list.title}</h3>
-          <span className="text-xs text-muted capitalize">{list.list_type} · {pending.length} to do</span>
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-lg leading-none flex-shrink-0" aria-hidden>{meta.icon}</span>
+          <div className="min-w-0">
+            <h3 className="font-bold text-ink truncate">{list.title}</h3>
+            <span className="text-xs text-muted">
+              {meta.label}
+              {pending.length > 0
+                ? ` · ${pending.length} to do`
+                : total > 0 ? ' · all done ✓' : ''}
+            </span>
+          </div>
         </div>
-        <button onClick={deleteList} className="text-muted hover:text-danger transition-colors text-xl leading-none" aria-label="Delete list">×</button>
+        <button onClick={deleteList} className="text-muted hover:text-danger transition-colors text-xl leading-none flex-shrink-0" aria-label="Delete list">×</button>
       </div>
 
-      {items.length > 0 && (
+      {done.length > 0 && (
+        <div className="h-1 rounded-full bg-sunken mb-3 overflow-hidden" title={`${done.length} of ${total} done`}>
+          <div className="h-full bg-success rounded-full transition-all" style={{ width: `${pct}%` }} />
+        </div>
+      )}
+
+      {pending.length > 0 && (
         <ul className="divide-y divide-line/60">
           {pending.map(item => (
             <ItemRow key={item.id} item={item} listId={list.id} people={people} onToggle={handleToggle} onDelete={handleDelete} onError={onError} />
           ))}
-          {done.map(item => (
-            <ItemRow key={item.id} item={item} listId={list.id} people={people} onToggle={handleToggle} onDelete={handleDelete} onError={onError} />
-          ))}
         </ul>
+      )}
+
+      {done.length > 0 && (
+        <div className="mt-1">
+          <button
+            onClick={() => setShowDone(v => !v)}
+            className="flex items-center gap-1 py-1.5 text-xs font-semibold text-muted hover:text-ink transition-colors"
+          >
+            <span className="w-3 inline-block">{showDone ? '▾' : '▸'}</span>
+            {done.length} completed
+          </button>
+          {showDone && (
+            <ul className="divide-y divide-line/60">
+              {done.map(item => (
+                <ItemRow key={item.id} item={item} listId={list.id} people={people} onToggle={handleToggle} onDelete={handleDelete} onError={onError} />
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {total === 0 && (
+        <p className="text-sm text-muted py-1">Nothing here yet — add the first item below.</p>
       )}
 
       {/* Add row: stacks on mobile (input, then who + add), inline from sm up. */}
@@ -394,6 +447,14 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
 
   if (loading) return <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
 
+  // Soonest due first; undated reminders sink to the bottom.
+  const sortedReminders = [...reminders].sort((a, b) => {
+    if (!a.due_at && !b.due_at) return 0
+    if (!a.due_at) return 1
+    if (!b.due_at) return -1
+    return new Date(a.due_at).getTime() - new Date(b.due_at).getTime()
+  })
+
   return (
     <div className="flex flex-col gap-4">
       {open ? (
@@ -421,24 +482,30 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
         <EmptyState icon="⏰" title="No reminders yet" hint="Dated reminders also show on your Hub and Calendar." />
       ) : (
         <div className="flex flex-col gap-3">
-          {reminders.map(r => (
-            <Card key={r.id}>
-              <div className="flex items-start gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-ink">{r.title}</p>
-                  {r.body && <p className="text-sm text-muted mt-0.5">{r.body}</p>}
-                  {r.due_at && (
-                    <p className="text-xs text-primary mt-1">
-                      {new Date(r.due_at).toLocaleString(undefined,
-                        r.is_all_day ? { dateStyle: 'medium' } : { dateStyle: 'medium', timeStyle: 'short' })}
-                      <Link to={calendarDayHref(r.due_at)} className="ml-2 hover:underline">Open day</Link>
-                    </p>
+          {sortedReminders.map(r => {
+            const due = dueLabel(r.due_at)
+            return (
+              <Card key={r.id}>
+                <div className="flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-ink">{r.title}</p>
+                    {r.body && <p className="text-sm text-muted mt-0.5">{r.body}</p>}
+                    {r.due_at && (
+                      <p className="text-xs text-muted mt-1">
+                        {new Date(r.due_at).toLocaleString(undefined,
+                          r.is_all_day ? { dateStyle: 'medium' } : { dateStyle: 'medium', timeStyle: 'short' })}
+                        <Link to={calendarDayHref(r.due_at)} className="ml-2 text-primary hover:underline">Open day</Link>
+                      </p>
+                    )}
+                  </div>
+                  {due && (
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${due.tone}`}>{due.text}</span>
                   )}
+                  <button onClick={() => remove(r.id)} className="text-muted hover:text-danger transition-colors text-xl leading-none flex-shrink-0" aria-label="Delete">×</button>
                 </div>
-                <button onClick={() => remove(r.id)} className="text-muted hover:text-danger transition-colors text-xl leading-none flex-shrink-0" aria-label="Delete">×</button>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            )
+          })}
         </div>
       )}
     </div>
@@ -587,13 +654,7 @@ function SearchResults({ results }: { results: AtlasSearchResults }) {
 
 type Tab = 'lists' | 'notes' | 'reminders'
 
-const LIST_TYPES = [
-  { key: 'todo', label: 'To-do' },
-  { key: 'grocery', label: 'Grocery' },
-  { key: 'shopping', label: 'Shopping' },
-  { key: 'checklist', label: 'Checklist' },
-  { key: 'general', label: 'General' },
-]
+const LIST_TYPES = Object.entries(LIST_TYPE_META).map(([key, m]) => ({ key, label: m.label, icon: m.icon }))
 
 export function AtlasPage() {
   const { user } = useAuth()
@@ -710,8 +771,8 @@ export function AtlasPage() {
                   placeholder="New list name…"
                   className="flex-1 min-w-[10rem]"
                 />
-                <Select value={newType} onChange={e => setNewType(e.target.value)} className="w-32">
-                  {LIST_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+                <Select value={newType} onChange={e => setNewType(e.target.value)} className="w-36">
+                  {LIST_TYPES.map(t => <option key={t.key} value={t.key}>{t.icon} {t.label}</option>)}
                 </Select>
                 <Button type="submit" loading={creating} disabled={!newTitle.trim()}>Create</Button>
               </form>

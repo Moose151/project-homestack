@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../../../api/client'
 import type {
   Appliance, Improvement, ImprovementStatus, MaintenanceTask, Person, Property,
-  ServiceProvider, HomesteadSearchResults,
+  ServiceProvider, HomesteadSearchResults, InsurancePolicy, HouseholdCost,
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
@@ -64,6 +64,13 @@ const STATUS_TONE: Record<ImprovementStatus, BadgeTone> = {
   idea: 'neutral', planned: 'primary', in_progress: 'warning',
   on_hold: 'neutral', done: 'success', cancelled: 'neutral',
 }
+const money = (v: string | number) =>
+  Number(v || 0).toLocaleString(undefined, { style: 'currency', currency: 'AUD' })
+const POLICY_TYPES = ['building', 'contents', 'building_contents', 'landlord', 'mortgage_protection', 'other']
+const COST_TYPES = ['rates', 'water', 'gas', 'electricity', 'mortgage', 'body_corporate', 'waste', 'internet', 'other']
+const BILLING_CYCLES = [
+  'weekly', 'fortnightly', 'monthly', 'quarterly', 'half_yearly', 'yearly', 'variable', 'other',
+]
 
 // ---------------------------------------------------------------------------
 // Overview tab — the property record + emergency info + at-a-glance
@@ -215,10 +222,15 @@ function OverviewTab({ onError, onGoTab }: { onError: (m: string) => void; onGoT
         </Card>
       )}
 
-      <p className="px-1 text-xs text-muted">
-        🔗 Coming soon — bills, rates &amp; mortgage from the Finances node, and full renovations from the
-        Projects node, will surface here and link back to their records.
-      </p>
+      <Card>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-semibold text-ink">Costs &amp; cover</p>
+            <p className="text-sm text-muted">Insurance, rates and utilities are protected and synced into Solace.</p>
+          </div>
+          <Button variant="secondary" size="sm" onClick={() => onGoTab('finances')}>Open finances</Button>
+        </div>
+      </Card>
     </div>
   )
 }
@@ -331,7 +343,7 @@ function MaintenanceTab({ people, defaultAssignee, onError }: {
             </Field>
             <Field label="Notes"><Textarea rows={2} value={f.notes} onChange={e => set('notes', e.target.value)} /></Field>
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
               <Button type="submit" size="sm" loading={saving} disabled={!f.title.trim()}>Save</Button>
             </div>
           </form>
@@ -364,7 +376,7 @@ function MaintenanceTab({ people, defaultAssignee, onError }: {
                   )}
                 </div>
                 {t.next_due_at && <Button size="sm" variant="secondary" onClick={() => complete(t)}>Done</Button>}
-                <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="flex items-center gap-1 sm:opacity-0 transition-opacity sm:group-hover:opacity-100">
                   <button onClick={() => startEdit(t)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
                   <button onClick={() => remove(t)} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger" aria-label="Delete">✕</button>
                 </div>
@@ -450,7 +462,7 @@ function AppliancesTab({ onError }: { onError: (m: string) => void }) {
             </div>
             <Field label="Notes"><Textarea rows={2} value={f.notes} onChange={e => set('notes', e.target.value)} /></Field>
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
               <Button type="submit" size="sm" loading={saving} disabled={!f.name.trim()}>Save</Button>
             </div>
           </form>
@@ -482,7 +494,7 @@ function AppliancesTab({ onError }: { onError: (m: string) => void }) {
                     {a.manual_url && <a href={a.manual_url} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">📄 Manual</a>}
                     {a.notes && <p className="mt-1 whitespace-pre-wrap text-sm text-muted-strong">{a.notes}</p>}
                   </div>
-                  <div className="flex flex-shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                  <div className="flex flex-shrink-0 items-center gap-1 sm:opacity-0 transition-opacity sm:group-hover:opacity-100">
                     <button onClick={() => startEdit(a)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
                     <button onClick={() => remove(a)} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger" aria-label="Delete">✕</button>
                   </div>
@@ -573,7 +585,7 @@ function ImprovementsTab({ people, defaultAssignee, onError }: {
           <Select value={i.status} onChange={e => setStatus(i, e.target.value)} className="!min-h-[34px] !w-auto !py-1 text-xs">
             {IMPROVEMENT_STATUSES.map(s => <option key={s} value={s}>{cap(s)}</option>)}
           </Select>
-          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="flex items-center gap-1 sm:opacity-0 transition-opacity sm:group-hover:opacity-100">
             <button onClick={() => startEdit(i)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
             <button onClick={() => remove(i)} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger" aria-label="Delete">✕</button>
           </div>
@@ -611,7 +623,7 @@ function ImprovementsTab({ people, defaultAssignee, onError }: {
             </Field>
             <Field label="Details"><Textarea rows={3} value={f.description} onChange={e => set('description', e.target.value)} /></Field>
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
               <Button type="submit" size="sm" loading={saving} disabled={!f.title.trim()}>Save</Button>
             </div>
           </form>
@@ -699,7 +711,7 @@ function ContactsTab({ onError }: { onError: (m: string) => void }) {
             </div>
             <Field label="Notes"><Textarea rows={2} value={f.notes} onChange={e => set('notes', e.target.value)} /></Field>
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
               <Button type="submit" size="sm" loading={saving} disabled={!f.name.trim()}>Save</Button>
             </div>
           </form>
@@ -729,7 +741,7 @@ function ContactsTab({ onError }: { onError: (m: string) => void }) {
                   {p.last_used_at && <p className="mt-0.5 text-xs text-muted">Last used {new Date(p.last_used_at).toLocaleDateString()}</p>}
                   {p.notes && <p className="mt-1 whitespace-pre-wrap text-sm text-muted-strong">{p.notes}</p>}
                 </div>
-                <div className="flex flex-shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="flex flex-shrink-0 items-center gap-1 sm:opacity-0 transition-opacity sm:group-hover:opacity-100">
                   <button onClick={() => startEdit(p)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
                   <button onClick={() => remove(p)} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger" aria-label="Delete">✕</button>
                 </div>
@@ -738,6 +750,374 @@ function ContactsTab({ onError }: { onError: (m: string) => void }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Costs & cover — password protected, mirrored to Solace through backend events
+// ---------------------------------------------------------------------------
+
+const EMPTY_POLICY = {
+  name: '', policy_type: 'building_contents', provider: '', policy_number: '',
+  premium_amount: '', billing_cycle: 'yearly', next_renewal_at: null as string | null,
+  standard_excess: '', additional_excesses: '', coverage_summary: '',
+  contact_phone: '', portal_url: '', is_active: true, notes: '',
+}
+
+const EMPTY_COST = {
+  name: '', cost_type: 'rates', provider: '', account_number: '', amount: '',
+  billing_cycle: 'quarterly', next_due_at: null as string | null,
+  is_active: true, notes: '',
+}
+
+function FinanceTab({ onError }: { onError: (m: string) => void }) {
+  const [unlocked, setUnlocked] = useState(false)
+  const [checking, setChecking] = useState(true)
+  const [password, setPassword] = useState('')
+  const [unlocking, setUnlocking] = useState(false)
+  const [policies, setPolicies] = useState<InsurancePolicy[]>([])
+  const [costs, setCosts] = useState<HouseholdCost[]>([])
+  const [policyForm, setPolicyForm] = useState(EMPTY_POLICY)
+  const [costForm, setCostForm] = useState(EMPTY_COST)
+  const [policyEdit, setPolicyEdit] = useState<number | null>(null)
+  const [costEdit, setCostEdit] = useState<number | null>(null)
+  const [showPolicyForm, setShowPolicyForm] = useState(false)
+  const [showCostForm, setShowCostForm] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [financeQuery, setFinanceQuery] = useState('')
+
+  const load = async () => {
+    const [p, c] = await Promise.all([api.getInsurancePolicies(), api.getHouseholdCosts()])
+    setPolicies(p)
+    setCosts(c)
+    setUnlocked(true)
+  }
+
+  useEffect(() => {
+    load().catch(() => {}).finally(() => setChecking(false))
+  }, [])
+
+  const unlock = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setUnlocking(true)
+    try {
+      await api.reauth(password)
+      await load()
+      setPassword('')
+    } catch (e) {
+      onError(errMsg(e))
+    } finally {
+      setUnlocking(false)
+    }
+  }
+
+  if (checking) return <div className="h-40 rounded-2xl bg-sunken animate-pulse" />
+  if (!unlocked) {
+    return (
+      <Card>
+        <form onSubmit={unlock} className="mx-auto flex max-w-md flex-col gap-4 py-3">
+          <div>
+            <h2 className="text-lg font-bold text-ink">Unlock costs &amp; cover</h2>
+            <p className="mt-1 text-sm text-muted">
+              Policy numbers and household costs are financial data, so your password is required.
+            </p>
+          </div>
+          <Field label="Password">
+            <Input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              autoComplete="current-password"
+              autoFocus
+            />
+          </Field>
+          <Button type="submit" loading={unlocking} disabled={!password}>Unlock</Button>
+        </form>
+      </Card>
+    )
+  }
+
+  const startPolicy = (policy?: InsurancePolicy) => {
+    if (policy) {
+      setPolicyEdit(policy.id)
+      setPolicyForm({
+        name: policy.name, policy_type: policy.policy_type, provider: policy.provider,
+        policy_number: policy.policy_number, premium_amount: policy.premium_amount,
+        billing_cycle: policy.billing_cycle, next_renewal_at: policy.next_renewal_at,
+        standard_excess: policy.standard_excess, additional_excesses: policy.additional_excesses,
+        coverage_summary: policy.coverage_summary, contact_phone: policy.contact_phone,
+        portal_url: policy.portal_url, is_active: policy.is_active, notes: policy.notes,
+      })
+    } else {
+      setPolicyEdit(null)
+      setPolicyForm(EMPTY_POLICY)
+    }
+    setShowPolicyForm(true)
+  }
+
+  const savePolicy = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!policyForm.name.trim()) return
+    setSaving(true)
+    const payload = {
+      ...policyForm,
+      name: policyForm.name.trim(),
+      premium_amount: policyForm.premium_amount || '0.00',
+      standard_excess: policyForm.standard_excess || '0.00',
+    }
+    try {
+      if (policyEdit) await api.updateInsurancePolicy(policyEdit, payload)
+      else await api.createInsurancePolicy(payload)
+      setShowPolicyForm(false)
+      await load()
+    } catch (e) {
+      onError(errMsg(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const removePolicy = async (policy: InsurancePolicy) => {
+    if (!confirm(`Delete insurance policy "${policy.name}"? Its linked Solace bill will also be removed.`)) return
+    try {
+      await api.deleteInsurancePolicy(policy.id)
+      await load()
+    } catch (e) {
+      onError(errMsg(e))
+    }
+  }
+
+  const startCost = (cost?: HouseholdCost) => {
+    if (cost) {
+      setCostEdit(cost.id)
+      setCostForm({
+        name: cost.name, cost_type: cost.cost_type, provider: cost.provider,
+        account_number: cost.account_number, amount: cost.amount,
+        billing_cycle: cost.billing_cycle, next_due_at: cost.next_due_at,
+        is_active: cost.is_active, notes: cost.notes,
+      })
+    } else {
+      setCostEdit(null)
+      setCostForm(EMPTY_COST)
+    }
+    setShowCostForm(true)
+  }
+
+  const saveCost = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!costForm.name.trim()) return
+    setSaving(true)
+    const payload = {
+      ...costForm,
+      name: costForm.name.trim(),
+      amount: costForm.amount || '0.00',
+    }
+    try {
+      if (costEdit) await api.updateHouseholdCost(costEdit, payload)
+      else await api.createHouseholdCost(payload)
+      setShowCostForm(false)
+      await load()
+    } catch (e) {
+      onError(errMsg(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const removeCost = async (cost: HouseholdCost) => {
+    if (!confirm(`Delete "${cost.name}"? Its linked Solace bill will also be removed.`)) return
+    try {
+      await api.deleteHouseholdCost(cost.id)
+      await load()
+    } catch (e) {
+      onError(errMsg(e))
+    }
+  }
+
+  const setPolicy = (key: string, value: unknown) =>
+    setPolicyForm(prev => ({ ...prev, [key]: value }))
+  const setCost = (key: string, value: unknown) =>
+    setCostForm(prev => ({ ...prev, [key]: value }))
+
+  const annualised = (amount: string, cycle: string) => {
+    const factor: Record<string, number> = {
+      weekly: 52, fortnightly: 26, monthly: 12, quarterly: 4, half_yearly: 2, yearly: 1,
+    }
+    return Number(amount || 0) * (factor[cycle] ?? 0)
+  }
+  const knownAnnual = [
+    ...policies.filter(p => p.is_active).map(p => annualised(p.premium_amount, p.billing_cycle)),
+    ...costs.filter(c => c.is_active).map(c => annualised(c.amount, c.billing_cycle)),
+  ].reduce((sum, value) => sum + value, 0)
+  const q = financeQuery.trim().toLowerCase()
+  const shownPolicies = q
+    ? policies.filter(p => [p.name, p.provider, p.policy_number, p.policy_type].some(v => v.toLowerCase().includes(q)))
+    : policies
+  const shownCosts = q
+    ? costs.filter(c => [c.name, c.provider, c.account_number, c.cost_type].some(v => v.toLowerCase().includes(q)))
+    : costs
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card><p className="text-2xl font-extrabold text-ink">{policies.filter(p => p.is_active).length}</p><p className="text-sm text-muted">Active policies</p></Card>
+        <Card><p className="text-2xl font-extrabold text-ink">{costs.filter(c => c.is_active).length}</p><p className="text-sm text-muted">Active home costs</p></Card>
+        <Card>
+          <p className="text-2xl font-extrabold text-ink">{money(knownAnnual)}</p>
+          <p className="text-sm text-muted">Known annualised cost</p>
+          <p className="mt-1 text-xs text-muted">Excludes variable and custom cycles</p>
+        </Card>
+      </div>
+
+      <Input
+        value={financeQuery}
+        onChange={e => setFinanceQuery(e.target.value)}
+        placeholder="Search policies, providers, account or policy numbers…"
+      />
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-ink">Insurance</h2>
+            <p className="text-sm text-muted">Policy details, premiums, excesses and renewals.</p>
+          </div>
+          {!showPolicyForm && <Button size="sm" onClick={() => startPolicy()}>+ Policy</Button>}
+        </div>
+
+        {showPolicyForm && (
+          <Card title={policyEdit ? 'Edit insurance policy' : 'New insurance policy'}>
+            <form onSubmit={savePolicy} className="flex flex-col gap-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <Field label="Policy name"><Input value={policyForm.name} onChange={e => setPolicy('name', e.target.value)} placeholder="Home & contents" autoFocus /></Field>
+                <Field label="Policy type"><Select value={policyForm.policy_type} onChange={e => setPolicy('policy_type', e.target.value)}>{POLICY_TYPES.map(v => <option key={v} value={v}>{cap(v)}</option>)}</Select></Field>
+                <Field label="Insurer"><Input value={policyForm.provider} onChange={e => setPolicy('provider', e.target.value)} /></Field>
+                <Field label="Policy number"><Input value={policyForm.policy_number} onChange={e => setPolicy('policy_number', e.target.value)} autoComplete="off" /></Field>
+                <Field label="Premium"><Input type="number" min="0" step="0.01" value={policyForm.premium_amount} onChange={e => setPolicy('premium_amount', e.target.value)} /></Field>
+                <Field label="Billing cycle"><Select value={policyForm.billing_cycle} onChange={e => setPolicy('billing_cycle', e.target.value)}>{BILLING_CYCLES.filter(v => v !== 'variable').map(v => <option key={v} value={v}>{cap(v)}</option>)}</Select></Field>
+                <Field label="Next renewal"><DateTimeField value={policyForm.next_renewal_at} allDay onChange={({ value }) => setPolicy('next_renewal_at', value)} /></Field>
+                <Field label="Standard excess"><Input type="number" min="0" step="0.01" value={policyForm.standard_excess} onChange={e => setPolicy('standard_excess', e.target.value)} /></Field>
+                <Field label="Claims phone"><Input type="tel" value={policyForm.contact_phone} onChange={e => setPolicy('contact_phone', e.target.value)} /></Field>
+              </div>
+              <Field label="Other excesses" hint="For example: flood $1,500; accidental damage $500."><Textarea rows={2} value={policyForm.additional_excesses} onChange={e => setPolicy('additional_excesses', e.target.value)} /></Field>
+              <Field label="Coverage summary"><Textarea rows={2} value={policyForm.coverage_summary} onChange={e => setPolicy('coverage_summary', e.target.value)} /></Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Policy portal"><Input type="url" value={policyForm.portal_url} onChange={e => setPolicy('portal_url', e.target.value)} placeholder="https://…" /></Field>
+                <Field label="Notes"><Textarea rows={2} value={policyForm.notes} onChange={e => setPolicy('notes', e.target.value)} /></Field>
+              </div>
+              <label className="flex min-h-[44px] items-center gap-2 text-sm text-ink"><input type="checkbox" checked={policyForm.is_active} onChange={e => setPolicy('is_active', e.target.checked)} /> Active policy</label>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setShowPolicyForm(false)}>Cancel</Button>
+                <Button type="submit" size="sm" loading={saving} disabled={!policyForm.name.trim()}>Save &amp; sync</Button>
+              </div>
+            </form>
+          </Card>
+        )}
+
+        {shownPolicies.length === 0 ? (
+          <EmptyState icon="🛡️" title={q ? 'No matching policies' : 'No insurance policies yet'} hint={q ? 'Try a different search.' : 'Add your building, contents or combined cover so renewal and excess details are easy to find.'} />
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {shownPolicies.map(policy => {
+              const due = dueLabel(policy.next_renewal_at)
+              return (
+                <Card key={policy.id} className={!policy.is_active ? 'opacity-65' : ''}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-bold text-ink">{policy.name}</h3>
+                        <Badge>{cap(policy.policy_type)}</Badge>
+                        {!policy.is_active && <Badge tone="neutral">Inactive</Badge>}
+                        {policy.solace_bill_ref && <Badge tone="success">Synced to Solace</Badge>}
+                      </div>
+                      <p className="mt-1 text-sm text-muted">{policy.provider || 'No insurer'} · {money(policy.premium_amount)} / {cap(policy.billing_cycle).toLowerCase()}</p>
+                      {policy.policy_number && <p className="text-sm text-muted-strong">Policy {policy.policy_number}</p>}
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {due && <Badge tone={due.tone}>Renews {due.text.toLowerCase()}</Badge>}
+                        <Badge tone="neutral">Excess {money(policy.standard_excess)}</Badge>
+                      </div>
+                      {policy.additional_excesses && <p className="mt-2 whitespace-pre-wrap text-sm text-muted-strong">{policy.additional_excesses}</p>}
+                      {policy.coverage_summary && <p className="mt-2 whitespace-pre-wrap text-sm text-muted">{policy.coverage_summary}</p>}
+                      <div className="mt-2 flex flex-wrap gap-3 text-sm">
+                        {policy.contact_phone && <a href={`tel:${policy.contact_phone}`} className="text-primary hover:underline">📞 Claims</a>}
+                        {policy.portal_url && <a href={policy.portal_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">Open portal ↗</a>}
+                      </div>
+                    </div>
+                    <div className="flex flex-shrink-0 gap-1">
+                      <button onClick={() => startPolicy(policy)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
+                      <button onClick={() => removePolicy(policy)} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger" aria-label="Delete">✕</button>
+                    </div>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-ink">Rates &amp; household services</h2>
+            <p className="text-sm text-muted">Water, gas, electricity, rates and other recurring home costs.</p>
+          </div>
+          {!showCostForm && <Button size="sm" onClick={() => startCost()}>+ Cost</Button>}
+        </div>
+
+        {showCostForm && (
+          <Card title={costEdit ? 'Edit household cost' : 'New household cost'}>
+            <form onSubmit={saveCost} className="flex flex-col gap-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <Field label="Name"><Input value={costForm.name} onChange={e => setCost('name', e.target.value)} placeholder="Council rates" autoFocus /></Field>
+                <Field label="Type"><Select value={costForm.cost_type} onChange={e => setCost('cost_type', e.target.value)}>{COST_TYPES.map(v => <option key={v} value={v}>{cap(v)}</option>)}</Select></Field>
+                <Field label="Provider"><Input value={costForm.provider} onChange={e => setCost('provider', e.target.value)} /></Field>
+                <Field label="Account number"><Input value={costForm.account_number} onChange={e => setCost('account_number', e.target.value)} autoComplete="off" /></Field>
+                <Field label="Expected / latest amount"><Input type="number" min="0" step="0.01" value={costForm.amount} onChange={e => setCost('amount', e.target.value)} /></Field>
+                <Field label="Billing cycle"><Select value={costForm.billing_cycle} onChange={e => setCost('billing_cycle', e.target.value)}>{BILLING_CYCLES.map(v => <option key={v} value={v}>{cap(v)}</option>)}</Select></Field>
+                <Field label="Next due"><DateTimeField value={costForm.next_due_at} allDay onChange={({ value }) => setCost('next_due_at', value)} /></Field>
+                <Field label="Notes" className="sm:col-span-2"><Textarea rows={2} value={costForm.notes} onChange={e => setCost('notes', e.target.value)} /></Field>
+              </div>
+              <label className="flex min-h-[44px] items-center gap-2 text-sm text-ink"><input type="checkbox" checked={costForm.is_active} onChange={e => setCost('is_active', e.target.checked)} /> Active cost</label>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setShowCostForm(false)}>Cancel</Button>
+                <Button type="submit" size="sm" loading={saving} disabled={!costForm.name.trim()}>Save &amp; sync</Button>
+              </div>
+            </form>
+          </Card>
+        )}
+
+        {shownCosts.length === 0 ? (
+          <EmptyState icon="🧾" title={q ? 'No matching household costs' : 'No household costs yet'} hint={q ? 'Try a different search.' : 'Add rates, water, gas and other services. Each one is mirrored into Solace automatically.'} />
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {shownCosts.map(cost => {
+              const due = dueLabel(cost.next_due_at)
+              return (
+                <Card key={cost.id} className={!cost.is_active ? 'opacity-65' : ''}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-bold text-ink">{cost.name}</h3>
+                        <Badge>{cap(cost.cost_type)}</Badge>
+                        {!cost.is_active && <Badge tone="neutral">Inactive</Badge>}
+                        {cost.solace_bill_ref && <Badge tone="success">Synced to Solace</Badge>}
+                      </div>
+                      <p className="mt-1 text-sm text-muted">{cost.provider || cap(cost.cost_type)} · {money(cost.amount)} / {cap(cost.billing_cycle).toLowerCase()}</p>
+                      {cost.account_number && <p className="text-sm text-muted-strong">Account {cost.account_number}</p>}
+                      {due && <div className="mt-2"><Badge tone={due.tone}>Due {due.text.toLowerCase()}</Badge></div>}
+                      {cost.notes && <p className="mt-2 whitespace-pre-wrap text-sm text-muted">{cost.notes}</p>}
+                    </div>
+                    <div className="flex flex-shrink-0 gap-1">
+                      <button onClick={() => startCost(cost)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
+                      <button onClick={() => removeCost(cost)} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger" aria-label="Delete">✕</button>
+                    </div>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+        )}
+      </section>
     </div>
   )
 }
@@ -777,7 +1157,7 @@ function SearchResults({ results }: { results: HomesteadSearchResults }) {
 // Homestead page
 // ---------------------------------------------------------------------------
 
-type Tab = 'overview' | 'maintenance' | 'appliances' | 'improvements' | 'contacts'
+type Tab = 'overview' | 'maintenance' | 'appliances' | 'improvements' | 'contacts' | 'finances'
 
 export function HomesteadPage() {
   const { user } = useAuth()
@@ -824,6 +1204,7 @@ export function HomesteadPage() {
               { key: 'appliances', label: 'appliances' },
               { key: 'improvements', label: 'improvements' },
               { key: 'contacts', label: 'contacts' },
+              { key: 'finances', label: 'costs & cover' },
             ]}
             active={tab}
             onChange={setTab}
@@ -835,6 +1216,7 @@ export function HomesteadPage() {
           {tab === 'appliances' && <AppliancesTab onError={setError} />}
           {tab === 'improvements' && <ImprovementsTab people={people} defaultAssignee={defaultAssignee} onError={setError} />}
           {tab === 'contacts' && <ContactsTab onError={setError} />}
+          {tab === 'finances' && <FinanceTab onError={setError} />}
         </>
       )}
     </div>

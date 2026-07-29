@@ -1,11 +1,64 @@
 # HomeStack — Version History
 
-> **Current version: 0.10.0**
+> **Current version: 0.11.3**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
 >
 > **Rule:** bump the version and add a row here with every push to `main`.
+
+---
+
+## 0.11 — Solace node
+
+### 0.11.3 — 2026-07-28
+- **Recurring-completion deployment fix** — declared `python-dateutil` as a backend runtime
+  dependency. Pets flea/worming/treatment completion and Homestead recurring maintenance both
+  use its RRULE parser; local development had the package installed but the Docker image did not,
+  causing a `ModuleNotFoundError` when marking a recurring treatment done.
+
+### 0.11.2 — 2026-07-28
+- **Homestead costs & cover** — added protected insurance policies (provider, policy number,
+  premiums, renewal, standard/additional excesses, cover summary and claims links) and recurring
+  home costs for rates, water, gas, electricity, mortgage/rent, strata, waste and internet.
+- Active policies/costs mirror one linked Solace bill through the signal boundary (D4). Updates
+  stay idempotent; deactivation/deletion removes the mirror. Financial Calendar events remain
+  Solace-owned and retain financial sensitivity/re-auth filtering.
+- New six-tab Homestead UI with password-protected Costs & cover, annualised summary, protected
+  search, CRUD and sync status. Touchscreen edit/delete actions are now visible, form Cancel
+  buttons no longer submit accidentally, and detail queries enforce row visibility.
+
+### 0.11.1 — 2026-07-21
+- **Solace legacy importer** — added `python manage.py import_solace --sqlite-db ... --dry-run`
+  for the standalone Project Solace SQLite database at `/home/moose/Documents/project-solace`.
+  The importer is dry-runnable/idempotent, reads the legacy tables directly, and maps recurring
+  bills, subscription-category recurring bills, active income sources/paydays, planned purchases,
+  buckets and the latest payday-checklist cycle into native Solace. Recurrence becomes RRULE
+  (`recurrence_rule`); dated records use the existing Solace services so Calendar sync stays on
+  the D7 helper. Latest-cycle checklist items preserve the legacy cycle/key in notes.
+- Import tests cover dry-run rollback, idempotence, subscription mapping and latest-cycle
+  checklist import.
+
+### 0.11.0 — 2026-07-21
+- **New node: Solace** — native household finance shell (Node Spec 22, decisions **D13/D14**).
+  Backend `apps/solace`: bills, paydays, planned purchases, budget buckets/set-asides,
+  subscriptions, and payday checklist items. All rows default to `visibility="sensitive"` and
+  `sensitivity="financial"`. Dated records sync to the shared Calendar via the scheduling helper
+  only: bills, paydays, subscriptions and planned purchases carry `calendar_event_id` and RRULE
+  where relevant.
+- **Finance safety pass**: Solace permissions are admin-only by default; every Solace API route
+  requires password re-auth and audits `sensitive_node_accessed`. Solace is configured as
+  disabled by default, kiosk-off, and `requires_reauthentication=True`. Shared Calendar queries
+  now suppress sensitive/financial events unless the session is re-authed; Solace Hub widgets
+  return no content unless the session is unlocked and the user has `solace.view`.
+- Hub widgets: `solace_bills_due`, `solace_subscriptions`, `solace_planned_purchases`
+  (web-only, source-node gated).
+- Frontend: `/solace` route (node-gated) with password unlock, overview cards, search, and tabs
+  for Bills, Buckets, Subscriptions, Purchases, Paydays and Checklist. App version bumped to
+  `v0.11.0`.
+- **Still to do before full cutover:** inspect the legacy Solace data/schema, build the dry-run
+  idempotent importer in `scripts/`, richer edit/delete affordances in the UI, notifications,
+  attachments, and live household retirement of the standalone app.
 
 ---
 

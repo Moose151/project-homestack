@@ -388,7 +388,7 @@ export interface HubWidget {
   name: string
   size: string
   supports_kiosk: boolean
-  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | PetTreatment[] | PetAppointment[] | MaintenanceTask[] | Appliance[] | Improvement[] | AppNotification[]
+  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | PetTreatment[] | PetAppointment[] | MaintenanceTask[] | Appliance[] | Improvement[] | SolaceBill[] | SolaceSubscription[] | SolacePurchase[] | AppNotification[]
   meta?: { unread_count?: number }
 }
 
@@ -770,11 +770,185 @@ export interface Improvement {
   updated_at: string
 }
 
+export type InsurancePolicyType =
+  | 'building' | 'contents' | 'building_contents' | 'landlord'
+  | 'mortgage_protection' | 'other'
+export type HomeBillingCycle =
+  | 'weekly' | 'fortnightly' | 'monthly' | 'quarterly'
+  | 'half_yearly' | 'yearly' | 'variable' | 'other'
+
+export interface InsurancePolicy {
+  id: number
+  name: string
+  policy_type: InsurancePolicyType
+  provider: string
+  policy_number: string
+  premium_amount: string
+  billing_cycle: Exclude<HomeBillingCycle, 'variable'>
+  next_renewal_at: string | null
+  recurrence_rule: string
+  standard_excess: string
+  additional_excesses: string
+  coverage_summary: string
+  contact_phone: string
+  portal_url: string
+  is_active: boolean
+  solace_bill_ref: number | null
+  notes: string
+  visibility: string
+  created_at: string
+  updated_at: string
+}
+
+export type HouseholdCostType =
+  | 'rates' | 'water' | 'gas' | 'electricity' | 'mortgage'
+  | 'body_corporate' | 'waste' | 'internet' | 'other'
+
+export interface HouseholdCost {
+  id: number
+  name: string
+  cost_type: HouseholdCostType
+  provider: string
+  account_number: string
+  amount: string
+  billing_cycle: HomeBillingCycle
+  next_due_at: string | null
+  recurrence_rule: string
+  is_active: boolean
+  solace_bill_ref: number | null
+  notes: string
+  visibility: string
+  created_at: string
+  updated_at: string
+}
+
 export interface HomesteadSearchResults {
   appliances: Appliance[]
   maintenance: MaintenanceTask[]
   providers: ServiceProvider[]
   improvements: Improvement[]
+}
+
+// ---------------------------------------------------------------------------
+// Solace (finance)
+// ---------------------------------------------------------------------------
+
+export interface SolaceBill {
+  id: number
+  name: string
+  category: string
+  provider: string
+  amount: string
+  due_at: string | null
+  is_all_day: boolean
+  recurrence_rule: string
+  is_paid: boolean
+  paid_at: string | null
+  notes: string
+  is_overdue: boolean
+  source_node: string
+  source_record_type: string
+  source_record_id: number | null
+  calendar_event_id: number | null
+  visibility: string
+  sensitivity: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SolacePayday {
+  id: number
+  title: string
+  expected_amount: string
+  pay_at: string | null
+  is_all_day: boolean
+  recurrence_rule: string
+  received_at: string | null
+  notes: string
+  calendar_event_id: number | null
+  visibility: string
+  sensitivity: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SolacePurchase {
+  id: number
+  name: string
+  category: string
+  target_amount: string
+  saved_amount: string
+  remaining_amount: string
+  progress_percent: number
+  target_date: string | null
+  is_all_day: boolean
+  status: string
+  priority: string
+  notes: string
+  is_open: boolean
+  calendar_event_id: number | null
+  visibility: string
+  sensitivity: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SolaceBucket {
+  id: number
+  name: string
+  category: string
+  target_amount: string
+  current_amount: string
+  remaining_amount: string
+  progress_percent: number
+  notes: string
+  visibility: string
+  sensitivity: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SolaceSubscription {
+  id: number
+  name: string
+  provider: string
+  amount: string
+  billing_cycle: string
+  next_renewal_at: string | null
+  is_all_day: boolean
+  recurrence_rule: string
+  is_active: boolean
+  notes: string
+  calendar_event_id: number | null
+  visibility: string
+  sensitivity: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SolaceChecklistItem {
+  id: number
+  title: string
+  bucket_id: number | null
+  bill_id: number | null
+  amount_hint: string
+  position: number
+  is_complete: boolean
+  completed_at: string | null
+  notes: string
+  visibility: string
+  sensitivity: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SolaceSearchResults {
+  bills: SolaceBill[]
+  paydays: SolacePayday[]
+  purchases: SolacePurchase[]
+  buckets: SolaceBucket[]
+  subscriptions: SolaceSubscription[]
+  checklist: SolaceChecklistItem[]
 }
 
 // ---------------------------------------------------------------------------

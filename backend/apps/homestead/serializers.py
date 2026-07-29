@@ -5,7 +5,9 @@ from rest_framework import serializers
 
 from apps.homestead.models import (
     Appliance,
+    HouseholdCost,
     Improvement,
+    InsurancePolicy,
     MaintenanceTask,
     Property,
     ServiceProvider,
@@ -100,4 +102,34 @@ class ImprovementSerializer(serializers.ModelSerializer):
         ]
 
     def validate_title(self, value: str) -> str:
+        return _non_blank(value)
+
+
+class InsurancePolicySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InsurancePolicy
+        fields = [
+            "id", "name", "policy_type", "provider", "policy_number",
+            "premium_amount", "billing_cycle", "next_renewal_at", "recurrence_rule",
+            "standard_excess", "additional_excesses", "coverage_summary",
+            "contact_phone", "portal_url", "is_active", "solace_bill_ref",
+            "notes", "visibility", "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "solace_bill_ref", "created_at", "updated_at"]
+
+    def validate_name(self, value: str) -> str:
+        return _non_blank(value)
+
+
+class HouseholdCostSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HouseholdCost
+        fields = [
+            "id", "name", "cost_type", "provider", "account_number", "amount",
+            "billing_cycle", "next_due_at", "recurrence_rule", "is_active",
+            "solace_bill_ref", "notes", "visibility", "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "solace_bill_ref", "created_at", "updated_at"]
+
+    def validate_name(self, value: str) -> str:
         return _non_blank(value)

@@ -4,8 +4,12 @@ from apps.homestead.views import (
     ApplianceDetailView,
     ApplianceListView,
     HomesteadSearchView,
+    HouseholdCostDetailView,
+    HouseholdCostListView,
     ImprovementDetailView,
     ImprovementListView,
+    InsurancePolicyDetailView,
+    InsurancePolicyListView,
     MaintenanceCompleteView,
     MaintenanceDetailView,
     MaintenanceListView,
@@ -33,4 +37,10 @@ urlpatterns = [
 
     path("improvements/", ImprovementListView.as_view(), name="homestead-improvement-list"),
     path("improvements/<int:improvement_id>/", ImprovementDetailView.as_view(), name="homestead-improvement-detail"),
+
+    path("insurance/", InsurancePolicyListView.as_view(), name="homestead-insurance-list"),
+    path("insurance/<int:policy_id>/", InsurancePolicyDetailView.as_view(), name="homestead-insurance-detail"),
+
+    path("costs/", HouseholdCostListView.as_view(), name="homestead-cost-list"),
+    path("costs/<int:cost_id>/", HouseholdCostDetailView.as_view(), name="homestead-cost-detail"),
 ]

@@ -6,11 +6,13 @@ from datetime import datetime, time
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from rest_framework import status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.permissions.drf import HomeStackPermission
+from apps.accounts.services import is_reauthed
 from apps.scheduling import selectors, services
 from apps.scheduling.serializers import CalendarEventSerializer, CalendarEventWriteSerializer
 
@@ -44,6 +46,7 @@ class CalendarEventListView(APIView):
             end=_parse_dt(params.get("end")),
             node=params.get("node") or None,
             person=int(person) if person and person.isdigit() else None,
+            sensitive_unlocked=is_reauthed(request._request),
         )
         return Response(CalendarEventSerializer(events, many=True).data)
 
@@ -57,19 +60,24 @@ class CalendarEventListView(APIView):
 class CalendarEventDetailView(APIView):
     permission_classes = [_CalendarPerm]
 
-    def _get_event(self, event_id: int):
+    def _get_event(self, request: Request, event_id: int):
         from rest_framework.exceptions import NotFound
         event = selectors.get_event(event_id)
         if event is None:
             raise NotFound()
+        if (
+            not is_reauthed(request._request)
+            and (event.visibility == "sensitive" or event.sensitivity in {"financial", "health", "document", "private"})
+        ):
+            raise PermissionDenied("Password re-authentication required for sensitive events.")
         return event
 
     def get(self, request: Request, event_id: int) -> Response:
-        event = self._get_event(event_id)
+        event = self._get_event(request, event_id)
         return Response(CalendarEventSerializer(event).data)
 
     def patch(self, request: Request, event_id: int) -> Response:
-        event = self._get_event(event_id)
+        event = self._get_event(request, event_id)
         if event.is_synced:
             return Response(
                 {"detail": "Synced events can only be updated via their source record."},
@@ -81,7 +89,7 @@ class CalendarEventDetailView(APIView):
         return Response(CalendarEventSerializer(event).data)
 
     def delete(self, request: Request, event_id: int) -> Response:
-        event = self._get_event(event_id)
+        event = self._get_event(request, event_id)
         if event.is_synced:
             return Response(
                 {"detail": "Synced events can only be deleted via their source record."},

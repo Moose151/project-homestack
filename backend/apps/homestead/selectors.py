@@ -9,7 +9,9 @@ from django.utils import timezone
 
 from apps.homestead.models import (
     Appliance,
+    HouseholdCost,
     Improvement,
+    InsurancePolicy,
     MaintenanceTask,
     Property,
     ServiceProvider,
@@ -41,8 +43,11 @@ def list_properties(user=None):
     return list(qs)
 
 
-def get_property(pk: int) -> Property | None:
-    return Property.objects.filter(pk=pk).first()
+def get_property(pk: int, user=None) -> Property | None:
+    qs = Property.objects.filter(pk=pk)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return qs.first()
 
 
 # ---------------------------------------------------------------------------
@@ -56,8 +61,11 @@ def list_providers(user=None):
     return list(qs)
 
 
-def get_provider(pk: int) -> ServiceProvider | None:
-    return ServiceProvider.objects.filter(pk=pk).first()
+def get_provider(pk: int, user=None) -> ServiceProvider | None:
+    qs = ServiceProvider.objects.filter(pk=pk)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return qs.first()
 
 
 # ---------------------------------------------------------------------------
@@ -78,8 +86,11 @@ def list_appliances(user=None, *, expiring_only: bool = False, within_days: int 
     return list(qs)
 
 
-def get_appliance(pk: int) -> Appliance | None:
-    return Appliance.objects.filter(pk=pk).first()
+def get_appliance(pk: int, user=None) -> Appliance | None:
+    qs = Appliance.objects.filter(pk=pk)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return qs.first()
 
 
 # ---------------------------------------------------------------------------
@@ -99,8 +110,11 @@ def list_maintenance(user=None, *, due_only: bool = False, limit: int | None = N
     return list(qs)
 
 
-def get_maintenance(pk: int) -> MaintenanceTask | None:
-    return MaintenanceTask.objects.filter(pk=pk).first()
+def get_maintenance(pk: int, user=None) -> MaintenanceTask | None:
+    qs = MaintenanceTask.objects.filter(pk=pk)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return qs.first()
 
 
 # ---------------------------------------------------------------------------
@@ -118,8 +132,47 @@ def list_improvements(user=None, *, open_only: bool = False, limit: int | None =
     return list(qs)
 
 
-def get_improvement(pk: int) -> Improvement | None:
-    return Improvement.objects.filter(pk=pk).first()
+def get_improvement(pk: int, user=None) -> Improvement | None:
+    qs = Improvement.objects.filter(pk=pk)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return qs.first()
+
+
+# ---------------------------------------------------------------------------
+# Protected home finances
+# ---------------------------------------------------------------------------
+
+def list_insurance_policies(user=None, *, active_only: bool = False):
+    qs = InsurancePolicy.objects.order_by("next_renewal_at", "name")
+    if active_only:
+        qs = qs.filter(is_active=True)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return list(qs)
+
+
+def get_insurance_policy(pk: int, user=None) -> InsurancePolicy | None:
+    qs = InsurancePolicy.objects.filter(pk=pk)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return qs.first()
+
+
+def list_household_costs(user=None, *, active_only: bool = False):
+    qs = HouseholdCost.objects.order_by("next_due_at", "name")
+    if active_only:
+        qs = qs.filter(is_active=True)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return list(qs)
+
+
+def get_household_cost(pk: int, user=None) -> HouseholdCost | None:
+    qs = HouseholdCost.objects.filter(pk=pk)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return qs.first()
 
 
 # ---------------------------------------------------------------------------

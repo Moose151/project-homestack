@@ -66,6 +66,7 @@ LOCAL_APPS = [
     "apps.home_wiki",  # Milestone 3 — household knowledge base (Node Spec 12)
     "apps.pets",  # Milestone 3 — pet profiles, treatments, vet appointments (Node Spec 13)
     "apps.homestead",  # Home/property hub — maintenance, appliances, providers, improvements (Node Spec 25)
+    "apps.solace",  # Milestone 5 — native finance node (sensitive, re-auth required)
 ]
 
 INSTALLED_APPS = [

@@ -1,10 +1,11 @@
 from django.apps import AppConfig
 
 
-class HomesteadConfig(AppConfig):
+class SolaceConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "apps.homestead"
+    name = "apps.solace"
+    verbose_name = "Solace"
 
     def ready(self) -> None:
-        from apps.homestead import handlers
+        from apps.solace import handlers
         handlers.connect()

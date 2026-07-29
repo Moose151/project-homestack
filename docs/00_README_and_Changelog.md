@@ -148,11 +148,11 @@ node (spec `25_Node_Homestead.md`) rather than the coldly-named planned **Assets
 absorbs Assets' *home* scope — property record, home maintenance, appliances, warranties,
 documents — plus house key-dates, a service-provider directory, and a lightweight improvements
 list. The planned Projects node still owns heavyweight renovations; Homestead's Improvement carries
-a dormant `project_ref` so an improvement can later link to a full Project. Money is deliberately
-absent — it comes from **Solace** later. Homestead is designed as an **aggregating hub**: once
-Solace and Projects exist it surfaces their house-relevant slices (bills/rates; house projects) and
-deep-links back, always via the events bus and read-time aggregation, never by importing another
-node's models (D4). A future Assets node may still cover non-home assets (vehicles, tools) or be
+a dormant `project_ref` so an improvement can later link to a full Project. Homestead owns
+home-specific policy/account context (insurance, rates, water, gas and other services), while
+**Solace remains the financial calendar/budget mirror**. These protected Homestead records sync
+linked Solace bills through events, never cross-node model imports (D4); financial Calendar rows
+remain Solace-owned. A future Assets node may still cover non-home assets (vehicles, tools) or be
 retired. Reason: matches how the owner thinks about "the house", keeps one daily surface, and
 respects D4/D15.
 
@@ -162,6 +162,7 @@ respects D4/D15.
 
 | Date | Change |
 |------|--------|
+| 2026-07-28 | Updated **D21**: Homestead now owns protected home insurance/account context and mirrors active costs to linked Solace bills through events (v0.11.2). |
 | 2026-07-21 | Added **D21** (Homestead is the home/property hub; folds the *home* scope of the planned Assets node). Added node spec `25_Node_Homestead.md`. Shipped the Homestead node end-to-end (v0.10.0). |
 | 2026-06-25 | Added **D19** (Meridian = full functional port of the standalone app) and **D20** (achievements/badges as a shared cross-node system). Rewrote `15_Node_Meridian.md` and `MILESTONE_2_Checklist.md` to the full-port scope after an audit found only a thin subset had been built. |
 | 2026-06-23 | Consolidated all prior docs into this set. Baked in decisions D1–D18. Dropped multi-household behaviour (kept tenant column). Switched to session auth, signal-based decoupling, Postgres FTS. Reordered roadmap for solo dev. Set Meridian/Solace to native rebuild-shell/reuse-logic/migrate-data, no iframe layer. |

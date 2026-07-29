@@ -11,7 +11,7 @@ from django.utils import timezone
 from apps.hub.models import HouseholdHubWidget
 
 
-def get_hub_widgets(user, *, kiosk_mode: bool = False) -> list[dict]:
+def get_hub_widgets(user, *, kiosk_mode: bool = False, sensitive_unlocked: bool = False) -> list[dict]:
     """Return assembled hub widget content for the authenticated user.
 
     kiosk_mode=True restricts to widgets where supports_kiosk=True.
@@ -99,6 +99,9 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False) -> list[dict]:
 
         elif key.startswith("homestead_"):
             content = _homestead_widget_content(key, user)
+
+        elif key.startswith("solace_"):
+            content = _solace_widget_content(key, user) if sensitive_unlocked else []
 
         widgets.append({
             "key": key,
@@ -232,6 +235,41 @@ def _homestead_widget_content(key: str, user) -> list:
     if key == "homestead_improvements":
         improvements = h.list_improvements(user, open_only=True, limit=8)
         return ImprovementSerializer(improvements, many=True).data
+
+    return []
+
+
+def _solace_widget_content(key: str, user) -> list:
+    """Assemble content for Solace finance widgets.
+
+    Callers must pass this only after password re-auth. This function still checks the
+    central resolver so finance widgets never appear for unauthorised roles.
+    """
+    from apps.permissions.resolver import resolve_permission
+    from apps.solace import selectors as s
+    from apps.solace.serializers import (
+        BillSerializer,
+        PlannedPurchaseSerializer,
+        SubscriptionSerializer,
+    )
+
+    if not resolve_permission(user, "view", "solace"):
+        return []
+
+    if key == "solace_bills_due":
+        return BillSerializer(
+            s.list_bills(user, upcoming_only=True, unpaid_only=True, limit=8), many=True
+        ).data
+
+    if key == "solace_subscriptions":
+        return SubscriptionSerializer(
+            s.list_subscriptions(user, active_only=True, limit=8), many=True
+        ).data
+
+    if key == "solace_planned_purchases":
+        return PlannedPurchaseSerializer(
+            s.list_purchases(user, open_only=True, limit=8), many=True
+        ).data
 
     return []
 

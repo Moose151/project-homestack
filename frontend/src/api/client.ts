@@ -12,6 +12,9 @@ import type {
   WikiCategory, WikiPage,
   Pet, PetTreatment, PetAppointment,
   Property, ServiceProvider, Appliance, MaintenanceTask, Improvement, HomesteadSearchResults,
+  InsurancePolicy, HouseholdCost,
+  SolaceBill, SolacePayday, SolacePurchase, SolaceBucket, SolaceSubscription,
+  SolaceChecklistItem, SolaceSearchResults,
   NodeInfo, Household,
   Book, BookClub, ClubBookEntry, ClubQueueItem, PersonalBookEntry, BookRating, BooksUser, BookShelfStatus,
 } from './types'
@@ -97,6 +100,53 @@ type ImprovementWrite = Partial<{
   assigned_to_person_id: number | null; title: string; description: string; status: string
   priority: string; room: string; target_date: string | null; is_all_day: boolean
   project_ref: number | null; notes: string; visibility: string
+}>
+
+type InsurancePolicyWrite = Partial<{
+  name: string; policy_type: string; provider: string; policy_number: string
+  premium_amount: string; billing_cycle: string; next_renewal_at: string | null
+  recurrence_rule: string; standard_excess: string; additional_excesses: string
+  coverage_summary: string; contact_phone: string; portal_url: string
+  is_active: boolean; notes: string; visibility: string
+}>
+
+type HouseholdCostWrite = Partial<{
+  name: string; cost_type: string; provider: string; account_number: string
+  amount: string; billing_cycle: string; next_due_at: string | null
+  recurrence_rule: string; is_active: boolean; notes: string; visibility: string
+}>
+
+type SolaceBillWrite = Partial<{
+  name: string; category: string; provider: string; amount: string
+  due_at: string | null; is_all_day: boolean; recurrence_rule: string
+  is_paid: boolean; paid_at: string | null; notes: string; visibility: string; sensitivity: string
+}>
+
+type SolacePaydayWrite = Partial<{
+  title: string; expected_amount: string; pay_at: string | null; is_all_day: boolean
+  recurrence_rule: string; received_at: string | null; notes: string; visibility: string; sensitivity: string
+}>
+
+type SolacePurchaseWrite = Partial<{
+  name: string; category: string; target_amount: string; saved_amount: string
+  target_date: string | null; is_all_day: boolean; status: string; priority: string
+  notes: string; visibility: string; sensitivity: string
+}>
+
+type SolaceBucketWrite = Partial<{
+  name: string; category: string; target_amount: string; current_amount: string
+  notes: string; visibility: string; sensitivity: string
+}>
+
+type SolaceSubscriptionWrite = Partial<{
+  name: string; provider: string; amount: string; billing_cycle: string
+  next_renewal_at: string | null; is_all_day: boolean; recurrence_rule: string
+  is_active: boolean; notes: string; visibility: string; sensitivity: string
+}>
+
+type SolaceChecklistWrite = Partial<{
+  title: string; bucket_id: number | null; bill_id: number | null; amount_hint: string
+  position: number; is_complete: boolean; notes: string; visibility: string; sensitivity: string
 }>
 
 type InstitutionWrite = Partial<{
@@ -651,6 +701,66 @@ export const api = {
     _fetch(`/homestead/improvements/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteImprovement: (id: number): Promise<void> =>
     _fetch(`/homestead/improvements/${id}/`, { method: 'DELETE' }),
+
+  getInsurancePolicies: (active = false): Promise<InsurancePolicy[]> =>
+    _fetch(`/homestead/insurance/${active ? '?active=1' : ''}`),
+  createInsurancePolicy: (data: InsurancePolicyWrite): Promise<InsurancePolicy> =>
+    _fetch('/homestead/insurance/', { method: 'POST', body: JSON.stringify(data) }),
+  updateInsurancePolicy: (id: number, data: InsurancePolicyWrite): Promise<InsurancePolicy> =>
+    _fetch(`/homestead/insurance/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteInsurancePolicy: (id: number): Promise<void> =>
+    _fetch(`/homestead/insurance/${id}/`, { method: 'DELETE' }),
+
+  getHouseholdCosts: (active = false): Promise<HouseholdCost[]> =>
+    _fetch(`/homestead/costs/${active ? '?active=1' : ''}`),
+  createHouseholdCost: (data: HouseholdCostWrite): Promise<HouseholdCost> =>
+    _fetch('/homestead/costs/', { method: 'POST', body: JSON.stringify(data) }),
+  updateHouseholdCost: (id: number, data: HouseholdCostWrite): Promise<HouseholdCost> =>
+    _fetch(`/homestead/costs/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteHouseholdCost: (id: number): Promise<void> =>
+    _fetch(`/homestead/costs/${id}/`, { method: 'DELETE' }),
+
+  // --- Solace (finance) ---
+  searchSolace: (q: string): Promise<SolaceSearchResults> =>
+    _fetch(`/solace/search/?q=${encodeURIComponent(q)}`),
+  getSolaceBills: (params?: { upcoming?: boolean; unpaid?: boolean }): Promise<SolaceBill[]> => {
+    const q = new URLSearchParams()
+    if (params?.upcoming) q.set('upcoming', '1')
+    if (params?.unpaid) q.set('unpaid', '1')
+    const qs = q.toString()
+    return _fetch(`/solace/bills/${qs ? `?${qs}` : ''}`)
+  },
+  createSolaceBill: (data: SolaceBillWrite): Promise<SolaceBill> =>
+    _fetch('/solace/bills/', { method: 'POST', body: JSON.stringify(data) }),
+  updateSolaceBill: (id: number, data: SolaceBillWrite): Promise<SolaceBill> =>
+    _fetch(`/solace/bills/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  markSolaceBillPaid: (id: number): Promise<SolaceBill> =>
+    _fetch(`/solace/bills/${id}/paid/`, { method: 'POST' }),
+  deleteSolaceBill: (id: number): Promise<void> =>
+    _fetch(`/solace/bills/${id}/`, { method: 'DELETE' }),
+  getSolacePaydays: (upcoming = false): Promise<SolacePayday[]> =>
+    _fetch(`/solace/paydays/${upcoming ? '?upcoming=1' : ''}`),
+  createSolacePayday: (data: SolacePaydayWrite): Promise<SolacePayday> =>
+    _fetch('/solace/paydays/', { method: 'POST', body: JSON.stringify(data) }),
+  getSolacePurchases: (open = false): Promise<SolacePurchase[]> =>
+    _fetch(`/solace/purchases/${open ? '?open=1' : ''}`),
+  createSolacePurchase: (data: SolacePurchaseWrite): Promise<SolacePurchase> =>
+    _fetch('/solace/purchases/', { method: 'POST', body: JSON.stringify(data) }),
+  getSolaceBuckets: (): Promise<SolaceBucket[]> => _fetch('/solace/buckets/'),
+  createSolaceBucket: (data: SolaceBucketWrite): Promise<SolaceBucket> =>
+    _fetch('/solace/buckets/', { method: 'POST', body: JSON.stringify(data) }),
+  updateSolaceBucket: (id: number, data: SolaceBucketWrite): Promise<SolaceBucket> =>
+    _fetch(`/solace/buckets/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  getSolaceSubscriptions: (active = false): Promise<SolaceSubscription[]> =>
+    _fetch(`/solace/subscriptions/${active ? '?active=1' : ''}`),
+  createSolaceSubscription: (data: SolaceSubscriptionWrite): Promise<SolaceSubscription> =>
+    _fetch('/solace/subscriptions/', { method: 'POST', body: JSON.stringify(data) }),
+  getSolaceChecklist: (incomplete = false): Promise<SolaceChecklistItem[]> =>
+    _fetch(`/solace/checklist/${incomplete ? '?incomplete=1' : ''}`),
+  createSolaceChecklistItem: (data: SolaceChecklistWrite): Promise<SolaceChecklistItem> =>
+    _fetch('/solace/checklist/', { method: 'POST', body: JSON.stringify(data) }),
+  updateSolaceChecklistItem: (id: number, data: SolaceChecklistWrite): Promise<SolaceChecklistItem> =>
+    _fetch(`/solace/checklist/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   // --- Books ---
   getBooksUsers: (): Promise<BooksUser[]> => _fetch('/books/users/'),

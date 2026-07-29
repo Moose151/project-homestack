@@ -21,6 +21,7 @@ export const STACKS: StackDef[] = [
   { key: 'home_wiki', label: 'Home Wiki', route: '/wiki',      icon: '📖', colour: '#0ca678', isNode: true },
   { key: 'pets',      label: 'Pets',      route: '/pets',      icon: '🐾', colour: '#d9642c', isNode: true },
   { key: 'homestead', label: 'Homestead', route: '/homestead', icon: '🏠', colour: '#b0563c', isNode: true },
+  { key: 'solace',    label: 'Solace',    route: '/solace',    icon: '💸', colour: '#8f4e38', isNode: true },
 ]
 
 export const STACK_BY_KEY: Record<string, StackDef> = Object.fromEntries(STACKS.map(s => [s.key, s]))

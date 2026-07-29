@@ -1,0 +1,35 @@
+from django.urls import path
+
+from apps.solace.views import (
+    BillDetailView,
+    BillListView,
+    BillPaidView,
+    BucketDetailView,
+    BucketListView,
+    ChecklistDetailView,
+    ChecklistListView,
+    PaydayDetailView,
+    PaydayListView,
+    PurchaseDetailView,
+    PurchaseListView,
+    SolaceSearchView,
+    SubscriptionDetailView,
+    SubscriptionListView,
+)
+
+urlpatterns = [
+    path("search/", SolaceSearchView.as_view(), name="solace-search"),
+    path("bills/", BillListView.as_view(), name="solace-bill-list"),
+    path("bills/<int:bill_id>/", BillDetailView.as_view(), name="solace-bill-detail"),
+    path("bills/<int:bill_id>/paid/", BillPaidView.as_view(), name="solace-bill-paid"),
+    path("paydays/", PaydayListView.as_view(), name="solace-payday-list"),
+    path("paydays/<int:payday_id>/", PaydayDetailView.as_view(), name="solace-payday-detail"),
+    path("purchases/", PurchaseListView.as_view(), name="solace-purchase-list"),
+    path("purchases/<int:purchase_id>/", PurchaseDetailView.as_view(), name="solace-purchase-detail"),
+    path("buckets/", BucketListView.as_view(), name="solace-bucket-list"),
+    path("buckets/<int:bucket_id>/", BucketDetailView.as_view(), name="solace-bucket-detail"),
+    path("subscriptions/", SubscriptionListView.as_view(), name="solace-subscription-list"),
+    path("subscriptions/<int:subscription_id>/", SubscriptionDetailView.as_view(), name="solace-subscription-detail"),
+    path("checklist/", ChecklistListView.as_view(), name="solace-checklist-list"),
+    path("checklist/<int:item_id>/", ChecklistDetailView.as_view(), name="solace-checklist-detail"),
+]

@@ -13,6 +13,7 @@ def list_events(
     node: str | None = None,
     person: int | None = None,
     upcoming_only: bool = False,
+    sensitive_unlocked: bool = False,
 ) -> list[CalendarEvent]:
     """Events the user may see, optionally windowed and filtered (D10).
 
@@ -33,6 +34,9 @@ def list_events(
         qs = qs.filter(assigned_to_person_id=person)
     if user is not None:
         qs = apply_visibility(qs, user)
+    if not sensitive_unlocked:
+        qs = qs.exclude(sensitivity__in=["financial", "health", "document", "private"])
+        qs = qs.exclude(visibility="sensitive")
     return list(qs)
 
 

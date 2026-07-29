@@ -13,6 +13,7 @@ from apps.hub.serializers import (
     UserWidgetWriteSerializer,
 )
 from apps.hub.services import HubError, get_hub_widgets, set_household_widget, set_user_widget
+from apps.accounts.services import is_reauthed
 from apps.permissions.drf import HomeStackPermission
 
 _HubPerm = HomeStackPermission.for_resource("hub")
@@ -22,14 +23,20 @@ class HubView(APIView):
     permission_classes = [_HubPerm]
 
     def get(self, request: Request) -> Response:
-        return Response({"widgets": get_hub_widgets(request.user, kiosk_mode=False)})
+        return Response({
+            "widgets": get_hub_widgets(
+                request.user,
+                kiosk_mode=False,
+                sensitive_unlocked=is_reauthed(request._request),
+            )
+        })
 
 
 class KioskHubView(APIView):
     permission_classes = [_HubPerm]
 
     def get(self, request: Request) -> Response:
-        return Response({"widgets": get_hub_widgets(request.user, kiosk_mode=True)})
+        return Response({"widgets": get_hub_widgets(request.user, kiosk_mode=True, sensitive_unlocked=False)})
 
 
 class HubWidgetConfigView(APIView):
