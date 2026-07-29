@@ -1,18 +1,26 @@
 """solace selectors — read-only finance queries (D9)."""
 from __future__ import annotations
 
+from datetime import date
+from decimal import Decimal, ROUND_HALF_UP
+
 from django.db import connection
-from django.db.models import Max, Q
+from django.db.models import Max, Prefetch, Q
 from django.utils import timezone
 
 from apps.permissions.visibility import apply_visibility
 from apps.solace.models import (
+    AccountBalanceSnapshot,
     Bill,
     BillOccurrence,
     BudgetBucket,
+    CycleCloseout,
+    FinanceCategory,
     Payday,
     PaydayChecklistItem,
+    PaydayChecklistPreference,
     PlannedPurchase,
+    SolaceSettings,
     Subscription,
 )
 
@@ -35,7 +43,13 @@ def list_bills(
     active_only: bool = False,
     limit: int | None = None,
 ):
-    qs = Bill.objects.order_by("due_at", "name")
+    qs = Bill.objects.prefetch_related(
+        Prefetch(
+            "occurrences",
+            queryset=BillOccurrence.objects.filter(status=BillOccurrence.Status.UPCOMING).order_by("due_at"),
+            to_attr="upcoming_occurrences",
+        )
+    ).order_by("due_at", "name")
     if upcoming_only:
         qs = qs.filter(due_at__isnull=False)
     if unpaid_only:
@@ -145,13 +159,20 @@ def list_checklist_items(
     *,
     incomplete_only: bool = False,
     latest_cycle_only: bool = False,
+    cycle_start=None,
     limit: int | None = None,
 ):
     qs = PaydayChecklistItem.objects.select_related("bucket", "bill").order_by(
         "-cycle_start", "is_complete", "position", "title"
     )
+    hidden_source_keys = PaydayChecklistPreference.objects.filter(
+        is_hidden=True
+    ).values_list("source_key", flat=True)
+    qs = qs.exclude(source_key__in=hidden_source_keys)
     if incomplete_only:
         qs = qs.filter(is_complete=False)
+    if cycle_start is not None:
+        qs = qs.filter(Q(cycle_start__isnull=True) | Q(cycle_start=cycle_start))
     if latest_cycle_only:
         latest_cycle = qs.aggregate(value=Max("cycle_start"))["value"]
         if latest_cycle:
@@ -167,14 +188,124 @@ def get_checklist_item(pk: int) -> PaydayChecklistItem | None:
     return PaydayChecklistItem.objects.filter(pk=pk).first()
 
 
+def get_settings() -> SolaceSettings | None:
+    return SolaceSettings.objects.first()
+
+
+def list_categories(user=None, *, active_only: bool = False, category_type: str = ""):
+    qs = FinanceCategory.objects.order_by("position", "name")
+    if active_only:
+        qs = qs.filter(is_active=True)
+    if category_type:
+        qs = qs.filter(category_type__in=(category_type, FinanceCategory.CategoryType.BOTH))
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return list(qs)
+
+
+def get_category(pk: int) -> FinanceCategory | None:
+    return FinanceCategory.objects.filter(pk=pk).first()
+
+
+def list_balance_snapshots(user=None, *, limit: int | None = None):
+    qs = AccountBalanceSnapshot.objects.order_by("-snapshot_date", "-id")
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    if limit is not None:
+        qs = qs[:limit]
+    return list(qs)
+
+
+def get_balance_snapshot(pk: int) -> AccountBalanceSnapshot | None:
+    return AccountBalanceSnapshot.objects.filter(pk=pk).first()
+
+
+def get_latest_balance(user=None) -> AccountBalanceSnapshot | None:
+    rows = list_balance_snapshots(user, limit=1)
+    return rows[0] if rows else None
+
+
+def list_checklist_preferences(user=None, *, hidden_only: bool = False):
+    qs = PaydayChecklistPreference.objects.order_by("label")
+    if hidden_only:
+        qs = qs.filter(is_hidden=True)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return list(qs)
+
+
+def get_cycle_closeout(cycle_start: date) -> CycleCloseout | None:
+    return CycleCloseout.objects.filter(cycle_start=cycle_start).first()
+
+
 def get_pay_cycle_plan(user, *, as_of=None) -> dict:
     from apps.solace.budget_engine import build_pay_cycle_plan
+    from apps.solace.bill_schedule import fortnightly_cost
 
-    return build_pay_cycle_plan(
+    settings_obj = get_settings()
+    plan = build_pay_cycle_plan(
         list_paydays(user, active_only=True),
         list_buckets(user, active_only=True),
         as_of=as_of,
+        cycle_anchor=settings_obj.cycle_anchor_date if settings_obj else None,
     )
+    cycle_start = date.fromisoformat(plan["cycle_start"])
+    penny = Decimal("0.01")
+    recurring_average = sum(
+        (
+            fortnightly_cost(bill)
+            for bill in list_bills(user, active_only=True)
+            if bill.include_in_set_aside
+        ),
+        Decimal("0.00"),
+    )
+    purchase_average = Decimal("0.00")
+    for purchase in list_purchases(user, open_only=True):
+        remaining = max(
+            Decimal(purchase.target_amount) - Decimal(purchase.saved_amount),
+            Decimal("0.00"),
+        )
+        target = (
+            timezone.localdate(purchase.target_date)
+            if purchase.target_date
+            else cycle_start
+        )
+        periods = max(1, ((target - cycle_start).days // 14) + 1)
+        purchase_average += remaining / Decimal(periods)
+    purchase_average = purchase_average.quantize(penny, rounding=ROUND_HALF_UP)
+    buffer_amount = (
+        Decimal(settings_obj.default_buffer_amount)
+        if settings_obj else Decimal("0.00")
+    )
+    required = (recurring_average + purchase_average + buffer_amount).quantize(
+        penny,
+        rounding=ROUND_HALF_UP,
+    )
+    bills_bucket_total = sum(
+        (
+            Decimal(row["amount"])
+            for row in plan["buckets"]
+            if (
+                "bill" in row["category"].casefold()
+                or "planned purchase" in row["category"].casefold()
+            )
+        ),
+        Decimal("0.00"),
+    )
+    shortfall = max(required - bills_bucket_total, Decimal("0.00")).quantize(
+        penny,
+        rounding=ROUND_HALF_UP,
+    )
+    plan["set_aside"] = {
+        "recurring_bills": f"{recurring_average:.2f}",
+        "planned_purchases": f"{purchase_average:.2f}",
+        "buffer": f"{buffer_amount:.2f}",
+        "required_total": f"{required:.2f}",
+        "bills_bucket_total": f"{bills_bucket_total:.2f}",
+        "shortfall": f"{shortfall:.2f}",
+        "is_covered": shortfall == 0,
+    }
+    return plan
 
 
 def search_solace(user, query: str) -> dict:

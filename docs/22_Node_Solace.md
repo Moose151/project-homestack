@@ -40,6 +40,11 @@ payday checklist, calendar/list views, categories, authentication, backups.
 - Recurring bills materialise independent due-date occurrences. Each occurrence can be paid,
   restored or skipped without changing the recurrence definition; the Solace Schedule combines
   monthly bill occurrences and expected income in calendar/list views.
+- Full standalone-parity management: custom categories, account-balance projections, finance
+  health checks, current/next cycle closeout, required set-aside/shortfall reporting, hidden
+  checklist preferences and complete edit/delete workflows.
+- Readable CSV/XLSX exports, reviewed ad-hoc CSV/XLSX bill import and an expanded idempotent
+  standalone SQLite importer.
 
 ## 5. Permissions (strong)
 
@@ -53,7 +58,8 @@ Widgets (permission-controlled, never for children/unauthorised): bills due · p
 planned-purchase reminder · subscription renewal · set-aside summary. Calendar (via helper):
 bills due, paydays, subscription renewals, planned-purchase dates, savings milestones — hidden
 from unauthorised users. Notifications to authorised users: bill due/overdue · payday ·
-subscription renewal · planned purchase approaching.
+subscription renewal · planned purchase approaching. Run the idempotent reminder command daily:
+`docker exec homestack-backend python manage.py solace_run_scheduled`.
 
 ## 7. Events (signals)
 
@@ -83,16 +89,21 @@ and a short timeout are required.
 `solace_bills` (`recurrence_rule`, `calendar_event_id`), `solace_bill_occurrences`,
 `solace_paydays`,
 `solace_planned_purchases`, `solace_buckets`, `solace_subscriptions`,
-`solace_payday_checklist_items`. Inherit `HouseholdBaseModel`; all `sensitivity = financial`.
+`solace_payday_checklist_items`, `solace_settings`, `solace_finance_categories`,
+`solace_account_balance_snapshots`, `solace_payday_checklist_preferences`,
+`solace_cycle_closeouts`. Inherit `HouseholdBaseModel`; all financial records use
+`sensitivity = financial`.
 Bucket records also hold their pay-cycle allocation method/value, rounding, active/order and
 remaining-pay cap. Generated checklist rows carry a cycle date and stable source key so refreshes
 are idempotent.
 
 ## 11. Scope & completion
 
-Initial (native): bills · paydays · planned purchases · buckets/set-asides · subscriptions ·
-payday checklist · permission-controlled Hub/Calendar · re-auth · audit · imported data.
+Native: bills and occurrence history · paydays · planned purchases · buckets/set-asides ·
+subscriptions · payday checklist/preferences · closeout and balance projection · categories and
+reports · settings and health checks · CSV/XLSX tools · permission-controlled
+Hub/Calendar/notifications · re-auth · audit · imported data.
 Complete when only authorised users access Solace through HomeStack, re-auth works, finance
 never leaks into unauthorised views, and the standalone app is retired at home. Future:
-richer subscriptions, travel/grocery/asset-purchase budget integration, financial documents,
-export/reporting, encrypted finance fields.
+travel/grocery/asset-purchase budget integration, financial documents and encrypted finance
+fields.

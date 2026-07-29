@@ -162,6 +162,7 @@ respects D4/D15.
 
 | Date | Change |
 |------|--------|
+| 2026-07-29 | Completed standalone Project Solace feature parity (v0.15.0): closeout/reconciliation, account-balance projections, finance health, custom categories, complete record management, checklist preferences, settings/cycle anchors, required set-aside and shortfall reporting, consolidated workspace loading, CSV/XLSX export and reviewed import, generic finance-safe reminders, and full-state standalone migration validated against the live local database. No new architectural decision. |
 | 2026-07-29 | Shipped Solace recurring bill parity (v0.14.0): independent paid/skipped occurrences, month-end-safe recurrence generation, monthly bill/income calendar and list, complete bill management/cost summaries, legacy occurrence import and working finance Hub renderers. No new architectural decision. |
 | 2026-07-29 | Shipped native Solace pay-cycle planning (v0.13.0): structured bucket allocation rules, per-income/household transfer calculations, pausable income sources and idempotent cycle-checklist generation. No new architectural decision. |
 | 2026-07-29 | Shipped the daily-use experience milestone (v0.12.0): permission-aware global search, universal quick-create, URL-backed navigation state, custom mobile navigation, route splitting/caching, session-expiry reliability, responsive/accessibility consistency and API response timing. No new architectural decision. |

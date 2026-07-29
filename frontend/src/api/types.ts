@@ -1040,6 +1040,158 @@ export interface SolacePayCyclePlan {
   remaining: string
   sources: SolacePlanSource[]
   buckets: SolacePlanBucket[]
+  set_aside: {
+    recurring_bills: string
+    planned_purchases: string
+    buffer: string
+    required_total: string
+    bills_bucket_total: string
+    shortfall: string
+    is_covered: boolean
+  }
+}
+
+export interface SolaceSettings {
+  id: number
+  currency_symbol: string
+  budget_year: number | null
+  cycle_anchor_date: string | null
+  default_buffer_amount: string
+  payday_bill_handling: 'new_cycle' | 'previous_cycle'
+  show_help_tips: boolean
+  dashboard_reminders: boolean
+  due_soon_days: number
+  created_at: string
+  updated_at: string
+}
+
+export interface SolaceCategory {
+  id: number
+  name: string
+  category_type: 'bill' | 'purchase' | 'both'
+  is_active: boolean
+  position: number
+  visibility: string
+  sensitivity: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SolaceBalanceSnapshot {
+  id: number
+  snapshot_date: string
+  balance: string
+  notes: string
+  visibility: string
+  sensitivity: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SolaceChecklistPreference {
+  id: number
+  source_key: string
+  label: string
+  is_hidden: boolean
+  reason: string
+  visibility: string
+  sensitivity: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SolaceCycleCloseout {
+  id: number
+  cycle_start: string
+  cycle_end: string
+  status: 'open' | 'closed'
+  closed_at: string | null
+  notes: string
+  visibility: string
+  sensitivity: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SolaceCloseoutResponse {
+  plan: SolacePayCyclePlan
+  bill_window: { start: string; end: string }
+  occurrences: SolaceBillOccurrence[]
+  checklist: SolaceChecklistItem[]
+  latest_balance: SolaceBalanceSnapshot | null
+  projected_balance: string | null
+  closeout: SolaceCycleCloseout | null
+  summary: {
+    bills_total: string
+    paid_total: string
+    unpaid_total: string
+    skipped_total: string
+    unpaid_count: number
+    checklist_count: number
+    checklist_complete_count: number
+  }
+}
+
+export interface SolaceHealth {
+  status: 'healthy' | 'warning' | 'error'
+  issues: { level: 'warning' | 'error'; code: string; message: string }[]
+  counts: {
+    active_bills: number
+    active_paydays: number
+    active_buckets: number
+    overdue_occurrences: number
+  }
+  percentage_allocation_total: string
+  latest_balance: SolaceBalanceSnapshot | null
+}
+
+export interface SolaceCategoryReport {
+  categories: {
+    category: string
+    bill_count: number
+    annual_total: string
+    fortnightly_total: string
+  }[]
+  annual_total: string
+  fortnightly_total: string
+}
+
+export interface SolaceBootstrap {
+  bills: SolaceBill[]
+  paydays: SolacePayday[]
+  purchases: SolacePurchase[]
+  buckets: SolaceBucket[]
+  subscriptions: SolaceSubscription[]
+  checklist: SolaceChecklistItem[]
+  plan: SolacePayCyclePlan
+  settings: SolaceSettings
+  categories: SolaceCategory[]
+  balances: SolaceBalanceSnapshot[]
+  health: SolaceHealth
+  category_report: SolaceCategoryReport
+  closeout: SolaceCloseoutResponse
+  checklist_preferences: SolaceChecklistPreference[]
+}
+
+export interface SolaceBillImportRow {
+  source_row: number
+  errors: string[]
+  name?: string
+  amount?: string
+  category?: string
+  provider?: string
+  due_at?: string | null
+  recurrence_rule?: string
+  is_active?: boolean
+  include_in_set_aside?: boolean
+  notes?: string
+}
+
+export interface SolaceBillImportPreview {
+  rows: SolaceBillImportRow[]
+  row_count: number
+  error_count: number
+  ready_count: number
 }
 
 export interface GlobalSearchResult {

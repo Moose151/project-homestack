@@ -1,15 +1,21 @@
 """solace serializers."""
 from __future__ import annotations
 
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.solace.models import (
+    AccountBalanceSnapshot,
     Bill,
     BillOccurrence,
     BudgetBucket,
+    CycleCloseout,
+    FinanceCategory,
     Payday,
     PaydayChecklistItem,
+    PaydayChecklistPreference,
     PlannedPurchase,
+    SolaceSettings,
     Subscription,
 )
 
@@ -21,7 +27,7 @@ def _non_blank(value: str) -> str:
 
 
 class BillSerializer(serializers.ModelSerializer):
-    is_overdue = serializers.BooleanField(read_only=True)
+    is_overdue = serializers.SerializerMethodField()
     next_due_at = serializers.SerializerMethodField()
     next_occurrence_id = serializers.SerializerMethodField()
     annual_amount = serializers.SerializerMethodField()
@@ -48,12 +54,34 @@ class BillSerializer(serializers.ModelSerializer):
         return _non_blank(value)
 
     def get_next_due_at(self, obj):
-        occurrence = obj.occurrences.filter(status=BillOccurrence.Status.UPCOMING).first()
+        occurrence = self._next_occurrence(obj)
         return occurrence.due_at if occurrence else None
 
     def get_next_occurrence_id(self, obj):
-        occurrence = obj.occurrences.filter(status=BillOccurrence.Status.UPCOMING).first()
+        occurrence = self._next_occurrence(obj)
         return occurrence.id if occurrence else None
+
+    def get_is_overdue(self, obj):
+        occurrence = self._next_occurrence(obj)
+        if occurrence:
+            return occurrence.is_overdue
+        return bool(
+            obj.due_at
+            and not obj.recurrence_rule
+            and not obj.is_paid
+            and obj.due_at < timezone.now()
+        )
+
+    @staticmethod
+    def _next_occurrence(obj):
+        prefetched = getattr(obj, "upcoming_occurrences", None)
+        if prefetched is not None:
+            return prefetched[0] if prefetched else None
+        cached = getattr(obj, "_solace_next_occurrence", None)
+        if cached is None and not hasattr(obj, "_solace_next_occurrence"):
+            cached = obj.occurrences.filter(status=BillOccurrence.Status.UPCOMING).first()
+            obj._solace_next_occurrence = cached
+        return cached
 
     def get_annual_amount(self, obj):
         from apps.solace.bill_schedule import annual_cost
@@ -180,3 +208,77 @@ class PaydayChecklistItemSerializer(serializers.ModelSerializer):
 
     def validate_title(self, value: str) -> str:
         return _non_blank(value)
+
+
+class SolaceSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SolaceSettings
+        fields = [
+            "id", "currency_symbol", "budget_year", "cycle_anchor_date",
+            "default_buffer_amount",
+            "payday_bill_handling", "show_help_tips", "dashboard_reminders",
+            "due_soon_days", "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate_currency_symbol(self, value: str) -> str:
+        return _non_blank(value)
+
+    def validate_budget_year(self, value):
+        if value is not None and not 2000 <= value <= 2200:
+            raise serializers.ValidationError("Budget year must be between 2000 and 2200.")
+        return value
+
+    def validate_due_soon_days(self, value):
+        if not 1 <= value <= 60:
+            raise serializers.ValidationError("Due-soon days must be between 1 and 60.")
+        return value
+
+
+class FinanceCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FinanceCategory
+        fields = [
+            "id", "name", "category_type", "is_active", "position",
+            "visibility", "sensitivity", "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate_name(self, value: str) -> str:
+        value = _non_blank(value)
+        qs = FinanceCategory.objects.filter(name__iexact=value)
+        if self.instance is not None:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("A category with this name already exists.")
+        return value
+
+
+class AccountBalanceSnapshotSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AccountBalanceSnapshot
+        fields = [
+            "id", "snapshot_date", "balance", "notes", "visibility",
+            "sensitivity", "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class PaydayChecklistPreferenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaydayChecklistPreference
+        fields = [
+            "id", "source_key", "label", "is_hidden", "reason",
+            "visibility", "sensitivity", "created_at", "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class CycleCloseoutSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CycleCloseout
+        fields = [
+            "id", "cycle_start", "cycle_end", "status", "closed_at", "notes",
+            "visibility", "sensitivity", "created_at", "updated_at",
+        ]
+        read_only_fields = fields

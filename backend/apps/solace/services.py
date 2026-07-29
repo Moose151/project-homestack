@@ -12,12 +12,17 @@ from apps.core.models import get_active_household
 from apps.scheduling.helpers import delete_event_for, sync_event_for
 from apps.solace import events
 from apps.solace.models import (
+    AccountBalanceSnapshot,
     Bill,
     BillOccurrence,
     BudgetBucket,
+    CycleCloseout,
+    FinanceCategory,
     Payday,
     PaydayChecklistItem,
+    PaydayChecklistPreference,
     PlannedPurchase,
+    SolaceSettings,
     Subscription,
 )
 
@@ -49,6 +54,162 @@ _CHECKLIST_FIELDS = {
     "title", "cycle_start", "source_key", "bucket_id", "bill_id", "amount_hint", "position",
     "is_complete", "completed_at", "notes", "visibility", "sensitivity",
 }
+_SETTINGS_FIELDS = {
+    "currency_symbol", "budget_year", "default_buffer_amount",
+    "cycle_anchor_date", "payday_bill_handling", "show_help_tips",
+    "dashboard_reminders", "due_soon_days",
+}
+_CATEGORY_FIELDS = {"name", "category_type", "is_active", "position", "visibility", "sensitivity"}
+_BALANCE_FIELDS = {"snapshot_date", "balance", "notes", "visibility", "sensitivity"}
+
+
+def get_or_create_settings(acting_user: User) -> SolaceSettings:
+    household = get_active_household()
+    obj, _ = SolaceSettings.objects.get_or_create(
+        household=household,
+        defaults={"created_by": acting_user, "updated_by": acting_user},
+    )
+    return obj
+
+
+def update_settings(acting_user: User, obj: SolaceSettings, **data) -> SolaceSettings:
+    for key, val in data.items():
+        if key in _SETTINGS_FIELDS:
+            setattr(obj, key, val)
+    obj.updated_by = acting_user
+    obj.save()
+    return obj
+
+
+def create_category(acting_user: User, **data) -> FinanceCategory:
+    obj = FinanceCategory(
+        household=get_active_household(),
+        created_by=acting_user,
+        updated_by=acting_user,
+        **data,
+    )
+    obj.save()
+    return obj
+
+
+def update_category(acting_user: User, obj: FinanceCategory, **data) -> FinanceCategory:
+    old_name = obj.name
+    for key, val in data.items():
+        if key in _CATEGORY_FIELDS:
+            setattr(obj, key, val)
+    obj.updated_by = acting_user
+    with transaction.atomic():
+        obj.save()
+        if old_name != obj.name:
+            Bill.objects.filter(category=old_name).update(category=obj.name, updated_by=acting_user)
+            PlannedPurchase.objects.filter(category=old_name).update(
+                category=obj.name,
+                updated_by=acting_user,
+            )
+    return obj
+
+
+def delete_category(acting_user: User, obj: FinanceCategory) -> None:
+    fallback = FinanceCategory.objects.filter(name="other").exclude(pk=obj.pk).first()
+    fallback_name = fallback.name if fallback else "other"
+    with transaction.atomic():
+        Bill.objects.filter(category=obj.name).update(category=fallback_name, updated_by=acting_user)
+        PlannedPurchase.objects.filter(category=obj.name).update(
+            category=fallback_name,
+            updated_by=acting_user,
+        )
+        obj.updated_by = acting_user
+        obj.save(update_fields=["updated_by", "updated_at"])
+        obj.soft_delete()
+
+
+def create_balance_snapshot(acting_user: User, **data) -> AccountBalanceSnapshot:
+    obj = AccountBalanceSnapshot(
+        household=get_active_household(),
+        created_by=acting_user,
+        updated_by=acting_user,
+        **data,
+    )
+    obj.save()
+    return obj
+
+
+def update_balance_snapshot(
+    acting_user: User,
+    obj: AccountBalanceSnapshot,
+    **data,
+) -> AccountBalanceSnapshot:
+    for key, val in data.items():
+        if key in _BALANCE_FIELDS:
+            setattr(obj, key, val)
+    obj.updated_by = acting_user
+    obj.save()
+    return obj
+
+
+def delete_balance_snapshot(acting_user: User, obj: AccountBalanceSnapshot) -> None:
+    obj.updated_by = acting_user
+    obj.save(update_fields=["updated_by", "updated_at"])
+    obj.soft_delete()
+
+
+def set_checklist_preference(
+    acting_user: User,
+    *,
+    source_key: str,
+    label: str,
+    is_hidden: bool,
+    reason: str = "",
+) -> PaydayChecklistPreference:
+    obj, _ = PaydayChecklistPreference.objects.update_or_create(
+        household=get_active_household(),
+        source_key=source_key,
+        defaults={
+            "label": label,
+            "is_hidden": is_hidden,
+            "reason": reason,
+            "updated_by": acting_user,
+        },
+        create_defaults={
+            "label": label,
+            "is_hidden": is_hidden,
+            "reason": reason,
+            "created_by": acting_user,
+            "updated_by": acting_user,
+        },
+    )
+    return obj
+
+
+def set_cycle_closeout(
+    acting_user: User,
+    *,
+    cycle_start: date,
+    cycle_end: date,
+    closed: bool,
+    notes: str = "",
+) -> CycleCloseout:
+    now = timezone.now()
+    obj, _ = CycleCloseout.objects.update_or_create(
+        household=get_active_household(),
+        cycle_start=cycle_start,
+        defaults={
+            "cycle_end": cycle_end,
+            "status": CycleCloseout.Status.CLOSED if closed else CycleCloseout.Status.OPEN,
+            "closed_at": now if closed else None,
+            "notes": notes,
+            "updated_by": acting_user,
+        },
+        create_defaults={
+            "cycle_end": cycle_end,
+            "status": CycleCloseout.Status.CLOSED if closed else CycleCloseout.Status.OPEN,
+            "closed_at": now if closed else None,
+            "notes": notes,
+            "created_by": acting_user,
+            "updated_by": acting_user,
+        },
+    )
+    return obj
 
 
 def create_bill(acting_user: User, **data) -> Bill:
@@ -198,20 +359,32 @@ def delete_purchase(acting_user: User, obj: PlannedPurchase) -> None:
     obj.soft_delete()
 
 
+@transaction.atomic
 def create_bucket(acting_user: User, **data) -> BudgetBucket:
     obj = BudgetBucket(
         household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
     )
     obj.save()
+    if obj.cap_to_remaining:
+        BudgetBucket.objects.exclude(pk=obj.pk).filter(cap_to_remaining=True).update(
+            cap_to_remaining=False,
+            updated_by=acting_user,
+        )
     return obj
 
 
+@transaction.atomic
 def update_bucket(acting_user: User, obj: BudgetBucket, **data) -> BudgetBucket:
     for key, val in data.items():
         if key in _BUCKET_FIELDS:
             setattr(obj, key, val)
     obj.updated_by = acting_user
     obj.save()
+    if obj.cap_to_remaining:
+        BudgetBucket.objects.exclude(pk=obj.pk).filter(cap_to_remaining=True).update(
+            cap_to_remaining=False,
+            updated_by=acting_user,
+        )
     return obj
 
 
@@ -280,9 +453,14 @@ def generate_plan_checklist(acting_user: User, plan: dict) -> list[PaydayCheckli
     """Create or refresh transfer checklist rows for one calculated pay cycle."""
     household = get_active_household()
     cycle_start = date.fromisoformat(plan["cycle_start"])
+    hidden_source_keys = set(
+        PaydayChecklistPreference.objects.filter(is_hidden=True).values_list("source_key", flat=True)
+    )
     generated = []
     for position, row in enumerate(plan["buckets"], start=1):
         source_key = f"pay-plan:bucket:{row['bucket_id']}"
+        if source_key in hidden_source_keys:
+            continue
         obj, _ = PaydayChecklistItem.objects.update_or_create(
             household=household,
             cycle_start=cycle_start,

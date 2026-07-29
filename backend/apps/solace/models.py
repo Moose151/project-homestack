@@ -42,7 +42,7 @@ class Bill(CalendarSyncMixin, HouseholdBaseModel):
         OTHER = "other", "Other"
 
     name = models.CharField(max_length=200)
-    category = models.CharField(max_length=30, choices=Category.choices, default=Category.OTHER)
+    category = models.CharField(max_length=100, default=Category.OTHER)
     provider = models.CharField(max_length=200, blank=True, default="")
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     due_at = models.DateTimeField(null=True, blank=True)
@@ -388,3 +388,148 @@ class PaydayChecklistItem(HouseholdBaseModel):
 
     def __str__(self) -> str:
         return self.title
+
+
+class SolaceSettings(HouseholdBaseModel):
+    class PaydayBillHandling(models.TextChoices):
+        NEW_CYCLE = "new_cycle", "New pay cycle"
+        PREVIOUS_CYCLE = "previous_cycle", "Previous pay cycle"
+
+    currency_symbol = models.CharField(max_length=8, default="$")
+    budget_year = models.PositiveSmallIntegerField(null=True, blank=True)
+    cycle_anchor_date = models.DateField(null=True, blank=True)
+    default_buffer_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+    )
+    payday_bill_handling = models.CharField(
+        max_length=20,
+        choices=PaydayBillHandling.choices,
+        default=PaydayBillHandling.NEW_CYCLE,
+    )
+    show_help_tips = models.BooleanField(default=True)
+    dashboard_reminders = models.BooleanField(default=True)
+    due_soon_days = models.PositiveSmallIntegerField(default=3)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name_plural = "Solace settings"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["household"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="unique_active_solace_settings",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"Solace settings — {self.household}"
+
+
+class FinanceCategory(HouseholdBaseModel):
+    class CategoryType(models.TextChoices):
+        BILL = "bill", "Bill"
+        PURCHASE = "purchase", "Purchase"
+        BOTH = "both", "Both"
+
+    name = models.CharField(max_length=100)
+    category_type = models.CharField(
+        max_length=20,
+        choices=CategoryType.choices,
+        default=CategoryType.BOTH,
+    )
+    is_active = models.BooleanField(default=True)
+    position = models.PositiveSmallIntegerField(default=0)
+    visibility = models.CharField(max_length=20, choices=Visibility.choices, default=Visibility.SENSITIVE)
+    sensitivity = models.CharField(max_length=20, choices=Sensitivity.choices, default=Sensitivity.FINANCIAL)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        ordering = ["position", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["household", "name"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="unique_active_solace_category_name",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class AccountBalanceSnapshot(HouseholdBaseModel):
+    snapshot_date = models.DateField(default=timezone.localdate)
+    balance = models.DecimalField(max_digits=12, decimal_places=2)
+    notes = models.TextField(blank=True, default="")
+    visibility = models.CharField(max_length=20, choices=Visibility.choices, default=Visibility.SENSITIVE)
+    sensitivity = models.CharField(max_length=20, choices=Sensitivity.choices, default=Sensitivity.FINANCIAL)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        ordering = ["-snapshot_date", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.snapshot_date}: {self.balance}"
+
+
+class PaydayChecklistPreference(HouseholdBaseModel):
+    source_key = models.CharField(max_length=120)
+    label = models.CharField(max_length=200)
+    is_hidden = models.BooleanField(default=False)
+    reason = models.CharField(max_length=200, blank=True, default="")
+    visibility = models.CharField(max_length=20, choices=Visibility.choices, default=Visibility.SENSITIVE)
+    sensitivity = models.CharField(max_length=20, choices=Sensitivity.choices, default=Sensitivity.FINANCIAL)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        ordering = ["label"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["household", "source_key"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="unique_active_solace_checklist_preference",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return self.label
+
+
+class CycleCloseout(HouseholdBaseModel):
+    class Status(models.TextChoices):
+        OPEN = "open", "Open"
+        CLOSED = "closed", "Closed"
+
+    cycle_start = models.DateField()
+    cycle_end = models.DateField()
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
+    closed_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True, default="")
+    visibility = models.CharField(max_length=20, choices=Visibility.choices, default=Visibility.SENSITIVE)
+    sensitivity = models.CharField(max_length=20, choices=Sensitivity.choices, default=Sensitivity.FINANCIAL)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        ordering = ["-cycle_start"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["household", "cycle_start"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="unique_active_solace_cycle_closeout",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.cycle_start} — {self.status}"

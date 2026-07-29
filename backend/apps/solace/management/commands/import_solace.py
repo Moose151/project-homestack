@@ -23,13 +23,17 @@ from django.utils import timezone
 
 from apps.core.models import get_active_household
 from apps.solace.models import (
+    AccountBalanceSnapshot,
     Bill,
     BillOccurrence,
     BudgetBucket,
+    CycleCloseout,
+    FinanceCategory,
     Payday,
     PaydayChecklistItem,
+    PaydayChecklistPreference,
     PlannedPurchase,
-    Subscription,
+    SolaceSettings,
 )
 from apps.solace.services import (
     create_bill,
@@ -37,7 +41,6 @@ from apps.solace.services import (
     create_checklist_item,
     create_payday,
     create_purchase,
-    create_subscription,
 )
 
 DEFAULT_DB = "/home/moose/Documents/project-solace/instance/solace.db"
@@ -46,17 +49,31 @@ DEFAULT_DB = "/home/moose/Documents/project-solace/instance/solace.db"
 @dataclass
 class LegacyData:
     categories: dict[int, str]
+    category_rows: list[dict[str, Any]]
     bills: list[dict[str, Any]]
     occurrences: dict[int, list[dict[str, Any]]]
     purchases: list[dict[str, Any]]
     buckets: list[dict[str, Any]]
     incomes: list[dict[str, Any]]
     checklist: list[dict[str, Any]]
+    settings: list[dict[str, Any]]
+    balances: list[dict[str, Any]]
+    checklist_preferences: list[dict[str, Any]]
+    closeouts: list[dict[str, Any]]
 
 
 def _rows(conn: sqlite3.Connection, table: str) -> list[dict[str, Any]]:
     conn.row_factory = sqlite3.Row
     return [dict(row) for row in conn.execute(f"select * from {table}")]
+
+
+def _optional_rows(conn: sqlite3.Connection, table: str) -> list[dict[str, Any]]:
+    try:
+        return _rows(conn, table)
+    except sqlite3.OperationalError as exc:
+        if "no such table" in str(exc).lower():
+            return []
+        raise
 
 
 def _money(value) -> Decimal:
@@ -150,15 +167,36 @@ def _priority(value: str | None) -> str:
     return v if v in {"low", "medium", "high"} else "medium"
 
 
-def _billing_cycle(value: str | None) -> str:
+def _income_rrule(value: str | None) -> str:
     return {
-        "Weekly": "weekly",
-        "Fortnightly": "fortnightly",
-        "Monthly": "monthly",
-        "Quarterly": "quarterly",
-        "Six-monthly": "other",
-        "Yearly": "yearly",
-    }.get(value or "", "other")
+        "weekly": "FREQ=WEEKLY",
+        "fortnightly": "FREQ=WEEKLY;INTERVAL=2",
+        "monthly": "FREQ=MONTHLY",
+        "quarterly": "FREQ=MONTHLY;INTERVAL=3",
+        "yearly": "FREQ=YEARLY",
+    }.get((value or "").strip().lower(), "FREQ=WEEKLY;INTERVAL=2")
+
+
+def _native_category(category_name: str) -> str:
+    raw = (category_name or "").strip()
+    known = {
+        "mortgage": "mortgage",
+        "mortgage / rent": "mortgage",
+        "utilities": "utilities",
+        "insurance": "insurance",
+        "council": "council",
+        "council / rates": "council",
+        "debt": "debt",
+        "subscriptions": "subscription",
+        "subscription": "subscription",
+        "childcare": "childcare",
+        "childcare / education": "childcare",
+        "travel": "travel",
+        "christmas": "christmas",
+        "home": "home",
+        "other": "other",
+    }
+    return known.get(raw.casefold(), raw)
 
 
 def _category_name(categories: dict[int, str], value) -> str:
@@ -174,18 +212,24 @@ def _load_legacy(path: Path) -> LegacyData:
         raise CommandError(f"Legacy SQLite database not found: {path}")
     conn = sqlite3.connect(path)
     try:
-        categories = {int(r["id"]): r["name"] for r in _rows(conn, "category")}
+        category_rows = _rows(conn, "category")
+        categories = {int(r["id"]): r["name"] for r in category_rows}
         occ: dict[int, list[dict[str, Any]]] = {}
         for row in _rows(conn, "bill_occurrence"):
             occ.setdefault(int(row["recurring_bill_id"]), []).append(row)
         return LegacyData(
             categories=categories,
+            category_rows=category_rows,
             bills=_rows(conn, "recurring_bill"),
             occurrences=occ,
             purchases=_rows(conn, "planned_purchase"),
             buckets=_rows(conn, "bucket"),
             incomes=_rows(conn, "income_source"),
             checklist=_rows(conn, "payday_checklist_item"),
+            settings=_optional_rows(conn, "settings"),
+            balances=_optional_rows(conn, "account_balance_snapshot"),
+            checklist_preferences=_optional_rows(conn, "payday_checklist_preference"),
+            closeouts=_optional_rows(conn, "cycle_closeout"),
         )
     except sqlite3.Error as exc:
         raise CommandError(f"Could not read legacy Solace database: {exc}")
@@ -224,6 +268,7 @@ class Command(BaseCommand):
     def _import(self, data: LegacyData) -> dict[str, int]:
         stats = {
             "bills": 0,
+            "categories": 0,
             "bill_occurrences": 0,
             "subscriptions": 0,
             "paydays": 0,
@@ -231,9 +276,112 @@ class Command(BaseCommand):
             "buckets": 0,
             "bucket_rules_enriched": 0,
             "checklist_items": 0,
+            "settings": 0,
+            "balance_snapshots": 0,
+            "checklist_preferences": 0,
+            "cycle_closeouts": 0,
             "skipped_inactive": 0,
         }
         system_user = None
+        household = get_active_household()
+
+        for position, row in enumerate(data.category_rows, start=1):
+            name = _native_category(row.get("name") or "")
+            if not name:
+                continue
+            category_type = str(row.get("category_type") or "Both").strip().lower()
+            if category_type not in {
+                FinanceCategory.CategoryType.BILL,
+                FinanceCategory.CategoryType.PURCHASE,
+                FinanceCategory.CategoryType.BOTH,
+            }:
+                category_type = FinanceCategory.CategoryType.BOTH
+            category = FinanceCategory.objects.filter(name__iexact=name).first()
+            if category is None:
+                FinanceCategory.objects.create(
+                    household=household,
+                    name=name,
+                    category_type=category_type,
+                    is_active=_bool(row.get("active")),
+                    position=position * 10,
+                )
+                stats["categories"] += 1
+            else:
+                changed = False
+                if category.category_type != category_type and category.category_type != "both":
+                    category.category_type = "both"
+                    changed = True
+                active = _bool(row.get("active"))
+                if category.is_active != active:
+                    category.is_active = active
+                    changed = True
+                if changed:
+                    category.save(update_fields=["category_type", "is_active", "updated_at"])
+
+        if data.settings:
+            row = data.settings[0]
+            settings_obj = SolaceSettings.objects.first()
+            created = settings_obj is None
+            if settings_obj is None:
+                settings_obj = SolaceSettings(household=household)
+            settings_obj.currency_symbol = row.get("currency_symbol") or "$"
+            settings_obj.budget_year = int(row["budget_year"]) if row.get("budget_year") else None
+            settings_obj.cycle_anchor_date = _parse_date(row.get("first_payday"))
+            settings_obj.default_buffer_amount = _money(row.get("default_buffer_amount"))
+            handling = row.get("payday_bill_handling") or "new_cycle"
+            settings_obj.payday_bill_handling = (
+                handling if handling in {"new_cycle", "previous_cycle"} else "new_cycle"
+            )
+            settings_obj.show_help_tips = _bool(row.get("show_help_tips"))
+            settings_obj.save()
+            stats["settings"] += int(created)
+
+        for row in data.balances:
+            snapshot_date = _parse_date(row.get("snapshot_date"))
+            if snapshot_date is None:
+                continue
+            _, created = AccountBalanceSnapshot.objects.update_or_create(
+                household=household,
+                snapshot_date=snapshot_date,
+                defaults={
+                    "balance": _money(row.get("balance")),
+                    "notes": row.get("notes") or "",
+                },
+            )
+            stats["balance_snapshots"] += int(created)
+
+        for row in data.checklist_preferences:
+            source_key = row.get("item_key") or ""
+            if not source_key:
+                continue
+            _, created = PaydayChecklistPreference.objects.update_or_create(
+                household=household,
+                source_key=source_key,
+                defaults={
+                    "label": row.get("label") or source_key,
+                    "is_hidden": _bool(row.get("hidden")),
+                    "reason": row.get("reason") or "",
+                },
+            )
+            stats["checklist_preferences"] += int(created)
+
+        for row in data.closeouts:
+            cycle_start = _parse_date(row.get("cycle_start"))
+            cycle_end = _parse_date(row.get("cycle_end"))
+            if cycle_start is None or cycle_end is None:
+                continue
+            closed = str(row.get("status") or "").lower() == "closed"
+            _, created = CycleCloseout.objects.update_or_create(
+                household=household,
+                cycle_start=cycle_start,
+                defaults={
+                    "cycle_end": cycle_end,
+                    "status": CycleCloseout.Status.CLOSED if closed else CycleCloseout.Status.OPEN,
+                    "closed_at": _parse_dt(row.get("closed_at")) if closed else None,
+                    "notes": row.get("notes") or "",
+                },
+            )
+            stats["cycle_closeouts"] += int(created)
 
         for row in data.bills:
             if not _bool(row.get("active")):
@@ -248,56 +396,43 @@ class Command(BaseCommand):
                 "recurrence_rule": _rrule_from_legacy(row),
                 "notes": row.get("notes") or "",
             }
-            if category.lower() == "subscriptions":
-                if Subscription.objects.filter(name=row["name"]).exists():
-                    continue
-                create_subscription(
+            bill = Bill.objects.filter(name=row["name"]).first()
+            if bill is None:
+                bill = create_bill(
                     system_user,
                     name=row["name"],
-                    billing_cycle=_billing_cycle(row.get("frequency")),
-                    next_renewal_at=due_at,
+                    category=_native_category(category) or "other",
+                    due_at=due_at,
                     is_active=True,
+                    include_in_set_aside=_bool(row.get("include_in_set_aside")),
+                    is_paid=False,
+                    paid_at=_latest_paid_at(occurrences),
                     **common,
                 )
-                stats["subscriptions"] += 1
-            else:
-                bill = Bill.objects.filter(name=row["name"]).first()
-                if bill is None:
-                    bill = create_bill(
-                        system_user,
-                        name=row["name"],
-                        category=_bill_category(category),
-                        due_at=due_at,
-                        is_active=True,
-                        include_in_set_aside=_bool(row.get("include_in_set_aside")),
-                        is_paid=False,
-                        paid_at=_latest_paid_at(occurrences),
-                        **common,
-                    )
-                    stats["bills"] += 1
-                for occurrence in occurrences:
-                    occurrence_due = _parse_dt(occurrence.get("due_date"))
-                    if occurrence_due is None:
-                        continue
-                    legacy_status = (occurrence.get("status") or "Upcoming").lower()
-                    occurrence_status = {
-                        "paid": BillOccurrence.Status.PAID,
-                        "skipped": BillOccurrence.Status.SKIPPED,
-                    }.get(legacy_status, BillOccurrence.Status.UPCOMING)
-                    _, created = BillOccurrence.objects.update_or_create(
-                        bill=bill,
-                        due_at=occurrence_due,
-                        defaults={
-                            "household": bill.household,
-                            "amount": _money(occurrence.get("amount") or bill.amount),
-                            "status": occurrence_status,
-                            "paid_at": _parse_dt(occurrence.get("paid_date")),
-                            "notes": occurrence.get("notes") or "",
-                            "visibility": bill.visibility,
-                            "sensitivity": bill.sensitivity,
-                        },
-                    )
-                    stats["bill_occurrences"] += int(created)
+                stats["bills"] += 1
+            for occurrence in occurrences:
+                occurrence_due = _parse_dt(occurrence.get("due_date"))
+                if occurrence_due is None:
+                    continue
+                legacy_status = (occurrence.get("status") or "Upcoming").lower()
+                occurrence_status = {
+                    "paid": BillOccurrence.Status.PAID,
+                    "skipped": BillOccurrence.Status.SKIPPED,
+                }.get(legacy_status, BillOccurrence.Status.UPCOMING)
+                _, created = BillOccurrence.objects.update_or_create(
+                    bill=bill,
+                    due_at=occurrence_due,
+                    defaults={
+                        "household": bill.household,
+                        "amount": _money(occurrence.get("amount") or bill.amount),
+                        "status": occurrence_status,
+                        "paid_at": _parse_dt(occurrence.get("paid_date")),
+                        "notes": occurrence.get("notes") or "",
+                        "visibility": bill.visibility,
+                        "sensitivity": bill.sensitivity,
+                    },
+                )
+                stats["bill_occurrences"] += int(created)
 
         for row in data.incomes:
             if not _bool(row.get("active")):
@@ -311,7 +446,7 @@ class Command(BaseCommand):
                 title=title,
                 expected_amount=_money(row.get("amount")),
                 pay_at=_parse_dt(row.get("next_pay_date")),
-                recurrence_rule="FREQ=WEEKLY;INTERVAL=2",
+                recurrence_rule=_income_rrule(row.get("frequency")),
                 notes=row.get("notes") or f"Imported from legacy income source #{row['id']}.",
             )
             stats["paydays"] += 1
@@ -322,7 +457,9 @@ class Command(BaseCommand):
             create_purchase(
                 system_user,
                 name=row["name"],
-                category=_category_name(data.categories, row.get("category_id")),
+                category=_native_category(
+                    _category_name(data.categories, row.get("category_id"))
+                ),
                 target_amount=_money(row.get("target_amount")),
                 saved_amount=_money(row.get("amount_saved")),
                 target_date=_parse_dt(row.get("target_date")),
@@ -413,20 +550,3 @@ class Command(BaseCommand):
             stats["checklist_items"] += 1
 
         return stats
-
-
-def _bill_category(category_name: str) -> str:
-    name = (category_name or "").lower()
-    if "mortgage" in name or "rent" in name or "house" in name:
-        return "mortgage"
-    if "insurance" in name:
-        return "insurance"
-    if "council" in name or "rate" in name:
-        return "council"
-    if "subscription" in name:
-        return "subscription"
-    if "child" in name or "education" in name:
-        return "childcare"
-    if "utilit" in name or "electric" in name or "water" in name or "gas" in name:
-        return "utilities"
-    return "other"

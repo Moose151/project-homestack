@@ -1,12 +1,17 @@
 from django.contrib import admin
 
 from apps.solace.models import (
+    AccountBalanceSnapshot,
     Bill,
     BillOccurrence,
     BudgetBucket,
+    CycleCloseout,
+    FinanceCategory,
     Payday,
     PaydayChecklistItem,
+    PaydayChecklistPreference,
     PlannedPurchase,
+    SolaceSettings,
     Subscription,
 )
 
@@ -26,3 +31,8 @@ admin.site.register(PlannedPurchase)
 admin.site.register(BudgetBucket)
 admin.site.register(Subscription)
 admin.site.register(PaydayChecklistItem)
+admin.site.register(SolaceSettings)
+admin.site.register(FinanceCategory)
+admin.site.register(AccountBalanceSnapshot)
+admin.site.register(PaydayChecklistPreference)
+admin.site.register(CycleCloseout)
