@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.19.0**
+> **Current version: 0.19.1**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,26 @@
 ---
 
 ## 0.19 — Household-launch mobile experience
+
+### 0.19.1 — 2026-08-04
+- **Usable dense workspaces on phones** — Solace, Homestead and Education replace their long
+  scrolling tab strips with a clear section picker on narrow screens. Solace's bill, bucket,
+  subscription, purchase and payday forms now stay collapsed until requested, and its legacy
+  double card padding has been removed.
+- **Touch actions stay visible** — edit/delete controls that previously depended on mouse hover
+  remain available on phones. Homestead maintenance rows stack their content and actions cleanly,
+  retain a prominent Done button, and shared fields no longer overflow narrow native date inputs.
+- **Search now completes the journey** — Atlas, Pets, Education and Homestead results link to the
+  relevant workspace or Calendar date. Shared search controls add a recognisable search cue and
+  one-tap clear action; Atlas's new-list form is collapsed until needed.
+- **Modal polish** — opening the mobile More sheet now locks the page behind it, preventing the
+  disorienting background scroll common on phones.
+- **Household countdown** — admins can enable a small Countdown card from Tune my Hub, give it a
+  name and target date, and show the whole household the days remaining. It handles today and
+  elapsed dates and can be hidden, resized or reordered like other Hub widgets.
+- Database migration required: `hub.0013_seed_countdown_widget` (catalogue seed only).
+- Validation: **599 backend tests**, frontend TypeScript check and production build clean; no
+  migration drift.
 
 ### 0.19.0 — 2026-08-04
 - **Friendlier phone navigation** — the mobile shell now uses the member's avatar, a calmer top

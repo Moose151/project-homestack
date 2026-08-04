@@ -8,7 +8,7 @@ import type {
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
-import { Field, Input, Textarea, Select, fieldClass } from '../../../components/Field'
+import { Field, Input, SearchField, Textarea, Select, fieldClass } from '../../../components/Field'
 import { Tabs } from '../../../components/Tabs'
 import { Badge, type BadgeTone } from '../../../components/Badge'
 import { PageHeader } from '../../../components/PageHeader'
@@ -487,7 +487,7 @@ function MaintenanceTab({ people, defaultAssignee, onError }: {
             const due = dueLabel(t.next_due_at)
             const assignee = t.assigned_to_person_id ? people.find(p => p.id === t.assigned_to_person_id) : null
             return (
-              <div key={t.id} className="flex items-center gap-3 rounded-xl border border-line p-3 group">
+              <div key={t.id} className="group flex flex-col gap-3 rounded-xl border border-line p-3 sm:flex-row sm:items-center">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium text-ink">{t.title}</span>
@@ -502,10 +502,12 @@ function MaintenanceTab({ people, defaultAssignee, onError }: {
                     </p>
                   )}
                 </div>
-                {t.next_due_at && <Button size="sm" variant="secondary" onClick={() => complete(t)}>Done</Button>}
-                <div className="flex items-center gap-1 sm:opacity-0 transition-opacity sm:group-hover:opacity-100">
-                  <button onClick={() => startEdit(t)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
-                  <button onClick={() => remove(t)} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger" aria-label="Delete">✕</button>
+                <div className="flex w-full items-center justify-end gap-1 sm:w-auto">
+                  {t.next_due_at && <Button size="sm" variant="secondary" onClick={() => complete(t)} className="mr-auto sm:mr-1">Done</Button>}
+                  <div className="flex items-center gap-1 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+                    <button onClick={() => startEdit(t)} className="min-h-10 rounded-lg px-3 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
+                    <button onClick={() => remove(t)} className="grid h-10 w-10 place-items-center rounded-lg text-muted hover:bg-danger-soft hover:text-danger" aria-label="Delete">✕</button>
+                  </div>
                 </div>
               </div>
             )
@@ -1265,24 +1267,24 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function SearchResults({ results }: { results: HomesteadSearchResults }) {
   const empty = !results.appliances.length && !results.maintenance.length && !results.providers.length && !results.improvements.length && !results.rooms.length && !results.room_items.length
   if (empty) return <p className="py-8 text-center text-sm text-muted">No matches.</p>
-  const row = (key: string, main: string, sub?: string) => (
-    <div key={key} className="flex items-center justify-between gap-3 rounded-lg bg-sunken px-3 py-1.5 text-sm">
+  const row = (key: string, href: string, main: string, sub?: string) => (
+    <Link key={key} to={href} className="flex min-h-11 items-center justify-between gap-3 rounded-xl bg-sunken px-3 py-2.5 text-sm transition-colors hover:bg-primary-soft hover:text-primary">
       <span className="text-ink">{main}</span>{sub && <span className="text-xs text-muted">{sub}</span>}
-    </div>
+    </Link>
   )
   return (
     <div className="flex flex-col gap-4">
-      {results.maintenance.length > 0 && <Section title="Maintenance">{results.maintenance.map(t => row(`m${t.id}`, t.title, cap(t.category)))}</Section>}
-      {results.appliances.length > 0 && <Section title="Appliances">{results.appliances.map(a => row(`a${a.id}`, a.name, [a.brand, a.model_number].filter(Boolean).join(' ')))}</Section>}
-      {results.improvements.length > 0 && <Section title="Improvements">{results.improvements.map(i => row(`i${i.id}`, i.title, cap(i.status)))}</Section>}
-      {results.providers.length > 0 && <Section title="Contacts">{results.providers.map(p => row(`p${p.id}`, p.name, cap(p.trade)))}</Section>}
+      {results.maintenance.length > 0 && <Section title="Maintenance">{results.maintenance.map(t => row(`m${t.id}`, '/homestead?tab=maintenance', t.title, cap(t.category)))}</Section>}
+      {results.appliances.length > 0 && <Section title="Appliances">{results.appliances.map(a => row(`a${a.id}`, '/homestead?tab=appliances', a.name, [a.brand, a.model_number].filter(Boolean).join(' ')))}</Section>}
+      {results.improvements.length > 0 && <Section title="Improvements">{results.improvements.map(i => row(`i${i.id}`, '/homestead?tab=improvements', i.title, cap(i.status)))}</Section>}
+      {results.providers.length > 0 && <Section title="Contacts">{results.providers.map(p => row(`p${p.id}`, '/homestead?tab=contacts', p.name, cap(p.trade)))}</Section>}
       {results.rooms.length > 0 && <Section title="Rooms & areas">{results.rooms.map(room => (
-        <Link key={room.id} to={`/homestead/rooms/${room.id}`} className="flex items-center justify-between gap-3 rounded-lg bg-sunken px-3 py-1.5 text-sm hover:text-primary">
+        <Link key={room.id} to={`/homestead/rooms/${room.id}`} className="flex min-h-11 items-center justify-between gap-3 rounded-xl bg-sunken px-3 py-2.5 text-sm transition-colors hover:bg-primary-soft hover:text-primary">
           <span>{room.icon || '🚪'} {room.name}</span><span className="text-xs text-muted">Open room →</span>
         </Link>
       ))}</Section>}
       {results.room_items.length > 0 && <Section title="Room plans">{results.room_items.map(item => (
-        <Link key={item.id} to={`/homestead/rooms/${item.room_id}`} className="flex items-center justify-between gap-3 rounded-lg bg-sunken px-3 py-1.5 text-sm hover:text-primary">
+        <Link key={item.id} to={`/homestead/rooms/${item.room_id}`} className="flex min-h-11 items-center justify-between gap-3 rounded-xl bg-sunken px-3 py-2.5 text-sm transition-colors hover:bg-primary-soft hover:text-primary">
           <span>{item.title}</span><span className="text-xs text-muted">{cap(item.item_type)} →</span>
         </Link>
       ))}</Section>}
@@ -1322,7 +1324,12 @@ export function HomesteadPage() {
     <div className="flex flex-col gap-5">
       <PageHeader title="Homestead" icon="🏠" subtitle="Your home — rooms, upkeep, appliances, contacts and improvements." />
 
-      <Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search rooms, plans, maintenance, appliances, contacts…" />
+      <SearchField
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        onClear={() => setQuery('')}
+        placeholder="Search rooms, plans, maintenance, appliances, contacts…"
+      />
 
       {error && (
         <div className="flex items-center justify-between gap-3 rounded-xl bg-danger-soft px-4 py-2.5 text-sm text-danger">
@@ -1348,6 +1355,7 @@ export function HomesteadPage() {
             active={tab}
             onChange={setTab}
             className="w-full sm:w-fit"
+            mobileSelectLabel="Homestead section"
           />
 
           {tab === 'overview' && <OverviewTab onError={setError} onGoTab={setTab} />}

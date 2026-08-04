@@ -4,6 +4,20 @@ from __future__ import annotations
 from rest_framework import serializers
 
 
+class CountdownSettingsSerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=100)
+    target_date = serializers.CharField(max_length=10)
+
+    def validate_target_date(self, value: str) -> str:
+        from datetime import date
+
+        try:
+            date.fromisoformat(value)
+        except ValueError as exc:
+            raise serializers.ValidationError("Use a valid date in YYYY-MM-DD format.") from exc
+        return value
+
+
 class HubWidgetConfigSerializer(serializers.Serializer):
     """Read shape for the Hub configuration screen (catalogue + household + user state)."""
 
@@ -17,12 +31,14 @@ class HubWidgetConfigSerializer(serializers.Serializer):
     size = serializers.CharField()
     user_hidden = serializers.BooleanField()
     user_order = serializers.IntegerField(allow_null=True)
+    settings = serializers.DictField()
 
 
 class HouseholdWidgetWriteSerializer(serializers.Serializer):
     is_enabled = serializers.BooleanField(required=False)
     display_order = serializers.IntegerField(required=False)
     size = serializers.ChoiceField(choices=["small", "medium", "large"], required=False)
+    settings = CountdownSettingsSerializer(required=False)
 
 
 class UserWidgetWriteSerializer(serializers.Serializer):

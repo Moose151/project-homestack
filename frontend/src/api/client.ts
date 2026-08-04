@@ -404,7 +404,7 @@ export const api = {
   hub: (): Promise<HubResponse> => _fetch('/hub/'),
   kioskHub: (): Promise<HubResponse> => _fetch('/hub/kiosk/'),
   getHubWidgetConfig: (): Promise<{ widgets: HubWidgetConfig[] }> => _fetch('/hub/widgets/'),
-  setHouseholdWidget: (key: string, data: Partial<{ is_enabled: boolean; display_order: number; size: string }>):
+  setHouseholdWidget: (key: string, data: Partial<{ is_enabled: boolean; display_order: number; size: string; settings: { title: string; target_date: string } }>):
     Promise<{ widgets: HubWidgetConfig[] }> =>
     _fetch(`/hub/widgets/${key}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   setUserWidget: (key: string, data: Partial<{ is_enabled: boolean; display_order: number }>):

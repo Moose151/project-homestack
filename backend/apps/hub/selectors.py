@@ -44,6 +44,7 @@ def list_widget_config(user) -> list[dict]:
             "size": hh.size if hh else "medium",
             "user_hidden": (uu is not None and not uu.is_enabled),
             "user_order": uu.display_order if uu else None,
+            "settings": hh.settings_json if hh else {},
         })
 
     rows.sort(key=lambda r: (

@@ -193,6 +193,40 @@ function ClockWidget() {
   )
 }
 
+function CountdownWidget({ title, targetDate }: { title?: string; targetDate?: string }) {
+  const [now, setNow] = useState(new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+
+  if (!title || !targetDate) return <p className="text-sm text-muted">Set a name and date in Tune my Hub.</p>
+  const [year, month, day] = targetDate.split('-').map(Number)
+  const targetUtc = Date.UTC(year, month - 1, day)
+  const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
+  const days = Math.round((targetUtc - todayUtc) / 86_400_000)
+  const targetLabel = new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  })
+
+  return (
+    <div className="py-2 text-center">
+      <p className="text-sm font-bold text-ink">{title}</p>
+      {days === 0 ? (
+        <p className="mt-2 text-4xl font-extrabold text-primary">It’s today! 🎉</p>
+      ) : (
+        <>
+          <p className="mt-2 text-5xl font-extrabold tabular-nums text-primary">{Math.abs(days)}</p>
+          <p className="text-sm font-semibold text-muted-strong">
+            {days > 0 ? `day${days === 1 ? '' : 's'} to go` : `day${days === -1 ? '' : 's'} since`}
+          </p>
+        </>
+      )}
+      <p className="mt-2 text-xs text-muted">{targetLabel}</p>
+    </div>
+  )
+}
+
 function UpcomingWidget({ items }: { items: CalendarEvent[] }) {
   if (items.length === 0) return <p className="text-sm text-muted">Nothing upcoming</p>
   return (
@@ -543,6 +577,8 @@ function renderWidget(w: HubWidget, onChanged: () => void) {
   switch (w.key) {
     case 'clock':
       return <ClockWidget />
+    case 'countdown':
+      return <CountdownWidget title={w.meta?.title} targetDate={w.meta?.target_date} />
     case 'notifications_summary':
       return <NotificationsSummaryWidget items={w.items as AppNotification[]} unread={w.meta?.unread_count} />
     case 'quick_add':

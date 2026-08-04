@@ -4,7 +4,7 @@ import { api } from '../../../api/client'
 import type { AtlasList, AtlasListItem, AtlasNote, AtlasReminder, AtlasSearchResults, Person } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
-import { Input, Textarea, Select } from '../../../components/Field'
+import { Input, SearchField, Textarea, Select } from '../../../components/Field'
 import { Tabs } from '../../../components/Tabs'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
@@ -113,7 +113,7 @@ function ItemRow({
       )}
       <button
         onClick={() => onDelete(item)}
-        className="opacity-0 group-hover:opacity-100 text-muted hover:text-danger transition-all text-lg leading-none"
+        className="sm:opacity-0 sm:group-hover:opacity-100 text-muted hover:text-danger transition-all text-lg leading-none"
         aria-label="Delete"
       >
         ×
@@ -619,36 +619,42 @@ function SearchResults({ results }: { results: AtlasSearchResults }) {
       {results.lists.length > 0 && (
         <Section title="Lists">
           {results.lists.map(l => (
-            <Card key={`l${l.id}`}>
-              <span className="text-sm text-ink">{l.title}</span>
-              <span className="text-xs text-muted capitalize"> · {l.list_type}</span>
-            </Card>
+            <Link key={`l${l.id}`} to="/atlas?tab=lists" className="group block">
+              <Card className="transition-colors group-hover:border-primary/40">
+                <span className="text-sm font-medium text-ink">{l.title}</span>
+                <span className="text-xs text-muted capitalize"> · {l.list_type}</span>
+              </Card>
+            </Link>
           ))}
         </Section>
       )}
       {results.items.length > 0 && (
         <Section title="List items">
           {results.items.map(i => (
-            <div key={`i${i.id}`} className="text-sm text-ink px-3 py-1.5 rounded-lg bg-sunken">
+            <Link key={`i${i.id}`} to="/atlas?tab=lists" className="block min-h-11 rounded-xl bg-sunken px-3 py-2.5 text-sm text-ink transition-colors hover:bg-primary-soft">
               {i.quantity && <span className="text-muted-strong mr-1.5">{i.quantity}×</span>}{i.title}
-            </div>
+            </Link>
           ))}
         </Section>
       )}
       {results.notes.length > 0 && (
         <Section title="Notes">
           {results.notes.map(n => (
-            <Card key={`n${n.id}`}>
-              <p className="text-sm font-medium text-ink">{n.title}</p>
-              {n.body && <p className="text-xs text-muted truncate">{n.body}</p>}
-            </Card>
+            <Link key={`n${n.id}`} to="/atlas?tab=notes" className="group block">
+              <Card className="transition-colors group-hover:border-primary/40">
+                <p className="text-sm font-medium text-ink">{n.title}</p>
+                {n.body && <p className="text-xs text-muted truncate">{n.body}</p>}
+              </Card>
+            </Link>
           ))}
         </Section>
       )}
       {results.reminders.length > 0 && (
         <Section title="Reminders">
           {results.reminders.map(r => (
-            <div key={`r${r.id}`} className="text-sm text-ink px-3 py-1.5 rounded-lg bg-sunken">{r.title}</div>
+            <Link key={`r${r.id}`} to="/atlas?tab=reminders" className="block min-h-11 rounded-xl bg-sunken px-3 py-2.5 text-sm text-ink transition-colors hover:bg-primary-soft">
+              {r.title}
+            </Link>
           ))}
         </Section>
       )}
@@ -674,6 +680,7 @@ export function AtlasPage() {
   const [newTitle, setNewTitle] = useState('')
   const [newType, setNewType] = useState('todo')
   const [creating, setCreating] = useState(false)
+  const [creatingList, setCreatingList] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useUrlQueryState()
   const [results, setResults] = useState<AtlasSearchResults | null>(null)
@@ -707,6 +714,7 @@ export function AtlasPage() {
       const full = await api.getList(list.id)
       setLists(prev => [full, ...prev])
       setNewTitle(''); setNewType('todo')
+      setCreatingList(false)
     } catch (e) {
       setError(errMsg(e))
     } finally {
@@ -742,9 +750,10 @@ export function AtlasPage() {
 
       <CaptureBar lists={lists} onCapture={capture} />
 
-      <Input
+      <SearchField
         value={query}
         onChange={e => setQuery(e.target.value)}
+        onClear={() => setQuery('')}
         placeholder="Search lists, items, notes, reminders…"
       />
 
@@ -773,23 +782,40 @@ export function AtlasPage() {
 
           {tab === 'lists' ? (
             <div className="flex flex-col gap-4">
-              <form onSubmit={createList} className="flex flex-wrap gap-2">
-                <Input
-                  value={newTitle}
-                  onChange={e => setNewTitle(e.target.value)}
-                  placeholder="New list name…"
-                  className="flex-1 min-w-[10rem]"
-                />
-                <Select value={newType} onChange={e => setNewType(e.target.value)} className="w-36">
-                  {LIST_TYPES.map(t => <option key={t.key} value={t.key}>{t.icon} {t.label}</option>)}
-                </Select>
-                <Button type="submit" loading={creating} disabled={!newTitle.trim()}>Create</Button>
-              </form>
+              {creatingList ? (
+                <form onSubmit={createList} className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-3 sm:flex-row">
+                  <Input
+                    value={newTitle}
+                    onChange={e => setNewTitle(e.target.value)}
+                    placeholder="New list name…"
+                    className="flex-1"
+                    autoFocus
+                  />
+                  <Select value={newType} onChange={e => setNewType(e.target.value)} className="sm:w-40">
+                    {LIST_TYPES.map(t => <option key={t.key} value={t.key}>{t.icon} {t.label}</option>)}
+                  </Select>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="ghost" onClick={() => { setCreatingList(false); setNewTitle('') }} className="flex-1 sm:flex-none">
+                      Cancel
+                    </Button>
+                    <Button type="submit" loading={creating} disabled={!newTitle.trim()} className="flex-1 sm:flex-none">
+                      Create
+                    </Button>
+                  </div>
+                </form>
+              ) : lists.length > 0 ? (
+                <Button variant="secondary" onClick={() => setCreatingList(true)} className="self-start">+ New list</Button>
+              ) : null}
 
               {loading ? (
                 <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
               ) : lists.length === 0 ? (
-                <EmptyState icon="🗒" title="No lists yet" hint="Create your first list above to get started." />
+                <EmptyState
+                  icon="🗒"
+                  title="No lists yet"
+                  hint="Make a shared list for groceries, errands or anything else."
+                  action={<Button onClick={() => setCreatingList(true)}>Create your first list</Button>}
+                />
               ) : (
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                   {lists.map(list => (

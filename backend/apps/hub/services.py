@@ -70,6 +70,11 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False, sensitive_unlocked: bool 
             # Client-rendered ambient/utility widgets — own no domain data (Hub spec §6).
             content = []
 
+        elif key == "countdown":
+            # Household-configured but client-rendered so the display stays timezone-local.
+            content = []
+            meta = dict(hw.settings_json or {})
+
         elif key == "atlas_todos":
             content = AtlasListItemSerializer(list_open_items(user, limit=20), many=True).data
 
@@ -301,7 +306,7 @@ def _get_widget(key: str):
     return widget
 
 
-def set_household_widget(user, key: str, *, is_enabled=None, display_order=None, size=None):
+def set_household_widget(user, key: str, *, is_enabled=None, display_order=None, size=None, settings=None):
     """Configure a widget for the whole household (admin/manager). Upserts the row."""
     from apps.hub.models import HouseholdHubWidget
     widget = _get_widget(key)
@@ -317,6 +322,10 @@ def set_household_widget(user, key: str, *, is_enabled=None, display_order=None,
         if size not in {"small", "medium", "large"}:
             raise HubError("Invalid size.")
         config.size = size
+    if settings is not None:
+        if key != "countdown":
+            raise HubError("Settings are not supported for this widget.")
+        config.settings_json = dict(settings)
     config.save()
     return config
 

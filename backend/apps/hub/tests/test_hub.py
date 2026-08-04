@@ -229,6 +229,37 @@ class HubWidgetConfigTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(self._config()["atlas_todos"]["size"], "large")
 
+    def test_admin_can_configure_countdown_widget(self):
+        _login(self.client, "admin")
+        resp = self.client.patch(
+            reverse("hub-widget-household", args=["countdown"]),
+            {
+                "is_enabled": True,
+                "size": "small",
+                "settings": {"title": "Our holiday", "target_date": "2030-12-20"},
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        config = self._config()["countdown"]
+        self.assertTrue(config["household_enabled"])
+        self.assertEqual(config["settings"]["title"], "Our holiday")
+
+        widget = next(
+            item for item in self.client.get(reverse("hub")).json()["widgets"]
+            if item["key"] == "countdown"
+        )
+        self.assertEqual(widget["meta"]["target_date"], "2030-12-20")
+
+    def test_countdown_rejects_invalid_target_date(self):
+        _login(self.client, "admin")
+        resp = self.client.patch(
+            reverse("hub-widget-household", args=["countdown"]),
+            {"settings": {"title": "Holiday", "target_date": "not-a-date"}},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+
     def test_non_admin_cannot_configure_household_widget(self):
         _login(self.client, "parentuser")
         resp = self.client.patch(

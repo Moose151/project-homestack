@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api } from '../../../api/client'
 import type {
   SolaceBalanceForecast, SolaceBalanceSnapshot, SolaceBill, SolaceBillOccurrence, SolaceBillTimeline, SolaceBucket, SolaceCategory,
@@ -8,7 +8,7 @@ import type {
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
-import { Field, Input, Select, fieldClass } from '../../../components/Field'
+import { Field, Input, SearchField, Select, fieldClass } from '../../../components/Field'
 import { Tabs } from '../../../components/Tabs'
 import { Badge, type BadgeTone } from '../../../components/Badge'
 import { PageHeader } from '../../../components/PageHeader'
@@ -58,6 +58,20 @@ const dayAfter = (dateValue: string) => {
 
 type Tab = 'overview' | 'forecast' | 'schedule' | 'closeout' | 'plan' | 'bills' | 'buckets' | 'subscriptions' | 'purchases' | 'paydays' | 'checklist' | 'manage'
 const TAB_KEYS: Tab[] = ['overview', 'forecast', 'schedule', 'closeout', 'plan', 'bills', 'buckets', 'subscriptions', 'purchases', 'paydays', 'checklist', 'manage']
+const SOLACE_TABS: Array<{ key: Tab; label: string }> = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'forecast', label: 'Forecast' },
+  { key: 'schedule', label: 'Schedule' },
+  { key: 'closeout', label: 'Closeout' },
+  { key: 'plan', label: 'Pay plan' },
+  { key: 'bills', label: 'Bills' },
+  { key: 'buckets', label: 'Buckets' },
+  { key: 'subscriptions', label: 'Subscriptions' },
+  { key: 'purchases', label: 'Purchases' },
+  { key: 'paydays', label: 'Paydays' },
+  { key: 'checklist', label: 'Checklist' },
+  { key: 'manage', label: 'Manage' },
+]
 
 const BILL_CATS = ['mortgage', 'utilities', 'insurance', 'council', 'debt', 'subscription', 'childcare', 'other']
 const RECURRENCE = [
@@ -95,7 +109,7 @@ function ReauthGate({ onUnlock }: { onUnlock: () => void }) {
   }
   return (
     <div className="max-w-lg mx-auto pt-8">
-      <Card className="p-5">
+      <Card contentClassName="p-5">
         <div className="flex flex-col gap-4">
           <div>
             <h2 className="text-xl font-bold text-ink">Unlock Solace</h2>
@@ -130,6 +144,29 @@ function DueBadge({ iso, paid }: { iso: string | null; paid?: boolean }) {
   return <Badge tone={tone}>{label}</Badge>
 }
 
+function CreatePanel({ label, children }: {
+  label: string
+  children: (close: () => void) => ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  if (!open) return <Button variant="secondary" onClick={() => setOpen(true)} className="self-start">+ {label}</Button>
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="min-h-10 rounded-xl px-3 text-sm font-semibold text-muted hover:bg-sunken hover:text-ink"
+          aria-label={`Close ${label.toLowerCase()} form`}
+        >
+          Close form ✕
+        </button>
+      </div>
+      {children(() => setOpen(false))}
+    </div>
+  )
+}
+
 function BillForm({ categories, onCreated, onError }: {
   categories: string[]; onCreated: () => void; onError: (message: string) => void
 }) {
@@ -160,7 +197,7 @@ function BillForm({ categories, onCreated, onError }: {
     } finally { setSaving(false) }
   }
   return (
-    <Card className="p-4">
+    <Card contentClassName="p-4">
       <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr_0.8fr_1fr_1fr_auto]">
         <Field label="Bill"><Input value={f.name} onChange={e => set('name', e.target.value)} placeholder="Electricity" /></Field>
         <Field label="Provider"><Input value={f.provider} onChange={e => set('provider', e.target.value)} /></Field>
@@ -417,16 +454,18 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError }: {
   }, [billSort, bills, categoryFilter, statusFilter])
   return (
     <div className="flex flex-col gap-4">
-      <BillForm categories={categories} onCreated={reload} onError={onError} />
+      <CreatePanel label="Add bill">
+        {close => <BillForm categories={categories} onCreated={() => { reload(); close() }} onError={onError} />}
+      </CreatePanel>
       {bills.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-3">
-          <Card className="p-3"><p className="text-xl font-extrabold text-ink">{money(annualTotal)}</p><p className="text-xs text-muted">Annual recurring cost</p></Card>
-          <Card className="p-3"><p className="text-xl font-extrabold text-ink">{money(fortnightlyTotal)}</p><p className="text-xs text-muted">Set aside per fortnight</p></Card>
-          <Card className="p-3"><p className="text-xl font-extrabold text-ink">{new Set(activeSetAside.map(bill => bill.category)).size}</p><p className="text-xs text-muted">Active categories</p></Card>
+          <Card contentClassName="p-3"><p className="text-xl font-extrabold text-ink">{money(annualTotal)}</p><p className="text-xs text-muted">Annual recurring cost</p></Card>
+          <Card contentClassName="p-3"><p className="text-xl font-extrabold text-ink">{money(fortnightlyTotal)}</p><p className="text-xs text-muted">Set aside per fortnight</p></Card>
+          <Card contentClassName="p-3"><p className="text-xl font-extrabold text-ink">{new Set(activeSetAside.map(bill => bill.category)).size}</p><p className="text-xs text-muted">Active categories</p></Card>
         </div>
       )}
       {bills.length > 0 && (
-        <Card className="p-3">
+        <Card contentClassName="p-3">
           <div className="grid gap-2 sm:grid-cols-3">
             <Select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)}>
               <option value="all">All categories</option>
@@ -452,7 +491,7 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError }: {
       {bills.length === 0 ? <EmptyState icon="💸" title="No bills yet" hint="" /> : (
         visibleBills.length === 0 ? <EmptyState icon="🔎" title="No bills match these filters" hint="Try another category or status." /> : <div className="grid gap-3 lg:grid-cols-2">
           {visibleBills.map(b => (
-            <Card key={b.id} className="p-4">
+            <Card key={b.id} contentClassName="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="font-semibold text-ink truncate">{b.name}</h3>
@@ -529,7 +568,7 @@ function BucketForm({ onCreated, onError }: {
     } finally { setSaving(false) }
   }
   return (
-    <Card className="p-4">
+    <Card contentClassName="p-4">
       <h3 className="mb-3 font-semibold text-ink">New bucket and pay rule</h3>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[1.3fr_1fr_0.9fr_0.8fr_0.8fr_0.8fr_auto]">
         <Field label="Bucket"><Input value={f.name} onChange={e => set('name', e.target.value)} placeholder="Emergency fund" /></Field>
@@ -655,11 +694,13 @@ function BucketsTab({ buckets, reload, onError }: {
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <BucketForm onCreated={reload} onError={onError} />
+      <CreatePanel label="Add bucket">
+        {close => <BucketForm onCreated={() => { reload(); close() }} onError={onError} />}
+      </CreatePanel>
       {buckets.length === 0 ? <EmptyState icon="🪣" title="No buckets yet" hint="" /> : (
         <div className="grid gap-3 lg:grid-cols-3">
           {buckets.map(b => (
-            <Card key={b.id} className="p-4">
+            <Card key={b.id} contentClassName="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div><h3 className="font-semibold text-ink">{b.name}</h3><p className="text-sm text-muted">{b.category || 'Set-aside'}</p></div>
                 <Badge tone={b.progress_percent >= 100 ? 'success' : 'primary'}>{b.progress_percent}%</Badge>
@@ -701,7 +742,7 @@ function SubscriptionForm({ onCreated, onError }: {
     } finally { setSaving(false) }
   }
   return (
-    <Card className="p-4">
+    <Card contentClassName="p-4">
       <div className="grid gap-3 lg:grid-cols-[1.3fr_1fr_0.7fr_1fr_1fr_auto]">
         <Field label="Subscription"><Input value={f.name} onChange={e => set('name', e.target.value)} /></Field>
         <Field label="Provider"><Input value={f.provider} onChange={e => set('provider', e.target.value)} /></Field>
@@ -784,10 +825,12 @@ function SubscriptionsTab({ subscriptions, reload, onError }: {
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <SubscriptionForm onCreated={reload} onError={onError} />
+      <CreatePanel label="Add subscription">
+        {close => <SubscriptionForm onCreated={() => { reload(); close() }} onError={onError} />}
+      </CreatePanel>
       <div className="grid gap-3 lg:grid-cols-3">
         {subscriptions.map(s => (
-          <Card key={s.id} className="p-4">
+          <Card key={s.id} contentClassName="p-4">
             <div className="flex items-start justify-between gap-3">
               <div><h3 className="font-semibold text-ink">{s.name}</h3><p className="text-sm text-muted">{s.provider || cap(s.billing_cycle)} · {money(s.amount)}</p></div>
               <DueBadge iso={s.next_renewal_at} />
@@ -818,7 +861,7 @@ function PurchaseForm({ categories, onCreated, onError }: {
     } finally { setSaving(false) }
   }
   return (
-    <Card className="p-4">
+    <Card contentClassName="p-4">
       <div className="grid gap-3 lg:grid-cols-[1.3fr_1fr_0.8fr_0.8fr_1fr_auto]">
         <Field label="Purchase"><Input value={f.name} onChange={e => set('name', e.target.value)} /></Field>
         <Field label="Category"><Select value={f.category} onChange={e => set('category', e.target.value)}><option value="">Choose…</option>{categories.map(category => <option key={category} value={category}>{cap(category)}</option>)}</Select></Field>
@@ -935,10 +978,12 @@ function PurchasesTab({ purchases, categories, reload, onError }: {
   }
   return (
     <div className="flex flex-col gap-4">
-      <PurchaseForm categories={categories} onCreated={reload} onError={onError} />
+      <CreatePanel label="Add purchase">
+        {close => <PurchaseForm categories={categories} onCreated={() => { reload(); close() }} onError={onError} />}
+      </CreatePanel>
       <div className="grid gap-3 lg:grid-cols-3">
         {purchases.map(p => (
-          <Card key={p.id} className="p-4">
+          <Card key={p.id} contentClassName="p-4">
             <div className="flex items-start justify-between gap-3">
               <div><h3 className="font-semibold text-ink">{p.name}</h3><p className="text-sm text-muted">{p.category || 'Planned'} · {money(p.saved_amount)} saved</p></div>
               <Badge tone={p.priority === 'high' ? 'warning' : 'neutral'}>{p.progress_percent}%</Badge>
@@ -978,7 +1023,7 @@ function PaydayForm({ onCreated, onError }: {
     } finally { setSaving(false) }
   }
   return (
-    <Card className="p-4">
+    <Card contentClassName="p-4">
       <div className="grid gap-3 lg:grid-cols-[1.4fr_0.8fr_1fr_1fr_auto]">
         <Field label="Title"><Input value={f.title} onChange={e => set('title', e.target.value)} /></Field>
         <Field label="Expected"><Input type="number" step="0.01" value={f.expected_amount} onChange={e => set('expected_amount', e.target.value)} /></Field>
@@ -1057,10 +1102,12 @@ function PaydaysTab({ paydays, reload, onError }: {
   }
   return (
     <div className="flex flex-col gap-4">
-      <PaydayForm onCreated={reload} onError={onError} />
+      <CreatePanel label="Add payday">
+        {close => <PaydayForm onCreated={() => { reload(); close() }} onError={onError} />}
+      </CreatePanel>
       <div className="grid gap-3 lg:grid-cols-3">
         {paydays.map(p => (
-          <Card key={p.id} className="p-4">
+          <Card key={p.id} contentClassName="p-4">
             <div className="flex items-start justify-between gap-3">
               <div><h3 className="font-semibold text-ink">{p.title}</h3><p className="text-sm text-muted">{money(p.expected_amount)}</p></div>
               <Badge tone={p.is_active ? 'success' : 'neutral'}>{p.is_active ? 'Included' : 'Paused'}</Badge>
@@ -1165,7 +1212,7 @@ function ChecklistTab({ items, preferences, plan, generating, reload, onGenerate
   return (
     <div className="flex flex-col gap-4">
       {viewedPlan && (
-        <Card className="p-4">
+        <Card contentClassName="p-4">
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
             <div>
               <p className="text-sm font-medium text-muted">Payday checklist</p>
@@ -1181,7 +1228,7 @@ function ChecklistTab({ items, preferences, plan, generating, reload, onGenerate
           </div>
         </Card>
       )}
-      <Card className="p-4">
+      <Card contentClassName="p-4">
         <div className="flex flex-col gap-3 sm:flex-row">
           <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Move money to bills account" />
           <Button onClick={add} loading={saving} disabled={!title.trim()}>Add</Button>
@@ -1209,7 +1256,7 @@ function ChecklistTab({ items, preferences, plan, generating, reload, onGenerate
         ))}
       </div>}
       {preferences.some(preference => preference.is_hidden) && (
-        <Card className="p-4">
+        <Card contentClassName="p-4">
           <h3 className="font-semibold text-ink">Hidden generated items</h3>
           <div className="mt-3 divide-y divide-line">
             {preferences.filter(preference => preference.is_hidden).map(preference => (
@@ -1295,7 +1342,7 @@ function ScheduleTab({ schedule, month, loading, onMonth, onAction }: {
   const todayKey = dateKey(new Date().toISOString())
 
   const eventRow = (event: ScheduleEvent) => (
-    <Card key={event.key} className="p-3">
+    <Card key={event.key} contentClassName="p-3">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div className="flex min-w-0 items-center gap-3">
           <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${event.kind === 'income' ? 'bg-success/10' : 'bg-warning/10'}`}>
@@ -1316,7 +1363,7 @@ function ScheduleTab({ schedule, month, loading, onMonth, onAction }: {
 
   return (
     <div className="space-y-4">
-      <Card className="p-3">
+      <Card contentClassName="p-3">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
           <div className="flex items-center gap-2">
             <Button size="sm" variant="ghost" onClick={() => onMonth(shiftMonth(month, -1))}>‹</Button>
@@ -1342,7 +1389,7 @@ function ScheduleTab({ schedule, month, loading, onMonth, onAction }: {
             ['Skipped', schedule.summary.skipped_total],
             ['Income', schedule.summary.income_total],
           ].map(([title, value]) => (
-            <Card key={title} className="p-3">
+            <Card key={title} contentClassName="p-3">
               <p className="text-lg font-extrabold text-ink">{money(value)}</p>
               <p className="text-xs text-muted">{title}</p>
             </Card>
@@ -1350,7 +1397,7 @@ function ScheduleTab({ schedule, month, loading, onMonth, onAction }: {
         </div>
       )}
       {view === 'calendar' ? (
-        <Card className="overflow-x-auto p-3">
+        <Card className="overflow-x-auto" contentClassName="p-3">
           <div className="min-w-[760px]">
             <div className="grid grid-cols-7 text-center text-xs font-semibold uppercase tracking-wide text-muted">
               {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => <div key={day} className="p-2">{day}</div>)}
@@ -1475,7 +1522,7 @@ function ForecastTab({ initial, onManage, onError }: {
   const covered = forecast.is_covered === true
   return (
     <div className="space-y-4">
-      <Card className="p-4">
+      <Card contentClassName="p-4">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div>
             <div className="flex items-center gap-2">
@@ -1505,24 +1552,24 @@ function ForecastTab({ initial, onManage, onError }: {
       </Card>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Card className="p-4">
+        <Card contentClassName="p-4">
           <p className="text-sm font-medium text-muted">Available to withdraw</p>
           <p className={`mt-1 text-3xl font-extrabold ${covered ? 'text-success' : 'text-danger'}`}>
             {covered ? money(forecast.safe_to_withdraw || '0') : money('0')}
           </p>
           <p className="mt-1 text-xs text-muted">Keeps every listed bill covered plus the {money(forecast.buffer_amount)} safety buffer.</p>
         </Card>
-        <Card className="p-4">
+        <Card contentClassName="p-4">
           <p className="text-sm font-medium text-muted">Bills-only surplus</p>
           <p className="mt-1 text-2xl font-extrabold text-ink">{money(forecast.bills_only_surplus || '0')}</p>
           <p className="mt-1 text-xs text-muted">Maximum before preserving the safety buffer.</p>
         </Card>
-        <Card className="p-4">
+        <Card contentClassName="p-4">
           <p className="text-sm font-medium text-muted">Lowest forecast balance</p>
           <p className={`mt-1 text-2xl font-extrabold ${Number(forecast.lowest_balance) < 0 ? 'text-danger' : 'text-ink'}`}>{money(forecast.lowest_balance || '0')}</p>
           <p className="mt-1 text-xs text-muted">Reached {dateOnly(forecast.lowest_balance_date)}.</p>
         </Card>
-        <Card className="p-4">
+        <Card contentClassName="p-4">
           <p className="text-sm font-medium text-muted">Ending balance</p>
           <p className="mt-1 text-2xl font-extrabold text-ink">{money(forecast.ending_balance || '0')}</p>
           <p className="mt-1 text-xs text-muted">After expected transfers and bills.</p>
@@ -1530,7 +1577,7 @@ function ForecastTab({ initial, onManage, onError }: {
       </div>
 
       {!covered && (
-        <Card className="border-danger/30 bg-danger/5 p-4">
+        <Card className="border-danger/30 bg-danger/5" contentClassName="p-4">
           <h3 className="font-bold text-danger">Projected shortfall of {money(forecast.shortfall || '0')}</h3>
           <p className="mt-1 text-sm text-muted">
             The account first reaches its lowest point on {dateOnly(forecast.lowest_balance_date)}. Increase Bills-bucket transfers or top up the account before then.
@@ -1539,9 +1586,9 @@ function ForecastTab({ initial, onManage, onError }: {
       )}
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Card className="p-3"><p className="text-lg font-bold text-success">+{money(forecast.total_contributions)}</p><p className="text-xs text-muted">Expected Bills-bucket transfers</p></Card>
-        <Card className="p-3"><p className="text-lg font-bold text-ink">−{money(forecast.total_bills)}</p><p className="text-xs text-muted">Included bills + subscriptions due</p></Card>
-        <Card className="p-3"><p className="text-lg font-bold text-ink">{money(forecast.required_opening_balance)}</p><p className="text-xs text-muted">Minimum opening balance required</p></Card>
+        <Card contentClassName="p-3"><p className="text-lg font-bold text-success">+{money(forecast.total_contributions)}</p><p className="text-xs text-muted">Expected Bills-bucket transfers</p></Card>
+        <Card contentClassName="p-3"><p className="text-lg font-bold text-ink">−{money(forecast.total_bills)}</p><p className="text-xs text-muted">Included bills + subscriptions due</p></Card>
+        <Card contentClassName="p-3"><p className="text-lg font-bold text-ink">{money(forecast.required_opening_balance)}</p><p className="text-xs text-muted">Minimum opening balance required</p></Card>
       </div>
 
       <Card className="overflow-hidden">
@@ -1614,7 +1661,7 @@ function PayPlan({ plan, generating, onGenerate, onTab, onError }: {
   }
   return (
     <div className="space-y-4">
-      <Card className="p-4">
+      <Card contentClassName="p-4">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
           <div>
             <p className="text-sm font-medium text-muted">Pay cycle</p>
@@ -1643,13 +1690,13 @@ function PayPlan({ plan, generating, onGenerate, onTab, onError }: {
           ['Bucket transfers', money(viewed.allocated_total)],
           ['Remaining after transfers', money(viewed.remaining)],
         ].map(([label, value]) => (
-          <Card key={label} className="p-4">
+          <Card key={label} contentClassName="p-4">
             <p className="text-2xl font-extrabold text-ink">{value}</p>
             <p className="mt-1 text-sm text-muted">{label}</p>
           </Card>
         ))}
       </div>
-      <Card className="p-4">
+      <Card contentClassName="p-4">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
           <div>
             <div className="flex items-center gap-2">
@@ -1691,7 +1738,7 @@ function PayPlan({ plan, generating, onGenerate, onTab, onError }: {
       )}
       <div className="grid gap-3 lg:grid-cols-2">
         {viewed.sources.map(source => (
-          <Card key={source.payday_id} className="p-4">
+          <Card key={source.payday_id} contentClassName="p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="font-semibold text-ink">{source.title}</h3>
@@ -1849,27 +1896,23 @@ export function SolacePage() {
       <PageHeader title="Solace" subtitle="Bills, set-asides and planned purchases" icon="💸" />
       {error && <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
       <div className="flex flex-col gap-2 sm:flex-row">
-        <Input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') search() }} placeholder="Search Solace" />
-        <Button variant="ghost" onClick={search}>Search</Button>
-        <Button variant="ghost" onClick={load} loading={loading}>Refresh</Button>
+        <SearchField
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          onClear={() => { setQ(''); void load() }}
+          onKeyDown={e => { if (e.key === 'Enter') void search() }}
+          placeholder="Search Solace"
+        />
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={search} className="flex-1 sm:flex-none">Search</Button>
+          <Button variant="ghost" onClick={load} loading={loading} className="flex-1 sm:flex-none">Refresh</Button>
+        </div>
       </div>
       <Tabs
-        tabs={[
-          { key: 'overview', label: 'Overview' },
-          { key: 'forecast', label: 'Forecast' },
-          { key: 'schedule', label: 'Schedule' },
-          { key: 'closeout', label: 'Closeout' },
-          { key: 'plan', label: 'Pay plan' },
-          { key: 'bills', label: 'Bills' },
-          { key: 'buckets', label: 'Buckets' },
-          { key: 'subscriptions', label: 'Subscriptions' },
-          { key: 'purchases', label: 'Purchases' },
-          { key: 'paydays', label: 'Paydays' },
-          { key: 'checklist', label: 'Checklist' },
-          { key: 'manage', label: 'Manage' },
-        ]}
+        tabs={SOLACE_TABS}
         active={tab}
-        onChange={k => setTab(k as Tab)}
+        onChange={setTab}
+        mobileSelectLabel="Solace section"
       />
       {tab === 'overview' && <Overview bills={bills} buckets={buckets} subscriptions={subscriptions} purchases={purchases} health={health} closeout={closeout} forecast={forecast} onTab={setTab} />}
       {tab === 'forecast' && <ForecastTab initial={forecast} onManage={() => setTab('manage')} onError={setError} />}

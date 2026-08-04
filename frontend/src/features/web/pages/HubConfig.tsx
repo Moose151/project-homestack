@@ -2,14 +2,23 @@ import { useEffect, useState } from 'react'
 import { api } from '../../../api/client'
 import type { HubWidgetConfig } from '../../../api/types'
 import { Card } from '../../../components/Card'
+import { Button } from '../../../components/Button'
+import { Field, Input } from '../../../components/Field'
 
 const SIZES = ['small', 'medium', 'large'] as const
 
 export function HubConfig({ isAdmin, onChanged }: { isAdmin: boolean; onChanged: () => void }) {
   const [widgets, setWidgets] = useState<HubWidgetConfig[]>([])
   const [busy, setBusy] = useState(false)
+  const [countdownTitle, setCountdownTitle] = useState('')
+  const [countdownDate, setCountdownDate] = useState('')
 
-  const load = () => api.getHubWidgetConfig().then(r => setWidgets(r.widgets))
+  const load = () => api.getHubWidgetConfig().then(r => {
+    setWidgets(r.widgets)
+    const countdown = r.widgets.find(widget => widget.key === 'countdown')
+    setCountdownTitle(countdown?.settings.title ?? '')
+    setCountdownDate(countdown?.settings.target_date ?? '')
+  })
   useEffect(() => { load() }, [])
 
   const apply = async (fn: () => Promise<{ widgets: HubWidgetConfig[] }>) => {
@@ -76,25 +85,48 @@ export function HubConfig({ isAdmin, onChanged }: { isAdmin: boolean; onChanged:
             <p className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Household defaults (admin)</p>
             <ul className="flex flex-col gap-1.5">
               {widgets.map(w => (
-                <li key={w.key} className="flex items-center gap-2 text-sm">
-                  <span className="flex-1 text-ink">{w.name}</span>
-                  <select
-                    disabled={busy || !w.household_enabled}
-                    value={w.size}
-                    onChange={e => apply(() => api.setHouseholdWidget(w.key, { size: e.target.value }))}
-                    className="text-xs rounded-lg border border-line bg-raised px-1.5 py-1 text-ink disabled:opacity-40"
-                  >
-                    {SIZES.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <button
-                    disabled={busy}
-                    onClick={() => apply(() => api.setHouseholdWidget(w.key, { is_enabled: !w.household_enabled }))}
-                    className={`text-xs px-2 py-1 rounded-lg font-medium ${
-                      w.household_enabled ? 'bg-primary-soft text-primary' : 'bg-sunken text-muted'
-                    }`}
-                  >
-                    {w.household_enabled ? 'Enabled' : 'Disabled'}
-                  </button>
+                <li key={w.key} className="rounded-xl text-sm">
+                  <div className="flex min-h-10 items-center gap-2">
+                    <span className="flex-1 text-ink">{w.name}</span>
+                    <select
+                      disabled={busy || !w.household_enabled}
+                      value={w.size}
+                      onChange={e => apply(() => api.setHouseholdWidget(w.key, { size: e.target.value }))}
+                      className="rounded-lg border border-line bg-raised px-1.5 py-1 text-xs text-ink disabled:opacity-40"
+                    >
+                      {SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <button
+                      disabled={busy}
+                      onClick={() => apply(() => api.setHouseholdWidget(w.key, { is_enabled: !w.household_enabled }))}
+                      className={`min-h-9 rounded-lg px-2 py-1 text-xs font-medium ${
+                        w.household_enabled ? 'bg-primary-soft text-primary' : 'bg-sunken text-muted'
+                      }`}
+                    >
+                      {w.household_enabled ? 'Enabled' : 'Disabled'}
+                    </button>
+                  </div>
+                  {w.key === 'countdown' && (
+                    <div className="mt-2 grid gap-2 rounded-xl bg-sunken p-3 sm:grid-cols-[1fr_180px_auto] sm:items-end">
+                      <Field label="Countdown name">
+                        <Input value={countdownTitle} onChange={event => setCountdownTitle(event.target.value)} placeholder="Our holiday" />
+                      </Field>
+                      <Field label="Target date">
+                        <Input type="date" value={countdownDate} onChange={event => setCountdownDate(event.target.value)} />
+                      </Field>
+                      <Button
+                        size="sm"
+                        disabled={busy || !countdownTitle.trim() || !countdownDate}
+                        onClick={() => apply(() => api.setHouseholdWidget('countdown', {
+                          is_enabled: true,
+                          size: w.size,
+                          settings: { title: countdownTitle.trim(), target_date: countdownDate },
+                        }))}
+                      >
+                        Save & show
+                      </Button>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

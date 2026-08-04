@@ -10,7 +10,7 @@ import type {
 import type { Person } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
-import { Input, Textarea, Select } from '../../../components/Field'
+import { Input, SearchField, Textarea, Select } from '../../../components/Field'
 import { Tabs, type TabDef } from '../../../components/Tabs'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
@@ -22,7 +22,7 @@ import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
 const inputCls =
-  'w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink ' +
+  'w-full min-w-0 max-w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink ' +
   'placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 min-h-[44px]'
 
 const TYPE_LABELS: Record<AssessmentType, string> = {
@@ -226,7 +226,7 @@ function AssessmentDetail({ assessment, onError }: {
                 )}
                 <button
                   onClick={() => deleteFile(f.id)}
-                  className="opacity-0 group-hover:opacity-100 text-muted hover:text-danger text-lg leading-none flex-shrink-0 transition-opacity"
+                  className="sm:opacity-0 sm:group-hover:opacity-100 text-muted hover:text-danger text-lg leading-none flex-shrink-0 transition-opacity"
                   aria-label="Remove file"
                 >×</button>
               </div>
@@ -407,11 +407,11 @@ function AssignmentRow({ a, onChange, onDelete, onError }: {
           value={a.status}
           onChange={e => setStatus(e.target.value as AssessmentStatus)}
           disabled={busy}
-          className="text-xs rounded-lg border border-line bg-surface px-2 py-1 text-muted-strong flex-shrink-0"
+          className="max-w-24 flex-shrink-0 rounded-lg border border-line bg-surface px-2 py-1 text-xs text-muted-strong sm:max-w-none"
         >
           {Object.entries(STATUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
-        <button onClick={remove} className="opacity-0 group-hover:opacity-100 text-muted hover:text-danger transition-all text-lg leading-none flex-shrink-0" aria-label="Delete">×</button>
+        <button onClick={remove} className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg text-lg leading-none text-muted transition-all hover:bg-danger-soft hover:text-danger sm:opacity-0 sm:group-hover:opacity-100" aria-label="Delete">×</button>
       </div>
     </li>
   )
@@ -546,7 +546,7 @@ function CoursesTab({ courses, reload, people, onError }: {
                   <div className={`font-semibold truncate ${c.is_completed ? 'line-through text-muted' : 'text-ink'}`}>{c.name}</div>
                   {c.code && <div className="text-xs text-primary font-medium">{c.code}</div>}
                 </div>
-                <button onClick={() => remove(c)} className="opacity-0 group-hover:opacity-100 text-muted hover:text-danger transition-all text-lg leading-none" aria-label="Delete">×</button>
+                <button onClick={() => remove(c)} className="sm:opacity-0 sm:group-hover:opacity-100 text-muted hover:text-danger transition-all text-lg leading-none" aria-label="Delete">×</button>
               </div>
               {c.teacher && <div className="text-sm text-muted mt-2">{c.teacher}</div>}
               {c.institution_name && <div className="text-xs text-muted mt-1">{c.institution_name}</div>}
@@ -670,7 +670,7 @@ function TimetableTab({ courses, onError }: { courses: EducationCourse[]; onErro
                         {s.location && <div className="text-xs text-muted">{s.location}</div>}
                       </div>
                       {s.recurrence_rule && <span className="text-xs px-2 py-0.5 rounded-full bg-sunken text-muted-strong flex-shrink-0">Weekly</span>}
-                      <button onClick={() => remove(s)} className="opacity-0 group-hover:opacity-100 text-muted hover:text-danger transition-all text-lg leading-none flex-shrink-0" aria-label="Delete">×</button>
+                      <button onClick={() => remove(s)} className="sm:opacity-0 sm:group-hover:opacity-100 text-muted hover:text-danger transition-all text-lg leading-none flex-shrink-0" aria-label="Delete">×</button>
                     </li>
                   )
                 })}
@@ -809,7 +809,7 @@ function EventsTab({ courses, people, institutions, defaultAssignee, onError }: 
                     </Link>
                   </div>
                 </div>
-                <button onClick={() => remove(ev)} className="opacity-0 group-hover:opacity-100 text-muted hover:text-danger transition-all text-lg leading-none flex-shrink-0" aria-label="Delete">×</button>
+                <button onClick={() => remove(ev)} className="sm:opacity-0 sm:group-hover:opacity-100 text-muted hover:text-danger transition-all text-lg leading-none flex-shrink-0" aria-label="Delete">×</button>
               </li>
             ))}
           </ul>
@@ -1232,7 +1232,12 @@ export function EducationPage() {
     <div className="space-y-5 max-w-5xl mx-auto">
       <PageHeader title="Education" icon="🎓" subtitle="Your courses, deadlines, timetable and events." />
 
-      <Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search courses, assignments, classes and events…" />
+      <SearchField
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        onClear={() => setQuery('')}
+        placeholder="Search courses, assignments, classes and events…"
+      />
 
       {error && (
         <div className="flex items-center justify-between gap-3 bg-danger-soft text-danger text-sm rounded-xl px-4 py-2.5">
@@ -1245,7 +1250,7 @@ export function EducationPage() {
         <EducationSearchResults results={results} />
       ) : (
         <>
-          <Tabs tabs={TABS} active={tab} onChange={setTab} />
+          <Tabs tabs={TABS} active={tab} onChange={setTab} mobileSelectLabel="Education section" />
 
           {tab === 'profile' && <ProfileTab people={people} institutions={institutions} onInstitutionCreated={i => setInstitutions(prev => [...prev, i])} defaultPersonId={defaultAssignee} onError={setError} />}
           {tab === 'assignments' && <AssignmentsTab courses={courses} people={people} defaultAssignee={defaultAssignee} onError={setError} />}
@@ -1270,7 +1275,9 @@ function EducationSearchResults({ results }: {
         <div className="flex flex-col gap-1.5">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Courses</p>
           {results.courses.map(c => (
-            <Card key={`c${c.id}`}><span className="text-sm font-medium text-ink">{c.code ? `${c.code} · ` : ''}{c.name}</span></Card>
+            <Link key={`c${c.id}`} to="/education?tab=courses" className="group block">
+              <Card className="transition-colors group-hover:border-primary/40"><span className="text-sm font-medium text-ink">{c.code ? `${c.code} · ` : ''}{c.name}</span></Card>
+            </Link>
           ))}
         </div>
       )}
@@ -1278,10 +1285,12 @@ function EducationSearchResults({ results }: {
         <div className="flex flex-col gap-1.5">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Assignments</p>
           {results.assessments.map(a => (
-            <Card key={`a${a.id}`}>
-              <span className="text-sm text-ink">{a.title}</span>
-              {a.due_at && <span className="ml-2 text-xs text-muted">{new Date(a.due_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
-            </Card>
+            <Link key={`a${a.id}`} to="/education?tab=assignments" className="group block">
+              <Card className="transition-colors group-hover:border-primary/40">
+                <span className="text-sm text-ink">{a.title}</span>
+                {a.due_at && <span className="ml-2 text-xs text-muted">{new Date(a.due_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
+              </Card>
+            </Link>
           ))}
         </div>
       )}
@@ -1289,7 +1298,9 @@ function EducationSearchResults({ results }: {
         <div className="flex flex-col gap-1.5">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Classes</p>
           {results.class_sessions.map(s => (
-            <Card key={`s${s.id}`}><span className="text-sm text-ink">{s.display_title}</span></Card>
+            <Link key={`s${s.id}`} to="/education?tab=timetable" className="group block">
+              <Card className="transition-colors group-hover:border-primary/40"><span className="text-sm text-ink">{s.display_title}</span></Card>
+            </Link>
           ))}
         </div>
       )}
@@ -1297,10 +1308,12 @@ function EducationSearchResults({ results }: {
         <div className="flex flex-col gap-1.5">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Events</p>
           {results.events.map(ev => (
-            <Card key={`e${ev.id}`}>
-              <span className="text-sm text-ink">{ev.title}</span>
-              <span className="ml-2 text-xs text-muted">{new Date(ev.start_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-            </Card>
+            <Link key={`e${ev.id}`} to={calendarDayHref(ev.start_at)} className="group block">
+              <Card className="transition-colors group-hover:border-primary/40">
+                <span className="text-sm text-ink">{ev.title}</span>
+                <span className="ml-2 text-xs text-primary">Open date →</span>
+              </Card>
+            </Link>
           ))}
         </div>
       )}

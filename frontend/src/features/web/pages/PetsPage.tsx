@@ -4,7 +4,7 @@ import { api } from '../../../api/client'
 import type { Pet, PetSpecies, PetTreatment, PetAppointment, TreatmentType } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
-import { Input, Textarea, Select, Field } from '../../../components/Field'
+import { Input, SearchField, Textarea, Select, Field } from '../../../components/Field'
 import { Tabs, type TabDef } from '../../../components/Tabs'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
@@ -153,7 +153,7 @@ function TreatmentRow({ t, onChange, onDelete, onError }: {
         </div>
       </div>
       {t.next_due_at && <Button size="sm" variant="secondary" onClick={complete}>Done</Button>}
-      <button onClick={remove} className="opacity-0 group-hover:opacity-100 text-muted hover:text-danger text-lg leading-none transition" aria-label="Delete">×</button>
+      <button onClick={remove} className="sm:opacity-0 sm:group-hover:opacity-100 text-muted hover:text-danger text-lg leading-none transition" aria-label="Delete">×</button>
     </li>
   )
 }
@@ -216,7 +216,7 @@ function PetCard({ pet, onChange, onDelete, onError, canDelete }: {
           <div className="font-semibold text-ink truncate">{pet.name}</div>
           <div className="text-xs text-muted">{SPECIES_LABELS[pet.species]}{pet.breed ? ` · ${pet.breed}` : ''}</div>
         </button>
-        <div className="flex flex-shrink-0 gap-1 opacity-0 group-hover:opacity-100 transition">
+        <div className="flex flex-shrink-0 gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition">
           <button onClick={() => setEditing(true)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
           {canDelete && <button onClick={remove} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger">Delete</button>}
         </div>
@@ -428,7 +428,12 @@ export function PetsPage() {
     <div className="space-y-5 max-w-5xl mx-auto">
       <PageHeader title="Pets" icon="🐾" subtitle="Pet profiles, treatment reminders and vet appointments." />
 
-      <Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search pets, treatments and appointments…" />
+      <SearchField
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        onClear={() => setQuery('')}
+        placeholder="Search pets, treatments and appointments…"
+      />
 
       {error && (
         <div className="flex items-center justify-between gap-3 bg-danger-soft text-danger text-sm rounded-xl px-4 py-2.5">
@@ -445,19 +450,38 @@ export function PetsPage() {
             {results.pets.length > 0 && (
               <div className="flex flex-col gap-1.5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">Pets</p>
-                {results.pets.map(p => <Card key={`p${p.id}`}><span className="text-sm text-ink">{SPECIES_EMOJI[p.species]} {p.name}</span></Card>)}
+                {results.pets.map(p => (
+                  <Link key={`p${p.id}`} to="/pets" className="group block">
+                    <Card className="transition-colors group-hover:border-primary/40">
+                      <span className="text-sm font-medium text-ink">{SPECIES_EMOJI[p.species]} {p.name}</span>
+                    </Card>
+                  </Link>
+                ))}
               </div>
             )}
             {results.treatments.length > 0 && (
               <div className="flex flex-col gap-1.5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">Treatments</p>
-                {results.treatments.map(t => <Card key={`t${t.id}`}><span className="text-sm text-ink">{t.pet_name} · {t.display_name}</span></Card>)}
+                {results.treatments.map(t => (
+                  <Link key={`t${t.id}`} to="/pets?tab=reminders" className="group block">
+                    <Card className="transition-colors group-hover:border-primary/40">
+                      <span className="text-sm font-medium text-ink">{t.pet_name} · {t.display_name}</span>
+                    </Card>
+                  </Link>
+                ))}
               </div>
             )}
             {results.appointments.length > 0 && (
               <div className="flex flex-col gap-1.5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">Appointments</p>
-                {results.appointments.map(a => <Card key={`a${a.id}`}><span className="text-sm text-ink">{a.pet_name} · {a.display_title}</span></Card>)}
+                {results.appointments.map(a => (
+                  <Link key={`a${a.id}`} to={calendarDayHref(a.start_at)} className="group block">
+                    <Card className="transition-colors group-hover:border-primary/40">
+                      <span className="text-sm font-medium text-ink">{a.pet_name} · {a.display_title}</span>
+                      <span className="ml-2 text-xs text-primary">Open date →</span>
+                    </Card>
+                  </Link>
+                ))}
               </div>
             )}
           </div>

@@ -3,7 +3,7 @@ import { api } from '../../../api/client'
 import type { WikiCategory, WikiPage } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
-import { Input, Textarea, Select, Field } from '../../../components/Field'
+import { Input, SearchField, Textarea, Select, Field } from '../../../components/Field'
 import { Tabs, type TabDef } from '../../../components/Tabs'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
@@ -169,8 +169,8 @@ function PageCard({ page, categories, onChange, onDelete, onError, canDelete }: 
           <button onClick={toggleFavourite} className="text-muted hover:text-warning px-1" title={page.is_favourite ? 'Unpin' : 'Pin as favourite'}>
             {page.is_favourite ? '⭐' : '☆'}
           </button>
-          <button onClick={() => setEditing(true)} className="opacity-0 group-hover:opacity-100 rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink transition">Edit</button>
-          {canDelete && <button onClick={remove} className="opacity-0 group-hover:opacity-100 rounded-lg px-2 py-1 text-xs text-muted hover:text-danger transition">Delete</button>}
+          <button onClick={() => setEditing(true)} className="sm:opacity-0 sm:group-hover:opacity-100 rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink transition">Edit</button>
+          {canDelete && <button onClick={remove} className="sm:opacity-0 sm:group-hover:opacity-100 rounded-lg px-2 py-1 text-xs text-muted hover:text-danger transition">Delete</button>}
         </div>
       </div>
       {expanded && (
@@ -339,7 +339,7 @@ function CategoriesTab({ categories, onChange, isAdmin, onError }: {
                   <span className="text-xs text-muted flex-shrink-0">{c.page_count ?? 0}</span>
                 </div>
                 {isAdmin && (
-                  <div className="flex flex-shrink-0 gap-1 opacity-0 group-hover:opacity-100 transition">
+                  <div className="flex flex-shrink-0 gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition">
                     <button onClick={() => toggleHidden(c)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">{c.is_hidden ? 'Show' : 'Hide'}</button>
                     <button onClick={() => remove(c)} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger">Delete</button>
                   </div>
@@ -387,7 +387,7 @@ export function HomeWikiPage() {
     <div className="space-y-5 max-w-5xl mx-auto">
       <PageHeader title="Home Wiki" icon="📖" subtitle="The household knowledge base — WiFi, bin night, emergency info, how-tos." />
 
-      <Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search the wiki…" />
+      <SearchField value={query} onChange={e => setQuery(e.target.value)} onClear={() => setQuery('')} placeholder="Search the wiki…" />
 
       {error && (
         <div className="flex items-center justify-between gap-3 bg-danger-soft text-danger text-sm rounded-xl px-4 py-2.5">

@@ -389,7 +389,7 @@ export interface HubWidget {
   size: string
   supports_kiosk: boolean
   items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | PetTreatment[] | PetAppointment[] | MaintenanceTask[] | Appliance[] | Improvement[] | SolaceBill[] | SolaceSubscription[] | SolacePurchase[] | AppNotification[]
-  meta?: { unread_count?: number }
+  meta?: { unread_count?: number; title?: string; target_date?: string }
 }
 
 export interface HubResponse {
@@ -407,6 +407,7 @@ export interface HubWidgetConfig {
   size: 'small' | 'medium' | 'large'
   user_hidden: boolean
   user_order: number | null
+  settings: { title?: string; target_date?: string }
 }
 
 // ---------------------------------------------------------------------------

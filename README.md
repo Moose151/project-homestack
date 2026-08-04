@@ -16,8 +16,10 @@ Hub/Atlas/Calendar surfaces, Education, Home Wiki and Pets. Homestead now includ
 area pages with purchase/maintenance/renovation plans and exact room/whole-house cost summaries.
 Native Solace has reached standalone feature parity, including a dated bills-account forecast and
 safe-withdrawal calculation. The v0.19 household-launch pass makes phone navigation, Hub shortcuts,
-calendar reading, quick creation, notifications and sign-in easier for everyday non-admin use;
-Solace's extra password-on-entry prompt is now an admin-controlled setting. Security maturation
+calendar reading, search journeys, touch actions and quick creation easier for everyday non-admin
+use; dense Solace, Homestead and Education workspaces now have phone-friendly section navigation,
+the Hub includes a configurable household countdown, and Solace's extra password-on-entry prompt
+is an admin-controlled setting. Security maturation
 includes the shared permission-checked attachment service, audited sensitive downloads, non-public
 file storage and five-minute password elevation.
 Production Solace import/comparison remains pending until the home-server environment is available.

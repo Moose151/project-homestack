@@ -96,7 +96,8 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: Household-launch responsive mobile pass shipped locally (2026-08-04, v0.19.0),
+**Phase: Household-launch responsive mobile pass and dense-workspace follow-up shipped locally
+(2026-08-04, v0.19.1),
 including optional Solace password-on-entry; deploy/pilot with the owner's partner is now the
 highest-value validation step. Milestone 4 security maturation remains the next local workstream
 and native Solace real-data comparison still requires the home server. Kiosk work remains deferred.**
@@ -197,6 +198,11 @@ and native Solace real-data comparison still requires the home server. Kiosk wor
   defaults and polish: adult-useful bottom navigation, calmer phone header, mobile Home launchpad,
   profile editing, friendly quick-create/sign-in/empty states, safe-area spacing, auto-scrolling
   tabs, readable mobile Calendar Month and Solace Schedule, and actionable notifications.
+- [x] **Dense mobile workspace follow-up (v0.19.1, 2026-08-04).** Solace, Homestead and Education
+  now use compact phone section pickers; Solace creation forms stay collapsed and no longer have
+  doubled card padding; hover-only actions remain visible to touch users; Homestead maintenance
+  rows stack cleanly; node search results navigate to useful destinations; and the Hub offers a
+  household-configured countdown widget for a named target date.
 - [~] **Milestone 4: security maturation — IN PROGRESS (v0.17.0).** Shared attachments now have
   protected upload/list/download/delete APIs, visibility+sensitivity enforcement through the
   central resolver, randomized non-public storage, sensitive-download audit records and frontend
@@ -248,7 +254,7 @@ and native Solace real-data comparison still requires the home server. Kiosk wor
 
 ## 6. Active tasks — household pilot, then continue M4 locally
 
-**Immediate product step:** deploy v0.19.0 to the home server and let the owner's partner use the
+**Immediate product step:** deploy v0.19.1 to the home server and let the owner's partner use the
 responsive web app naturally on her phone. Capture friction from real Calendar, Atlas, Homestead,
 notification and quick-create journeys before doing another broad visual pass. Each browser can
 edit its four bottom-bar destinations from More; new browsers default to Home/Calendar/Atlas/
@@ -260,8 +266,8 @@ through the central resolver, define the web/kiosk locked-state contract and sho
 timeout, then close the remaining permission/user-change audit gaps. Keep permission tests first.
 
 **Production track (requires the home server):** rebuild both production images, deploy through
-v0.19.0, and run `migrate` through `attachments.0001`, `permissions.0020`, `solace.0007` and
-`homestead.0003`.
+v0.19.1, and run `migrate` through `attachments.0001`, `permissions.0020`, `solace.0007`,
+`homestead.0003` and `hub.0013`.
 
 The Solace cutover sequence remains: rerun the importer
 dry-run/apply so settings, categories, bucket rules, historical occurrences, balances,
@@ -418,6 +424,7 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-08-04 | Assistant | M4 | **Protected shared attachments and expiring re-auth shipped (v0.17.0).** Built the D11 attachment model/API with permission-first tests, linked node/record metadata, randomized storage, checksums/limits, visibility+sensitivity filtering through the central resolver, ownership-aware soft deletion and audited sensitive downloads. Removed raw `/media/` serving; Education assessment files now download through a visibility-checked API and private assessment/note/file direct-ID lookups were tightened. Password elevation is timestamped, expires after five minutes, rejects guest/child elevation and invalidates legacy permanent flags. Frontend shared client/types added. **581 backend tests green; frontend type-check + production build clean; no migration drift.** | Continue M4 locally: generic sensitive-node lock contract/web+kiosk timeout and remaining permission/user-change audit coverage. Production later: migrate `attachments.0001`, `permissions.0020`, `solace.0007`, then complete Solace cutover validation. |
 | 2026-08-04 | Assistant | Homestead | **Room and area planning shipped (v0.18.0).** Added household-scoped `RoomArea` and `RoomPlanItem` models plus layered CRUD APIs, permission-first tests, central visibility filtering, publish-only lifecycle events, admin registration and local/global search. Each room links from the new Homestead Rooms tab to a dedicated page. Plans combine purchases, maintenance, renovations and upgrades with priority, assignee, quantity, estimated unit cost, optional actual total cost, reference link and notes. Planned/in-progress items drive remaining estimates; completed items use actual cost or estimate fallback; archived items stay visible but are excluded. Exact decimal summaries roll up per room and household. Completed/archived items can be reopened/restored; stable room routes and `floorplan_data` reserve the future clickable-map path. **593 backend tests green; frontend type-check + production build clean; no migration drift.** | **Deploy:** rebuild both images and run `docker exec homestack-backend python manage.py migrate` (`homestead.0003`). Then enable/open Homestead and live-test room creation, item completion/actual costs and phone layout. Future room slice: clickable floor-plan renderer. Otherwise resume remaining M4 lock/audit work locally. |
 | 2026-08-04 | Assistant | Mobile launch | **Household-launch mobile experience shipped (v0.19.0).** Reworked the responsive shell for partner-first daily use: avatar-led calmer phone header; safe-area-aware five-target bottom bar; new-browser defaults prioritising Home/Calendar/Atlas/Homestead; clearer active states; a three-column More grid; profile/avatar editing from mobile; and warmer login language. Added a phone-only Hub launchpad for Calendar, Lists & notes, Our home and Pets; friendlier quick-create choices/descriptions including Home plan; responsive shared headings/cards/modals and auto-centred scrollable tabs. Calendar Month renders as a readable agenda on phones, Solace Schedule defaults to List, and notification taps now follow `action_url`. Added an admin-controlled **Ask for a password when opening Solace** switch in Manage settings. It uses existing `HouseholdNode.requires_reauthentication`, defaults on, is permission-tested, preserves `solace.*` access control and continues access auditing. **597 backend tests green; frontend type-check + production build clean; no migration drift.** | Deploy/rebuild and migrate through `homestead.0003` (v0.19 itself adds no migration). On the partner's phone, sign in, choose/edit her four bottom destinations from More, then observe real Calendar/Atlas/Homestead/notification friction. Solace prompt toggle: Solace → Manage → Solace settings. Resume M4 locally after pilot feedback. |
+| 2026-08-04 | Assistant | Mobile usability | **Dense workspace, navigation and Countdown follow-up shipped (v0.19.1).** Replaced the long phone tab strips in Solace, Homestead and Education with labelled section pickers. Collapsed Solace's five large creation forms until requested, removed its accidental double card padding, kept its mobile Schedule list default, and made its search/refresh controls phone-friendly. Made hover-dependent edit/delete actions visible on touch devices, stacked Homestead maintenance rows around a prominent Done action, prevented narrow native fields overflowing, and locked background scroll behind the More sheet. Added one-tap clear to shared node search and made Atlas, Pets, Education and Homestead results navigate to their relevant tab, room or Calendar date; Atlas list creation is now progressive. Added a configurable core Countdown widget: admins set a household title/date in Tune my Hub, then it shows days remaining, today or days elapsed and participates in normal Hub enable/size/order controls. **599 backend tests green using local SQLite test settings; frontend type-check + production build clean; no migration drift.** | Deploy/rebuild both images and migrate through `hub.0013`. Configure the countdown from Home → Tune my Hub, then pilot Solace, Homestead maintenance/rooms and Education assignments on the partner's phone. Resume M4 locally after household feedback. |
 
 ### Session notes (free-form, optional)
 

@@ -4,9 +4,10 @@ interface Props {
   title?: string
   children: ReactNode
   className?: string
+  contentClassName?: string
 }
 
-export function Card({ title, children, className = '' }: Props) {
+export function Card({ title, children, className = '', contentClassName = '' }: Props) {
   return (
     <div className={`bg-surface rounded-2xl shadow-soft border border-line ${className}`}>
       {title && (
@@ -14,7 +15,7 @@ export function Card({ title, children, className = '' }: Props) {
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">{title}</h3>
         </div>
       )}
-      <div className="p-4 pt-3 sm:p-5 sm:pt-3">{children}</div>
+      <div className={contentClassName || 'p-4 pt-3 sm:p-5 sm:pt-3'}>{children}</div>
     </div>
   )
 }
