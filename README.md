@@ -15,8 +15,11 @@ Milestones 1–3 are complete, including the walking skeleton, native Meridian, 
 Hub/Atlas/Calendar surfaces, Education, Home Wiki and Pets. Homestead now includes linked room and
 area pages with purchase/maintenance/renovation plans and exact room/whole-house cost summaries.
 Native Solace has reached standalone feature parity, including a dated bills-account forecast and
-safe-withdrawal calculation. Security maturation includes the shared permission-checked attachment
-service, audited sensitive downloads, non-public file storage and five-minute password elevation.
+safe-withdrawal calculation. The v0.19 household-launch pass makes phone navigation, Hub shortcuts,
+calendar reading, quick creation, notifications and sign-in easier for everyday non-admin use;
+Solace's extra password-on-entry prompt is now an admin-controlled setting. Security maturation
+includes the shared permission-checked attachment service, audited sensitive downloads, non-public
+file storage and five-minute password elevation.
 Production Solace import/comparison remains pending until the home-server environment is available.
 See [`HANDOVER.md`](HANDOVER.md).
 

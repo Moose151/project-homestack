@@ -92,6 +92,18 @@ class SolacePermissionTests(TestCase):
         resp = self.client.get(self.url)
         self.assertEqual(resp.status_code, 200)
 
+    def test_admin_can_view_without_reauth_when_household_setting_is_off(self):
+        from apps.nodes.models import HouseholdNode
+
+        HouseholdNode.objects.filter(node__key="solace").update(
+            requires_reauthentication=False
+        )
+        _login(self.client, "admin")
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+        self.assertTrue(
+            AuditLog.objects.filter(action="sensitive_node_accessed").exists()
+        )
+
     def test_manager_not_granted_by_default(self):
         _login(self.client, "manager")
         _reauth(self.client)

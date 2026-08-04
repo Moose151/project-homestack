@@ -59,7 +59,7 @@ export function Modal({
     >
       <div
         ref={dialogRef}
-        className={`w-full ${maxW} max-h-[92vh] overflow-y-auto rounded-t-2xl bg-surface shadow-card sm:rounded-2xl`}
+        className={`w-full ${maxW} max-h-[92vh] overflow-y-auto rounded-t-2xl bg-surface pb-[env(safe-area-inset-bottom)] shadow-card sm:rounded-2xl sm:pb-0`}
         onClick={e => e.stopPropagation()}
       >
         {title && (
@@ -74,7 +74,7 @@ export function Modal({
             </button>
           </div>
         )}
-        <div className="p-5">{children}</div>
+        <div className="p-4 sm:p-5">{children}</div>
         {footer && (
           <div className="sticky bottom-0 flex justify-end gap-2 border-t border-line bg-surface/95 px-5 py-3.5 backdrop-blur">
             {footer}

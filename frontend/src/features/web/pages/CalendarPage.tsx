@@ -611,33 +611,49 @@ export function CalendarPage() {
       {loading ? (
         <div className="h-64 rounded-2xl bg-sunken animate-pulse" />
       ) : view === 'month' ? (
-        <div className="rounded-2xl border border-line overflow-hidden">
-          <div className="grid grid-cols-7 bg-sunken">
-            {weekdayNames.map(d => <div key={d} className="px-2 py-1.5 text-xs font-semibold text-muted text-center">{d}</div>)}
+        <>
+          <div className="sm:hidden">
+            <div className="mb-3 rounded-xl bg-primary-soft px-3 py-2 text-xs text-primary">
+              Month view becomes an easy-to-read list on phones. Tap an event for details.
+            </div>
+            <AgendaView
+              events={visibleEvents.filter(event => {
+                const date = new Date(event.start_at)
+                return date.getMonth() === anchor.getMonth() && date.getFullYear() === anchor.getFullYear()
+              })}
+              colourFor={colourFor}
+              time24={time24}
+              onOpen={openEvent}
+            />
           </div>
-          <div className="grid grid-cols-7">
-            {monthGrid(anchor, weekStart).map((d, i) => {
-              const inMonth = d.getMonth() === anchor.getMonth()
-              const evs = dayEvents(d)
-              return (
-                <div key={i} onClick={() => openNew(d)}
-                  className={`min-h-[92px] border-b border-r border-line p-1 cursor-pointer hover:bg-sunken/50 ${inMonth ? '' : 'bg-sunken/30'}`}>
-                  <div className={`text-xs font-semibold mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday(d) ? 'bg-primary text-white' : inMonth ? 'text-ink' : 'text-muted'}`}>
-                    {d.getDate()}
+          <div className="hidden rounded-2xl border border-line overflow-hidden sm:block">
+            <div className="grid grid-cols-7 bg-sunken">
+              {weekdayNames.map(d => <div key={d} className="px-2 py-1.5 text-xs font-semibold text-muted text-center">{d}</div>)}
+            </div>
+            <div className="grid grid-cols-7">
+              {monthGrid(anchor, weekStart).map((d, i) => {
+                const inMonth = d.getMonth() === anchor.getMonth()
+                const evs = dayEvents(d)
+                return (
+                  <div key={i} onClick={() => openNew(d)}
+                    className={`min-h-[92px] border-b border-r border-line p-1 cursor-pointer hover:bg-sunken/50 ${inMonth ? '' : 'bg-sunken/30'}`}>
+                    <div className={`text-xs font-semibold mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday(d) ? 'bg-primary text-white' : inMonth ? 'text-ink' : 'text-muted'}`}>
+                      {d.getDate()}
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      {evs.slice(0, 3).map(e => (
+                        <div key={e.id} onClick={ev => { ev.stopPropagation(); openEvent(e) }}>
+                          <EventChip event={e} colour={colourFor(e)} time24={time24} onClick={() => {}} />
+                        </div>
+                      ))}
+                      {evs.length > 3 && <span className="text-[10px] text-muted pl-1">+{evs.length - 3} more</span>}
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-0.5">
-                    {evs.slice(0, 3).map(e => (
-                      <div key={e.id} onClick={ev => { ev.stopPropagation(); openEvent(e) }}>
-                        <EventChip event={e} colour={colourFor(e)} time24={time24} onClick={() => {}} />
-                      </div>
-                    ))}
-                    {evs.length > 3 && <span className="text-[10px] text-muted pl-1">+{evs.length - 3} more</span>}
-                  </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
-        </div>
+        </>
       ) : view === 'week' ? (
         <div className="grid grid-cols-1 sm:grid-cols-7 gap-2">
           {Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(anchor, weekStart), i)).map(d => (

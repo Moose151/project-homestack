@@ -15,6 +15,7 @@ import { Card } from '../../../components/Card'
 import { EmptyState } from '../../../components/EmptyState'
 import { Field, Input, Select } from '../../../components/Field'
 import { solaceMoney as money } from './solaceFormat'
+import { useStacks } from '../../stacks/StacksContext'
 
 const cap = (value: string) => value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, ' ')
 const errMsg = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong.'
@@ -171,6 +172,8 @@ export function ManagementTab({ settings, categories, balances, report, health, 
   reload: () => void
   onError: (message: string) => void
 }) {
+  const { nodes, refresh: refreshStacks } = useStacks()
+  const solaceNode = nodes.find(node => node.key === 'solace')
   const [settingsForm, setSettingsForm] = useState({
     currency_symbol: '$',
     budget_year: '',
@@ -233,6 +236,19 @@ export function ManagementTab({ settings, categories, balances, report, health, 
         due_soon_days: Number(settingsForm.due_soon_days),
       })
       reload()
+    } catch (error) {
+      onError(errMsg(error))
+    } finally {
+      setSaving('')
+    }
+  }
+  const setPasswordUnlock = async (required: boolean) => {
+    setSaving('password-unlock')
+    try {
+      await api.updateNodeConfiguration('solace', {
+        requires_reauthentication: required,
+      })
+      await refreshStacks()
     } catch (error) {
       onError(errMsg(error))
     } finally {
@@ -348,6 +364,28 @@ export function ManagementTab({ settings, categories, balances, report, health, 
             <input type="checkbox" checked={settingsForm.dashboard_reminders} onChange={event => setSettingsForm(previous => ({ ...previous, dashboard_reminders: event.target.checked }))} />
             Show generic Solace reminders in HomeStack notifications
           </label>
+          {solaceNode?.supports_sensitive_lock && (
+            <div className="mt-4 flex items-start gap-3 rounded-xl border border-line bg-sunken/60 p-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-ink">Ask for a password when opening Solace</p>
+                <p className="mt-0.5 text-xs text-muted">
+                  Recommended on shared devices. Turning this off keeps Solace permissions in place,
+                  but authorised users will open it without the extra password prompt.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={solaceNode.requires_reauthentication}
+                aria-label="Ask for a password when opening Solace"
+                onClick={() => setPasswordUnlock(!solaceNode.requires_reauthentication)}
+                disabled={saving === 'password-unlock'}
+                className={`relative h-7 w-12 flex-shrink-0 rounded-full transition-colors disabled:opacity-50 ${solaceNode.requires_reauthentication ? 'bg-success' : 'bg-line-strong'}`}
+              >
+                <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${solaceNode.requires_reauthentication ? 'left-6' : 'left-1'}`} />
+              </button>
+            </div>
+          )}
           <Button className="mt-4" size="sm" onClick={saveSettings} loading={saving === 'settings'}>Save settings</Button>
         </Card>
 

@@ -7,5 +7,6 @@ urlpatterns = [
     path("", views.NodeListView.as_view(), name="nodes-list"),
     path("<slug:node_key>/enable/", views.NodeEnableView.as_view(), name="nodes-enable"),
     path("<slug:node_key>/disable/", views.NodeDisableView.as_view(), name="nodes-disable"),
+    path("<slug:node_key>/configuration/", views.NodeConfigurationView.as_view(), name="nodes-configuration"),
     path("<slug:node_key>/settings/", views.NodeSettingsView.as_view(), name="nodes-settings"),
 ]

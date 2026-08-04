@@ -22,6 +22,10 @@ interface NavItem { key: string; label: string; route: string; icon: string; col
 // How many stacks (in STACKS order) get a dedicated slot in the mobile bottom bar
 // before the rest collapse into the "More" sheet. Keeps the bar to 5 tap targets.
 const MOBILE_PRIMARY_SLOTS = 4
+const MOBILE_DEFAULT_PRIORITY = [
+  'hub', 'calendar', 'atlas', 'homestead', 'pets', 'home_wiki',
+  'education', 'books', 'meridian', 'solace',
+]
 
 const EMOJI_OPTS = ['🐱','🐶','🦊','🐼','🐻','🦋','🦄','🐸','🐳','🌻','🌙','⭐','🎸','🎮','🏄','🍕','🎩','🔮','🌈','🦅']
 
@@ -155,9 +159,12 @@ export function AppShell() {
   // Mobile bottom bar: a few primary stacks get their own slot; everything else
   // (remaining stacks + admin + utilities) lives behind the "More" sheet.
   const availableKeys = new Set(stackNav.map(item => item.key))
+  const defaultMobileKeys = MOBILE_DEFAULT_PRIORITY
+    .filter(key => availableKeys.has(key))
+    .slice(0, MOBILE_PRIMARY_SLOTS)
   const effectiveMobileKeys = mobileKeys.length
     ? mobileKeys.filter(key => availableKeys.has(key)).slice(0, MOBILE_PRIMARY_SLOTS)
-    : stackNav.slice(0, MOBILE_PRIMARY_SLOTS).map(item => item.key)
+    : defaultMobileKeys
   const mobilePrimary = effectiveMobileKeys
     .map(key => stackNav.find(item => item.key === key))
     .filter((item): item is NavItem => Boolean(item))
@@ -271,9 +278,14 @@ export function AppShell() {
 
       {/* Main content */}
       <div className="flex-1 md:ml-56 flex flex-col min-h-screen">
-        <header className="flex items-center gap-1 px-4 md:px-8 h-16 border-b border-line bg-surface/60 backdrop-blur sticky top-0 z-10">
+        <header className="flex h-[60px] items-center gap-1 border-b border-line bg-surface/80 px-3 backdrop-blur sticky top-0 z-10 sm:px-4 md:h-16 md:px-8">
           <div className="flex min-w-0 items-center gap-2 mr-auto">
-            <span className="inline-grid place-items-center w-8 h-8 rounded-lg bg-primary text-white shadow-soft text-sm">◇</span>
+            {user && (
+              <button onClick={() => setMoreOpen(true)} className="md:hidden rounded-full" aria-label="Open profile and menu">
+                <Avatar name={user.display_name} colour={user.colour} avatar={user.avatar} size="sm" />
+              </button>
+            )}
+            <span className="hidden md:inline-grid place-items-center w-8 h-8 rounded-lg bg-primary text-white shadow-soft text-sm">◇</span>
             <div className="min-w-0">
               <span className="block truncate text-sm font-extrabold tracking-tight text-ink md:text-base">
                 {currentNav?.label || 'HomeStack'}
@@ -283,7 +295,7 @@ export function AppShell() {
           </div>
           <button
             onClick={() => setSearchOpen(true)}
-            className="grid h-9 min-w-9 place-items-center rounded-xl px-2 text-muted transition-colors hover:bg-sunken hover:text-ink md:flex md:gap-2"
+            className="grid h-10 min-w-10 place-items-center rounded-xl px-2 text-muted transition-colors hover:bg-sunken hover:text-ink md:flex md:gap-2"
             aria-label="Search HomeStack"
             title="Search (Ctrl/⌘ K)"
           >
@@ -291,13 +303,13 @@ export function AppShell() {
           </button>
           <button
             onClick={() => setQuickOpen(true)}
-            className="grid h-9 min-w-9 place-items-center rounded-xl bg-primary px-2 text-white shadow-soft transition-colors hover:bg-primary-hover md:flex md:gap-1"
+            className="grid h-10 min-w-10 place-items-center rounded-xl bg-primary px-2 text-white shadow-soft transition-all hover:bg-primary-hover active:scale-95 md:flex md:gap-1"
             aria-label="Create something"
             title="Create something"
           >
             <span className="text-lg leading-none">＋</span><span className="hidden text-xs font-semibold lg:inline">Create</span>
           </button>
-          <CalendarPeek />
+          <div className="hidden sm:block"><CalendarPeek /></div>
           <NotificationBell />
         </header>
         <ConnectionBanner />
@@ -306,35 +318,36 @@ export function AppShell() {
             <InlineAlert message={stacksError} onRetry={refreshStacks} />
           </div>
         )}
-        <main className="flex-1 w-full px-4 py-5 sm:px-5 md:px-8 lg:px-10 xl:px-12 md:py-8 max-w-[1600px] mx-auto pb-24 md:pb-8">
+        <main className="flex-1 w-full px-4 py-5 sm:px-5 md:px-8 lg:px-10 xl:px-12 md:py-8 max-w-[1600px] mx-auto pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-8">
           <Outlet />
         </main>
       </div>
 
       {/* Bottom nav — mobile only */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-surface/95 backdrop-blur border-t border-line flex z-30">
+      <nav className="mobile-bottom-nav md:hidden fixed bottom-0 inset-x-0 bg-surface/95 backdrop-blur border-t border-line flex z-30 pb-[env(safe-area-inset-bottom)]" aria-label="Main navigation">
         {mobilePrimary.map(item => (
           <NavLink
             key={item.route}
             to={item.route}
             style={({ isActive }) => (isActive ? { color: item.colour } : undefined)}
             className={({ isActive }) =>
-              `flex-1 min-w-0 flex flex-col items-center justify-center py-2.5 text-[11px] font-semibold transition-colors ${
+              `flex-1 min-w-0 flex flex-col items-center justify-center pb-1.5 pt-2 text-[11px] font-semibold transition-colors ${
                 isActive ? '' : 'text-muted'
               }`
             }
           >
-            <span className="text-xl mb-0.5">{item.icon}</span>
+            <span className="mb-0.5 grid h-7 min-w-10 place-items-center rounded-full px-2 text-xl transition-all">{item.icon}</span>
             <span className="truncate max-w-full px-1">{item.label}</span>
           </NavLink>
         ))}
         <button
           onClick={() => setMoreOpen(true)}
-          className={`flex-1 min-w-0 flex flex-col items-center justify-center py-2.5 text-[11px] font-semibold transition-colors ${
+          className={`flex-1 min-w-0 flex flex-col items-center justify-center pb-1.5 pt-2 text-[11px] font-semibold transition-colors ${
             moreOpen ? 'text-primary' : 'text-muted'
           }`}
+          aria-label="More navigation and profile options"
         >
-          <span className="text-xl mb-0.5">☰</span>
+          <span className="mb-0.5 grid h-7 min-w-10 place-items-center rounded-full px-2 text-xl">☰</span>
           More
         </button>
       </nav>
@@ -345,20 +358,47 @@ export function AppShell() {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setMoreOpen(false)} />
           <div className="absolute inset-x-0 bottom-0 bg-surface rounded-t-3xl border-t border-line shadow-soft max-h-[85vh] overflow-y-auto pb-[env(safe-area-inset-bottom)]">
             <div className="sticky top-0 bg-surface/95 backdrop-blur flex items-center justify-between px-5 pt-4 pb-3 border-b border-line">
-              <span className="text-base font-bold text-ink">All stacks</span>
+              <span className="text-base font-bold text-ink">Your HomeStack</span>
               <button onClick={() => setMoreOpen(false)} className="w-8 h-8 grid place-items-center rounded-lg text-muted hover:bg-sunken" aria-label="Close">✕</button>
             </div>
 
             <div className="p-4 space-y-5">
+              {user && (
+                <div className="rounded-2xl border border-line bg-sunken/70 p-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar name={user.display_name} colour={user.colour} avatar={user.avatar} size="md" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-bold text-ink">Hi, {user.display_name}</p>
+                      <p className="text-xs text-muted">Make this space feel like yours.</p>
+                    </div>
+                    <button
+                      onClick={() => setEditingProfile(value => !value)}
+                      className="rounded-xl px-3 py-2 text-xs font-semibold text-primary hover:bg-primary-soft"
+                    >
+                      {editingProfile ? 'Close' : 'Edit profile'}
+                    </button>
+                  </div>
+                  {editingProfile && (
+                    <div className="mt-3">
+                      <ProfileEditor
+                        user={user}
+                        onSaved={u => { updateUser(u); setEditingProfile(false) }}
+                        onClose={() => setEditingProfile(false)}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
               {mobileOverflow.length > 0 && (
                 <div>
                   <div className="mb-2 flex items-center justify-between gap-3 px-1">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-muted/70">All stacks</p>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-muted/70">More spaces</p>
                     <button onClick={() => setCustomisingNav(value => !value)} className="text-xs font-semibold text-primary">
                       {customisingNav ? 'Done' : 'Edit bottom bar'}
                     </button>
                   </div>
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="grid grid-cols-3 gap-2 min-[430px]:grid-cols-4">
                     {(customisingNav ? stackNav : mobileOverflow).map(item => {
                       const pinned = effectiveMobileKeys.includes(item.key)
                       if (customisingNav) {
@@ -450,16 +490,7 @@ export function AppShell() {
                 </div>
               </div>
 
-              {user && (
-                <div className="flex items-center gap-3 px-1 pt-2 border-t border-line">
-                  <Avatar name={user.display_name} colour={user.colour} avatar={user.avatar} size="sm" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-ink truncate">{user.display_name}</p>
-                    <p className="text-xs text-muted capitalize">{user.role}</p>
-                  </div>
-                  <span className="text-[10px] text-muted/50">v{APP_VERSION}</span>
-                </div>
-              )}
+              <p className="border-t border-line px-1 pt-4 text-center text-[10px] text-muted/50">HomeStack v{APP_VERSION}</p>
             </div>
           </div>
         </div>

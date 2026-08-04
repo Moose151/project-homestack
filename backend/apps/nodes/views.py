@@ -53,6 +53,28 @@ class NodeDisableView(APIView):
         return Response(NodeSerializer(hn).data)
 
 
+class NodeConfigurationView(APIView):
+    permission_classes = [_NodeViewPerm]
+    permission_action = "edit"
+
+    def patch(self, request: Request, node_key: str) -> Response:
+        value = request.data.get("requires_reauthentication")
+        if not isinstance(value, bool):
+            return Response(
+                {"requires_reauthentication": "This field must be true or false."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            hn = services.update_node_configuration(
+                request.user,
+                node_key,
+                requires_reauthentication=value,
+            )
+        except Node.DoesNotExist:
+            return Response({"detail": "Node not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(NodeSerializer(hn).data)
+
+
 class NodeSettingsView(APIView):
     permission_classes = [_NodeViewPerm]
     permission_action = "edit"  # PATCH would default to "edit" anyway, but explicit

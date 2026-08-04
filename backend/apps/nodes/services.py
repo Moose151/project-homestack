@@ -35,6 +35,24 @@ def disable_node(acting_user, node_key: str) -> HouseholdNode:
     return hn
 
 
+def update_node_configuration(
+    acting_user, node_key: str, *, requires_reauthentication: bool
+) -> HouseholdNode:
+    """Update security/display configuration stored directly on HouseholdNode."""
+    from apps.audit.helpers import log_audit
+
+    node, hn = _get_or_404(node_key)
+    hn.requires_reauthentication = requires_reauthentication
+    hn.save(update_fields=["requires_reauthentication", "updated_at"])
+    log_audit(
+        "node_security_settings_updated",
+        user=acting_user,
+        target_node=node,
+        metadata={"requires_reauthentication": requires_reauthentication},
+    )
+    return hn
+
+
 def update_node_settings(acting_user, node_key: str, settings: dict) -> list[NodeSetting]:
     """Upsert NodeSetting rows for each key in settings dict."""
     from apps.audit.helpers import log_audit

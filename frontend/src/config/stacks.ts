@@ -12,7 +12,7 @@ export interface StackDef {
 }
 
 export const STACKS: StackDef[] = [
-  { key: 'hub',       label: 'Hub',       route: '/hub',       icon: '◫', colour: '#1d7a91', isNode: false },
+  { key: 'hub',       label: 'Home',      route: '/hub',       icon: '🏡', colour: '#1d7a91', isNode: false },
   { key: 'calendar',  label: 'Calendar',  route: '/calendar',  icon: '📅', colour: '#2b7fd0', isNode: false },
   { key: 'atlas',     label: 'Atlas',     route: '/atlas',     icon: '🗒', colour: '#5b57d1', isNode: true },
   { key: 'meridian',  label: 'Meridian',  route: '/meridian',  icon: '⭐', colour: '#d98324', isNode: true },

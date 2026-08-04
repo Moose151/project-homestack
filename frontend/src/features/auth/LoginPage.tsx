@@ -54,12 +54,13 @@ export function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-extrabold tracking-tight text-ink">HomeStack</h1>
-          <p className="text-muted mt-1">Welcome back</p>
+        <div className="text-center mb-6 sm:mb-8">
+          <span className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-primary text-xl text-white shadow-soft">◇</span>
+          <h1 className="text-3xl font-extrabold tracking-tight text-ink">Welcome home</h1>
+          <p className="text-muted mt-1">Everything your household needs, together.</p>
         </div>
 
-        <div className="bg-surface rounded-2xl shadow-card border border-line p-8">
+        <div className="bg-surface rounded-2xl shadow-card border border-line p-5 sm:p-8">
           {step === 'select' ? (
             <div className="flex flex-col gap-5">
               <p className="text-center text-muted-strong font-medium">Who's signing in?</p>

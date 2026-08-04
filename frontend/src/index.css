@@ -91,6 +91,20 @@
       linear-gradient(180deg, var(--hs-bg-soft) 0%, var(--hs-bg) 18rem, var(--hs-bg) 100%);
     background-attachment: fixed;
     color: var(--hs-text);
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+
+  .tabs-scroll {
+    scrollbar-width: none;
+  }
+
+  .tabs-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-bottom-nav a[aria-current='page'] > span:first-child {
+    background: var(--hs-primary-soft);
   }
 
   :where(button, a, input, select, textarea):focus-visible {

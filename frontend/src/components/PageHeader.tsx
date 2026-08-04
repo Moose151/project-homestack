@@ -15,11 +15,11 @@ export function PageHeader({
   className?: string
 }) {
   return (
-    <div className={`flex flex-wrap items-start justify-between gap-3 ${className}`}>
-      <div className="flex items-center gap-3 min-w-0">
-        {icon && <span className="text-2xl leading-none">{icon}</span>}
+    <div className={`flex flex-wrap items-start justify-between gap-2.5 sm:gap-3 ${className}`}>
+      <div className="flex items-center gap-2.5 min-w-0 sm:gap-3">
+        {icon && <span className="text-xl leading-none sm:text-2xl">{icon}</span>}
         <div className="min-w-0">
-          <h1 className="truncate text-2xl font-extrabold tracking-tight text-ink">{title}</h1>
+          <h1 className="truncate text-xl font-extrabold tracking-tight text-ink sm:text-2xl">{title}</h1>
           {subtitle && <p className="mt-0.5 text-sm text-muted">{subtitle}</p>}
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { AppNotification } from '../api/types'
 
@@ -7,6 +8,7 @@ const LEVEL_DOT: Record<string, string> = {
 }
 
 export function NotificationBell() {
+  const navigate = useNavigate()
   const [items, setItems] = useState<AppNotification[]>([])
   const [unread, setUnread] = useState(0)
   const [open, setOpen] = useState(false)
@@ -32,6 +34,13 @@ export function NotificationBell() {
     if (!n.is_read) { await api.markNotificationRead(n.id).catch(() => {}); load() }
   }
   const markAll = async () => { await api.markAllNotificationsRead().catch(() => {}); load() }
+  const openItem = async (notification: AppNotification) => {
+    await markRead(notification)
+    if (notification.action_url) {
+      setOpen(false)
+      navigate(notification.action_url)
+    }
+  }
 
   return (
     <div className="relative" ref={ref}>
@@ -47,7 +56,7 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-auto bg-surface rounded-2xl shadow-soft border border-line z-30">
+        <div className="fixed inset-x-3 top-[62px] max-h-[70vh] overflow-auto rounded-2xl border border-line bg-surface shadow-card z-30 sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80 sm:max-h-96">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-line">
             <span className="text-sm font-semibold text-ink">Notifications</span>
             {unread > 0 && <button onClick={markAll} className="text-xs text-primary hover:underline">Mark all read</button>}
@@ -57,13 +66,14 @@ export function NotificationBell() {
           ) : (
             <ul className="divide-y divide-line/60">
               {items.map(n => (
-                <li key={n.id} onClick={() => markRead(n)}
+                <li key={n.id} onClick={() => openItem(n)}
                   className={`px-4 py-3 cursor-pointer hover:bg-sunken ${n.is_read ? 'opacity-60' : ''}`}>
                   <div className="flex items-start gap-2">
                     <span className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${LEVEL_DOT[n.level] ?? 'bg-primary'}`} />
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-ink">{n.title}</p>
                       <p className="text-xs text-muted">{n.message}</p>
+                      {n.action_url && <p className="mt-1 text-[11px] font-semibold text-primary">Open →</p>}
                     </div>
                   </div>
                 </li>

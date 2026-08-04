@@ -1,11 +1,36 @@
 # HomeStack — Version History
 
-> **Current version: 0.18.0**
+> **Current version: 0.19.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
 >
 > **Rule:** bump the version and add a row here with every push to `main`.
+
+---
+
+## 0.19 — Household-launch mobile experience
+
+### 0.19.0 — 2026-08-04
+- **Friendlier phone navigation** — the mobile shell now uses the member's avatar, a calmer top
+  bar, safe-area-aware bottom navigation and clearer active states. New browsers default to the
+  four most useful adult household destinations (Home, Calendar, Atlas and Homestead when
+  enabled), while the existing bottom-bar editor still lets each person choose their own four.
+- **A useful mobile Home** — the Hub adds a phone-only everyday launchpad for the family calendar,
+  lists/notes, home and pets. Copy, sign-in and empty states are warmer, profile/avatar editing is
+  available from the phone menu, and the global create sheet uses plain-language choices with a
+  direct Home plan action.
+- **Less cramped daily work** — shared cards, page headings, tabs and bottom-sheet modals use
+  phone-appropriate spacing; long tab bars automatically keep the selected tab visible. Calendar
+  Month becomes a readable event list on phones, Solace Schedule defaults to List on phones, and
+  notification cards now open their linked record.
+- **Optional Solace password prompt** — admins can turn “Ask for a password when opening Solace”
+  off in Manage → Solace settings. The secure default remains on. Turning it off removes the
+  extra re-authentication gate for Solace APIs while preserving `solace.*` role permissions and
+  the existing access audit trail.
+- No database migration is required for this release.
+- Validation: **597 backend tests**, frontend TypeScript check and production build clean; no
+  migration drift.
 
 ---
 

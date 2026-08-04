@@ -96,9 +96,10 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: Homestead room/area planning shipped locally (2026-08-04, v0.18.0); Milestone 4
-security maturation remains the next local workstream while native Solace production
-deploy/real-data comparison waits for the home-server environment. Kiosk work remains deferred.**
+**Phase: Household-launch responsive mobile pass shipped locally (2026-08-04, v0.19.0),
+including optional Solace password-on-entry; deploy/pilot with the owner's partner is now the
+highest-value validation step. Milestone 4 security maturation remains the next local workstream
+and native Solace real-data comparison still requires the home server. Kiosk work remains deferred.**
 
 > **Owner direction, 2026-07-29.** Focus on usability, functionality, response time, navigation
 > and layout across the responsive web app. v0.12.0 delivers the shared foundation: route
@@ -192,6 +193,10 @@ deploy/real-data comparison waits for the home-server environment. Kiosk work re
 - [x] **Daily-use web/mobile experience pass (v0.12.0, 2026-07-29).** Shared navigation,
   response-time, reliability, layout and accessibility foundation delivered across all web
   surfaces. Kiosk equivalents remain deferred.
+- [x] **Household-launch mobile pass (v0.19.0, 2026-08-04).** Partner-oriented responsive-web
+  defaults and polish: adult-useful bottom navigation, calmer phone header, mobile Home launchpad,
+  profile editing, friendly quick-create/sign-in/empty states, safe-area spacing, auto-scrolling
+  tabs, readable mobile Calendar Month and Solace Schedule, and actionable notifications.
 - [~] **Milestone 4: security maturation — IN PROGRESS (v0.17.0).** Shared attachments now have
   protected upload/list/download/delete APIs, visibility+sensitivity enforcement through the
   central resolver, randomized non-public storage, sensitive-download audit records and frontend
@@ -206,8 +211,9 @@ deploy/real-data comparison waits for the home-server environment. Kiosk work re
   subscriptions and payday checklist items. All rows default to `visibility="sensitive"` +
   `sensitivity="financial"`. Bills/paydays/subscriptions/planned purchases sync to Calendar via
   the scheduling helper only (D7/D8). Solace is admin-only by default, disabled by default,
-  kiosk-off, `requires_reauthentication=True`, and every Solace API route requires password
-  re-auth + audits `sensitive_node_accessed`. Calendar now hides sensitive/financial events
+  kiosk-off, and every Solace API route audits `sensitive_node_accessed`. Password re-auth remains
+  the secure default but v0.19.0 lets an admin disable the extra Solace-on-entry prompt through
+  Manage → Solace settings; `solace.*` permissions remain enforced. Calendar hides sensitive/financial events
   until re-auth; Solace Hub widgets return content only when unlocked and authorised. Frontend
   `/solace` route shipped with password unlock, overview, search and tabs. `import_solace`
   now dry-runs/imports the local legacy SQLite DB (`/home/moose/Documents/project-solace`):
@@ -240,16 +246,21 @@ deploy/real-data comparison waits for the home-server environment. Kiosk work re
   events (D4); full Projects integration remains future. See spec `25_Node_Homestead.md`.
 - [ ] Milestone 6: Inventory, Assets (non-home only, or retire — see D21), Hearth, Travel, Projects, Health.
 
-## 6. Active tasks — continue M4 locally; deploy and validate Solace when available
+## 6. Active tasks — household pilot, then continue M4 locally
 
-**Immediate local build step (no home server required):** live-test/polish the new Homestead room
-workflow locally if desired, then finish the generic sensitive-node lock
+**Immediate product step:** deploy v0.19.0 to the home server and let the owner's partner use the
+responsive web app naturally on her phone. Capture friction from real Calendar, Atlas, Homestead,
+notification and quick-create journeys before doing another broad visual pass. Each browser can
+edit its four bottom-bar destinations from More; new browsers default to Home/Calendar/Atlas/
+Homestead when those stacks are enabled.
+
+**Next local build step (no home server required):** finish the generic sensitive-node lock
 path instead of leaving it Solace-specific: move re-auth/sensitivity decisions consistently
 through the central resolver, define the web/kiosk locked-state contract and shorter kiosk
 timeout, then close the remaining permission/user-change audit gaps. Keep permission tests first.
 
 **Production track (requires the home server):** rebuild both production images, deploy through
-v0.18.0, and run `migrate` through `attachments.0001`, `permissions.0020`, `solace.0007` and
+v0.19.0, and run `migrate` through `attachments.0001`, `permissions.0020`, `solace.0007` and
 `homestead.0003`.
 
 The Solace cutover sequence remains: rerun the importer
@@ -406,6 +417,7 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-07-30 | Assistant | M5 | **Solace cash-flow forecast and deep standalone parity (v0.16.0).** Added an audited 3–24 month bills-account forecast that combines the latest balance, expected Bills-bucket transfers, included bills and active subscriptions into a dated running balance; it reports the low point/risk date, required opening balance, shortfall, bills-only surplus and buffer-preserving safe withdrawal. Ported bill autopay/stop dates and 12+12 occurrence detail, filter/sort, six-monthly entry and protected future/all-unpaid edit scope; current/next Pay plan and Checklist navigation; confirm-income/review-bills/record-balance steps; calculated upcoming paydays; capped purchase quick-saving; standalone-equivalent category report filters/period totals; and expanded health checks. Import/verify now preserves bill stop/autopay fields. **560 backend tests green; frontend type-check + production build clean; no migration drift.** | **Deploy/cutover:** rebuild both images, migrate through `solace.0007`, copy the legacy SQLite DB into the container, run importer dry-run/apply/verify, record a fresh real bills-account balance, and validate the forecast timeline/safe-withdrawal value plus a full pay cycle/month on phone and laptop before retiring standalone Solace. |
 | 2026-08-04 | Assistant | M4 | **Protected shared attachments and expiring re-auth shipped (v0.17.0).** Built the D11 attachment model/API with permission-first tests, linked node/record metadata, randomized storage, checksums/limits, visibility+sensitivity filtering through the central resolver, ownership-aware soft deletion and audited sensitive downloads. Removed raw `/media/` serving; Education assessment files now download through a visibility-checked API and private assessment/note/file direct-ID lookups were tightened. Password elevation is timestamped, expires after five minutes, rejects guest/child elevation and invalidates legacy permanent flags. Frontend shared client/types added. **581 backend tests green; frontend type-check + production build clean; no migration drift.** | Continue M4 locally: generic sensitive-node lock contract/web+kiosk timeout and remaining permission/user-change audit coverage. Production later: migrate `attachments.0001`, `permissions.0020`, `solace.0007`, then complete Solace cutover validation. |
 | 2026-08-04 | Assistant | Homestead | **Room and area planning shipped (v0.18.0).** Added household-scoped `RoomArea` and `RoomPlanItem` models plus layered CRUD APIs, permission-first tests, central visibility filtering, publish-only lifecycle events, admin registration and local/global search. Each room links from the new Homestead Rooms tab to a dedicated page. Plans combine purchases, maintenance, renovations and upgrades with priority, assignee, quantity, estimated unit cost, optional actual total cost, reference link and notes. Planned/in-progress items drive remaining estimates; completed items use actual cost or estimate fallback; archived items stay visible but are excluded. Exact decimal summaries roll up per room and household. Completed/archived items can be reopened/restored; stable room routes and `floorplan_data` reserve the future clickable-map path. **593 backend tests green; frontend type-check + production build clean; no migration drift.** | **Deploy:** rebuild both images and run `docker exec homestack-backend python manage.py migrate` (`homestead.0003`). Then enable/open Homestead and live-test room creation, item completion/actual costs and phone layout. Future room slice: clickable floor-plan renderer. Otherwise resume remaining M4 lock/audit work locally. |
+| 2026-08-04 | Assistant | Mobile launch | **Household-launch mobile experience shipped (v0.19.0).** Reworked the responsive shell for partner-first daily use: avatar-led calmer phone header; safe-area-aware five-target bottom bar; new-browser defaults prioritising Home/Calendar/Atlas/Homestead; clearer active states; a three-column More grid; profile/avatar editing from mobile; and warmer login language. Added a phone-only Hub launchpad for Calendar, Lists & notes, Our home and Pets; friendlier quick-create choices/descriptions including Home plan; responsive shared headings/cards/modals and auto-centred scrollable tabs. Calendar Month renders as a readable agenda on phones, Solace Schedule defaults to List, and notification taps now follow `action_url`. Added an admin-controlled **Ask for a password when opening Solace** switch in Manage settings. It uses existing `HouseholdNode.requires_reauthentication`, defaults on, is permission-tested, preserves `solace.*` access control and continues access auditing. **597 backend tests green; frontend type-check + production build clean; no migration drift.** | Deploy/rebuild and migrate through `homestead.0003` (v0.19 itself adds no migration). On the partner's phone, sign in, choose/edit her four bottom destinations from More, then observe real Calendar/Atlas/Homestead/notification friction. Solace prompt toggle: Solace → Manage → Solace settings. Resume M4 locally after pilot feedback. |
 
 ### Session notes (free-form, optional)
 

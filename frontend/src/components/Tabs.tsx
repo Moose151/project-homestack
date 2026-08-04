@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 
 export interface TabDef<T extends string = string> {
   key: T
@@ -20,6 +20,13 @@ export function Tabs<T extends string>({
   className?: string
 }) {
   const buttons = useRef<Array<HTMLButtonElement | null>>([])
+  useEffect(() => {
+    buttons.current[tabs.findIndex(tab => tab.key === active)]?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'center',
+    })
+  }, [active])
   const moveFocus = (index: number, direction: number) => {
     const next = (index + direction + tabs.length) % tabs.length
     buttons.current[next]?.focus()
@@ -27,7 +34,7 @@ export function Tabs<T extends string>({
   }
 
   return (
-    <div className={`flex gap-1 rounded-2xl bg-sunken p-1 overflow-x-auto ${className}`} role="tablist">
+    <div className={`tabs-scroll flex gap-1 rounded-2xl bg-sunken p-1 overflow-x-auto ${className}`} role="tablist">
       {tabs.map((t, index) => {
         const isActive = t.key === active
         return (
@@ -44,7 +51,7 @@ export function Tabs<T extends string>({
             role="tab"
             aria-selected={isActive}
             tabIndex={isActive ? 0 : -1}
-            className={`flex min-h-[40px] items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold capitalize transition-colors ${
+            className={`flex min-h-[44px] items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold capitalize transition-colors sm:min-h-[40px] sm:px-3.5 ${
               isActive ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'
             }`}
           >

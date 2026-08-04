@@ -171,3 +171,38 @@ class NodeSettingsViewTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(resp.status_code, 404)
+
+
+class NodeConfigurationViewTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("config-admin", role=User.Role.ADMIN)
+        self.user = _make_user("config-user")
+        self.url = reverse("nodes-configuration", kwargs={"node_key": "solace"})
+
+    def test_admin_can_turn_off_solace_password_unlock(self):
+        _login(self.client, "config-admin")
+        response = self.client.patch(
+            self.url,
+            {"requires_reauthentication": False},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["requires_reauthentication"])
+
+    def test_regular_user_cannot_change_node_security(self):
+        _login(self.client, "config-user")
+        response = self.client.patch(
+            self.url,
+            {"requires_reauthentication": False},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_configuration_requires_a_boolean(self):
+        _login(self.client, "config-admin")
+        response = self.client.patch(
+            self.url,
+            {"requires_reauthentication": "no"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)

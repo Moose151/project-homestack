@@ -32,6 +32,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { STACK_BY_KEY, softColour } from '../../../config/stacks'
 import { PageHeader } from '../../../components/PageHeader'
 import { InlineAlert, PageSkeleton } from '../../../components/PageState'
+import { useStacks } from '../../stacks/StacksContext'
 
 const SIZE_SPAN: Record<string, string> = {
   small: 'sm:col-span-1',
@@ -597,6 +598,7 @@ function renderWidget(w: HubWidget, onChanged: () => void) {
 
 export function HubPage() {
   const { user } = useAuth()
+  const { enabledKeys } = useStacks()
   const [data, setData] = useState<HubResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [configuring, setConfiguring] = useState(false)
@@ -607,9 +609,15 @@ export function HubPage() {
   const now = new Date()
   const greeting =
     now.getHours() < 12 ? 'Good morning' : now.getHours() < 18 ? 'Good afternoon' : 'Good evening'
+  const mobileDestinations = [
+    { key: 'calendar', label: "What's on", hint: 'Family calendar', icon: '📅', route: '/calendar', colour: STACK_BY_KEY.calendar.colour, enabled: true },
+    { key: 'atlas', label: 'Lists & notes', hint: 'Capture anything', icon: '🗒️', route: '/atlas', colour: STACK_BY_KEY.atlas.colour, enabled: enabledKeys.has('atlas') },
+    { key: 'homestead', label: 'Our home', hint: 'Rooms & upkeep', icon: '🏠', route: '/homestead', colour: STACK_BY_KEY.homestead.colour, enabled: enabledKeys.has('homestead') },
+    { key: 'pets', label: 'Our pets', hint: 'Care & reminders', icon: '🐾', route: '/pets', colour: STACK_BY_KEY.pets.colour, enabled: enabledKeys.has('pets') },
+  ].filter(item => item.enabled)
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5 sm:gap-6">
       <PageHeader
         title={`${greeting}${user ? `, ${user.display_name}` : ''}`}
         subtitle={now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
@@ -617,11 +625,36 @@ export function HubPage() {
           onClick={() => setConfiguring(c => !c)}
           className="text-sm text-muted hover:text-ink transition-colors px-3 py-1.5 rounded-xl hover:bg-sunken whitespace-nowrap"
         >
-          {configuring ? 'Done' : '⚙ Customise'}
+          {configuring ? 'Done' : '⚙ Tune my Hub'}
         </button>}
       />
 
       {error && <InlineAlert message={error} onRetry={loadHub} onDismiss={() => setError(null)} />}
+
+      <section className="md:hidden" aria-labelledby="mobile-destinations-title">
+        <div className="mb-2 flex items-end justify-between gap-3">
+          <div>
+            <h2 id="mobile-destinations-title" className="font-bold text-ink">Jump back in</h2>
+            <p className="text-xs text-muted">The everyday household shortcuts.</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2.5">
+          {mobileDestinations.map(item => (
+            <Link
+              key={item.key}
+              to={item.route}
+              className="flex min-h-[88px] items-center gap-3 rounded-2xl border border-line bg-surface p-3 shadow-soft transition-all active:scale-[0.98]"
+              style={{ background: `linear-gradient(135deg, ${softColour(item.colour, '18')}, var(--hs-surface) 72%)` }}
+            >
+              <span className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-2xl bg-surface/80 text-2xl shadow-sm">{item.icon}</span>
+              <span className="min-w-0">
+                <span className="block font-bold text-ink">{item.label}</span>
+                <span className="block text-[11px] text-muted">{item.hint}</span>
+              </span>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       {configuring && (
         <HubConfig isAdmin={user?.role === 'admin'} onChanged={loadHub} />
@@ -632,7 +665,7 @@ export function HubPage() {
       ) : data.widgets.length === 0 ? (
         <Card>
           <p className="text-muted text-sm text-center py-4">
-            No widgets on your Hub yet. Use <span className="font-medium text-ink">Customise</span> to add some.
+            No cards on your Hub yet. Use <span className="font-medium text-ink">Tune my Hub</span> to choose what helps you.
           </p>
         </Card>
       ) : (

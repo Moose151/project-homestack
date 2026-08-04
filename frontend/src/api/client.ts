@@ -707,6 +707,13 @@ export const api = {
   disableNode: (key: string): Promise<NodeInfo> =>
     _fetch<NodeInfo>(`/nodes/${key}/disable/`, { method: 'POST' })
       .then(value => { clearSharedCache('/nodes/'); return value }),
+  updateNodeConfiguration: (key: string, data: {
+    requires_reauthentication: boolean
+  }): Promise<NodeInfo> =>
+    _fetch<NodeInfo>(`/nodes/${key}/configuration/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }).then(value => { clearSharedCache('/nodes/'); return value }),
 
   // --- Household ---
   getHousehold: (): Promise<Household> => cachedGet('/household/', 30_000),

@@ -6,11 +6,12 @@ import { Input } from './Field'
 import { Modal } from './Modal'
 
 const ACTIONS = [
-  { key: 'event', label: 'Event', icon: '📅', route: '/calendar?new=event', node: null },
-  { key: 'task', label: 'Meridian task', icon: '⭐', route: '/meridian?tab=tasks&new=task', node: 'meridian' },
-  { key: 'bill', label: 'Bill', icon: '💸', route: '/solace?tab=bills&new=bill', node: 'solace' },
-  { key: 'maintenance', label: 'Maintenance', icon: '🛠️', route: '/homestead?tab=maintenance&new=maintenance', node: 'homestead' },
-  { key: 'book', label: 'Book', icon: '📚', route: '/books?new=book', node: 'books' },
+  { key: 'event', label: 'Calendar event', hint: 'Put something on the family calendar', icon: '📅', route: '/calendar?new=event', node: null },
+  { key: 'home-plan', label: 'Home plan', hint: 'Plan a room purchase or project', icon: '🏠', route: '/homestead?tab=rooms', node: 'homestead' },
+  { key: 'maintenance', label: 'Maintenance', hint: 'Remember a job around the house', icon: '🛠️', route: '/homestead?tab=maintenance&new=maintenance', node: 'homestead' },
+  { key: 'book', label: 'Book', hint: 'Add something to read', icon: '📚', route: '/books?new=book', node: 'books' },
+  { key: 'task', label: 'Meridian task', hint: 'Create a points task', icon: '⭐', route: '/meridian?tab=tasks&new=task', node: 'meridian' },
+  { key: 'bill', label: 'Bill', hint: 'Add a household payment', icon: '💸', route: '/solace?tab=bills&new=bill', node: 'solace' },
 ] as const
 
 export function QuickCreate({
@@ -54,7 +55,7 @@ export function QuickCreate({
   }
 
   return (
-    <Modal title="Create something" onClose={onClose} size="md">
+    <Modal title="What would you like to add?" onClose={onClose} size="md">
       <div className="space-y-5">
         {enabledKeys.has('atlas') && (
           <form onSubmit={create} className="space-y-3 rounded-2xl bg-sunken p-3">
@@ -82,10 +83,11 @@ export function QuickCreate({
             <button
               key={action.key}
               onClick={() => go(action.route)}
-              className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-surface p-3 text-sm font-semibold text-ink transition-colors hover:bg-sunken"
+              className="flex min-h-[112px] flex-col items-center justify-center gap-1 rounded-2xl border border-line bg-surface p-3 text-center transition-all hover:-translate-y-0.5 hover:bg-sunken active:scale-[0.98]"
             >
               <span className="text-2xl">{action.icon}</span>
-              {action.label}
+              <span className="text-sm font-semibold text-ink">{action.label}</span>
+              <span className="text-[11px] leading-snug text-muted">{action.hint}</span>
             </button>
           ))}
         </div>

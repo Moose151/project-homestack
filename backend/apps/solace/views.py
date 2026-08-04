@@ -43,7 +43,13 @@ class SolaceAccessMixin:
 
     def initial(self, request: Request, *args, **kwargs) -> None:
         super().initial(request, *args, **kwargs)
-        if not is_reauthed(request._request):
+        from apps.nodes.selectors import get_household_node
+
+        config = get_household_node("solace")
+        requires_reauthentication = (
+            config.requires_reauthentication if config is not None else True
+        )
+        if requires_reauthentication and not is_reauthed(request._request):
             raise PermissionDenied("Password re-authentication required for Solace.")
         node = Node.objects.filter(key="solace").first()
         log_audit(

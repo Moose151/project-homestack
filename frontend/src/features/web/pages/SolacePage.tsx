@@ -17,6 +17,7 @@ import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 import { UndoToast } from '../../../components/UndoToast'
 import { CloseoutTab, HealthPanel, ManagementTab } from './SolaceManagement'
 import { setSolaceCurrencySymbol, solaceMoney as money } from './solaceFormat'
+import { useStacks } from '../../stacks/StacksContext'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ')
@@ -1258,7 +1259,9 @@ function ScheduleTab({ schedule, month, loading, onMonth, onAction }: {
   onMonth: (month: string) => void
   onAction: (id: number, action: 'paid' | 'unpaid' | 'skip') => Promise<SolaceBillOccurrence>
 }) {
-  const [view, setView] = useState<'calendar' | 'list'>('calendar')
+  const [view, setView] = useState<'calendar' | 'list'>(() =>
+    window.matchMedia('(max-width: 639px)').matches ? 'list' : 'calendar'
+  )
   const [year, monthNumber] = month.split('-').map(Number)
   const label = new Date(year, monthNumber - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
   const events = useMemo<ScheduleEvent[]>(() => {
@@ -1719,6 +1722,8 @@ function PayPlan({ plan, generating, onGenerate, onTab, onError }: {
 
 export function SolacePage() {
   const [unlocked, setUnlocked] = useState(false)
+  const { nodes } = useStacks()
+  const requiresPasswordUnlock = nodes.find(node => node.key === 'solace')?.requires_reauthentication ?? true
   const [tab, setTab] = useUrlTab<Tab>('overview', TAB_KEYS)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -1742,6 +1747,10 @@ export function SolacePage() {
   const [scheduleMonth, setScheduleMonth] = useState(currentMonthKey)
   const [scheduleLoading, setScheduleLoading] = useState(false)
   const [q, setQ] = useUrlQueryState()
+
+  useEffect(() => {
+    if (!requiresPasswordUnlock) setUnlocked(true)
+  }, [requiresPasswordUnlock])
 
   const loadSchedule = async (month = scheduleMonth) => {
     const { start, end } = monthBounds(month)
@@ -1833,7 +1842,7 @@ export function SolacePage() {
     }
   }
 
-  if (!unlocked) return <ReauthGate onUnlock={() => setUnlocked(true)} />
+  if (requiresPasswordUnlock && !unlocked) return <ReauthGate onUnlock={() => setUnlocked(true)} />
 
   return (
     <div className="max-w-5xl mx-auto space-y-5">
