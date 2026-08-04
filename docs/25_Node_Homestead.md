@@ -1,6 +1,7 @@
 # Node Spec — Homestead
 
-> Canonical. Shipped V1 (2026-07-21, v0.10.0); costs & cover added in v0.11.2.
+> Canonical. Shipped V1 (2026-07-21, v0.10.0); costs & cover added in v0.11.2;
+> room/area planning added in v0.18.0.
 > Global rules from `00_README_and_Changelog.md`
 > apply. See **D21** for why this node exists and how it relates to Assets / Projects / Solace.
 
@@ -18,7 +19,8 @@ Solace; future renovations come from Projects. Cross-node flow always uses the e
 stopcock, gas shut-off, consumer unit, boiler location), recurring/one-off **maintenance** and
 renewals, **appliances** + warranties + manuals + serials, a **service-provider** directory, and a
 lightweight **improvements** list. Also belongs: home insurance policy details and home service
-accounts/costs (rates, water, gas, electricity, mortgage/rent, strata, waste and internet).
+accounts/costs (rates, water, gas, electricity, mortgage/rent, strata, waste and internet), plus
+structured rooms/areas and their wanted purchases, maintenance, renovations and upgrades.
 **Not:** whole-house budgeting/paydays/savings → **Solace**; heavyweight
 renovations with task boards → **Projects** (an Improvement can link via `project_ref`); how-to
 guides & manuals text → **Home Wiki**; simple to-do lists → **Atlas**; vehicles/tools/non-home
@@ -42,6 +44,15 @@ Solace insurance bill.
 **Household costs** — rates, water, gas, electricity, mortgage/rent, strata/body corporate,
 waste, internet or other; provider/account number, expected/latest amount, billing cycle and next
 due date. Each active record mirrors to one linked Solace bill.
+**Rooms & areas** — named interior, outdoor, utility, storage or other spaces. Every room is a
+link to a stable dedicated page (and therefore a future floor-plan destination), with icon,
+colour, ordering, description and reserved `floorplan_data` metadata.
+**Room plans** — one unified list of purchases, maintenance, renovations and upgrades per room,
+including status (planned/in progress/completed/archived), priority, assignee, quantity,
+estimated unit cost, optional actual total cost, reference link and notes. Active items are
+grouped by type; completed and archived records stay visible and can be restored. Room and
+household totals count active estimates plus completed actual cost (falling back to estimate)
+and exclude archived items.
 
 ## 4. Permissions
 
@@ -64,6 +75,7 @@ Notifications: assignment/overdue reminders are a later slice.
 
 Publishes (D4): `homestead.property_created`, `homestead.maintenance_completed`,
 `homestead.appliance_added`, `homestead.improvement_created`, `homestead.improvement_completed`,
+`homestead.room_created`, `homestead.room_item_created`, `homestead.room_item_completed`,
 `homestead.insurance_policy_saved`, `homestead.household_cost_saved`, and
 `homestead.home_finance_record_deleted`. Solace consumes the finance events and publishes
 `solace.home_bill_synced`; Homestead stores only that lightweight bill reference. Future
@@ -73,7 +85,9 @@ Publishes (D4): `homestead.property_created`, `homestead.maintenance_completed`,
 
 FTS `search_homestead` (Postgres SearchVector + SQLite icontains fallback, D9) over appliances
 (name/brand/model/serial/room/notes), maintenance (title/notes), providers (name/company/notes),
-and improvements (title/description/room/notes) — permission-filtered. Not a primary kiosk node;
+improvements (title/description/room/notes), rooms (name/description), and room plan items
+(title/description/notes) — permission-filtered. Room and item results deep-link to the dedicated
+room page. Not a primary kiosk node;
 emergency info is kiosk-safe for a future safe view.
 Policy/account-number search is available only inside the unlocked Costs & cover surface and is
 kept out of the ordinary Homestead search response.
@@ -81,7 +95,7 @@ kept out of the ordinary Homestead search response.
 ## 8. Data model
 
 `homestead` app. `Property`, `ServiceProvider`, `Appliance`, `MaintenanceTask` (CalendarSyncMixin),
-`Improvement` (CalendarSyncMixin), `InsurancePolicy`, `HouseholdCost`. All inherit
+`Improvement` (CalendarSyncMixin), `RoomArea`, `RoomPlanItem`, `InsurancePolicy`, `HouseholdCost`. All inherit
 `HouseholdBaseModel`. No per-item `property` FK in V1 (single home; avoids the
 `property`/`@property` clash and is YAGNI). `InsurancePolicy`/`HouseholdCost` own the home-context
 fields and keep `solace_bill_ref`; the linked `Solace.Bill` owns the financial Calendar mirror.
@@ -90,10 +104,11 @@ fields and keep `solace_bill_ref`; the linked `Solace.Bill` owns the financial C
 ## 9. Scope & completion
 
 V1 (done): property record + emergency info · maintenance with recurrence + complete-advances +
-calendar sync · appliances + warranties · service-provider directory · improvements · FTS · three
-Hub widgets · `homestead.*` permissions · node catalogue (disabled by default) · 28 tests. Frontend:
-`/homestead` route (node-gated) + 6 tabs
-(Overview/Maintenance/Appliances/Improvements/Contacts/Costs & cover) + search + Hub renderers.
+calendar sync · appliances + warranties · service-provider directory · improvements · structured
+room/area plans and costs · FTS · three Hub widgets · `homestead.*` permissions · node catalogue
+(disabled by default). Frontend: `/homestead` route (node-gated) + 7 tabs
+(Overview/Rooms/Maintenance/Appliances/Improvements/Contacts/Costs & cover), dedicated
+`/homestead/rooms/:roomId` pages, search and Hub renderers.
 Costs & cover includes annualised summaries, protected search, full CRUD and Solace sync.
-Future: Projects linking, meter readings, rooms as structured records, document attachments,
+Future: clickable floor-plan rendering, Projects linking, meter readings, document attachments,
 seasonal maintenance templates, kiosk safe view, assignment/overdue notifications.

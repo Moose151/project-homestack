@@ -14,6 +14,7 @@ const BooksPage = lazy(() => import('./features/web/pages/BooksPage').then(m => 
 const HomeWikiPage = lazy(() => import('./features/web/pages/HomeWikiPage').then(m => ({ default: m.HomeWikiPage })))
 const PetsPage = lazy(() => import('./features/web/pages/PetsPage').then(m => ({ default: m.PetsPage })))
 const HomesteadPage = lazy(() => import('./features/web/pages/HomesteadPage').then(m => ({ default: m.HomesteadPage })))
+const HomesteadRoomPage = lazy(() => import('./features/web/pages/HomesteadRoomPage').then(m => ({ default: m.HomesteadRoomPage })))
 const SolacePage = lazy(() => import('./features/web/pages/SolacePage').then(m => ({ default: m.SolacePage })))
 const UsersPage = lazy(() => import('./features/web/pages/UsersPage').then(m => ({ default: m.UsersPage })))
 const SettingsPage = lazy(() => import('./features/web/pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
@@ -52,6 +53,7 @@ function WebRoutes({ isAdmin }: { isAdmin: boolean }) {
         <Route path="/wiki" element={<NodeRoute nodeKey="home_wiki"><Deferred><HomeWikiPage /></Deferred></NodeRoute>} />
         <Route path="/pets" element={<NodeRoute nodeKey="pets"><Deferred><PetsPage /></Deferred></NodeRoute>} />
         <Route path="/homestead" element={<NodeRoute nodeKey="homestead"><Deferred><HomesteadPage /></Deferred></NodeRoute>} />
+        <Route path="/homestead/rooms/:roomId" element={<NodeRoute nodeKey="homestead"><Deferred><HomesteadRoomPage /></Deferred></NodeRoute>} />
         <Route path="/solace" element={<NodeRoute nodeKey="solace"><Deferred><SolacePage /></Deferred></NodeRoute>} />
         {isAdmin && <Route path="/users" element={<Deferred><UsersPage /></Deferred>} />}
         {isAdmin && <Route path="/settings" element={<Deferred><SettingsPage /></Deferred>} />}

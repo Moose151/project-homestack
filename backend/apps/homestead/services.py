@@ -17,6 +17,8 @@ from apps.homestead.models import (
     InsurancePolicy,
     MaintenanceTask,
     Property,
+    RoomArea,
+    RoomPlanItem,
     ServiceProvider,
 )
 from apps.scheduling.helpers import delete_event_for, sync_event_for
@@ -224,6 +226,90 @@ def update_improvement(acting_user: User, obj: Improvement, **data) -> Improveme
 
 def delete_improvement(acting_user: User, obj: Improvement) -> None:
     delete_event_for(obj)
+    obj.updated_by = acting_user
+    obj.save(update_fields=["updated_by", "updated_at"])
+    obj.soft_delete()
+
+
+# ---------------------------------------------------------------------------
+# Rooms / areas and their unified plans
+# ---------------------------------------------------------------------------
+
+_ROOM_FIELDS = {
+    "name", "area_type", "description", "icon", "colour", "display_order",
+    "floorplan_data", "visibility",
+}
+_ROOM_ITEM_FIELDS = {
+    "assigned_to_person_id", "title", "item_type", "status", "priority", "description",
+    "quantity", "estimated_unit_cost", "actual_cost", "link_url", "notes", "position",
+    "visibility",
+}
+
+
+def create_room(acting_user: User, **data) -> RoomArea:
+    obj = RoomArea(
+        household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
+    )
+    obj.save()
+    events.room_created(obj.id, obj.household_id)
+    return obj
+
+
+def update_room(acting_user: User, obj: RoomArea, **data) -> RoomArea:
+    for key, value in data.items():
+        if key in _ROOM_FIELDS:
+            setattr(obj, key, value)
+    obj.updated_by = acting_user
+    obj.save()
+    return obj
+
+
+def delete_room(acting_user: User, obj: RoomArea) -> None:
+    for item in obj.plan_items.all():
+        item.updated_by = acting_user
+        item.save(update_fields=["updated_by", "updated_at"])
+        item.soft_delete()
+    obj.updated_by = acting_user
+    obj.save(update_fields=["updated_by", "updated_at"])
+    obj.soft_delete()
+
+
+def create_room_item(
+    acting_user: User, room: RoomArea, **data
+) -> RoomPlanItem:
+    obj = RoomPlanItem(
+        household=get_active_household(),
+        room=room,
+        created_by=acting_user,
+        updated_by=acting_user,
+        **data,
+    )
+    if obj.status == RoomPlanItem.Status.COMPLETED:
+        obj.completed_at = timezone.now()
+    obj.save()
+    events.room_item_created(obj.id, room.id, obj.household_id)
+    return obj
+
+
+def update_room_item(
+    acting_user: User, obj: RoomPlanItem, **data
+) -> RoomPlanItem:
+    previous_status = obj.status
+    for key, value in data.items():
+        if key in _ROOM_ITEM_FIELDS:
+            setattr(obj, key, value)
+    if obj.status == RoomPlanItem.Status.COMPLETED and previous_status != obj.status:
+        obj.completed_at = timezone.now()
+    elif obj.status != RoomPlanItem.Status.COMPLETED:
+        obj.completed_at = None
+    obj.updated_by = acting_user
+    obj.save()
+    if previous_status != RoomPlanItem.Status.COMPLETED and obj.status == RoomPlanItem.Status.COMPLETED:
+        events.room_item_completed(obj.id, obj.room_id, obj.household_id)
+    return obj
+
+
+def delete_room_item(acting_user: User, obj: RoomPlanItem) -> None:
     obj.updated_by = acting_user
     obj.save(update_fields=["updated_by", "updated_at"])
     obj.soft_delete()

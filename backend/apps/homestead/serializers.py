@@ -10,6 +10,8 @@ from apps.homestead.models import (
     InsurancePolicy,
     MaintenanceTask,
     Property,
+    RoomArea,
+    RoomPlanItem,
     ServiceProvider,
 )
 
@@ -99,6 +101,65 @@ class ImprovementSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id", "is_open", "calendar_event_id", "created_at", "updated_at",
+        ]
+
+    def validate_title(self, value: str) -> str:
+        return _non_blank(value)
+
+
+class RoomCostSummarySerializer(serializers.Serializer):
+    active_count = serializers.IntegerField()
+    completed_count = serializers.IntegerField()
+    archived_count = serializers.IntegerField()
+    remaining_estimated_cost = serializers.DecimalField(max_digits=14, decimal_places=2)
+    completed_cost = serializers.DecimalField(max_digits=14, decimal_places=2)
+    overall_cost = serializers.DecimalField(max_digits=14, decimal_places=2)
+
+
+class RoomAreaSerializer(serializers.ModelSerializer):
+    summary = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RoomArea
+        fields = [
+            "id", "name", "area_type", "description", "icon", "colour",
+            "display_order", "floorplan_data", "visibility", "summary",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "summary", "created_at", "updated_at"]
+
+    def validate_name(self, value: str) -> str:
+        return _non_blank(value)
+
+    def get_summary(self, obj: RoomArea) -> dict:
+        summaries = self.context.get("summaries", {})
+        return summaries.get(obj.id, self.context.get("empty_summary", {
+            "active_count": 0,
+            "completed_count": 0,
+            "archived_count": 0,
+            "remaining_estimated_cost": "0.00",
+            "completed_cost": "0.00",
+            "overall_cost": "0.00",
+        }))
+
+
+class RoomPlanItemSerializer(serializers.ModelSerializer):
+    room_id = serializers.IntegerField(read_only=True)
+    assigned_to_person_id = serializers.IntegerField(required=False, allow_null=True)
+    estimated_total = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    effective_cost = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = RoomPlanItem
+        fields = [
+            "id", "room_id", "assigned_to_person_id", "title", "item_type", "status",
+            "priority", "description", "quantity", "estimated_unit_cost", "estimated_total",
+            "actual_cost", "effective_cost", "link_url", "notes", "position",
+            "completed_at", "visibility", "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "id", "room_id", "estimated_total", "effective_cost", "completed_at",
+            "created_at", "updated_at",
         ]
 
     def validate_title(self, value: str) -> str:

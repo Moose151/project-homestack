@@ -113,6 +113,8 @@ def search_all(request, query: str, *, per_node_limit: int = 8) -> dict:
             *[_result("homestead", "appliance", row, row.name, row.room or "Appliance", f"/homestead?tab=appliances&q={encoded}") for row in found["appliances"]],
             *[_result("homestead", "improvement", row, row.title, "Improvement", f"/homestead?tab=improvements&q={encoded}") for row in found["improvements"]],
             *[_result("homestead", "provider", row, row.name, row.company or "Contact", f"/homestead?tab=contacts&q={encoded}") for row in found["providers"]],
+            *[_result("homestead", "room", row, row.name, "Room / area", f"/homestead/rooms/{row.id}") for row in found["rooms"]],
+            *[_result("homestead", "room_item", row, row.title, row.room.name, f"/homestead/rooms/{row.room_id}") for row in found["room_items"]],
         ])
 
     if allowed("solace"):

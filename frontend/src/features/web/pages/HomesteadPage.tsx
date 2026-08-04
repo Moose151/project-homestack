@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type {
   Appliance, Improvement, ImprovementStatus, MaintenanceTask, Person, Property,
   ServiceProvider, HomesteadSearchResults, InsurancePolicy, HouseholdCost,
+  RoomAreaType, RoomListResponse,
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
@@ -232,6 +234,129 @@ function OverviewTab({ onError, onGoTab }: { onError: (m: string) => void; onGoT
           <Button variant="secondary" size="sm" onClick={() => onGoTab('finances')}>Open finances</Button>
         </div>
       </Card>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Rooms & areas — linked overview into dedicated room planning pages
+// ---------------------------------------------------------------------------
+
+const EMPTY_ROOMS: RoomListResponse = {
+  rooms: [],
+  household_summary: {
+    active_count: 0, completed_count: 0, archived_count: 0,
+    remaining_estimated_cost: '0.00', completed_cost: '0.00', overall_cost: '0.00',
+  },
+}
+
+function RoomsTab({ onError, canEdit }: { onError: (m: string) => void; canEdit: boolean }) {
+  const [data, setData] = useState<RoomListResponse>(EMPTY_ROOMS)
+  const [loading, setLoading] = useState(true)
+  const [adding, setAdding] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({
+    name: '', area_type: 'interior' as RoomAreaType, description: '', icon: '',
+  })
+
+  const load = () => api.getRooms().then(setData).catch(e => onError(errMsg(e))).finally(() => setLoading(false))
+  useEffect(() => { void load() }, [])
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!form.name.trim()) return
+    setSaving(true)
+    try {
+      await api.createRoom({ ...form, name: form.name.trim() })
+      setForm({ name: '', area_type: 'interior', description: '', icon: '' })
+      setAdding(false)
+      await load()
+    } catch (e) { onError(errMsg(e)) } finally { setSaving(false) }
+  }
+
+  if (loading) return <div className="h-40 rounded-2xl bg-sunken animate-pulse" />
+  const summary = data.household_summary
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card>
+          <p className="text-2xl font-extrabold text-ink">{money(summary.remaining_estimated_cost)}</p>
+          <p className="text-sm text-muted">Still planned across the house</p>
+          <p className="mt-1 text-xs text-muted">{summary.active_count} active item{summary.active_count === 1 ? '' : 's'}</p>
+        </Card>
+        <Card>
+          <p className="text-2xl font-extrabold text-ink">{money(summary.completed_cost)}</p>
+          <p className="text-sm text-muted">Completed cost</p>
+          <p className="mt-1 text-xs text-muted">Actual cost where recorded</p>
+        </Card>
+        <Card>
+          <p className="text-2xl font-extrabold text-ink">{money(summary.overall_cost)}</p>
+          <p className="text-sm text-muted">Overall household plan</p>
+          <p className="mt-1 text-xs text-muted">Archived ideas excluded</p>
+        </Card>
+      </div>
+
+      {adding ? (
+        <Card title="Add a room or area">
+          <form onSubmit={save} className="flex flex-col gap-3">
+            <div className="grid gap-3 sm:grid-cols-[90px_1fr_180px]">
+              <Field label="Icon"><Input value={form.icon} onChange={e => setForm(f => ({ ...f, icon: e.target.value }))} placeholder="🛋️" /></Field>
+              <Field label="Name"><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Living room" autoFocus /></Field>
+              <Field label="Type">
+                <Select value={form.area_type} onChange={e => setForm(f => ({ ...f, area_type: e.target.value as RoomAreaType }))}>
+                  {['interior', 'outdoor', 'utility', 'storage', 'other'].map(type => <option key={type} value={type}>{cap(type)}</option>)}
+                </Select>
+              </Field>
+            </div>
+            <Field label="Description"><Textarea rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="What this space is used for, or the overall goal for it…" /></Field>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setAdding(false)}>Cancel</Button>
+              <Button type="submit" size="sm" loading={saving} disabled={!form.name.trim()}>Create room</Button>
+            </div>
+          </form>
+        </Card>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-bold text-ink">Rooms &amp; areas</h2>
+            <p className="text-sm text-muted">Each room opens its own purchases, maintenance, renovations and upgrades plan.</p>
+          </div>
+          {canEdit && <Button size="sm" onClick={() => setAdding(true)}>+ Add room or area</Button>}
+        </div>
+      )}
+
+      {data.rooms.length === 0 ? (
+        <EmptyState icon="🚪" title="No rooms or areas yet" hint="Start with the spaces you want to plan — rooms, garage, garden, patio or any other area." />
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {data.rooms.map(room => (
+            <Link key={room.id} to={`/homestead/rooms/${room.id}`} className="group rounded-2xl border border-line bg-surface p-4 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-2xl" style={{ backgroundColor: `${room.colour}20` }}>
+                  {room.icon || (room.area_type === 'outdoor' ? '🌿' : '🚪')}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="truncate font-bold text-ink group-hover:text-primary">{room.name}</h3>
+                    <span className="text-muted transition group-hover:translate-x-0.5">→</span>
+                  </div>
+                  <p className="text-xs text-muted">{cap(room.area_type)} · {room.summary.active_count} active</p>
+                  {room.description && <p className="mt-2 line-clamp-2 text-sm text-muted-strong">{room.description}</p>}
+                  <div className="mt-3 flex items-end justify-between gap-3 border-t border-line pt-2">
+                    <div><p className="text-xs text-muted">Remaining</p><p className="font-bold text-ink">{money(room.summary.remaining_estimated_cost)}</p></div>
+                    <p className="text-xs text-muted">{room.summary.completed_count} completed · {room.summary.archived_count} archived</p>
+                  </div>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      <div className="rounded-xl border border-dashed border-line px-4 py-3 text-sm text-muted">
+        Floor-plan view is a future visual layer; every room already has a stable page for the map to open.
+      </div>
     </div>
   )
 }
@@ -1138,7 +1263,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function SearchResults({ results }: { results: HomesteadSearchResults }) {
-  const empty = !results.appliances.length && !results.maintenance.length && !results.providers.length && !results.improvements.length
+  const empty = !results.appliances.length && !results.maintenance.length && !results.providers.length && !results.improvements.length && !results.rooms.length && !results.room_items.length
   if (empty) return <p className="py-8 text-center text-sm text-muted">No matches.</p>
   const row = (key: string, main: string, sub?: string) => (
     <div key={key} className="flex items-center justify-between gap-3 rounded-lg bg-sunken px-3 py-1.5 text-sm">
@@ -1151,6 +1276,16 @@ function SearchResults({ results }: { results: HomesteadSearchResults }) {
       {results.appliances.length > 0 && <Section title="Appliances">{results.appliances.map(a => row(`a${a.id}`, a.name, [a.brand, a.model_number].filter(Boolean).join(' ')))}</Section>}
       {results.improvements.length > 0 && <Section title="Improvements">{results.improvements.map(i => row(`i${i.id}`, i.title, cap(i.status)))}</Section>}
       {results.providers.length > 0 && <Section title="Contacts">{results.providers.map(p => row(`p${p.id}`, p.name, cap(p.trade)))}</Section>}
+      {results.rooms.length > 0 && <Section title="Rooms & areas">{results.rooms.map(room => (
+        <Link key={room.id} to={`/homestead/rooms/${room.id}`} className="flex items-center justify-between gap-3 rounded-lg bg-sunken px-3 py-1.5 text-sm hover:text-primary">
+          <span>{room.icon || '🚪'} {room.name}</span><span className="text-xs text-muted">Open room →</span>
+        </Link>
+      ))}</Section>}
+      {results.room_items.length > 0 && <Section title="Room plans">{results.room_items.map(item => (
+        <Link key={item.id} to={`/homestead/rooms/${item.room_id}`} className="flex items-center justify-between gap-3 rounded-lg bg-sunken px-3 py-1.5 text-sm hover:text-primary">
+          <span>{item.title}</span><span className="text-xs text-muted">{cap(item.item_type)} →</span>
+        </Link>
+      ))}</Section>}
     </div>
   )
 }
@@ -1159,8 +1294,8 @@ function SearchResults({ results }: { results: HomesteadSearchResults }) {
 // Homestead page
 // ---------------------------------------------------------------------------
 
-type Tab = 'overview' | 'maintenance' | 'appliances' | 'improvements' | 'contacts' | 'finances'
-const TAB_KEYS: Tab[] = ['overview', 'maintenance', 'appliances', 'improvements', 'contacts', 'finances']
+type Tab = 'overview' | 'rooms' | 'maintenance' | 'appliances' | 'improvements' | 'contacts' | 'finances'
+const TAB_KEYS: Tab[] = ['overview', 'rooms', 'maintenance', 'appliances', 'improvements', 'contacts', 'finances']
 
 export function HomesteadPage() {
   const { user } = useAuth()
@@ -1185,9 +1320,9 @@ export function HomesteadPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Homestead" icon="🏠" subtitle="Your home — upkeep, appliances, contacts and improvements." />
+      <PageHeader title="Homestead" icon="🏠" subtitle="Your home — rooms, upkeep, appliances, contacts and improvements." />
 
-      <Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search maintenance, appliances, contacts, improvements…" />
+      <Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search rooms, plans, maintenance, appliances, contacts…" />
 
       {error && (
         <div className="flex items-center justify-between gap-3 rounded-xl bg-danger-soft px-4 py-2.5 text-sm text-danger">
@@ -1203,6 +1338,7 @@ export function HomesteadPage() {
           <Tabs
             tabs={[
               { key: 'overview', label: 'overview' },
+              { key: 'rooms', label: 'rooms' },
               { key: 'maintenance', label: 'maintenance' },
               { key: 'appliances', label: 'appliances' },
               { key: 'improvements', label: 'improvements' },
@@ -1215,6 +1351,7 @@ export function HomesteadPage() {
           />
 
           {tab === 'overview' && <OverviewTab onError={setError} onGoTab={setTab} />}
+          {tab === 'rooms' && <RoomsTab onError={setError} canEdit={Boolean(user && user.role !== 'guest' && !user.is_child_account)} />}
           {tab === 'maintenance' && <MaintenanceTab people={people} defaultAssignee={defaultAssignee} onError={setError} />}
           {tab === 'appliances' && <AppliancesTab onError={setError} />}
           {tab === 'improvements' && <ImprovementsTab people={people} defaultAssignee={defaultAssignee} onError={setError} />}

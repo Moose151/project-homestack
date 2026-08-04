@@ -1,11 +1,33 @@
 # HomeStack — Version History
 
-> **Current version: 0.17.0**
+> **Current version: 0.18.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
 >
 > **Rule:** bump the version and add a row here with every push to `main`.
+
+---
+
+## 0.18 — Homestead room and area planning
+
+### 0.18.0 — 2026-08-04
+- **Linked room/area workspace** — Homestead now has a Rooms & areas overview where every space
+  is a link to its own stable page. Rooms carry type, description, icon, colour, ordering and
+  reserved floor-plan metadata so a future clickable map can target the same routes.
+- **One plan for everything in a room** — dedicated room pages track purchases, maintenance,
+  renovations and upgrades with status, priority, assignee, quantity, estimated unit cost,
+  optional actual total cost, reference link and notes.
+- **Useful lifecycle and totals** — active work is grouped by type; completed and archived items
+  remain visible and can be reopened/restored. Room and whole-house summaries show remaining
+  estimates, completed cost (actual where supplied, estimate fallback) and overall cost, with
+  archived ideas deliberately excluded.
+- **Permission-aware APIs and search** — layered CRUD APIs use the existing `homestead.*`
+  permissions and central record visibility rules. Room and plan-item results are searchable
+  both inside Homestead and through global search, deep-linking to the room page.
+- Database migration required: `homestead.0003_roomarea_roomplanitem`.
+- Validation: **593 backend tests**, frontend TypeScript check and production build clean; no
+  migration drift.
 
 ---
 

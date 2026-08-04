@@ -3,12 +3,10 @@
 V1 slice: the property record (with practical emergency info), recurring/one-off maintenance,
 appliances + warranties, a service-provider directory, and a lightweight improvements list.
 
-Design intent (owner, 2026-07-21): Homestead is an *aggregating* home hub. When the financial
-node (Solace) and the Projects node exist, Homestead surfaces the house-relevant slices of them
-(rates/bills; house projects) and deep-links to the full record — always via the events bus and
-read-time aggregation, never by importing another node's models (D4). Two dormant hooks live
-here now: money is deliberately absent (comes from Solace) and `Improvement.project_ref` links
-an improvement to a future full Project.
+Design intent (owner, 2026-07-21): Homestead is an *aggregating* home hub. The financial node
+(Solace) owns household cash-flow while Homestead owns home-specific policies/accounts and room
+planning estimates. Cross-node data moves through events, never model imports (D4), and
+`Improvement.project_ref` remains the hook to a future full Project.
 
 All models inherit HouseholdBaseModel (household scoping, audit, soft-delete). Maintenance and
 improvement dates mirror to the shared calendar via the scheduling helper only (D7); recurring
@@ -18,6 +16,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from apps.core.models import AllObjectsManager, HouseholdBaseModel, HouseholdManager
@@ -302,6 +301,124 @@ class Improvement(CalendarSyncMixin, HouseholdBaseModel):
 
     def get_calendar_node_key(self) -> str:
         return "homestead"
+
+
+class RoomArea(HouseholdBaseModel):
+    """A stable room/area destination, ready for a future clickable floor plan."""
+
+    class AreaType(models.TextChoices):
+        INTERIOR = "interior", "Interior room"
+        OUTDOOR = "outdoor", "Outdoor area"
+        UTILITY = "utility", "Utility / service area"
+        STORAGE = "storage", "Storage"
+        OTHER = "other", "Other"
+
+    name = models.CharField(max_length=160)
+    area_type = models.CharField(
+        max_length=20, choices=AreaType.choices, default=AreaType.INTERIOR
+    )
+    description = models.TextField(blank=True, default="")
+    icon = models.CharField(max_length=50, blank=True, default="")
+    colour = models.CharField(max_length=20, blank=True, default="#B0563C")
+    display_order = models.PositiveSmallIntegerField(default=0)
+    # Flexible coordinates/shape metadata for the future floor-plan renderer. The room ID and
+    # detail route stay stable when that visual layer arrives.
+    floorplan_data = models.JSONField(default=dict, blank=True)
+    visibility = models.CharField(
+        max_length=20, choices=Visibility.choices, default=Visibility.HOUSEHOLD
+    )
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "room or area"
+        ordering = ["display_order", "name", "id"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class RoomPlanItem(HouseholdBaseModel):
+    """One wanted purchase, maintenance job, renovation or upgrade for a room."""
+
+    class ItemType(models.TextChoices):
+        PURCHASE = "purchase", "Purchase"
+        MAINTENANCE = "maintenance", "Maintenance"
+        RENOVATION = "renovation", "Renovation"
+        UPGRADE = "upgrade", "Upgrade"
+
+    class Status(models.TextChoices):
+        PLANNED = "planned", "Planned"
+        IN_PROGRESS = "in_progress", "In progress"
+        COMPLETED = "completed", "Completed"
+        ARCHIVED = "archived", "Archived"
+
+    class Priority(models.TextChoices):
+        LOW = "low", "Low"
+        MEDIUM = "medium", "Medium"
+        HIGH = "high", "High"
+
+    room = models.ForeignKey(RoomArea, on_delete=models.PROTECT, related_name="plan_items")
+    assigned_to_person = models.ForeignKey(
+        "people.Person", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    title = models.CharField(max_length=255)
+    item_type = models.CharField(
+        max_length=20, choices=ItemType.choices, default=ItemType.PURCHASE
+    )
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PLANNED)
+    priority = models.CharField(
+        max_length=10, choices=Priority.choices, default=Priority.MEDIUM
+    )
+    description = models.TextField(blank=True, default="")
+    quantity = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("1.00"),
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
+    estimated_unit_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+    )
+    # Actual cost is the total paid, not a per-unit amount.
+    actual_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.00"))],
+    )
+    link_url = models.CharField(max_length=500, blank=True, default="")
+    notes = models.TextField(blank=True, default="")
+    position = models.PositiveSmallIntegerField(default=0)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    visibility = models.CharField(
+        max_length=20, choices=Visibility.choices, default=Visibility.HOUSEHOLD
+    )
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "room plan item"
+        ordering = ["position", "-updated_at", "id"]
+
+    def __str__(self) -> str:
+        return self.title
+
+    @property
+    def estimated_total(self) -> Decimal:
+        return (self.quantity * self.estimated_unit_cost).quantize(Decimal("0.01"))
+
+    @property
+    def effective_cost(self) -> Decimal:
+        if self.status == self.Status.COMPLETED and self.actual_cost is not None:
+            return self.actual_cost
+        return self.estimated_total
 
 
 class InsurancePolicy(HouseholdBaseModel):

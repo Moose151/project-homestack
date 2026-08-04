@@ -17,6 +17,10 @@ from apps.homestead.views import (
     PropertyListView,
     ProviderDetailView,
     ProviderListView,
+    RoomDetailView,
+    RoomItemDetailView,
+    RoomItemListView,
+    RoomListView,
 )
 
 urlpatterns = [
@@ -37,6 +41,11 @@ urlpatterns = [
 
     path("improvements/", ImprovementListView.as_view(), name="homestead-improvement-list"),
     path("improvements/<int:improvement_id>/", ImprovementDetailView.as_view(), name="homestead-improvement-detail"),
+
+    path("rooms/", RoomListView.as_view(), name="homestead-room-list"),
+    path("rooms/<int:room_id>/", RoomDetailView.as_view(), name="homestead-room-detail"),
+    path("rooms/<int:room_id>/items/", RoomItemListView.as_view(), name="homestead-room-item-list"),
+    path("rooms/<int:room_id>/items/<int:item_id>/", RoomItemDetailView.as_view(), name="homestead-room-item-detail"),
 
     path("insurance/", InsurancePolicyListView.as_view(), name="homestead-insurance-list"),
     path("insurance/<int:policy_id>/", InsurancePolicyDetailView.as_view(), name="homestead-insurance-detail"),

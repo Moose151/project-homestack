@@ -8,6 +8,7 @@ Covers:
 - Complete maintenance: stamps last_done_at and advances next_due_at by its RRULE (D8);
   non-recurring tasks have their reminder cleared.
 - Visibility: a user's private appliance is hidden from another user and from children.
+- Room/area planning, costs, lifecycle, visibility and search.
 - Search + Hub widgets.
 """
 from django.test import TestCase
@@ -24,6 +25,8 @@ from apps.homestead.services import (
     create_provider,
     create_household_cost,
     create_insurance_policy,
+    create_room,
+    create_room_item,
     delete_maintenance,
     update_improvement,
 )
@@ -135,6 +138,66 @@ class HomesteadFinancePermissionTests(TestCase):
         self.assertIn(self.client.get(self.url).status_code, [401, 403])
 
 
+class HomesteadRoomPermissionTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("room_admin", User.Role.ADMIN)
+        self.user = _make_user("room_user", User.Role.USER)
+        self.guest = _make_user("room_guest", User.Role.GUEST)
+        self.child = _make_user("room_child", User.Role.USER, is_child=True)
+        self.room = create_room(self.admin, name="Kitchen")
+        self.list_url = reverse("homestead-room-list")
+
+    def test_guest_can_view_rooms_but_cannot_create(self):
+        self.client.force_login(self.guest)
+        self.assertEqual(self.client.get(self.list_url).status_code, 200)
+        self.assertEqual(
+            self.client.post(
+                self.list_url,
+                {"name": "Garage"},
+                content_type="application/json",
+            ).status_code,
+            403,
+        )
+
+    def test_member_can_create_room_and_item(self):
+        self.client.force_login(self.user)
+        room_response = self.client.post(
+            self.list_url,
+            {"name": "Back patio", "area_type": "outdoor"},
+            content_type="application/json",
+        )
+        self.assertEqual(room_response.status_code, 201)
+        item_response = self.client.post(
+            reverse("homestead-room-item-list", args=[room_response.json()["id"]]),
+            {"title": "Outdoor table", "item_type": "purchase"},
+            content_type="application/json",
+        )
+        self.assertEqual(item_response.status_code, 201)
+
+    def test_child_cannot_create_room_item(self):
+        self.client.force_login(self.child)
+        response = self.client.post(
+            reverse("homestead-room-item-list", args=[self.room.id]),
+            {"title": "Paint walls", "item_type": "upgrade"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_member_cannot_delete_room_or_item(self):
+        item = create_room_item(self.admin, self.room, title="Replace tap")
+        self.client.force_login(self.user)
+        self.assertEqual(
+            self.client.delete(reverse("homestead-room-detail", args=[self.room.id])).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.delete(
+                reverse("homestead-room-item-detail", args=[self.room.id, item.id])
+            ).status_code,
+            403,
+        )
+
+
 # ---------------------------------------------------------------------------
 # CRUD
 # ---------------------------------------------------------------------------
@@ -203,6 +266,149 @@ class HomesteadCrudTests(TestCase):
         )
         self.assertEqual(resp.status_code, 201)
         self.assertTrue(resp.json()["is_open"])
+
+
+class HomesteadRoomsTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("rooms_admin", User.Role.ADMIN)
+        self.other = _make_user("rooms_other", User.Role.USER)
+        self.client.force_login(self.admin)
+        self.room = create_room(
+            self.admin,
+            name="Living room",
+            area_type="interior",
+            description="Main family space",
+            icon="🛋️",
+            floorplan_data={"label_x": 42, "label_y": 18},
+        )
+
+    def test_room_crud_preserves_future_floorplan_metadata(self):
+        response = self.client.get(reverse("homestead-room-detail", args=[self.room.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["room"]["name"], "Living room")
+        self.assertEqual(response.json()["room"]["floorplan_data"]["label_x"], 42)
+
+        response = self.client.patch(
+            reverse("homestead-room-detail", args=[self.room.id]),
+            {"description": "TV and family space", "display_order": 2},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["description"], "TV and family space")
+
+    def test_room_item_costs_and_household_totals(self):
+        create_room_item(
+            self.admin,
+            self.room,
+            title="New lamps",
+            item_type="purchase",
+            quantity="2.00",
+            estimated_unit_cost="100.00",
+        )
+        create_room_item(
+            self.admin,
+            self.room,
+            title="Replace flooring",
+            item_type="renovation",
+            quantity="1.00",
+            estimated_unit_cost="500.00",
+            actual_cost="450.00",
+            status="completed",
+        )
+        create_room_item(
+            self.admin,
+            self.room,
+            title="Old idea",
+            item_type="upgrade",
+            estimated_unit_cost="999.00",
+            status="archived",
+        )
+
+        response = self.client.get(reverse("homestead-room-list"))
+
+        self.assertEqual(response.status_code, 200)
+        summary = response.json()["rooms"][0]["summary"]
+        self.assertEqual(summary["active_count"], 1)
+        self.assertEqual(summary["completed_count"], 1)
+        self.assertEqual(summary["archived_count"], 1)
+        self.assertEqual(summary["remaining_estimated_cost"], "200.00")
+        self.assertEqual(summary["completed_cost"], "450.00")
+        self.assertEqual(summary["overall_cost"], "650.00")
+        self.assertEqual(response.json()["household_summary"], summary)
+
+    def test_detail_keeps_completed_and_archived_items_visible(self):
+        create_room_item(self.admin, self.room, title="Active", status="planned")
+        create_room_item(self.admin, self.room, title="Finished", status="completed")
+        create_room_item(self.admin, self.room, title="Parked", status="archived")
+
+        response = self.client.get(reverse("homestead-room-detail", args=[self.room.id]))
+
+        self.assertEqual(
+            {item["status"] for item in response.json()["items"]},
+            {"planned", "completed", "archived"},
+        )
+
+    def test_completing_and_reopening_item_updates_timestamp(self):
+        item = create_room_item(self.admin, self.room, title="Paint ceiling")
+        url = reverse("homestead-room-item-detail", args=[self.room.id, item.id])
+
+        completed = self.client.patch(
+            url,
+            {"status": "completed", "actual_cost": "210.50"},
+            content_type="application/json",
+        )
+        self.assertEqual(completed.status_code, 200)
+        self.assertIsNotNone(completed.json()["completed_at"])
+        self.assertEqual(completed.json()["effective_cost"], "210.50")
+
+        reopened = self.client.patch(
+            url,
+            {"status": "in_progress"},
+            content_type="application/json",
+        )
+        self.assertIsNone(reopened.json()["completed_at"])
+
+    def test_cost_fields_validate_nonnegative_values_and_positive_quantity(self):
+        url = reverse("homestead-room-item-list", args=[self.room.id])
+        response = self.client.post(
+            url,
+            {
+                "title": "Invalid",
+                "quantity": "0",
+                "estimated_unit_cost": "-1.00",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("quantity", response.json())
+        self.assertIn("estimated_unit_cost", response.json())
+
+    def test_private_room_and_items_are_hidden_from_other_member(self):
+        private_room = create_room(
+            self.admin,
+            name="Private study",
+            visibility="private",
+        )
+        create_room_item(self.admin, private_room, title="Private purchase")
+        self.client.force_login(self.other)
+
+        listed_ids = [room["id"] for room in self.client.get(reverse("homestead-room-list")).json()["rooms"]]
+        self.assertNotIn(private_room.id, listed_ids)
+        self.assertEqual(
+            self.client.get(reverse("homestead-room-detail", args=[private_room.id])).status_code,
+            404,
+        )
+
+    def test_deleting_room_soft_deletes_its_items(self):
+        item = create_room_item(self.admin, self.room, title="Remove with room")
+
+        self.assertEqual(
+            self.client.delete(reverse("homestead-room-detail", args=[self.room.id])).status_code,
+            204,
+        )
+        from apps.homestead.models import RoomArea, RoomPlanItem
+        self.assertFalse(RoomArea.objects.filter(pk=self.room.id).exists())
+        self.assertFalse(RoomPlanItem.objects.filter(pk=item.id).exists())
 
 
 # ---------------------------------------------------------------------------
@@ -437,6 +643,20 @@ class HomesteadSearchAndHubTests(TestCase):
         self.assertEqual([a["name"] for a in resp.json()["appliances"]], ["Dishwasher"])
         resp = self.client.get(reverse("homestead-search"), {"q": "Loft"})
         self.assertEqual([i["title"] for i in resp.json()["improvements"]], ["Loft conversion"])
+
+    def test_search_matches_rooms_and_room_plan_items(self):
+        room = create_room(self.admin, name="Sunroom")
+        create_room_item(self.admin, room, title="Wicker sofa", item_type="purchase")
+
+        room_response = self.client.get(reverse("homestead-search"), {"q": "Sunroom"})
+        self.assertEqual([row["name"] for row in room_response.json()["rooms"]], ["Sunroom"])
+        self.assertEqual(room_response.json()["rooms"][0]["summary"]["overall_cost"], "0.00")
+
+        item_response = self.client.get(reverse("homestead-search"), {"q": "Wicker"})
+        self.assertEqual(
+            [row["title"] for row in item_response.json()["room_items"]],
+            ["Wicker sofa"],
+        )
 
     def test_maintenance_widget_lists_due(self):
         from apps.hub.services import _homestead_widget_content

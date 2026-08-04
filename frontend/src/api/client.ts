@@ -12,7 +12,8 @@ import type {
   WikiCategory, WikiPage,
   Pet, PetTreatment, PetAppointment,
   Property, ServiceProvider, Appliance, MaintenanceTask, Improvement, HomesteadSearchResults,
-  InsurancePolicy, HouseholdCost,
+  InsurancePolicy, HouseholdCost, RoomArea, RoomDetailResponse, RoomListResponse, RoomPlanItem,
+  RoomAreaType, RoomItemPriority, RoomItemStatus, RoomItemType,
   SolaceBill, SolaceBillOccurrence, SolaceBillTimeline, SolacePayday, SolacePurchase, SolaceSchedule,
   SolaceBucket, SolaceSubscription,
   SolaceChecklistItem, SolacePayCyclePlan, SolaceSearchResults,
@@ -119,6 +120,18 @@ type HouseholdCostWrite = Partial<{
   name: string; cost_type: string; provider: string; account_number: string
   amount: string; billing_cycle: string; next_due_at: string | null
   recurrence_rule: string; is_active: boolean; notes: string; visibility: string
+}>
+
+type RoomWrite = Partial<{
+  name: string; area_type: RoomAreaType; description: string; icon: string; colour: string
+  display_order: number; floorplan_data: Record<string, unknown>; visibility: string
+}>
+
+type RoomItemWrite = Partial<{
+  assigned_to_person_id: number | null; title: string; item_type: RoomItemType
+  status: RoomItemStatus; priority: RoomItemPriority; description: string
+  quantity: string; estimated_unit_cost: string; actual_cost: string | null
+  link_url: string; notes: string; position: number; visibility: string
 }>
 
 type SolaceBillWrite = Partial<{
@@ -841,6 +854,21 @@ export const api = {
     _fetch(`/homestead/improvements/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteImprovement: (id: number): Promise<void> =>
     _fetch(`/homestead/improvements/${id}/`, { method: 'DELETE' }),
+
+  getRooms: (): Promise<RoomListResponse> => _fetch('/homestead/rooms/'),
+  getRoom: (id: number): Promise<RoomDetailResponse> => _fetch(`/homestead/rooms/${id}/`),
+  createRoom: (data: RoomWrite): Promise<RoomArea> =>
+    _fetch('/homestead/rooms/', { method: 'POST', body: JSON.stringify(data) }),
+  updateRoom: (id: number, data: RoomWrite): Promise<RoomArea> =>
+    _fetch(`/homestead/rooms/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteRoom: (id: number): Promise<void> =>
+    _fetch(`/homestead/rooms/${id}/`, { method: 'DELETE' }),
+  createRoomItem: (roomId: number, data: RoomItemWrite): Promise<RoomPlanItem> =>
+    _fetch(`/homestead/rooms/${roomId}/items/`, { method: 'POST', body: JSON.stringify(data) }),
+  updateRoomItem: (roomId: number, itemId: number, data: RoomItemWrite): Promise<RoomPlanItem> =>
+    _fetch(`/homestead/rooms/${roomId}/items/${itemId}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteRoomItem: (roomId: number, itemId: number): Promise<void> =>
+    _fetch(`/homestead/rooms/${roomId}/items/${itemId}/`, { method: 'DELETE' }),
 
   getInsurancePolicies: (active = false): Promise<InsurancePolicy[]> =>
     _fetch(`/homestead/insurance/${active ? '?active=1' : ''}`),

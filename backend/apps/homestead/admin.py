@@ -7,6 +7,8 @@ from apps.homestead.models import (
     InsurancePolicy,
     MaintenanceTask,
     Property,
+    RoomArea,
+    RoomPlanItem,
     ServiceProvider,
 )
 
@@ -44,6 +46,23 @@ class ImprovementAdmin(admin.ModelAdmin):
     list_display = ("title", "status", "priority", "room", "target_date")
     search_fields = ("title", "description", "notes")
     list_filter = ("status", "priority")
+
+
+@admin.register(RoomArea)
+class RoomAreaAdmin(admin.ModelAdmin):
+    list_display = ("name", "area_type", "display_order", "visibility")
+    search_fields = ("name", "description")
+    list_filter = ("area_type", "visibility")
+
+
+@admin.register(RoomPlanItem)
+class RoomPlanItemAdmin(admin.ModelAdmin):
+    list_display = (
+        "title", "room", "item_type", "status", "priority",
+        "estimated_unit_cost", "actual_cost",
+    )
+    search_fields = ("title", "description", "notes")
+    list_filter = ("item_type", "status", "priority", "visibility")
 
 
 @admin.register(InsurancePolicy)

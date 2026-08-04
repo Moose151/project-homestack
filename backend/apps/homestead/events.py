@@ -32,6 +32,24 @@ def improvement_completed(improvement_id: int, household_id: int) -> None:
     })
 
 
+def room_created(room_id: int, household_id: int) -> None:
+    publish("homestead.room_created", payload={
+        "room_id": room_id, "household_id": household_id,
+    })
+
+
+def room_item_created(item_id: int, room_id: int, household_id: int) -> None:
+    publish("homestead.room_item_created", payload={
+        "item_id": item_id, "room_id": room_id, "household_id": household_id,
+    })
+
+
+def room_item_completed(item_id: int, room_id: int, household_id: int) -> None:
+    publish("homestead.room_item_completed", payload={
+        "item_id": item_id, "room_id": room_id, "household_id": household_id,
+    })
+
+
 _CYCLE_RRULE = {
     "weekly": "FREQ=WEEKLY",
     "fortnightly": "FREQ=WEEKLY;INTERVAL=2",

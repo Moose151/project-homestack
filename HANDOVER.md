@@ -42,7 +42,7 @@ archived/superseded — ignore them.
 - `24_Core_Calendar.md` — Calendar core-service spec (app `scheduling`, D7/D8 timeline,
   every-page access, configurable views, look & feel).
 - `MILESTONE_1_Checklist.md` / `MILESTONE_2_Checklist.md` / `MILESTONE_2.5_Checklist.md` — the
-  per-milestone build checklists. **M3 is next.**
+  per-milestone build checklists. **M4 is active; Homestead room planning shipped alongside it.**
 
 ## 3. Hard rules (do NOT violate these)
 
@@ -96,9 +96,9 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: Milestone 4 security maturation resumed locally (2026-08-04, v0.17.0) while native
-Solace production deploy/real-data comparison remains pending on the home-server environment;
-kiosk work remains deferred.**
+**Phase: Homestead room/area planning shipped locally (2026-08-04, v0.18.0); Milestone 4
+security maturation remains the next local workstream while native Solace production
+deploy/real-data comparison waits for the home-server environment. Kiosk work remains deferred.**
 
 > **Owner direction, 2026-07-29.** Focus on usability, functionality, response time, navigation
 > and layout across the responsive web app. v0.12.0 delivers the shared foundation: route
@@ -230,22 +230,27 @@ kiosk work remains deferred.**
   `docs/SOLACE_PARITY_CHECKLIST.md`. **Still to do for cutover:** deploy migrations/import real
   data, compare a full pay cycle and monthly schedule, accept the phone/laptop workflow, then
   retire standalone Solace.
-- [~] **Homestead node — SHIPPED (2026-07-21; costs & cover v0.11.2, decision D21).** The household's home/property
-  hub (maintenance, appliances/warranties, service contacts, improvements + property record). Folds the
-  *home* scope of the planned **Assets** node. Protected insurance + rates/water/gas/utility cost
-  tracking now mirrors linked Solace bills through events (D4); Projects renovations remain future.
-  See spec `25_Node_Homestead.md`.
+- [~] **Homestead node — SHIPPED (2026-07-21; costs & cover v0.11.2; room planning v0.18.0;
+  decision D21).** The household's home/property hub (maintenance, appliances/warranties,
+  service contacts, improvements + property record). Rooms/areas now link to dedicated pages
+  with unified purchase/maintenance/renovation/upgrade plans, active/completed/archived lifecycle,
+  estimated/actual costs and exact room/whole-house totals; stable IDs plus `floorplan_data`
+  prepare for a future clickable floor plan. Folds the *home* scope of planned **Assets**.
+  Protected insurance + rates/water/gas/utility cost tracking mirrors linked Solace bills through
+  events (D4); full Projects integration remains future. See spec `25_Node_Homestead.md`.
 - [ ] Milestone 6: Inventory, Assets (non-home only, or retire — see D21), Hearth, Travel, Projects, Health.
 
 ## 6. Active tasks — continue M4 locally; deploy and validate Solace when available
 
-**Immediate local build step (no home server required):** finish the generic sensitive-node lock
+**Immediate local build step (no home server required):** live-test/polish the new Homestead room
+workflow locally if desired, then finish the generic sensitive-node lock
 path instead of leaving it Solace-specific: move re-auth/sensitivity decisions consistently
 through the central resolver, define the web/kiosk locked-state contract and shorter kiosk
 timeout, then close the remaining permission/user-change audit gaps. Keep permission tests first.
 
 **Production track (requires the home server):** rebuild both production images, deploy through
-v0.17.0, and run `migrate` through `attachments.0001`, `permissions.0020` and `solace.0007`.
+v0.18.0, and run `migrate` through `attachments.0001`, `permissions.0020`, `solace.0007` and
+`homestead.0003`.
 
 The Solace cutover sequence remains: rerun the importer
 dry-run/apply so settings, categories, bucket rules, historical occurrences, balances,
@@ -400,6 +405,7 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-07-30 | Assistant | M5 | **Standalone Solace feature parity completed (v0.15.0).** Added cycle closeout/reconciliation, balance snapshots/projections, finance health, full management flows, custom categories, checklist preferences, Solace settings, required set-aside/coverage, CSV/XLSX export, reviewed bill import and generic scheduled reminders. Expanded the idempotent legacy importer to bring across the remaining standalone state and validated it read-only against the live local SQLite database. The responsive Solace workspace now loads through one bootstrap request. Follow-up corrected the omitted v0.15 version/handover/README records, removed a dead importer statistic, fixed the configured pay-cycle anchor so it remains authoritative when income sources exist, and added read-only `import_solace --verify` cutover checks with actionable record/field drift reporting. **549 backend tests green; frontend type-check and production build clean; no migration drift.** | **Deploy/cutover:** rebuild both images (backend adds `openpyxl`), migrate through `solace.0006`, copy the legacy SQLite DB into the backend container, run importer dry-run/apply/verify, compare a full real pay cycle and month, then accept phone/laptop workflows before retiring standalone Solace. Docker is not installed in this development environment, so production deploy remains an owner/home-server operation. |
 | 2026-07-30 | Assistant | M5 | **Solace cash-flow forecast and deep standalone parity (v0.16.0).** Added an audited 3–24 month bills-account forecast that combines the latest balance, expected Bills-bucket transfers, included bills and active subscriptions into a dated running balance; it reports the low point/risk date, required opening balance, shortfall, bills-only surplus and buffer-preserving safe withdrawal. Ported bill autopay/stop dates and 12+12 occurrence detail, filter/sort, six-monthly entry and protected future/all-unpaid edit scope; current/next Pay plan and Checklist navigation; confirm-income/review-bills/record-balance steps; calculated upcoming paydays; capped purchase quick-saving; standalone-equivalent category report filters/period totals; and expanded health checks. Import/verify now preserves bill stop/autopay fields. **560 backend tests green; frontend type-check + production build clean; no migration drift.** | **Deploy/cutover:** rebuild both images, migrate through `solace.0007`, copy the legacy SQLite DB into the container, run importer dry-run/apply/verify, record a fresh real bills-account balance, and validate the forecast timeline/safe-withdrawal value plus a full pay cycle/month on phone and laptop before retiring standalone Solace. |
 | 2026-08-04 | Assistant | M4 | **Protected shared attachments and expiring re-auth shipped (v0.17.0).** Built the D11 attachment model/API with permission-first tests, linked node/record metadata, randomized storage, checksums/limits, visibility+sensitivity filtering through the central resolver, ownership-aware soft deletion and audited sensitive downloads. Removed raw `/media/` serving; Education assessment files now download through a visibility-checked API and private assessment/note/file direct-ID lookups were tightened. Password elevation is timestamped, expires after five minutes, rejects guest/child elevation and invalidates legacy permanent flags. Frontend shared client/types added. **581 backend tests green; frontend type-check + production build clean; no migration drift.** | Continue M4 locally: generic sensitive-node lock contract/web+kiosk timeout and remaining permission/user-change audit coverage. Production later: migrate `attachments.0001`, `permissions.0020`, `solace.0007`, then complete Solace cutover validation. |
+| 2026-08-04 | Assistant | Homestead | **Room and area planning shipped (v0.18.0).** Added household-scoped `RoomArea` and `RoomPlanItem` models plus layered CRUD APIs, permission-first tests, central visibility filtering, publish-only lifecycle events, admin registration and local/global search. Each room links from the new Homestead Rooms tab to a dedicated page. Plans combine purchases, maintenance, renovations and upgrades with priority, assignee, quantity, estimated unit cost, optional actual total cost, reference link and notes. Planned/in-progress items drive remaining estimates; completed items use actual cost or estimate fallback; archived items stay visible but are excluded. Exact decimal summaries roll up per room and household. Completed/archived items can be reopened/restored; stable room routes and `floorplan_data` reserve the future clickable-map path. **593 backend tests green; frontend type-check + production build clean; no migration drift.** | **Deploy:** rebuild both images and run `docker exec homestack-backend python manage.py migrate` (`homestead.0003`). Then enable/open Homestead and live-test room creation, item completion/actual costs and phone layout. Future room slice: clickable floor-plan renderer. Otherwise resume remaining M4 lock/audit work locally. |
 
 ### Session notes (free-form, optional)
 

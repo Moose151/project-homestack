@@ -770,6 +770,69 @@ export interface Improvement {
   updated_at: string
 }
 
+export type RoomAreaType = 'interior' | 'outdoor' | 'utility' | 'storage' | 'other'
+export type RoomItemType = 'purchase' | 'maintenance' | 'renovation' | 'upgrade'
+export type RoomItemStatus = 'planned' | 'in_progress' | 'completed' | 'archived'
+export type RoomItemPriority = 'low' | 'medium' | 'high'
+
+export interface RoomCostSummary {
+  active_count: number
+  completed_count: number
+  archived_count: number
+  remaining_estimated_cost: string
+  completed_cost: string
+  overall_cost: string
+}
+
+export interface RoomArea {
+  id: number
+  name: string
+  area_type: RoomAreaType
+  description: string
+  icon: string
+  colour: string
+  display_order: number
+  floorplan_data: Record<string, unknown>
+  visibility: string
+  summary: RoomCostSummary
+  created_at: string
+  updated_at: string
+}
+
+export interface RoomPlanItem {
+  id: number
+  room_id: number
+  assigned_to_person_id: number | null
+  title: string
+  item_type: RoomItemType
+  status: RoomItemStatus
+  priority: RoomItemPriority
+  description: string
+  quantity: string
+  estimated_unit_cost: string
+  estimated_total: string
+  actual_cost: string | null
+  effective_cost: string
+  link_url: string
+  notes: string
+  position: number
+  completed_at: string | null
+  visibility: string
+  created_at: string
+  updated_at: string
+}
+
+export interface RoomListResponse {
+  rooms: RoomArea[]
+  household_summary: RoomCostSummary
+}
+
+export interface RoomDetailResponse {
+  room: RoomArea
+  items: RoomPlanItem[]
+  summary: RoomCostSummary
+}
+
 export type InsurancePolicyType =
   | 'building' | 'contents' | 'building_contents' | 'landlord'
   | 'mortgage_protection' | 'other'
@@ -827,6 +890,8 @@ export interface HomesteadSearchResults {
   maintenance: MaintenanceTask[]
   providers: ServiceProvider[]
   improvements: Improvement[]
+  rooms: RoomArea[]
+  room_items: RoomPlanItem[]
 }
 
 // ---------------------------------------------------------------------------

@@ -17,6 +17,8 @@ from apps.homestead.serializers import (
     InsurancePolicySerializer,
     MaintenanceTaskSerializer,
     PropertySerializer,
+    RoomAreaSerializer,
+    RoomPlanItemSerializer,
     ServiceProviderSerializer,
 )
 from apps.nodes.models import Node
@@ -60,13 +62,18 @@ class HomesteadSearchView(APIView):
     def get(self, request: Request) -> Response:
         query = (request.query_params.get("q") or "").strip()
         if not query:
-            return Response({"appliances": [], "maintenance": [], "providers": [], "improvements": []})
+            return Response({
+                "appliances": [], "maintenance": [], "providers": [], "improvements": [],
+                "rooms": [], "room_items": [],
+            })
         r = selectors.search_homestead(request.user, query)
         return Response({
             "appliances": ApplianceSerializer(r["appliances"], many=True).data,
             "maintenance": MaintenanceTaskSerializer(r["maintenance"], many=True).data,
             "providers": ServiceProviderSerializer(r["providers"], many=True).data,
             "improvements": ImprovementSerializer(r["improvements"], many=True).data,
+            "rooms": RoomAreaSerializer(r["rooms"], many=True).data,
+            "room_items": RoomPlanItemSerializer(r["room_items"], many=True).data,
         })
 
 
@@ -279,6 +286,131 @@ class ImprovementDetailView(APIView):
 
     def delete(self, request: Request, improvement_id: int) -> Response:
         services.delete_improvement(request.user, self._get(improvement_id, request.user))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Rooms / areas and unified plan items
+# ---------------------------------------------------------------------------
+
+def _room_serializer_context(user, rooms) -> tuple[dict, dict]:
+    summaries, household = selectors.room_summaries(user, rooms)
+    return {
+        "summaries": summaries,
+        "empty_summary": selectors.empty_room_summary(),
+    }, household
+
+
+class RoomListView(APIView):
+    permission_classes = [_Perm]
+
+    def get(self, request: Request) -> Response:
+        rooms = selectors.list_rooms(request.user)
+        context, household = _room_serializer_context(request.user, rooms)
+        return Response({
+            "rooms": RoomAreaSerializer(rooms, many=True, context=context).data,
+            "household_summary": household,
+        })
+
+    def post(self, request: Request) -> Response:
+        serializer = RoomAreaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        room = services.create_room(request.user, **serializer.validated_data)
+        context, _household = _room_serializer_context(request.user, [room])
+        return Response(
+            RoomAreaSerializer(room, context=context).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class RoomDetailView(APIView):
+    permission_classes = [_Perm]
+
+    def _get(self, room_id: int, user):
+        room = selectors.get_room(room_id, user)
+        if room is None:
+            raise NotFound()
+        return room
+
+    def get(self, request: Request, room_id: int) -> Response:
+        room = self._get(room_id, request.user)
+        items = selectors.list_room_items(request.user, room)
+        summary = selectors.summarize_room_items(items)
+        return Response({
+            "room": RoomAreaSerializer(
+                room,
+                context={"summaries": {room.id: summary}, "empty_summary": summary},
+            ).data,
+            "items": RoomPlanItemSerializer(items, many=True).data,
+            "summary": summary,
+        })
+
+    def patch(self, request: Request, room_id: int) -> Response:
+        room = self._get(room_id, request.user)
+        serializer = RoomAreaSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        room = services.update_room(request.user, room, **serializer.validated_data)
+        context, _household = _room_serializer_context(request.user, [room])
+        return Response(RoomAreaSerializer(room, context=context).data)
+
+    def delete(self, request: Request, room_id: int) -> Response:
+        services.delete_room(request.user, self._get(room_id, request.user))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class RoomItemListView(APIView):
+    permission_classes = [_Perm]
+
+    def _room(self, room_id: int, user):
+        room = selectors.get_room(room_id, user)
+        if room is None:
+            raise NotFound()
+        return room
+
+    def get(self, request: Request, room_id: int) -> Response:
+        return Response(RoomPlanItemSerializer(
+            selectors.list_room_items(request.user, self._room(room_id, request.user)),
+            many=True,
+        ).data)
+
+    def post(self, request: Request, room_id: int) -> Response:
+        room = self._room(room_id, request.user)
+        serializer = RoomPlanItemSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        item = services.create_room_item(
+            request.user, room, **serializer.validated_data
+        )
+        return Response(
+            RoomPlanItemSerializer(item).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class RoomItemDetailView(APIView):
+    permission_classes = [_Perm]
+
+    def _get(self, room_id: int, item_id: int, user):
+        room = selectors.get_room(room_id, user)
+        if room is None:
+            raise NotFound()
+        item = selectors.get_room_item(item_id, room, user)
+        if item is None:
+            raise NotFound()
+        return item
+
+    def patch(self, request: Request, room_id: int, item_id: int) -> Response:
+        item = self._get(room_id, item_id, request.user)
+        serializer = RoomPlanItemSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        item = services.update_room_item(
+            request.user, item, **serializer.validated_data
+        )
+        return Response(RoomPlanItemSerializer(item).data)
+
+    def delete(self, request: Request, room_id: int, item_id: int) -> Response:
+        services.delete_room_item(
+            request.user, self._get(room_id, item_id, request.user)
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

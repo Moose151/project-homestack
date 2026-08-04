@@ -12,12 +12,13 @@ opt-in **nodes** (areas of household life), and a touchscreen **kiosk** for the 
 ## Status
 
 Milestones 1–3 are complete, including the walking skeleton, native Meridian, the core
-Hub/Atlas/Calendar surfaces, Education, Home Wiki and Pets. Homestead is available, and native
-Solace has reached standalone feature parity, including a dated bills-account forecast and
-safe-withdrawal calculation. Security maturation is now underway: v0.17.0 adds the shared
-permission-checked attachment service, audited sensitive downloads, non-public file storage and
-five-minute password elevation. Production Solace import/comparison and phone/laptop acceptance
-remain pending until the home-server environment is available. See [`HANDOVER.md`](HANDOVER.md).
+Hub/Atlas/Calendar surfaces, Education, Home Wiki and Pets. Homestead now includes linked room and
+area pages with purchase/maintenance/renovation plans and exact room/whole-house cost summaries.
+Native Solace has reached standalone feature parity, including a dated bills-account forecast and
+safe-withdrawal calculation. Security maturation includes the shared permission-checked attachment
+service, audited sensitive downloads, non-public file storage and five-minute password elevation.
+Production Solace import/comparison remains pending until the home-server environment is available.
+See [`HANDOVER.md`](HANDOVER.md).
 
 ## Tech stack
 
