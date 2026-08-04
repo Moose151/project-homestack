@@ -87,8 +87,11 @@ def list_assessments(
     return list(qs)
 
 
-def get_assessment(pk: int) -> EducationAssessment | None:
-    return EducationAssessment.objects.filter(pk=pk).first()
+def get_assessment(pk: int, user=None) -> EducationAssessment | None:
+    qs = EducationAssessment.objects.filter(pk=pk)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return qs.first()
 
 
 # ---------------------------------------------------------------------------
@@ -99,8 +102,15 @@ def list_assessment_notes(assessment: EducationAssessment) -> list[EducationAsse
     return list(assessment.notes.order_by("created_at"))
 
 
-def get_assessment_note(pk: int) -> EducationAssessmentNote | None:
-    return EducationAssessmentNote.objects.filter(pk=pk).first()
+def get_assessment_note(
+    pk: int,
+    *,
+    assessment: EducationAssessment | None = None,
+) -> EducationAssessmentNote | None:
+    qs = EducationAssessmentNote.objects.filter(pk=pk)
+    if assessment is not None:
+        qs = qs.filter(assessment=assessment)
+    return qs.first()
 
 
 # ---------------------------------------------------------------------------
@@ -111,8 +121,15 @@ def list_assessment_files(assessment: EducationAssessment) -> list[EducationAsse
     return list(assessment.files.order_by("created_at"))
 
 
-def get_assessment_file(pk: int) -> EducationAssessmentFile | None:
-    return EducationAssessmentFile.objects.filter(pk=pk).first()
+def get_assessment_file(
+    pk: int,
+    *,
+    assessment: EducationAssessment | None = None,
+) -> EducationAssessmentFile | None:
+    qs = EducationAssessmentFile.objects.filter(pk=pk)
+    if assessment is not None:
+        qs = qs.filter(assessment=assessment)
+    return qs.first()
 
 
 # ---------------------------------------------------------------------------

@@ -168,6 +168,10 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 # --- Media (user uploads) ---
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+# Shared uploads are served only through permission-checked API downloads (D11).
+ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024
+# Password elevation is deliberately brief, especially on shared devices (D6).
+REAUTH_TTL_SECONDS = 5 * 60
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

@@ -1264,6 +1264,30 @@ export interface GlobalSearchResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Shared attachments
+// ---------------------------------------------------------------------------
+
+export type AttachmentVisibility = 'private' | 'household' | 'role_restricted' | 'sensitive'
+export type AttachmentSensitivity = 'normal' | 'financial' | 'health' | 'document' | 'private'
+
+export interface Attachment {
+  id: number
+  uploaded_by: number
+  filename: string
+  original_filename: string
+  mime_type: string
+  file_size: number
+  checksum: string
+  linked_node: number | null
+  linked_record_type: string
+  linked_record_id: number | null
+  visibility: AttachmentVisibility
+  sensitivity: AttachmentSensitivity
+  created_at: string
+  updated_at: string
+}
+
+// ---------------------------------------------------------------------------
 // Nodes (stacks) + household
 // ---------------------------------------------------------------------------
 

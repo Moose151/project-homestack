@@ -6,7 +6,9 @@ All session manipulation lives here so views stay thin (Coding Standards §6).
 from __future__ import annotations
 
 from django.contrib.auth import authenticate, login, logout
+from django.conf import settings
 from django.http import HttpRequest
+from django.utils import timezone
 
 from apps.accounts.models import User
 
@@ -52,7 +54,7 @@ def logout_user(request: HttpRequest) -> None:
 
 def grant_reauth(request: HttpRequest) -> None:
     """Mark the session as having passed password re-authentication (D6 §6)."""
-    request.session[REAUTH_SESSION_KEY] = True
+    request.session[REAUTH_SESSION_KEY] = int(timezone.now().timestamp())
 
 
 def revoke_reauth(request: HttpRequest) -> None:
@@ -60,7 +62,19 @@ def revoke_reauth(request: HttpRequest) -> None:
 
 
 def is_reauthed(request: HttpRequest) -> bool:
-    return bool(request.session.get(REAUTH_SESSION_KEY, False))
+    granted_at = request.session.get(REAUTH_SESSION_KEY)
+    # Old releases stored a permanent boolean. Refuse it so upgrades cannot retain an
+    # indefinitely elevated session.
+    if isinstance(granted_at, bool) or not isinstance(granted_at, (int, float)):
+        if granted_at is not None:
+            revoke_reauth(request)
+        return False
+    ttl_seconds = getattr(settings, "REAUTH_TTL_SECONDS", 5 * 60)
+    age = timezone.now().timestamp() - granted_at
+    if age < 0 or age > ttl_seconds:
+        revoke_reauth(request)
+        return False
+    return True
 
 
 def reauth_user(request: HttpRequest, password: str) -> bool:
@@ -70,7 +84,11 @@ def reauth_user(request: HttpRequest, password: str) -> bool:
     Child accounts and guests cannot re-auth (no password).
     """
     user = request.user
-    if not user.is_authenticated or user.is_child_account:
+    if (
+        not user.is_authenticated
+        or user.is_child_account
+        or user.role == User.Role.GUEST
+    ):
         return False
     if not user.check_password(password):
         return False

@@ -1,8 +1,6 @@
 """
 Root URL config. API is served under /api/v1/ (API Specification §1).
 """
-from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
@@ -39,5 +37,6 @@ urlpatterns = [
     path("api/v1/kiosk/meridian/", KioskMeridianView.as_view(), name="kiosk-meridian"),
     path("api/v1/hub/", include("apps.hub.urls")),
     path("api/v1/notifications/", include("apps.notifications.urls")),
+    path("api/v1/attachments/", include("apps.attachments.urls")),
     path("api/v1/backups/", include("apps.backups.urls")),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+]

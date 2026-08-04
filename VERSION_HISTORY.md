@@ -1,11 +1,38 @@
 # HomeStack — Version History
 
-> **Current version: 0.16.0**
+> **Current version: 0.17.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
 >
 > **Rule:** bump the version and add a row here with every push to `main`.
+
+---
+
+## 0.17 — Security maturation: protected attachments
+
+### 0.17.0 — 2026-08-04
+- **Shared protected attachment service** — added the canonical D11 attachment model and
+  `/api/v1/attachments/` upload/list/download/delete API with household ownership, linked
+  node/record metadata, randomized storage names, SHA-256 checksums, upload limits, soft deletion
+  and frontend client/types for node adoption.
+- **Central record policy** — the permission resolver can now enforce record visibility,
+  sensitivity, child/kiosk denial and current re-auth state. Attachment lists hide locked
+  metadata; downloads and deletion re-check the record rather than trusting client-side state.
+- **Sensitive download audit** — every financial, health, document, private or explicitly
+  sensitive attachment download creates an immutable `sensitive_attachment_downloaded` audit
+  entry. Regular members may remove only their own uploads; managers/admins can manage all.
+- **No public upload bypass** — Django no longer exposes `MEDIA_ROOT` through `/media/`; files
+  are streamed only through permission-checked API endpoints. Existing Education assessment
+  files now use their own visibility-checked download route, and private assessment detail,
+  note and file lookups were tightened against direct-ID access.
+- **Actually short-lived re-auth** — password elevation now records a grant timestamp, expires
+  after five minutes, removes expired state and rejects permanent boolean flags left by older
+  sessions.
+- Database migrations required: `attachments.0001_initial` and
+  `permissions.0020_seed_attachment_permissions`.
+- Validation: **581 backend tests**, frontend TypeScript check and production build clean; no
+  migration drift.
 
 ---
 

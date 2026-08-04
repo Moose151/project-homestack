@@ -96,9 +96,9 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: native Solace feature parity complete locally (2026-07-30, v0.16.0) —
-production deploy, real-data comparison and owner cutover acceptance are next; kiosk work
-remains deferred.**
+**Phase: Milestone 4 security maturation resumed locally (2026-08-04, v0.17.0) while native
+Solace production deploy/real-data comparison remains pending on the home-server environment;
+kiosk work remains deferred.**
 
 > **Owner direction, 2026-07-29.** Focus on usability, functionality, response time, navigation
 > and layout across the responsive web app. v0.12.0 delivers the shared foundation: route
@@ -192,7 +192,14 @@ remains deferred.**
 - [x] **Daily-use web/mobile experience pass (v0.12.0, 2026-07-29).** Shared navigation,
   response-time, reliability, layout and accessibility foundation delivered across all web
   surfaces. Kiosk equivalents remain deferred.
-- [ ] Milestone 4: security maturation.
+- [~] **Milestone 4: security maturation — IN PROGRESS (v0.17.0).** Shared attachments now have
+  protected upload/list/download/delete APIs, visibility+sensitivity enforcement through the
+  central resolver, randomized non-public storage, sensitive-download audit records and frontend
+  client/types. Existing Education files use a permission-checked download route; direct private
+  assessment/note/file ID access was tightened. Password re-auth now expires after five minutes
+  and rejects old permanent session flags. Remaining: generic sensitive-lock/kiosk UX, complete
+  audit coverage for permission/user changes, and the pre-remote-access checklist (only if remote
+  access is pursued).
 - [~] **Milestone 5: native Solace — standalone feature parity complete locally (v0.16.0);
   production cutover validation remains.**
   Backend `apps/solace` covers bills, paydays, planned purchases, budget buckets/set-asides,
@@ -230,10 +237,17 @@ remains deferred.**
   See spec `25_Node_Homestead.md`.
 - [ ] Milestone 6: Inventory, Assets (non-home only, or retire — see D21), Hearth, Travel, Projects, Health.
 
-## 6. Active task — deploy and validate Solace v0.16.0
+## 6. Active tasks — continue M4 locally; deploy and validate Solace when available
 
-**Immediate next concrete step:** rebuild both production images (the backend now needs
-`openpyxl`), deploy v0.16.0, and run `migrate` through `solace.0007`. Rerun the Solace importer
+**Immediate local build step (no home server required):** finish the generic sensitive-node lock
+path instead of leaving it Solace-specific: move re-auth/sensitivity decisions consistently
+through the central resolver, define the web/kiosk locked-state contract and shorter kiosk
+timeout, then close the remaining permission/user-change audit gaps. Keep permission tests first.
+
+**Production track (requires the home server):** rebuild both production images, deploy through
+v0.17.0, and run `migrate` through `attachments.0001`, `permissions.0020` and `solace.0007`.
+
+The Solace cutover sequence remains: rerun the importer
 dry-run/apply so settings, categories, bucket rules, historical occurrences, balances,
 preferences and closeouts are enriched, then run the read-only `import_solace --verify`.
 Compare a full standalone pay cycle and month against the native Pay plan/Schedule: bill dates
@@ -385,6 +399,7 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-07-29 | Assistant | M5 | **Solace recurring bill schedule built (v0.14.0).** Added `BillOccurrence` as the independent due-date/status record so paying one recurring occurrence no longer permanently pays the definition. Generator ports standalone weekly/fortnightly/monthly/quarterly/six-monthly/yearly behaviour and clamps the 29th–31st correctly without drift. New protected Schedule API/UI combines monthly bill occurrences and recurring income with calendar/list views, totals and paid/unpaid/skipped/restore actions. Bills now have responsive create/edit/pause/delete, set-aside inclusion, annual/fortnightly costs and summaries. Importer idempotently restores legacy occurrence history. Existing Solace Hub widgets now render useful finance cards. Added `docs/SOLACE_PARITY_CHECKLIST.md`. **Expected 535 backend tests after final validation; production build clean; no migration drift.** | **Deploy:** rebuild both images, run `migrate` (`solace.0004_bill_occurrences`), rerun the importer dry-run/apply, then compare a real standalone month and pay cycle. Next parity slice: cycle closeout + account balance/health, then remaining record edit/delete, exports and notifications. |
 | 2026-07-30 | Assistant | M5 | **Standalone Solace feature parity completed (v0.15.0).** Added cycle closeout/reconciliation, balance snapshots/projections, finance health, full management flows, custom categories, checklist preferences, Solace settings, required set-aside/coverage, CSV/XLSX export, reviewed bill import and generic scheduled reminders. Expanded the idempotent legacy importer to bring across the remaining standalone state and validated it read-only against the live local SQLite database. The responsive Solace workspace now loads through one bootstrap request. Follow-up corrected the omitted v0.15 version/handover/README records, removed a dead importer statistic, fixed the configured pay-cycle anchor so it remains authoritative when income sources exist, and added read-only `import_solace --verify` cutover checks with actionable record/field drift reporting. **549 backend tests green; frontend type-check and production build clean; no migration drift.** | **Deploy/cutover:** rebuild both images (backend adds `openpyxl`), migrate through `solace.0006`, copy the legacy SQLite DB into the backend container, run importer dry-run/apply/verify, compare a full real pay cycle and month, then accept phone/laptop workflows before retiring standalone Solace. Docker is not installed in this development environment, so production deploy remains an owner/home-server operation. |
 | 2026-07-30 | Assistant | M5 | **Solace cash-flow forecast and deep standalone parity (v0.16.0).** Added an audited 3–24 month bills-account forecast that combines the latest balance, expected Bills-bucket transfers, included bills and active subscriptions into a dated running balance; it reports the low point/risk date, required opening balance, shortfall, bills-only surplus and buffer-preserving safe withdrawal. Ported bill autopay/stop dates and 12+12 occurrence detail, filter/sort, six-monthly entry and protected future/all-unpaid edit scope; current/next Pay plan and Checklist navigation; confirm-income/review-bills/record-balance steps; calculated upcoming paydays; capped purchase quick-saving; standalone-equivalent category report filters/period totals; and expanded health checks. Import/verify now preserves bill stop/autopay fields. **560 backend tests green; frontend type-check + production build clean; no migration drift.** | **Deploy/cutover:** rebuild both images, migrate through `solace.0007`, copy the legacy SQLite DB into the container, run importer dry-run/apply/verify, record a fresh real bills-account balance, and validate the forecast timeline/safe-withdrawal value plus a full pay cycle/month on phone and laptop before retiring standalone Solace. |
+| 2026-08-04 | Assistant | M4 | **Protected shared attachments and expiring re-auth shipped (v0.17.0).** Built the D11 attachment model/API with permission-first tests, linked node/record metadata, randomized storage, checksums/limits, visibility+sensitivity filtering through the central resolver, ownership-aware soft deletion and audited sensitive downloads. Removed raw `/media/` serving; Education assessment files now download through a visibility-checked API and private assessment/note/file direct-ID lookups were tightened. Password elevation is timestamped, expires after five minutes, rejects guest/child elevation and invalidates legacy permanent flags. Frontend shared client/types added. **581 backend tests green; frontend type-check + production build clean; no migration drift.** | Continue M4 locally: generic sensitive-node lock contract/web+kiosk timeout and remaining permission/user-change audit coverage. Production later: migrate `attachments.0001`, `permissions.0020`, `solace.0007`, then complete Solace cutover validation. |
 
 ### Session notes (free-form, optional)
 

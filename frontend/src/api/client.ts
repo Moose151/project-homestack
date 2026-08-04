@@ -19,6 +19,7 @@ import type {
   SolaceBalanceForecast, SolaceBalanceSnapshot, SolaceBillImportPreview, SolaceBootstrap, SolaceCategory, SolaceCategoryReport, SolaceChecklistPreference,
   SolaceCloseoutResponse, SolaceCycleCloseout, SolaceHealth, SolaceSettings,
   GlobalSearchResponse,
+  Attachment, AttachmentSensitivity, AttachmentVisibility,
   NodeInfo, Household,
   Book, BookClub, ClubBookEntry, ClubQueueItem, PersonalBookEntry, BookRating, BooksUser, BookShelfStatus,
 } from './types'
@@ -346,6 +347,33 @@ export const api = {
 
   // --- People ---
   getPeople: (): Promise<Person[]> => cachedGet('/people/'),
+
+  // --- Shared attachments (permission-checked; storage paths are never public) ---
+  getAttachments: (filters?: Partial<{
+    linked_node: number; linked_record_type: string; linked_record_id: number
+  }>): Promise<Attachment[]> => {
+    const query = new URLSearchParams()
+    if (filters?.linked_node) query.set('linked_node', String(filters.linked_node))
+    if (filters?.linked_record_type) query.set('linked_record_type', filters.linked_record_type)
+    if (filters?.linked_record_id) query.set('linked_record_id', String(filters.linked_record_id))
+    return _fetch(`/attachments/${query.size ? `?${query}` : ''}`)
+  },
+  uploadAttachment: (file: File, metadata?: Partial<{
+    linked_node: number; linked_record_type: string; linked_record_id: number
+    visibility: AttachmentVisibility; sensitivity: AttachmentSensitivity
+  }>): Promise<Attachment> => {
+    const data = new FormData()
+    data.append('file', file)
+    if (metadata?.linked_node) data.append('linked_node', String(metadata.linked_node))
+    if (metadata?.linked_record_type) data.append('linked_record_type', metadata.linked_record_type)
+    if (metadata?.linked_record_id) data.append('linked_record_id', String(metadata.linked_record_id))
+    if (metadata?.visibility) data.append('visibility', metadata.visibility)
+    if (metadata?.sensitivity) data.append('sensitivity', metadata.sensitivity)
+    return _fetchRaw('/attachments/', { method: 'POST', body: data })
+  },
+  attachmentDownloadUrl: (id: number): string => `${BASE}/attachments/${id}/download/`,
+  deleteAttachment: (id: number): Promise<void> =>
+    _fetch(`/attachments/${id}/`, { method: 'DELETE' }),
 
   // --- User management (admin) ---
   getUsers: (): Promise<AdminUser[]> => cachedGet('/users/', 15_000),

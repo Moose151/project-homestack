@@ -8,7 +8,11 @@ Covers:
 - Visibility: a user's private course is hidden from another user; children never see it.
 - Hub widgets: education_deadlines / education_classes assemble permission-filtered content.
 """
-from django.test import TestCase
+import shutil
+import tempfile
+
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -319,6 +323,57 @@ class AssessmentNotesTests(TestCase):
         url = f"/api/v1/education/assessments/{self.assessment.id}/notes/"
         res = self.client.get(url)
         self.assertEqual(res.status_code, 403)
+
+
+class AssessmentFilesSecurityTests(TestCase):
+    def setUp(self):
+        self.media_root = tempfile.mkdtemp(prefix="homestack-education-files-")
+        self.media_override = override_settings(MEDIA_ROOT=self.media_root)
+        self.media_override.enable()
+        self.addCleanup(self.media_override.disable)
+        self.addCleanup(shutil.rmtree, self.media_root, True)
+        self.owner = _make_user("fileowner", User.Role.USER)
+        self.other = _make_user("fileother", User.Role.USER)
+        self.assessment = create_assessment(
+            self.owner,
+            title="Private brief",
+            visibility="private",
+        )
+        self.list_url = reverse(
+            "education-assessment-file-list",
+            args=[self.assessment.id],
+        )
+
+    def _upload(self):
+        self.client.force_login(self.owner)
+        return self.client.post(
+            self.list_url,
+            {"file": SimpleUploadedFile("brief.pdf", b"assignment brief", content_type="application/pdf")},
+        )
+
+    def test_file_url_uses_permission_checked_download_endpoint(self):
+        response = self._upload()
+
+        self.assertEqual(response.status_code, 201)
+        file_url = response.json()["file_url"]
+        self.assertIn("/api/v1/education/assessments/", file_url)
+        self.assertTrue(file_url.endswith("/download/"))
+        self.assertNotIn("/media/", file_url)
+
+    def test_owner_can_download_assessment_file(self):
+        uploaded = self._upload().json()
+
+        response = self.client.get(uploaded["file_url"])
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(b"".join(response.streaming_content), b"assignment brief")
+
+    def test_other_user_cannot_list_or_download_private_assessment_files(self):
+        uploaded = self._upload().json()
+        self.client.force_login(self.other)
+
+        self.assertEqual(self.client.get(self.list_url).status_code, 404)
+        self.assertEqual(self.client.get(uploaded["file_url"]).status_code, 404)
 
 
 # ---------------------------------------------------------------------------

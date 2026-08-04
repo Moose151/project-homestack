@@ -4,6 +4,7 @@ from apps.education.views import (
     AcademicProfileView,
     AssessmentDetailView,
     AssessmentFileDetailView,
+    AssessmentFileDownloadView,
     AssessmentFileListView,
     AssessmentListView,
     AssessmentNoteDetailView,
@@ -34,6 +35,7 @@ urlpatterns = [
     path("assessments/<int:assessment_id>/notes/<int:note_id>/", AssessmentNoteDetailView.as_view(), name="education-assessment-note-detail"),
     path("assessments/<int:assessment_id>/files/", AssessmentFileListView.as_view(), name="education-assessment-file-list"),
     path("assessments/<int:assessment_id>/files/<int:file_id>/", AssessmentFileDetailView.as_view(), name="education-assessment-file-detail"),
+    path("assessments/<int:assessment_id>/files/<int:file_id>/download/", AssessmentFileDownloadView.as_view(), name="education-assessment-file-download"),
 
     path("classes/", ClassSessionListView.as_view(), name="education-class-list"),
     path("classes/<int:session_id>/", ClassSessionDetailView.as_view(), name="education-class-detail"),

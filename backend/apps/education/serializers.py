@@ -1,6 +1,7 @@
 """education serializers."""
 from __future__ import annotations
 
+from django.urls import reverse
 from rest_framework import serializers
 
 from apps.education.models import (
@@ -162,10 +163,14 @@ class AssessmentFileSerializer(serializers.ModelSerializer):
         ]
 
     def get_file_url(self, obj: EducationAssessmentFile) -> str:
-        request = self.context.get("request")
-        if obj.file and request:
-            return request.build_absolute_uri(obj.file.url)
-        return obj.file.url if obj.file else ""
+        if not obj.file:
+            return ""
+        # Keep this relative so the browser uses the frontend's same-origin /api proxy;
+        # an absolute URL may expose the Docker-only backend hostname after changeOrigin.
+        return reverse(
+            "education-assessment-file-download",
+            args=[obj.assessment_id, obj.id],
+        )
 
 
 class AcademicProfileSerializer(serializers.ModelSerializer):

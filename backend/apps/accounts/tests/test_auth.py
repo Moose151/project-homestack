@@ -4,11 +4,13 @@ accounts auth endpoint tests — Phase 1.3 (D6, API spec §2).
 Tests cover PIN login, password login, logout, /me, and reauth.
 Ordering mirrors the spec; permission-matrix tests come in Phase 1.5 (D10).
 """
-from django.test import TestCase
+from django.contrib.sessions.middleware import SessionMiddleware
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.accounts.models import User
-from apps.accounts.services import REAUTH_SESSION_KEY
+from apps.accounts.services import REAUTH_SESSION_KEY, is_reauthed
 from apps.core.models import get_active_household
 
 
@@ -168,3 +170,34 @@ class ReauthTests(TestCase):
         self.client.post(self.login_url, {"username": "finn", "pin": "1234"}, content_type="application/json")
         resp = self.client.post(self.reauth_url, {"password": "alicepass!"}, content_type="application/json")
         self.assertEqual(resp.status_code, 401)
+
+    def test_guest_cannot_reauth(self):
+        guest = _make_user(
+            username="visitor",
+            display_name="Visitor",
+            role=User.Role.GUEST,
+            password="guestpass!",
+        )
+        self.client.force_login(guest)
+        resp = self.client.post(
+            self.reauth_url,
+            {"password": "guestpass!"},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 401)
+
+    @override_settings(REAUTH_TTL_SECONDS=60)
+    def test_reauth_state_expires_and_is_removed(self):
+        request = RequestFactory().get("/")
+        SessionMiddleware(lambda _request: None).process_request(request)
+        request.session[REAUTH_SESSION_KEY] = int(timezone.now().timestamp()) - 61
+
+        self.assertFalse(is_reauthed(request))
+        self.assertNotIn(REAUTH_SESSION_KEY, request.session)
+
+    def test_legacy_boolean_reauth_state_is_not_trusted(self):
+        request = RequestFactory().get("/")
+        SessionMiddleware(lambda _request: None).process_request(request)
+        request.session[REAUTH_SESSION_KEY] = True
+
+        self.assertFalse(is_reauthed(request))

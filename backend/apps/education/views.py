@@ -1,6 +1,7 @@
 """education views — thin wrappers over selectors/services (Coding Standards §6)."""
 from __future__ import annotations
 
+from django.http import FileResponse, Http404
 from rest_framework import status
 from rest_framework.exceptions import NotFound
 from rest_framework.request import Request
@@ -168,7 +169,7 @@ class AssessmentDetailView(APIView):
     permission_classes = [_EduPerm]
 
     def _get(self, pk: int):
-        obj = selectors.get_assessment(pk)
+        obj = selectors.get_assessment(pk, self.request.user)
         if obj is None:
             raise NotFound()
         return obj
@@ -196,7 +197,7 @@ class AssessmentNoteListView(APIView):
     permission_classes = [_EduPerm]
 
     def _get_assessment(self, pk: int):
-        obj = selectors.get_assessment(pk)
+        obj = selectors.get_assessment(pk, self.request.user)
         if obj is None:
             raise NotFound()
         return obj
@@ -220,14 +221,17 @@ class AssessmentNoteDetailView(APIView):
     permission_classes = [_EduPerm]
     permission_action = "edit"  # note create/edit/delete all fall under education.edit
 
-    def _get(self, pk: int):
-        obj = selectors.get_assessment_note(pk)
+    def _get(self, assessment_id: int, pk: int):
+        assessment = selectors.get_assessment(assessment_id, self.request.user)
+        if assessment is None:
+            raise NotFound()
+        obj = selectors.get_assessment_note(pk, assessment=assessment)
         if obj is None:
             raise NotFound()
         return obj
 
     def patch(self, request: Request, assessment_id: int, note_id: int) -> Response:
-        note = self._get(note_id)
+        note = self._get(assessment_id, note_id)
         serializer = AssessmentNoteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         note = services.update_assessment_note(
@@ -236,7 +240,7 @@ class AssessmentNoteDetailView(APIView):
         return Response(AssessmentNoteSerializer(note).data)
 
     def delete(self, request: Request, assessment_id: int, note_id: int) -> Response:
-        services.delete_assessment_note(request.user, self._get(note_id))
+        services.delete_assessment_note(request.user, self._get(assessment_id, note_id))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -248,7 +252,7 @@ class AssessmentFileListView(APIView):
     permission_classes = [_EduPerm]
 
     def _get_assessment(self, pk: int):
-        obj = selectors.get_assessment(pk)
+        obj = selectors.get_assessment(pk, self.request.user)
         if obj is None:
             raise NotFound()
         return obj
@@ -276,15 +280,37 @@ class AssessmentFileDetailView(APIView):
     permission_classes = [_EduPerm]
     permission_action = "edit"  # file upload/delete falls under education.edit
 
-    def _get(self, pk: int):
-        obj = selectors.get_assessment_file(pk)
+    def _get(self, assessment_id: int, pk: int):
+        assessment = selectors.get_assessment(assessment_id, self.request.user)
+        if assessment is None:
+            raise NotFound()
+        obj = selectors.get_assessment_file(pk, assessment=assessment)
         if obj is None:
             raise NotFound()
         return obj
 
     def delete(self, request: Request, assessment_id: int, file_id: int) -> Response:
-        services.delete_assessment_file(request.user, self._get(file_id))
+        services.delete_assessment_file(request.user, self._get(assessment_id, file_id))
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AssessmentFileDownloadView(APIView):
+    permission_classes = [_EduPerm]
+
+    def get(self, request: Request, assessment_id: int, file_id: int) -> FileResponse:
+        assessment = selectors.get_assessment(assessment_id, request.user)
+        if assessment is None:
+            raise NotFound()
+        obj = selectors.get_assessment_file(file_id, assessment=assessment)
+        if obj is None:
+            raise NotFound()
+        if not obj.file or not obj.file.storage.exists(obj.file.name):
+            raise Http404("Assessment file is missing.")
+        return FileResponse(
+            obj.file.open("rb"),
+            as_attachment=True,
+            filename=obj.original_filename,
+        )
 
 
 # ---------------------------------------------------------------------------

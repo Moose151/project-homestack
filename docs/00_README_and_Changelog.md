@@ -4,7 +4,7 @@
 `.docx` files in the project, including the previous Doc 00 update pack and the original
 standalone documents. Archive the old files; do not edit them further.
 
-**Last revised:** 2026-07-29
+**Last revised:** 2026-08-04
 **Owner:** Solo developer (single household: two adults, two children)
 **Deployment target:** Always-on home server, self-hosted, Docker Compose.
 
@@ -162,6 +162,7 @@ respects D4/D15.
 
 | Date | Change |
 |------|--------|
+| 2026-08-04 | Started the remaining M4 security-maturation work (v0.17.0): protected shared attachments, central record visibility/sensitivity enforcement, audited sensitive downloads, removal of public media serving, visibility-checked Education file downloads and five-minute expiring password re-authentication. No new architectural decision. |
 | 2026-07-30 | Shipped Solace bills-account forecasting and deep workflow parity (v0.16.0): dated 3–24 month cash flow and safe-withdrawal calculation, bill stop/autopay/history/edit-scope controls, current/next pay plans and checklists, complete payday steps, purchase quick-saving, calculated upcoming income dates, normalised category reports and expanded health checks. No new architectural decision. |
 | 2026-07-29 | Completed standalone Project Solace feature parity (v0.15.0): closeout/reconciliation, account-balance projections, finance health, custom categories, complete record management, checklist preferences, settings/cycle anchors, required set-aside and shortfall reporting, consolidated workspace loading, CSV/XLSX export and reviewed import, generic finance-safe reminders, and full-state standalone migration validated against the live local database. No new architectural decision. |
 | 2026-07-29 | Shipped Solace recurring bill parity (v0.14.0): independent paid/skipped occurrences, month-end-safe recurrence generation, monthly bill/income calendar and list, complete bill management/cost summaries, legacy occurrence import and working finance Hub renderers. No new architectural decision. |
