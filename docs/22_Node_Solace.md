@@ -40,9 +40,17 @@ payday checklist, calendar/list views, categories, authentication, backups.
 - Recurring bills materialise independent due-date occurrences. Each occurrence can be paid,
   restored or skipped without changing the recurrence definition; the Solace Schedule combines
   monthly bill occurrences and expected income in calendar/list views.
-- Full standalone-parity management: custom categories, account-balance projections, finance
-  health checks, current/next cycle closeout, required set-aside/shortfall reporting, hidden
-  checklist preferences and complete edit/delete workflows.
+- Full standalone-parity management: custom categories and normalised reports, current/next pay
+  plans and checklists, account-balance projections, finance health checks, current/next cycle
+  closeout, required set-aside/shortfall reporting, hidden checklist preferences and complete
+  edit/delete workflows.
+- Bills-account cash-flow forecast over 3–24 months: expected Bills-bucket transfers less
+  included bill occurrences and active subscriptions, with a dated running balance, lowest
+  point, first risk date, required opening balance and safe-to-withdraw values both before and
+  after the configured buffer. A balance recorded today is treated as an end-of-day value;
+  otherwise the latest snapshot is the current known opening balance and Finance Health warns
+  once it is more than 14 days old. Only active buckets whose category contains “Bills” count
+  as account transfers.
 - Readable CSV/XLSX exports, reviewed ad-hoc CSV/XLSX bill import and an expanded idempotent
   standalone SQLite importer.
 
@@ -80,7 +88,9 @@ and a short timeout are required.
    `sensitivity = financial`, re-auth-gated endpoints via the resolver.
 2. **Reuse the logic** — port bill-recurrence, set-aside/bucket and payday-checklist behaviour.
 3. **Import the data** — a one-time, dry-runnable script in `scripts/` mapping existing Solace
-   data onto the new tables and onto shared users/people.
+   data onto the new tables and onto shared users/people. Run `import_solace --dry-run`, apply
+   the import, then run `import_solace --verify`; verification is read-only and reports any
+   source-to-native field mismatch before cutover.
 4. **Cut over** — only after security maturation (M4) is proven; then retire the standalone app
    at home.
 
@@ -99,7 +109,7 @@ are idempotent.
 
 ## 11. Scope & completion
 
-Native: bills and occurrence history · paydays · planned purchases · buckets/set-asides ·
+Native: bills and occurrence history · bills-account forecast · paydays · planned purchases · buckets/set-asides ·
 subscriptions · payday checklist/preferences · closeout and balance projection · categories and
 reports · settings and health checks · CSV/XLSX tools · permission-controlled
 Hub/Calendar/notifications · re-auth · audit · imported data.

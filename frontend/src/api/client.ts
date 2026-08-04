@@ -13,10 +13,10 @@ import type {
   Pet, PetTreatment, PetAppointment,
   Property, ServiceProvider, Appliance, MaintenanceTask, Improvement, HomesteadSearchResults,
   InsurancePolicy, HouseholdCost,
-  SolaceBill, SolaceBillOccurrence, SolacePayday, SolacePurchase, SolaceSchedule,
+  SolaceBill, SolaceBillOccurrence, SolaceBillTimeline, SolacePayday, SolacePurchase, SolaceSchedule,
   SolaceBucket, SolaceSubscription,
   SolaceChecklistItem, SolacePayCyclePlan, SolaceSearchResults,
-  SolaceBalanceSnapshot, SolaceBillImportPreview, SolaceBootstrap, SolaceCategory, SolaceCategoryReport, SolaceChecklistPreference,
+  SolaceBalanceForecast, SolaceBalanceSnapshot, SolaceBillImportPreview, SolaceBootstrap, SolaceCategory, SolaceCategoryReport, SolaceChecklistPreference,
   SolaceCloseoutResponse, SolaceCycleCloseout, SolaceHealth, SolaceSettings,
   GlobalSearchResponse,
   NodeInfo, Household,
@@ -123,7 +123,9 @@ type HouseholdCostWrite = Partial<{
 type SolaceBillWrite = Partial<{
   name: string; category: string; provider: string; amount: string
   due_at: string | null; is_all_day: boolean; recurrence_rule: string
-  is_active: boolean; include_in_set_aside: boolean
+  end_date: string | null; is_active: boolean; is_autopay: boolean
+  include_in_set_aside: boolean
+  occurrence_update_scope: 'future_unpaid' | 'all_unpaid'
   is_paid: boolean; paid_at: string | null; notes: string; visibility: string; sensitivity: string
 }>
 
@@ -858,6 +860,8 @@ export const api = {
     _fetch('/solace/bills/', { method: 'POST', body: JSON.stringify(data) }),
   updateSolaceBill: (id: number, data: SolaceBillWrite): Promise<SolaceBill> =>
     _fetch(`/solace/bills/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  getSolaceBillTimeline: (id: number): Promise<SolaceBillTimeline> =>
+    _fetch(`/solace/bills/${id}/occurrences/`),
   markSolaceBillPaid: (id: number): Promise<SolaceBill> =>
     _fetch(`/solace/bills/${id}/paid/`, { method: 'POST' }),
   deleteSolaceBill: (id: number): Promise<void> =>
@@ -876,6 +880,11 @@ export const api = {
     _fetch('/solace/purchases/', { method: 'POST', body: JSON.stringify(data) }),
   updateSolacePurchase: (id: number, data: SolacePurchaseWrite): Promise<SolacePurchase> =>
     _fetch(`/solace/purchases/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  addSolacePurchaseSavings: (id: number, amount: string): Promise<SolacePurchase> =>
+    _fetch(`/solace/purchases/${id}/add-saved/`, {
+      method: 'POST',
+      body: JSON.stringify({ amount }),
+    }),
   deleteSolacePurchase: (id: number): Promise<void> =>
     _fetch(`/solace/purchases/${id}/`, { method: 'DELETE' }),
   getSolaceBuckets: (): Promise<SolaceBucket[]> => _fetch('/solace/buckets/'),
@@ -893,10 +902,15 @@ export const api = {
     _fetch(`/solace/subscriptions/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteSolaceSubscription: (id: number): Promise<void> =>
     _fetch(`/solace/subscriptions/${id}/`, { method: 'DELETE' }),
-  getSolaceChecklist: (incomplete = false, latest = true): Promise<SolaceChecklistItem[]> => {
+  getSolaceChecklist: (options: {
+    incomplete?: boolean
+    latest?: boolean
+    date?: string
+  } = {}): Promise<SolaceChecklistItem[]> => {
     const query = new URLSearchParams()
-    if (incomplete) query.set('incomplete', '1')
-    if (latest) query.set('latest', '1')
+    if (options.incomplete) query.set('incomplete', '1')
+    if (options.latest !== false) query.set('latest', '1')
+    if (options.date) query.set('date', options.date)
     return _fetch(`/solace/checklist/${query.size ? `?${query}` : ''}`)
   },
   createSolaceChecklistItem: (data: SolaceChecklistWrite): Promise<SolaceChecklistItem> =>
@@ -930,6 +944,11 @@ export const api = {
     _fetch('/solace/checklist/preferences/', { method: 'POST', body: JSON.stringify(data) }),
   getSolaceCloseout: (date?: string): Promise<SolaceCloseoutResponse> =>
     _fetch(`/solace/closeout/${date ? `?date=${encodeURIComponent(date)}` : ''}`),
+  getSolaceForecast: (months = 12, date?: string): Promise<SolaceBalanceForecast> => {
+    const query = new URLSearchParams({ months: String(months) })
+    if (date) query.set('date', date)
+    return _fetch(`/solace/forecast/?${query}`)
+  },
   setSolaceCloseout: (
     action: 'close' | 'reopen',
     notes = '',
@@ -940,8 +959,13 @@ export const api = {
       body: JSON.stringify({ action, notes }),
     }),
   getSolaceHealth: (): Promise<SolaceHealth> => _fetch('/solace/health/'),
-  getSolaceCategoryReport: (): Promise<SolaceCategoryReport> =>
-    _fetch('/solace/reports/categories/'),
+  getSolaceCategoryReport: (activeOnly = true, includedOnly = false): Promise<SolaceCategoryReport> => {
+    const query = new URLSearchParams({
+      active: activeOnly ? '1' : '0',
+      included: includedOnly ? '1' : '0',
+    })
+    return _fetch(`/solace/reports/categories/?${query}`)
+  },
   previewSolaceBillImport: (file: File): Promise<SolaceBillImportPreview> => {
     const data = new FormData()
     data.append('file', file)

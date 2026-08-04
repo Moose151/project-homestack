@@ -7,6 +7,7 @@ Usage
 -----
     python manage.py import_solace --sqlite-db /home/moose/Documents/project-solace/instance/solace.db --dry-run
     python manage.py import_solace --sqlite-db /home/moose/Documents/project-solace/instance/solace.db
+    python manage.py import_solace --sqlite-db /home/moose/Documents/project-solace/instance/solace.db --verify
 """
 from __future__ import annotations
 
@@ -242,7 +243,13 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--sqlite-db", default=DEFAULT_DB, help="Path to legacy Project Solace SQLite DB.")
-        parser.add_argument("--dry-run", action="store_true", help="Report what would be imported without writing.")
+        mode = parser.add_mutually_exclusive_group()
+        mode.add_argument("--dry-run", action="store_true", help="Report what would be imported without writing.")
+        mode.add_argument(
+            "--verify",
+            action="store_true",
+            help="Read both databases and fail if imported legacy records do not match.",
+        )
 
     def handle(self, *args, **options):
         household = get_active_household()
@@ -250,6 +257,21 @@ class Command(BaseCommand):
             raise CommandError("No active household. Run migrations first.")
 
         data = _load_legacy(Path(options["sqlite_db"]))
+        if options["verify"]:
+            mismatches, checked = self._verify(data)
+            if mismatches:
+                details = "\n".join(f"  - {message}" for message in mismatches)
+                raise CommandError(
+                    f"Verification failed: {len(mismatches)} mismatch(es) "
+                    f"across {checked} checks.\n{details}"
+                )
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Verification passed: {checked} source-to-native checks match."
+                )
+            )
+            return
+
         dry = options["dry_run"]
         self.stdout.write(self.style.WARNING("DRY-RUN — no changes written" if dry else "Importing"))
 
@@ -270,7 +292,7 @@ class Command(BaseCommand):
             "bills": 0,
             "categories": 0,
             "bill_occurrences": 0,
-            "subscriptions": 0,
+            "bills_enriched": 0,
             "paydays": 0,
             "planned_purchases": 0,
             "buckets": 0,
@@ -394,6 +416,8 @@ class Command(BaseCommand):
                 "provider": row.get("account_name") or "",
                 "amount": _money(row.get("amount")),
                 "recurrence_rule": _rrule_from_legacy(row),
+                "end_date": _parse_date(row.get("end_date")),
+                "is_autopay": _bool(row.get("autopay")),
                 "notes": row.get("notes") or "",
             }
             bill = Bill.objects.filter(name=row["name"]).first()
@@ -410,6 +434,19 @@ class Command(BaseCommand):
                     **common,
                 )
                 stats["bills"] += 1
+            else:
+                changed_fields = []
+                expected_end_date = _parse_date(row.get("end_date"))
+                expected_autopay = _bool(row.get("autopay"))
+                if bill.end_date != expected_end_date:
+                    bill.end_date = expected_end_date
+                    changed_fields.append("end_date")
+                if bill.is_autopay != expected_autopay:
+                    bill.is_autopay = expected_autopay
+                    changed_fields.append("is_autopay")
+                if changed_fields:
+                    bill.save(update_fields=[*changed_fields, "updated_at"])
+                    stats["bills_enriched"] += 1
             for occurrence in occurrences:
                 occurrence_due = _parse_dt(occurrence.get("due_date"))
                 if occurrence_due is None:
@@ -550,3 +587,319 @@ class Command(BaseCommand):
             stats["checklist_items"] += 1
 
         return stats
+
+    def _verify(self, data: LegacyData) -> tuple[list[str], int]:
+        """Compare legacy source rows with their native natural-key counterparts.
+
+        Native-only rows are allowed: Homestead mirrors and records created after cutover must
+        not make verification fail. Every active/imported legacy row, however, must exist with
+        the financially significant values preserved.
+        """
+        mismatches: list[str] = []
+        checked = 0
+
+        def mismatch(label: str, field: str, expected, actual) -> None:
+            mismatches.append(f"{label}: {field} expected {expected!r}, found {actual!r}")
+
+        def check(label: str, field: str, expected, actual) -> None:
+            nonlocal checked
+            checked += 1
+            if expected != actual:
+                mismatch(label, field, expected, actual)
+
+        def local_date(value):
+            if value is None:
+                return None
+            return timezone.localdate(value) if isinstance(value, datetime) else value
+
+        for row in data.category_rows:
+            name = _native_category(row.get("name") or "")
+            if not name:
+                continue
+            label = f"category {name}"
+            category = FinanceCategory.objects.filter(name__iexact=name).first()
+            checked += 1
+            if category is None:
+                mismatches.append(f"{label}: missing")
+                continue
+            expected_type = str(row.get("category_type") or "Both").strip().lower()
+            if expected_type not in {
+                FinanceCategory.CategoryType.BILL,
+                FinanceCategory.CategoryType.PURCHASE,
+                FinanceCategory.CategoryType.BOTH,
+            }:
+                expected_type = FinanceCategory.CategoryType.BOTH
+            checked += 1
+            if (
+                category.category_type != expected_type
+                and category.category_type != FinanceCategory.CategoryType.BOTH
+            ):
+                mismatch(
+                    label,
+                    "category_type",
+                    f"{expected_type} or both",
+                    category.category_type,
+                )
+            check(label, "is_active", _bool(row.get("active")), category.is_active)
+
+        for row in data.bills:
+            if not _bool(row.get("active")):
+                continue
+            name = row.get("name") or ""
+            label = f"bill {name}"
+            bill = Bill.objects.filter(name=name).first()
+            checked += 1
+            if bill is None:
+                mismatches.append(f"{label}: missing")
+                continue
+            occurrences = data.occurrences.get(int(row["id"]), [])
+            check(label, "amount", _money(row.get("amount")), bill.amount)
+            check(
+                label,
+                "category",
+                _native_category(_category_name(data.categories, row.get("category_id"))) or "other",
+                bill.category,
+            )
+            check(label, "provider", row.get("account_name") or "", bill.provider)
+            check(label, "recurrence_rule", _rrule_from_legacy(row), bill.recurrence_rule)
+            check(label, "end_date", _parse_date(row.get("end_date")), bill.end_date)
+            check(label, "is_autopay", _bool(row.get("autopay")), bill.is_autopay)
+            expected_due_dates = {
+                local_date(parsed)
+                for occurrence in occurrences
+                if (parsed := _parse_dt(occurrence.get("due_date"))) is not None
+            }
+            start_date = local_date(_parse_dt(row.get("start_date")))
+            if start_date is not None:
+                expected_due_dates.add(start_date)
+            if not expected_due_dates:
+                expected_due_dates.add(None)
+            checked += 1
+            if local_date(bill.due_at) not in expected_due_dates:
+                mismatch(
+                    label,
+                    "due_at",
+                    f"one of {sorted(str(value) for value in expected_due_dates)}",
+                    local_date(bill.due_at),
+                )
+            for occurrence in occurrences:
+                due_at = _parse_dt(occurrence.get("due_date"))
+                if due_at is None:
+                    continue
+                occurrence_label = f"{label} occurrence {local_date(due_at)}"
+                native = BillOccurrence.objects.filter(bill=bill, due_at=due_at).first()
+                checked += 1
+                if native is None:
+                    mismatches.append(f"{occurrence_label}: missing")
+                    continue
+                expected_status = {
+                    "paid": BillOccurrence.Status.PAID,
+                    "skipped": BillOccurrence.Status.SKIPPED,
+                }.get(
+                    (occurrence.get("status") or "Upcoming").lower(),
+                    BillOccurrence.Status.UPCOMING,
+                )
+                check(
+                    occurrence_label,
+                    "amount",
+                    _money(occurrence.get("amount") or bill.amount),
+                    native.amount,
+                )
+                check(occurrence_label, "status", expected_status, native.status)
+                check(
+                    occurrence_label,
+                    "paid_at",
+                    local_date(_parse_dt(occurrence.get("paid_date"))),
+                    local_date(native.paid_at),
+                )
+
+        for row in data.incomes:
+            if not _bool(row.get("active")):
+                continue
+            title = f"{row.get('owner_name') or 'Household'}: {row.get('name') or 'Income'}"
+            label = f"income {title}"
+            payday = Payday.objects.filter(title=title).first()
+            checked += 1
+            if payday is None:
+                mismatches.append(f"{label}: missing")
+                continue
+            check(label, "expected_amount", _money(row.get("amount")), payday.expected_amount)
+            check(
+                label,
+                "pay_at",
+                local_date(_parse_dt(row.get("next_pay_date"))),
+                local_date(payday.pay_at),
+            )
+            check(
+                label,
+                "recurrence_rule",
+                _income_rrule(row.get("frequency")),
+                payday.recurrence_rule,
+            )
+
+        for row in data.purchases:
+            name = row.get("name") or ""
+            label = f"purchase {name}"
+            purchase = PlannedPurchase.objects.filter(name=name).first()
+            checked += 1
+            if purchase is None:
+                mismatches.append(f"{label}: missing")
+                continue
+            check(label, "target_amount", _money(row.get("target_amount")), purchase.target_amount)
+            check(label, "saved_amount", _money(row.get("amount_saved")), purchase.saved_amount)
+            check(
+                label,
+                "target_date",
+                local_date(_parse_dt(row.get("target_date"))),
+                local_date(purchase.target_date),
+            )
+            check(label, "status", _purchase_status(row.get("status")), purchase.status)
+            check(label, "priority", _priority(row.get("priority")), purchase.priority)
+
+        for row in data.buckets:
+            if not _bool(row.get("active")):
+                continue
+            name = row.get("name") or ""
+            label = f"bucket {name}"
+            bucket = BudgetBucket.objects.filter(name=name).first()
+            checked += 1
+            if bucket is None:
+                mismatches.append(f"{label}: missing")
+                continue
+            fixed = row.get("fixed_amount")
+            check(
+                label,
+                "allocation_method",
+                (
+                    BudgetBucket.AllocationMethod.FIXED
+                    if fixed not in (None, "")
+                    else BudgetBucket.AllocationMethod.PERCENTAGE
+                ),
+                bucket.allocation_method,
+            )
+            check(
+                label,
+                "allocation_value",
+                _money(fixed if fixed not in (None, "") else row.get("percentage")),
+                bucket.allocation_value,
+            )
+            check(
+                label,
+                "rounding_increment",
+                _money(row.get("rounding_increment") or 1),
+                bucket.rounding_increment,
+            )
+            check(
+                label,
+                "cap_to_remaining",
+                _bool(row.get("cap_to_remaining")),
+                bucket.cap_to_remaining,
+            )
+            check(label, "position", int(row.get("sort_order") or 0), bucket.position)
+
+        if data.settings:
+            row = data.settings[0]
+            settings_obj = SolaceSettings.objects.first()
+            checked += 1
+            if settings_obj is None:
+                mismatches.append("settings: missing")
+            else:
+                check(
+                    "settings",
+                    "currency_symbol",
+                    row.get("currency_symbol") or "$",
+                    settings_obj.currency_symbol,
+                )
+                check(
+                    "settings",
+                    "budget_year",
+                    int(row["budget_year"]) if row.get("budget_year") else None,
+                    settings_obj.budget_year,
+                )
+                check(
+                    "settings",
+                    "cycle_anchor_date",
+                    _parse_date(row.get("first_payday")),
+                    settings_obj.cycle_anchor_date,
+                )
+                check(
+                    "settings",
+                    "default_buffer_amount",
+                    _money(row.get("default_buffer_amount")),
+                    settings_obj.default_buffer_amount,
+                )
+                expected_handling = row.get("payday_bill_handling") or "new_cycle"
+                if expected_handling not in {"new_cycle", "previous_cycle"}:
+                    expected_handling = "new_cycle"
+                check(
+                    "settings",
+                    "payday_bill_handling",
+                    expected_handling,
+                    settings_obj.payday_bill_handling,
+                )
+                check(
+                    "settings",
+                    "show_help_tips",
+                    _bool(row.get("show_help_tips")),
+                    settings_obj.show_help_tips,
+                )
+
+        for row in data.balances:
+            snapshot_date = _parse_date(row.get("snapshot_date"))
+            if snapshot_date is None:
+                continue
+            label = f"balance {snapshot_date}"
+            native = AccountBalanceSnapshot.objects.filter(snapshot_date=snapshot_date).first()
+            checked += 1
+            if native is None:
+                mismatches.append(f"{label}: missing")
+                continue
+            check(label, "balance", _money(row.get("balance")), native.balance)
+
+        for row in data.checklist_preferences:
+            source_key = row.get("item_key") or ""
+            if not source_key:
+                continue
+            label = f"checklist preference {source_key}"
+            native = PaydayChecklistPreference.objects.filter(source_key=source_key).first()
+            checked += 1
+            if native is None:
+                mismatches.append(f"{label}: missing")
+                continue
+            check(label, "is_hidden", _bool(row.get("hidden")), native.is_hidden)
+
+        for row in data.closeouts:
+            cycle_start = _parse_date(row.get("cycle_start"))
+            if cycle_start is None:
+                continue
+            label = f"closeout {cycle_start}"
+            native = CycleCloseout.objects.filter(cycle_start=cycle_start).first()
+            checked += 1
+            if native is None:
+                mismatches.append(f"{label}: missing")
+                continue
+            expected_status = (
+                CycleCloseout.Status.CLOSED
+                if str(row.get("status") or "").lower() == "closed"
+                else CycleCloseout.Status.OPEN
+            )
+            check(label, "cycle_end", _parse_date(row.get("cycle_end")), native.cycle_end)
+            check(label, "status", expected_status, native.status)
+
+        latest_cycle = max((row.get("cycle_start") or "" for row in data.checklist), default="")
+        for row in data.checklist:
+            if row.get("cycle_start") != latest_cycle:
+                continue
+            title = row.get("label") or row.get("item_key") or "Checklist item"
+            position = int(row.get("sort_order") or 0)
+            label = f"checklist item {title}"
+            native = PaydayChecklistItem.objects.filter(title=title, position=position).first()
+            checked += 1
+            if native is None:
+                mismatches.append(f"{label}: missing")
+                continue
+            check(label, "cycle_start", _parse_date(latest_cycle), native.cycle_start)
+            check(label, "amount_hint", _money(row.get("amount")), native.amount_hint)
+            check(label, "is_complete", _bool(row.get("completed")), native.is_complete)
+
+        return mismatches, checked

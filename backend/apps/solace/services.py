@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import date
 from datetime import timedelta
+from decimal import Decimal
 
 from django.db import transaction
 from django.utils import timezone
@@ -29,7 +30,7 @@ from apps.solace.models import (
 
 _BILL_FIELDS = {
     "name", "category", "provider", "amount", "due_at", "is_all_day", "recurrence_rule",
-    "is_active", "include_in_set_aside", "is_paid", "paid_at", "notes",
+    "end_date", "is_active", "is_autopay", "include_in_set_aside", "is_paid", "paid_at", "notes",
     "source_node", "source_record_type",
     "source_record_id", "visibility", "sensitivity",
 }
@@ -224,9 +225,15 @@ def create_bill(acting_user: User, **data) -> Bill:
     return obj
 
 
-def update_bill(acting_user: User, obj: Bill, **data) -> Bill:
+def update_bill(
+    acting_user: User,
+    obj: Bill,
+    *,
+    occurrence_scope: str = "future_unpaid",
+    **data,
+) -> Bill:
     schedule_changed = bool(
-        {"amount", "due_at", "recurrence_rule", "is_active"} & set(data)
+        {"amount", "due_at", "recurrence_rule", "end_date", "is_active"} & set(data)
     )
     for key, val in data.items():
         if key in _BILL_FIELDS:
@@ -235,9 +242,9 @@ def update_bill(acting_user: User, obj: Bill, **data) -> Bill:
     obj.save()
     sync_event_for(obj)
     if schedule_changed:
-        from apps.solace.bill_schedule import refresh_future_occurrences
+        from apps.solace.bill_schedule import refresh_unpaid_occurrences
 
-        refresh_future_occurrences(obj)
+        refresh_unpaid_occurrences(obj, scope=occurrence_scope)
     return obj
 
 
@@ -352,6 +359,22 @@ def update_purchase(acting_user: User, obj: PlannedPurchase, **data) -> PlannedP
     return obj
 
 
+@transaction.atomic
+def add_purchase_savings(
+    acting_user: User,
+    obj: PlannedPurchase,
+    amount: Decimal,
+) -> PlannedPurchase:
+    obj = PlannedPurchase.objects.select_for_update().get(pk=obj.pk)
+    obj.saved_amount = min(
+        Decimal(obj.saved_amount) + Decimal(amount),
+        Decimal(obj.target_amount),
+    )
+    obj.updated_by = acting_user
+    obj.save(update_fields=["saved_amount", "updated_by", "updated_at"])
+    return obj
+
+
 def delete_purchase(acting_user: User, obj: PlannedPurchase) -> None:
     delete_event_for(obj)
     obj.updated_by = acting_user
@@ -456,9 +479,38 @@ def generate_plan_checklist(acting_user: User, plan: dict) -> list[PaydayCheckli
     hidden_source_keys = set(
         PaydayChecklistPreference.objects.filter(is_hidden=True).values_list("source_key", flat=True)
     )
+    required = [
+        {
+            "source_key": "pay-plan:confirm-income",
+            "title": "Confirm all expected income has arrived",
+            "bucket_id": None,
+            "amount": "0.00",
+        },
+        *[
+            {
+                "source_key": f"pay-plan:bucket:{row['bucket_id']}",
+                "title": f"Transfer to {row['bucket_name']}",
+                "bucket_id": row["bucket_id"],
+                "amount": row["amount"],
+            }
+            for row in plan["buckets"]
+        ],
+        {
+            "source_key": "pay-plan:review-bills",
+            "title": "Review bills due before next payday",
+            "bucket_id": None,
+            "amount": "0.00",
+        },
+        {
+            "source_key": "pay-plan:record-balance",
+            "title": "Optional: record the bills-account balance",
+            "bucket_id": None,
+            "amount": "0.00",
+        },
+    ]
     generated = []
-    for position, row in enumerate(plan["buckets"], start=1):
-        source_key = f"pay-plan:bucket:{row['bucket_id']}"
+    for position, row in enumerate(required, start=1):
+        source_key = row["source_key"]
         if source_key in hidden_source_keys:
             continue
         obj, _ = PaydayChecklistItem.objects.update_or_create(
@@ -466,7 +518,7 @@ def generate_plan_checklist(acting_user: User, plan: dict) -> list[PaydayCheckli
             cycle_start=cycle_start,
             source_key=source_key,
             defaults={
-                "title": f"Transfer to {row['bucket_name']}",
+                "title": row["title"],
                 "bucket_id": row["bucket_id"],
                 "amount_hint": row["amount"],
                 "position": position * 10,
@@ -477,7 +529,7 @@ def generate_plan_checklist(acting_user: User, plan: dict) -> list[PaydayCheckli
                 "updated_by": acting_user,
             },
             create_defaults={
-                "title": f"Transfer to {row['bucket_name']}",
+                "title": row["title"],
                 "bucket_id": row["bucket_id"],
                 "amount_hint": row["amount"],
                 "position": position * 10,

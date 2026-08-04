@@ -188,6 +188,9 @@ export function ManagementTab({ settings, categories, balances, report, health, 
   const [saving, setSaving] = useState('')
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importPreview, setImportPreview] = useState<SolaceBillImportPreview | null>(null)
+  const [reportView, setReportView] = useState(report)
+  const [reportActiveOnly, setReportActiveOnly] = useState(true)
+  const [reportIncludedOnly, setReportIncludedOnly] = useState(false)
 
   useEffect(() => {
     if (!settings) return
@@ -202,6 +205,23 @@ export function ManagementTab({ settings, categories, balances, report, health, 
       due_soon_days: String(settings.due_soon_days),
     })
   }, [settings])
+
+  useEffect(() => {
+    setReportView(report)
+    setReportActiveOnly(report?.active_only ?? true)
+    setReportIncludedOnly(report?.included_only ?? false)
+  }, [report])
+
+  const loadReport = async (activeOnly: boolean, includedOnly: boolean) => {
+    setSaving('report')
+    try {
+      setReportView(await api.getSolaceCategoryReport(activeOnly, includedOnly))
+    } catch (error) {
+      onError(errMsg(error))
+    } finally {
+      setSaving('')
+    }
+  }
 
   const saveSettings = async () => {
     setSaving('settings')
@@ -367,24 +387,72 @@ export function ManagementTab({ settings, categories, balances, report, health, 
       </Card>
 
       <Card className="p-4">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
           <div>
             <h2 className="font-bold text-ink">Category report</h2>
-            <p className="text-sm text-muted">Active bills included in set-aside planning.</p>
+            <p className="text-sm text-muted">Average recurring bill cost normalised across common periods.</p>
           </div>
-          {report && <p className="text-right text-sm text-muted">{money(report.fortnightly_total)}/fortnight<br />{money(report.annual_total)}/year</p>}
+          <div className="flex flex-wrap gap-3 text-sm text-muted">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={reportActiveOnly}
+                onChange={event => {
+                  setReportActiveOnly(event.target.checked)
+                  void loadReport(event.target.checked, reportIncludedOnly)
+                }}
+              />
+              Active only
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={reportIncludedOnly}
+                onChange={event => {
+                  setReportIncludedOnly(event.target.checked)
+                  void loadReport(reportActiveOnly, event.target.checked)
+                }}
+              />
+              Set-aside only
+            </label>
+          </div>
         </div>
-        {!report || report.categories.length === 0 ? (
-          <EmptyState icon="📊" title="No category totals yet" hint="Add active bills to populate this report." />
-        ) : (
-          <div className="mt-4 divide-y divide-line">
-            {report.categories.map(row => (
-              <div key={row.category} className="grid grid-cols-[1fr_auto_auto] gap-4 py-2 text-sm">
-                <span className="font-medium text-ink">{cap(row.category)} <span className="text-muted">({row.bill_count})</span></span>
-                <span className="text-muted">{money(row.fortnightly_total)}/fortnight</span>
-                <span className="font-semibold text-ink">{money(row.annual_total)}/year</span>
+        {reportView && (
+          <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+            {[
+              ['Weekly', reportView.weekly_total],
+              ['Fortnightly', reportView.fortnightly_total],
+              ['Monthly', reportView.monthly_total],
+              ['Yearly', reportView.annual_total],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-lg bg-sunken p-3">
+                <p className="font-bold text-ink">{money(value)}</p>
+                <p className="text-xs text-muted">{label}</p>
               </div>
             ))}
+          </div>
+        )}
+        {!reportView || reportView.categories.length === 0 ? (
+          <EmptyState icon="📊" title="No category totals yet" hint="Add active bills to populate this report." />
+        ) : (
+          <div className={`mt-4 overflow-x-auto ${saving === 'report' ? 'opacity-60' : ''}`}>
+            <table className="w-full min-w-[680px] text-left text-sm">
+              <thead className="text-muted">
+                <tr><th className="py-2">Category</th><th className="py-2 text-right">Bills</th><th className="py-2 text-right">Weekly</th><th className="py-2 text-right">Fortnightly</th><th className="py-2 text-right">Monthly</th><th className="py-2 text-right">Yearly</th></tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {reportView.categories.map(row => (
+                  <tr key={row.category}>
+                    <td className="py-2 font-medium text-ink">{cap(row.category)}</td>
+                    <td className="py-2 text-right text-muted">{row.bill_count}</td>
+                    <td className="py-2 text-right text-muted">{money(row.weekly_total)}</td>
+                    <td className="py-2 text-right text-muted">{money(row.fortnightly_total)}</td>
+                    <td className="py-2 text-right text-muted">{money(row.monthly_total)}</td>
+                    <td className="py-2 text-right font-semibold text-ink">{money(row.annual_total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </Card>

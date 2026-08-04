@@ -30,6 +30,7 @@ from apps.solace.serializers import (
     PaydayChecklistPreferenceSerializer,
     PaydaySerializer,
     PlannedPurchaseSerializer,
+    PurchaseSavingsSerializer,
     SolaceSettingsSerializer,
     SubscriptionSerializer,
 )
@@ -349,6 +350,25 @@ class SolaceHealthView(SolaceAccessMixin, APIView):
         missing_payday_dates = sum(1 for row in paydays if not row.pay_at)
         if missing_payday_dates:
             issues.append({"level": "error", "code": "payday_dates", "message": f"{missing_payday_dates} active income source(s) have no pay date."})
+        uncategorised = sum(
+            1
+            for row in bills
+            if (row.category or "").strip().casefold()
+            in {"", "other", "uncategorised", "uncategorized"}
+        )
+        if uncategorised:
+            issues.append({
+                "level": "warning",
+                "code": "uncategorised_bills",
+                "message": f"{uncategorised} active bill(s) use the fallback Other category.",
+            })
+        remainder_count = sum(1 for row in buckets if row.cap_to_remaining)
+        if remainder_count > 1:
+            issues.append({
+                "level": "error",
+                "code": "remainder_buckets",
+                "message": "More than one active bucket is capped to the remaining income.",
+            })
         percentage_total = sum(
             (
                 Decimal(row.allocation_value)
@@ -357,12 +377,23 @@ class SolaceHealthView(SolaceAccessMixin, APIView):
             ),
             Decimal("0.00"),
         )
-        if percentage_total > Decimal("100.00"):
+        if percentage_total > Decimal("105.00"):
             issues.append({"level": "error", "code": "allocation_over", "message": f"Percentage bucket rules total {percentage_total:.2f}%."})
+        elif percentage_total and percentage_total < Decimal("95.00"):
+            issues.append({"level": "warning", "code": "allocation_under", "message": f"Percentage bucket rules total only {percentage_total:.2f}%."})
         elif buckets and percentage_total == 0 and not any(
             row.allocation_method == BudgetBucket.AllocationMethod.FIXED for row in buckets
         ):
             issues.append({"level": "warning", "code": "allocation_empty", "message": "Active buckets do not allocate any income."})
+        if (bills or selectors.list_subscriptions(request.user, active_only=True)) and not any(
+            "bill" in (row.category or "").casefold()
+            for row in buckets
+        ):
+            issues.append({
+                "level": "warning",
+                "code": "no_bills_bucket",
+                "message": "Add a Bills-category bucket so account forecasts include expected transfers.",
+            })
         for bill in bills:
             ensure_bill_occurrences(bill, today - timedelta(days=365), today)
         overdue = selectors.list_bill_occurrences(
@@ -403,38 +434,79 @@ class SolaceHealthView(SolaceAccessMixin, APIView):
 
 class CategoryReportView(SolaceAccessMixin, APIView):
     def get(self, request: Request) -> Response:
-        from apps.solace.bill_schedule import annual_cost, fortnightly_cost
+        from apps.solace.bill_schedule import annual_cost
 
+        active_only = request.query_params.get("active", "1") != "0"
+        included_only = request.query_params.get("included", "0") == "1"
         grouped = {}
-        for bill in selectors.list_bills(request.user, active_only=True):
+        for bill in selectors.list_bills(request.user, active_only=active_only):
+            if included_only and not bill.include_in_set_aside:
+                continue
             row = grouped.setdefault(
                 bill.category or "other",
                 {
                     "category": bill.category or "other",
                     "bill_count": 0,
+                    "weekly_total": Decimal("0.00"),
+                    "monthly_total": Decimal("0.00"),
                     "annual_total": Decimal("0.00"),
                     "fortnightly_total": Decimal("0.00"),
                 },
             )
             row["bill_count"] += 1
-            if bill.include_in_set_aside:
-                row["annual_total"] += annual_cost(bill)
-                row["fortnightly_total"] += fortnightly_cost(bill)
+            yearly = annual_cost(bill, include_inactive=not active_only)
+            row["weekly_total"] += yearly / Decimal("52")
+            row["fortnightly_total"] += yearly / Decimal("26")
+            row["monthly_total"] += yearly / Decimal("12")
+            row["annual_total"] += yearly
         rows = [
             {
                 **row,
+                "weekly_total": f"{row['weekly_total']:.2f}",
+                "monthly_total": f"{row['monthly_total']:.2f}",
                 "annual_total": f"{row['annual_total']:.2f}",
                 "fortnightly_total": f"{row['fortnightly_total']:.2f}",
             }
-            for row in sorted(grouped.values(), key=lambda value: value["category"].lower())
+            for row in sorted(
+                grouped.values(),
+                key=lambda value: (-value["annual_total"], value["category"].lower()),
+            )
         ]
         return Response(
             {
                 "categories": rows,
+                "bill_count": sum(row["bill_count"] for row in rows),
+                "weekly_total": f"{sum((Decimal(row['weekly_total']) for row in rows), Decimal('0.00')):.2f}",
+                "monthly_total": f"{sum((Decimal(row['monthly_total']) for row in rows), Decimal('0.00')):.2f}",
                 "annual_total": f"{sum((Decimal(row['annual_total']) for row in rows), Decimal('0.00')):.2f}",
                 "fortnightly_total": f"{sum((Decimal(row['fortnightly_total']) for row in rows), Decimal('0.00')):.2f}",
+                "active_only": active_only,
+                "included_only": included_only,
             }
         )
+
+
+class BalanceForecastView(SolaceAccessMixin, APIView):
+    def get(self, request: Request) -> Response:
+        from apps.solace.forecast import build_balance_forecast
+
+        raw_months = (request.query_params.get("months") or "12").strip()
+        try:
+            months = int(raw_months)
+        except ValueError as exc:
+            raise ValidationError({"months": "Use a whole number from 1 to 24."}) from exc
+        if not 1 <= months <= 24:
+            raise ValidationError({"months": "Use a whole number from 1 to 24."})
+        forecast = build_balance_forecast(
+            request.user,
+            as_of=_plan_date(request),
+            horizon_months=months,
+        )
+        forecast["latest_balance"] = (
+            AccountBalanceSnapshotSerializer(forecast["latest_balance"]).data
+            if forecast["latest_balance"] else None
+        )
+        return Response(forecast)
 
 
 def _schedule_range(request: Request) -> tuple[date, date]:
@@ -562,14 +634,49 @@ class BillDetailView(SolaceAccessMixin, APIView):
         return obj
 
     def patch(self, request: Request, bill_id: int) -> Response:
-        serializer = BillSerializer(data=request.data, partial=True)
+        existing = self._get(bill_id)
+        payload = request.data.copy()
+        occurrence_scope = payload.pop("occurrence_update_scope", "future_unpaid")
+        if isinstance(occurrence_scope, list):
+            occurrence_scope = occurrence_scope[-1] if occurrence_scope else "future_unpaid"
+        if occurrence_scope not in {"future_unpaid", "all_unpaid"}:
+            raise ValidationError({
+                "occurrence_update_scope": "Use future_unpaid or all_unpaid.",
+            })
+        serializer = BillSerializer(existing, data=payload, partial=True)
         serializer.is_valid(raise_exception=True)
-        obj = services.update_bill(request.user, self._get(bill_id), **serializer.validated_data)
+        obj = services.update_bill(
+            request.user,
+            existing,
+            occurrence_scope=occurrence_scope,
+            **serializer.validated_data,
+        )
         return Response(BillSerializer(obj).data)
 
     def delete(self, request: Request, bill_id: int) -> Response:
         services.delete_bill(request.user, self._get(bill_id))
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class BillOccurrenceTimelineView(SolaceAccessMixin, APIView):
+    def get(self, request: Request, bill_id: int) -> Response:
+        bill = selectors.get_bill(bill_id, request.user)
+        if bill is None:
+            raise NotFound()
+        timeline = selectors.get_bill_occurrence_timeline(request.user, bill)
+        return Response(
+            {
+                "bill": BillSerializer(bill).data,
+                "upcoming": BillOccurrenceSerializer(
+                    timeline["upcoming"],
+                    many=True,
+                ).data,
+                "history": BillOccurrenceSerializer(
+                    timeline["history"],
+                    many=True,
+                ).data,
+            }
+        )
 
 
 class BillPaidView(SolaceAccessMixin, APIView):
@@ -638,6 +745,25 @@ class PurchaseDetailView(SolaceAccessMixin, APIView):
         return Response(status=204)
 
 
+class PurchaseSavingsView(SolaceAccessMixin, APIView):
+    permission_action = "edit"
+
+    def post(self, request: Request, purchase_id: int) -> Response:
+        obj = selectors.get_purchase(purchase_id, request.user)
+        if obj is None:
+            raise NotFound()
+        if not obj.is_open:
+            raise ValidationError({"purchase": "Savings cannot be added to a closed purchase."})
+        serializer = PurchaseSavingsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        obj = services.add_purchase_savings(
+            request.user,
+            obj,
+            serializer.validated_data["amount"],
+        )
+        return Response(PlannedPurchaseSerializer(obj).data)
+
+
 class BucketListView(SolaceAccessMixin, APIView):
     def get(self, request: Request) -> Response:
         return Response(BudgetBucketSerializer(selectors.list_buckets(request.user), many=True).data)
@@ -695,10 +821,19 @@ class SubscriptionDetailView(SolaceAccessMixin, APIView):
 
 class ChecklistListView(SolaceAccessMixin, APIView):
     def get(self, request: Request) -> Response:
+        plan_date = _plan_date(request)
+        cycle_start = None
+        if plan_date is not None:
+            plan = selectors.get_pay_cycle_plan(request.user, as_of=plan_date)
+            cycle_start = date.fromisoformat(plan["cycle_start"])
         items = selectors.list_checklist_items(
             request.user,
             incomplete_only=request.query_params.get("incomplete") == "1",
-            latest_cycle_only=request.query_params.get("latest") == "1",
+            latest_cycle_only=(
+                request.query_params.get("latest") == "1"
+                and cycle_start is None
+            ),
+            cycle_start=cycle_start,
         )
         return Response(PaydayChecklistItemSerializer(items, many=True).data)
 
@@ -744,6 +879,7 @@ class SolaceBootstrapView(SolaceAccessMixin, APIView):
                 "health": SolaceHealthView().get(request).data,
                 "category_report": CategoryReportView().get(request).data,
                 "closeout": CycleCloseoutView().get(request).data,
+                "forecast": BalanceForecastView().get(request).data,
                 "checklist_preferences": ChecklistPreferenceView().get(request).data,
             }
         )

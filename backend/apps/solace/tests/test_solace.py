@@ -5,7 +5,7 @@ import tempfile
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
@@ -104,6 +104,21 @@ class SolacePermissionTests(TestCase):
         resp = self.client.get(self.url)
         self.assertIn(resp.status_code, [401, 403])
 
+    def test_bill_timeline_requires_solace_access_and_reauth(self):
+        bill = create_bill(self.admin, name="Protected history", due_at=_future())
+        url = reverse("solace-bill-occurrences", args=[bill.id])
+        _login(self.client, "manager")
+        _reauth(self.client)
+        self.assertIn(self.client.get(url).status_code, [401, 403])
+
+    def test_balance_forecast_requires_solace_access_and_reauth(self):
+        _login(self.client, "manager")
+        _reauth(self.client)
+        self.assertIn(
+            self.client.get(reverse("solace-forecast")).status_code,
+            [401, 403],
+        )
+
 
 class SolaceCrudAndCalendarTests(TestCase):
     def setUp(self):
@@ -148,6 +163,22 @@ class SolaceCrudAndCalendarTests(TestCase):
         self.assertEqual(event.source_node.key, "solace")
         self.assertEqual(event.sensitivity, "financial")
 
+    def test_payday_exposes_known_anchor_and_calculated_upcoming_date(self):
+        anchor = _future(2)
+        create_payday(
+            self.admin,
+            title="Weekly income",
+            expected_amount="1000.00",
+            pay_at=anchor,
+            recurrence_rule="FREQ=WEEKLY",
+        )
+        row = self.client.get(reverse("solace-payday-list")).json()[0]
+        self.assertEqual(row["pay_at"], anchor.isoformat().replace("+00:00", "Z"))
+        self.assertEqual(
+            datetime.fromisoformat(row["next_pay_at"].replace("Z", "+00:00")),
+            anchor.replace(microsecond=0),
+        )
+
     def test_monthly_occurrences_clamp_to_month_end_without_drifting(self):
         bill = create_bill(
             self.admin,
@@ -167,6 +198,62 @@ class SolaceCrudAndCalendarTests(TestCase):
         )
         self.assertEqual(annual_cost(bill), 1200)
         self.assertEqual(str(fortnightly_cost(bill)), "46.15")
+
+    def test_bill_stop_after_bounds_occurrences_and_metadata_round_trips(self):
+        due_at = timezone.make_aware(datetime(2027, 1, 1, 9))
+        response = self.client.post(
+            reverse("solace-bill-list"),
+            {
+                "name": "Fixed term",
+                "amount": "50.00",
+                "due_at": due_at.isoformat(),
+                "recurrence_rule": "FREQ=MONTHLY",
+                "end_date": "2027-03-01",
+                "is_autopay": True,
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.json()["is_autopay"])
+        self.assertEqual(response.json()["end_date"], "2027-03-01")
+        bill = Bill.objects.get(name="Fixed term")
+        values = occurrence_datetimes(bill, date(2027, 1, 1), date(2027, 6, 30))
+        self.assertEqual(
+            [timezone.localdate(value).isoformat() for value in values],
+            ["2027-01-01", "2027-02-01", "2027-03-01"],
+        )
+
+        invalid = self.client.patch(
+            reverse("solace-bill-detail", args=[bill.id]),
+            {"end_date": "2026-12-31"},
+            content_type="application/json",
+        )
+        self.assertEqual(invalid.status_code, 400)
+
+    def test_bill_timeline_returns_upcoming_and_recent_history(self):
+        bill = create_bill(
+            self.admin,
+            name="Timeline bill",
+            amount="25.00",
+            due_at=timezone.now() - timedelta(days=84),
+            recurrence_rule="FREQ=WEEKLY",
+        )
+        response = self.client.get(
+            reverse("solace-bill-occurrences", args=[bill.id])
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["bill"]["name"], "Timeline bill")
+        self.assertEqual(len(data["upcoming"]), 12)
+        self.assertEqual(len(data["history"]), 12)
+        self.assertLess(
+            data["upcoming"][0]["due_at"],
+            data["upcoming"][-1]["due_at"],
+        )
+        self.assertGreater(
+            data["history"][0]["due_at"],
+            data["history"][-1]["due_at"],
+        )
 
     def test_recurring_occurrence_can_be_paid_restored_and_skipped(self):
         bill = create_bill(
@@ -213,6 +300,38 @@ class SolaceCrudAndCalendarTests(TestCase):
             due_at=second.due_at,
         ).get()
         self.assertEqual(refreshed_second.amount, 125)
+
+    def test_bill_edit_can_refresh_all_unpaid_and_preserve_paid_history(self):
+        anchor = timezone.now() - timedelta(days=70)
+        bill = create_bill(
+            self.admin,
+            name="Corrected bill",
+            amount="80.00",
+            due_at=anchor,
+            recurrence_rule="FREQ=MONTHLY",
+        )
+        past = list(bill.occurrences.filter(due_at__lt=timezone.now()).order_by("due_at"))
+        self.assertGreaterEqual(len(past), 2)
+        paid, unpaid = past[-2:]
+        paid_date = paid.due_at
+        unpaid_date = unpaid.due_at
+        self.client.post(reverse("solace-occurrence-action", args=[paid.id, "paid"]))
+
+        response = self.client.patch(
+            reverse("solace-bill-detail", args=[bill.id]),
+            {
+                "amount": "95.00",
+                "occurrence_update_scope": "all_unpaid",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        preserved = BillOccurrence.objects.get(bill=bill, due_at=paid_date)
+        corrected = BillOccurrence.objects.get(bill=bill, due_at=unpaid_date)
+        self.assertEqual(preserved.status, BillOccurrence.Status.PAID)
+        self.assertEqual(preserved.amount, 80)
+        self.assertEqual(corrected.status, BillOccurrence.Status.UPCOMING)
+        self.assertEqual(corrected.amount, 95)
 
     def test_month_schedule_combines_bills_and_income(self):
         create_bill(
@@ -305,8 +424,8 @@ class SolacePayCyclePlanTests(TestCase):
         url = reverse("solace-plan-checklist")
         resp = self.client.post(f"{url}?date=2026-08-03")
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(len(resp.json()), 2)
-        self.assertEqual(PaydayChecklistItem.objects.count(), 2)
+        self.assertEqual(len(resp.json()), 5)
+        self.assertEqual(PaydayChecklistItem.objects.count(), 5)
         bills_item = PaydayChecklistItem.objects.get(bucket=self.bills)
         self.assertEqual(bills_item.cycle_start.isoformat(), "2026-08-01")
         self.assertEqual(bills_item.amount_hint, 750)
@@ -315,9 +434,27 @@ class SolacePayCyclePlanTests(TestCase):
 
         resp = self.client.post(f"{url}?date=2026-08-03")
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(PaydayChecklistItem.objects.count(), 2)
+        self.assertEqual(PaydayChecklistItem.objects.count(), 5)
         bills_item.refresh_from_db()
         self.assertTrue(bills_item.is_complete)
+
+    def test_checklist_can_open_current_and_next_cycles(self):
+        url = reverse("solace-plan-checklist")
+        current = self.client.post(f"{url}?date=2026-08-03").json()
+        following = self.client.post(f"{url}?date=2026-08-16").json()
+        self.assertEqual({row["cycle_start"] for row in current}, {"2026-08-01"})
+        self.assertEqual({row["cycle_start"] for row in following}, {"2026-08-15"})
+
+        current_rows = self.client.get(
+            reverse("solace-checklist-list"),
+            {"date": "2026-08-03"},
+        ).json()
+        following_rows = self.client.get(
+            reverse("solace-checklist-list"),
+            {"date": "2026-08-16"},
+        ).json()
+        self.assertEqual({row["cycle_start"] for row in current_rows}, {"2026-08-01"})
+        self.assertEqual({row["cycle_start"] for row in following_rows}, {"2026-08-15"})
 
     def test_invalid_plan_date_is_rejected(self):
         resp = self.client.get(reverse("solace-plan"), {"date": "03/08/2026"})
@@ -354,6 +491,20 @@ class SolacePayCyclePlanTests(TestCase):
         plan = self.client.get(reverse("solace-plan"), {"date": "2026-08-03"}).json()
         self.assertLessEqual(date.fromisoformat(plan["cycle_start"]), date(2026, 8, 3))
         self.assertGreaterEqual(date.fromisoformat(plan["cycle_end"]), date(2026, 8, 3))
+
+    def test_configured_cycle_anchor_overrides_income_dates(self):
+        self.client.get(reverse("solace-settings"))
+        self.client.patch(
+            reverse("solace-settings"),
+            {"cycle_anchor_date": "2026-07-30"},
+            content_type="application/json",
+        )
+
+        plan = self.client.get(reverse("solace-plan"), {"date": "2026-08-03"}).json()
+
+        self.assertEqual(plan["cycle_start"], "2026-07-30")
+        self.assertEqual(plan["cycle_end"], "2026-08-12")
+        self.assertEqual(plan["income_total"], "3000.00")
 
     def test_plan_reports_required_set_aside_and_bucket_coverage(self):
         self.client.get(reverse("solace-settings"))
@@ -498,6 +649,122 @@ class SolaceManagementTests(TestCase):
         )
         self.assertEqual(response.json()["status"], "open")
 
+    def test_balance_forecast_finds_withdrawable_surplus_and_low_point(self):
+        self.client.get(reverse("solace-settings"))
+        self.client.patch(
+            reverse("solace-settings"),
+            {"default_buffer_amount": "100.00"},
+            content_type="application/json",
+        )
+        create_payday(
+            self.admin,
+            title="Household pay",
+            expected_amount="1000.00",
+            pay_at=timezone.make_aware(datetime(2026, 8, 15, 9)),
+            recurrence_rule="FREQ=WEEKLY;INTERVAL=2",
+        )
+        create_bucket(
+            self.admin,
+            name="Bills account",
+            category="Bills",
+            allocation_method=BudgetBucket.AllocationMethod.PERCENTAGE,
+            allocation_value="20.00",
+            rounding_increment="1.00",
+        )
+        create_bill(
+            self.admin,
+            name="Rent",
+            amount="600.00",
+            due_at=timezone.make_aware(datetime(2026, 8, 10, 9)),
+            recurrence_rule="FREQ=MONTHLY",
+        )
+        create_subscription(
+            self.admin,
+            name="Streaming",
+            amount="50.00",
+            next_renewal_at=timezone.make_aware(datetime(2026, 8, 20, 9)),
+            recurrence_rule="FREQ=MONTHLY",
+        )
+        self.client.post(
+            reverse("solace-balance-list"),
+            {"snapshot_date": "2026-08-02", "balance": "1000.00"},
+            content_type="application/json",
+        )
+
+        response = self.client.get(
+            reverse("solace-forecast"),
+            {"date": "2026-08-03", "months": "1"},
+        )
+        self.assertEqual(response.status_code, 200)
+        forecast = response.json()
+        self.assertEqual(forecast["forecast_start"], "2026-08-03")
+        self.assertEqual(forecast["through"], "2026-09-03")
+        self.assertEqual(forecast["total_bills"], "650.00")
+        self.assertEqual(forecast["total_contributions"], "400.00")
+        self.assertEqual(forecast["lowest_balance"], "400.00")
+        self.assertEqual(forecast["lowest_balance_date"], "2026-08-10")
+        self.assertEqual(forecast["bills_only_surplus"], "400.00")
+        self.assertEqual(forecast["safe_to_withdraw"], "300.00")
+        self.assertEqual(forecast["ending_balance"], "750.00")
+        self.assertTrue(forecast["is_covered"])
+        self.assertEqual(
+            [row["date"] for row in forecast["timeline"]],
+            ["2026-08-10", "2026-08-15", "2026-08-20", "2026-08-29"],
+        )
+
+    def test_balance_forecast_reports_required_opening_without_snapshot(self):
+        create_bill(
+            self.admin,
+            name="Insurance",
+            amount="450.00",
+            due_at=timezone.make_aware(datetime(2026, 8, 10, 9)),
+        )
+        forecast = self.client.get(
+            reverse("solace-forecast"),
+            {"date": "2026-08-03", "months": "1"},
+        ).json()
+        self.assertIsNone(forecast["opening_balance"])
+        self.assertIsNone(forecast["safe_to_withdraw"])
+        self.assertIsNone(forecast["is_covered"])
+        self.assertEqual(forecast["required_opening_balance"], "450.00")
+
+    def test_balance_forecast_validates_horizon(self):
+        response = self.client.get(reverse("solace-forecast"), {"months": "25"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_purchase_quick_saving_caps_at_target_and_rejects_closed_goal(self):
+        purchase = create_purchase(
+            self.admin,
+            name="Sofa",
+            target_amount="500.00",
+            saved_amount="450.00",
+        )
+        url = reverse("solace-purchase-add-saved", args=[purchase.id])
+        response = self.client.post(
+            url,
+            {"amount": "100.00"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["saved_amount"], "500.00")
+        self.assertEqual(response.json()["remaining_amount"], "0.00")
+
+        response = self.client.post(
+            url,
+            {"amount": "0.00"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+        purchase.status = PlannedPurchase.Status.BOUGHT
+        purchase.save(update_fields=["status", "updated_at"])
+        response = self.client.post(
+            url,
+            {"amount": "1.00"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
     def test_generated_checklist_item_can_be_hidden_and_restored(self):
         create_payday(
             self.admin,
@@ -521,16 +788,15 @@ class SolaceManagementTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertTrue(PaydayChecklistPreference.objects.get().is_hidden)
-        self.assertEqual(
-            self.client.get(reverse("solace-checklist-list")).json(),
-            [],
-        )
+        visible = self.client.get(reverse("solace-checklist-list")).json()
+        self.assertEqual(len(visible), 3)
+        self.assertNotIn("Transfer to Bills", [row["title"] for row in visible])
         self.client.post(
             reverse("solace-checklist-preferences"),
             {"source_key": source_key, "label": "Transfer to Bills", "is_hidden": False},
             content_type="application/json",
         )
-        self.assertEqual(len(self.client.get(reverse("solace-checklist-list")).json()), 1)
+        self.assertEqual(len(self.client.get(reverse("solace-checklist-list")).json()), 4)
 
     def test_health_and_category_report_return_actionable_data(self):
         create_bill(
@@ -541,12 +807,44 @@ class SolaceManagementTests(TestCase):
             due_at=timezone.now() + timedelta(days=3),
             recurrence_rule="FREQ=MONTHLY",
         )
+        create_bill(
+            self.admin,
+            name="Excluded",
+            category="utilities",
+            amount="20.00",
+            due_at=timezone.now() + timedelta(days=4),
+            recurrence_rule="FREQ=MONTHLY",
+            include_in_set_aside=False,
+        )
+        create_bill(
+            self.admin,
+            name="Old",
+            category="utilities",
+            amount="10.00",
+            due_at=timezone.now() + timedelta(days=5),
+            recurrence_rule="FREQ=MONTHLY",
+            is_active=False,
+        )
         health = self.client.get(reverse("solace-health")).json()
         self.assertEqual(health["status"], "error")
         self.assertIn("no_income", [row["code"] for row in health["issues"]])
         report = self.client.get(reverse("solace-category-report")).json()
         self.assertEqual(report["categories"][0]["category"], "utilities")
-        self.assertEqual(report["categories"][0]["annual_total"], "1440.00")
+        self.assertEqual(report["categories"][0]["annual_total"], "1680.00")
+        self.assertEqual(report["categories"][0]["weekly_total"], "32.31")
+        self.assertEqual(report["categories"][0]["monthly_total"], "140.00")
+        self.assertEqual(report["bill_count"], 2)
+
+        included = self.client.get(
+            reverse("solace-category-report"),
+            {"included": "1"},
+        ).json()
+        self.assertEqual(included["annual_total"], "1440.00")
+        all_bills = self.client.get(
+            reverse("solace-category-report"),
+            {"active": "0"},
+        ).json()
+        self.assertEqual(all_bills["annual_total"], "1800.00")
 
     def test_bootstrap_loads_the_complete_workspace(self):
         response = self.client.get(reverse("solace-bootstrap"))
@@ -555,7 +853,8 @@ class SolaceManagementTests(TestCase):
             {
                 "bills", "paydays", "purchases", "buckets", "subscriptions",
                 "checklist", "plan", "settings", "categories", "balances",
-                "health", "category_report", "closeout", "checklist_preferences",
+                "health", "category_report", "closeout", "forecast",
+                "checklist_preferences",
             },
             set(response.json()),
         )
@@ -717,7 +1016,7 @@ def _make_legacy_solace_db() -> str:
         conn.executemany(
             "insert into recurring_bill values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
-                (1, "Electricity", 120.5, "Monthly", 12, None, "2026-01-01", None, 1, 1, 0, "Power Co", 1, ""),
+                (1, "Electricity", 120.5, "Monthly", 12, None, "2026-01-01", "2027-12-12", 1, 1, 0, "Power Co", 1, ""),
                 (2, "Streaming", 14.99, "Monthly", 15, None, "2026-01-01", None, 2, 1, 1, "Stream Co", 1, "Family plan"),
                 (3, "Old bill", 99.0, "Monthly", 1, None, "2026-01-01", None, 1, 0, 0, "", 1, ""),
             ],
@@ -796,7 +1095,9 @@ class SolaceImportTests(TestCase):
         self.assertEqual(SolaceSettings.objects.get().payday_bill_handling, "previous_cycle")
         self.assertEqual(SolaceSettings.objects.get().cycle_anchor_date, date(2026, 8, 1))
         self.assertEqual(Bill.objects.get(name="Electricity").category, "utilities")
+        self.assertEqual(Bill.objects.get(name="Electricity").end_date, date(2027, 12, 12))
         self.assertEqual(Bill.objects.get(name="Streaming").category, "subscription")
+        self.assertTrue(Bill.objects.get(name="Streaming").is_autopay)
         self.assertEqual(PaydayChecklistItem.objects.get().title, "Transfer to Bills")
         self.assertEqual(BudgetBucket.objects.get().allocation_method, "percentage")
         self.assertEqual(BudgetBucket.objects.get().allocation_value, 25)
@@ -815,3 +1116,36 @@ class SolaceImportTests(TestCase):
         self.assertEqual(Bill.objects.count(), 2)
         self.assertEqual(Subscription.objects.count(), 0)
         self.assertEqual(BillOccurrence.objects.count(), occurrence_count)
+
+        streaming = Bill.objects.get(name="Streaming")
+        streaming.is_autopay = False
+        streaming.save(update_fields=["is_autopay", "updated_at"])
+        out = io.StringIO()
+        call_command("import_solace", "--sqlite-db", db_path, stdout=out)
+        streaming.refresh_from_db()
+        self.assertTrue(streaming.is_autopay)
+        self.assertIn("bills_enriched: 1", out.getvalue())
+
+    def test_import_solace_verify_reports_parity_and_actionable_drift(self):
+        db_path = _make_legacy_solace_db()
+        call_command("import_solace", "--sqlite-db", db_path, stdout=io.StringIO())
+
+        out = io.StringIO()
+        call_command("import_solace", "--sqlite-db", db_path, "--verify", stdout=out)
+        self.assertIn("Verification passed", out.getvalue())
+
+        bill = Bill.objects.get(name="Electricity")
+        bill.amount = Decimal("999.00")
+        bill.save(update_fields=["amount", "updated_at"])
+
+        with self.assertRaisesMessage(
+            CommandError,
+            "bill Electricity: amount expected Decimal('120.50'), found Decimal('999.00')",
+        ):
+            call_command(
+                "import_solace",
+                "--sqlite-db",
+                db_path,
+                "--verify",
+                stdout=io.StringIO(),
+            )

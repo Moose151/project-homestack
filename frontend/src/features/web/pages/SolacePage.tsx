@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../../api/client'
 import type {
-  SolaceBalanceSnapshot, SolaceBill, SolaceBillOccurrence, SolaceBucket, SolaceCategory,
+  SolaceBalanceForecast, SolaceBalanceSnapshot, SolaceBill, SolaceBillOccurrence, SolaceBillTimeline, SolaceBucket, SolaceCategory,
   SolaceCategoryReport, SolaceChecklistItem, SolaceChecklistPreference, SolaceCloseoutResponse,
   SolaceHealth, SolacePayday, SolacePayCyclePlan, SolacePurchase, SolaceSchedule,
   SolaceSettings, SolaceSubscription,
@@ -49,9 +49,14 @@ const shiftMonth = (monthKey: string, offset: number) => {
   const value = new Date(year, month - 1 + offset, 1)
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`
 }
+const dayAfter = (dateValue: string) => {
+  const value = new Date(`${dateValue.slice(0, 10)}T12:00:00`)
+  value.setDate(value.getDate() + 1)
+  return dateKey(value.toISOString())
+}
 
-type Tab = 'overview' | 'schedule' | 'closeout' | 'plan' | 'bills' | 'buckets' | 'subscriptions' | 'purchases' | 'paydays' | 'checklist' | 'manage'
-const TAB_KEYS: Tab[] = ['overview', 'schedule', 'closeout', 'plan', 'bills', 'buckets', 'subscriptions', 'purchases', 'paydays', 'checklist', 'manage']
+type Tab = 'overview' | 'forecast' | 'schedule' | 'closeout' | 'plan' | 'bills' | 'buckets' | 'subscriptions' | 'purchases' | 'paydays' | 'checklist' | 'manage'
+const TAB_KEYS: Tab[] = ['overview', 'forecast', 'schedule', 'closeout', 'plan', 'bills', 'buckets', 'subscriptions', 'purchases', 'paydays', 'checklist', 'manage']
 
 const BILL_CATS = ['mortgage', 'utilities', 'insurance', 'council', 'debt', 'subscription', 'childcare', 'other']
 const RECURRENCE = [
@@ -60,6 +65,7 @@ const RECURRENCE = [
   { label: 'Fortnightly', value: 'FREQ=WEEKLY;INTERVAL=2' },
   { label: 'Monthly', value: 'FREQ=MONTHLY' },
   { label: 'Quarterly', value: 'FREQ=MONTHLY;INTERVAL=3' },
+  { label: 'Six-monthly', value: 'FREQ=MONTHLY;INTERVAL=6' },
   { label: 'Yearly', value: 'FREQ=YEARLY' },
 ]
 const subscriptionRecurrence = (cycle: string, fallback = '') => ({
@@ -128,7 +134,7 @@ function BillForm({ categories, onCreated, onError }: {
 }) {
   const [f, setF] = useState({
     name: '', category: categories[0] || 'other', provider: '', amount: '', due_at: '',
-    recurrence_rule: '', include_in_set_aside: true,
+    recurrence_rule: '', end_date: '', is_autopay: false, include_in_set_aside: true,
   })
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: string | boolean) => setF(prev => ({ ...prev, [k]: v }))
@@ -139,12 +145,13 @@ function BillForm({ categories, onCreated, onError }: {
         ...f,
         amount: f.amount || '0.00',
         due_at: fromLocalInput(f.due_at),
+        end_date: f.end_date || null,
         is_all_day: true,
         is_active: true,
       })
       setF({
         name: '', category: categories[0] || 'other', provider: '', amount: '', due_at: '',
-        recurrence_rule: '', include_in_set_aside: true,
+        recurrence_rule: '', end_date: '', is_autopay: false, include_in_set_aside: true,
       })
       onCreated()
     } catch (error) {
@@ -162,14 +169,23 @@ function BillForm({ categories, onCreated, onError }: {
         <Field label="Repeats"><Select value={f.recurrence_rule} onChange={e => set('recurrence_rule', e.target.value)}>{RECURRENCE.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}</Select></Field>
         <div className="flex items-end"><Button onClick={save} loading={saving} disabled={!f.name.trim()} className="w-full">Add</Button></div>
       </div>
-      <label className="mt-3 flex items-center gap-2 text-sm text-muted">
-        <input
-          type="checkbox"
-          checked={f.include_in_set_aside}
-          onChange={e => set('include_in_set_aside', e.target.checked)}
-        />
-        Include this bill in set-aside planning
-      </label>
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
+        <Field label="Stop after (optional)">
+          <Input type="date" value={f.end_date} onChange={e => set('end_date', e.target.value)} />
+        </Field>
+        <label className="flex min-h-11 items-center gap-2 text-sm text-muted">
+          <input type="checkbox" checked={f.is_autopay} onChange={e => set('is_autopay', e.target.checked)} />
+          Autopay
+        </label>
+        <label className="flex min-h-11 items-center gap-2 text-sm text-muted">
+          <input
+            type="checkbox"
+            checked={f.include_in_set_aside}
+            onChange={e => set('include_in_set_aside', e.target.checked)}
+          />
+          Include in set-aside planning
+        </label>
+      </div>
     </Card>
   )
 }
@@ -184,8 +200,12 @@ function BillEditor({ bill, categories, reload, onError }: {
     amount: bill.amount,
     due_at: toLocalInput(bill.due_at),
     recurrence_rule: bill.recurrence_rule,
+    end_date: bill.end_date || '',
     is_active: bill.is_active,
+    is_autopay: bill.is_autopay,
     include_in_set_aside: bill.include_in_set_aside,
+    notes: bill.notes,
+    occurrence_update_scope: 'future_unpaid' as 'future_unpaid' | 'all_unpaid',
   })
   const [saving, setSaving] = useState(false)
   const set = (key: string, value: string | boolean) => setF(previous => ({ ...previous, [key]: value }))
@@ -195,6 +215,7 @@ function BillEditor({ bill, categories, reload, onError }: {
       await api.updateSolaceBill(bill.id, {
         ...f,
         due_at: fromLocalInput(f.due_at),
+        end_date: f.end_date || null,
         amount: f.amount || '0.00',
       })
       reload()
@@ -240,7 +261,16 @@ function BillEditor({ bill, categories, reload, onError }: {
             {RECURRENCE.map(rule => <option key={rule.value} value={rule.value}>{rule.label}</option>)}
           </Select>
         </Field>
+        <Field label="Stop after"><Input type="date" value={f.end_date} onChange={e => set('end_date', e.target.value)} /></Field>
+        <Field label="Notes"><Input value={f.notes} onChange={e => set('notes', e.target.value)} /></Field>
+        <Field label="Occurrence updates">
+          <Select value={f.occurrence_update_scope} onChange={e => set('occurrence_update_scope', e.target.value)}>
+            <option value="future_unpaid">Future unpaid only</option>
+            <option value="all_unpaid">All unpaid in budget year</option>
+          </Select>
+        </Field>
       </div>
+      <p className="mt-2 text-xs text-muted">Paid history is always preserved. Use all unpaid only when correcting the bill rule for the whole budget year.</p>
       <div className="mt-3 flex flex-wrap gap-4 text-sm text-muted">
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={f.is_active} onChange={e => set('is_active', e.target.checked)} />
@@ -250,10 +280,84 @@ function BillEditor({ bill, categories, reload, onError }: {
           <input type="checkbox" checked={f.include_in_set_aside} onChange={e => set('include_in_set_aside', e.target.checked)} />
           Include in set-aside
         </label>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={f.is_autopay} onChange={e => set('is_autopay', e.target.checked)} />
+          Autopay
+        </label>
       </div>
       <div className="mt-3 flex gap-2">
         <Button size="sm" onClick={save} loading={saving} disabled={!f.name.trim()}>Save</Button>
         <Button size="sm" variant="danger" onClick={remove} disabled={saving}>Delete</Button>
+      </div>
+    </details>
+  )
+}
+
+function BillDetails({ bill }: { bill: SolaceBill }) {
+  const [timeline, setTimeline] = useState<SolaceBillTimeline | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const load = async () => {
+    if (timeline || loading) return
+    setLoading(true)
+    setLoadError('')
+    try {
+      setTimeline(await api.getSolaceBillTimeline(bill.id))
+    } catch (error) {
+      setLoadError(errMsg(error))
+    } finally {
+      setLoading(false)
+    }
+  }
+  const occurrenceList = (rows: SolaceBillOccurrence[], empty: string) => (
+    rows.length === 0 ? <p className="text-sm text-muted">{empty}</p> : (
+      <div className="space-y-2">
+        {rows.map(row => (
+          <div key={row.id} className="flex items-center justify-between gap-3 rounded-lg bg-sunken/50 px-3 py-2 text-sm">
+            <div>
+              <p className="font-medium text-ink">{new Date(row.due_at).toLocaleDateString()}</p>
+              <p className="text-xs text-muted">
+                {cap(row.status)}
+                {row.paid_at ? ` · paid ${new Date(row.paid_at).toLocaleDateString()}` : ''}
+              </p>
+            </div>
+            <span className="font-semibold text-ink">{money(row.amount)}</span>
+          </div>
+        ))}
+      </div>
+    )
+  )
+  return (
+    <details className="mt-3 border-t border-line pt-3" onToggle={event => {
+      if (event.currentTarget.open) void load()
+    }}>
+      <summary className="cursor-pointer text-sm font-medium text-primary">Details & occurrence history</summary>
+      <div className="mt-3 space-y-4">
+        <div className="grid gap-2 text-sm sm:grid-cols-2">
+          <div><span className="text-muted">First due</span><p className="font-medium text-ink">{dateOnly(bill.due_at)}</p></div>
+          <div><span className="text-muted">Stop after</span><p className="font-medium text-ink">{bill.end_date ? new Date(`${bill.end_date}T00:00:00`).toLocaleDateString() : 'No end date'}</p></div>
+          <div><span className="text-muted">Payment</span><p className="font-medium text-ink">{bill.is_autopay ? 'Autopay' : 'Manual'}</p></div>
+          <div><span className="text-muted">Account/provider</span><p className="font-medium text-ink">{bill.provider || 'Not recorded'}</p></div>
+        </div>
+        {loading && <p className="text-sm text-muted">Loading occurrence history…</p>}
+        {loadError && (
+          <div className="flex items-center justify-between gap-3 rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">
+            <span>{loadError}</span>
+            <Button size="sm" variant="ghost" onClick={() => { setTimeline(null); void load() }}>Retry</Button>
+          </div>
+        )}
+        {timeline && (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div>
+              <h4 className="mb-2 text-sm font-semibold text-ink">Upcoming occurrences</h4>
+              {occurrenceList(timeline.upcoming, 'No upcoming occurrences generated.')}
+            </div>
+            <div>
+              <h4 className="mb-2 text-sm font-semibold text-ink">Recent history</h4>
+              {occurrenceList(timeline.history, 'No past occurrences yet.')}
+            </div>
+          </div>
+        )}
       </div>
     </details>
   )
@@ -268,6 +372,9 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError }: {
 }) {
   const [undoOccurrence, setUndoOccurrence] = useState<{ id: number; name: string } | null>(null)
   const [paying, setPaying] = useState<number | null>(null)
+  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [billSort, setBillSort] = useState('name-asc')
   const pay = async (bill: SolaceBill) => {
     if (!bill.next_occurrence_id) return
     setPaying(bill.next_occurrence_id)
@@ -293,6 +400,20 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError }: {
   const activeSetAside = bills.filter(bill => bill.is_active && bill.include_in_set_aside)
   const annualTotal = activeSetAside.reduce((sum, bill) => sum + Number(bill.annual_amount), 0)
   const fortnightlyTotal = activeSetAside.reduce((sum, bill) => sum + Number(bill.fortnightly_amount), 0)
+  const visibleBills = useMemo(() => {
+    const rows = bills.filter(bill => (
+      (categoryFilter === 'all' || bill.category === categoryFilter)
+      && (statusFilter === 'all' || (statusFilter === 'active' ? bill.is_active : !bill.is_active))
+    ))
+    return [...rows].sort((left, right) => {
+      if (billSort === 'name-desc') return right.name.localeCompare(left.name)
+      if (billSort === 'due-asc') return String(left.next_due_at || left.due_at || '9999').localeCompare(String(right.next_due_at || right.due_at || '9999'))
+      if (billSort === 'amount-desc') return Number(right.amount) - Number(left.amount)
+      if (billSort === 'annual-desc') return Number(right.annual_amount) - Number(left.annual_amount)
+      if (billSort === 'category-asc') return left.category.localeCompare(right.category) || left.name.localeCompare(right.name)
+      return left.name.localeCompare(right.name)
+    })
+  }, [billSort, bills, categoryFilter, statusFilter])
   return (
     <div className="flex flex-col gap-4">
       <BillForm categories={categories} onCreated={reload} onError={onError} />
@@ -303,9 +424,33 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError }: {
           <Card className="p-3"><p className="text-xl font-extrabold text-ink">{new Set(activeSetAside.map(bill => bill.category)).size}</p><p className="text-xs text-muted">Active categories</p></Card>
         </div>
       )}
+      {bills.length > 0 && (
+        <Card className="p-3">
+          <div className="grid gap-2 sm:grid-cols-3">
+            <Select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)}>
+              <option value="all">All categories</option>
+              {[...new Set(bills.map(bill => bill.category))].sort().map(category => <option key={category} value={category}>{cap(category)}</option>)}
+            </Select>
+            <Select value={statusFilter} onChange={event => setStatusFilter(event.target.value)}>
+              <option value="all">Active and paused</option>
+              <option value="active">Active only</option>
+              <option value="paused">Paused only</option>
+            </Select>
+            <Select value={billSort} onChange={event => setBillSort(event.target.value)}>
+              <option value="name-asc">Name A–Z</option>
+              <option value="name-desc">Name Z–A</option>
+              <option value="due-asc">Next due</option>
+              <option value="amount-desc">Highest payment</option>
+              <option value="annual-desc">Highest annual cost</option>
+              <option value="category-asc">Category</option>
+            </Select>
+          </div>
+          <p className="mt-2 text-xs text-muted">Showing {visibleBills.length} of {bills.length} bills.</p>
+        </Card>
+      )}
       {bills.length === 0 ? <EmptyState icon="💸" title="No bills yet" hint="" /> : (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {bills.map(b => (
+        visibleBills.length === 0 ? <EmptyState icon="🔎" title="No bills match these filters" hint="Try another category or status." /> : <div className="grid gap-3 lg:grid-cols-2">
+          {visibleBills.map(b => (
             <Card key={b.id} className="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -321,6 +466,7 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError }: {
               {b.notes && <p className="mt-3 text-sm text-muted">{b.notes}</p>}
               <div className="mt-3 flex items-center gap-2">
                 {b.recurrence_rule && <Badge tone="neutral">Recurring</Badge>}
+                {b.is_autopay && <Badge tone="success">Autopay</Badge>}
                 {!b.is_active && <Badge tone="neutral">Paused</Badge>}
                 {b.next_occurrence_id && b.is_active && (
                   <Button
@@ -333,6 +479,7 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError }: {
                   </Button>
                 )}
               </div>
+              <BillDetails bill={b} />
               {b.source_node
                 ? <p className="mt-3 border-t border-line pt-3 text-xs text-muted">Edit this linked bill from {cap(b.source_node)}.</p>
                 : <BillEditor bill={b} categories={categories} reload={reload} onError={onError} />}
@@ -753,6 +900,38 @@ function PurchaseEditor({ purchase, categories, reload, onError }: {
 function PurchasesTab({ purchases, categories, reload, onError }: {
   purchases: SolacePurchase[]; categories: string[]; reload: () => void; onError: (message: string) => void
 }) {
+  const QuickSave = ({ purchase }: { purchase: SolacePurchase }) => {
+    const [amount, setAmount] = useState('')
+    const [saving, setSaving] = useState(false)
+    const add = async () => {
+      setSaving(true)
+      try {
+        await api.addSolacePurchaseSavings(purchase.id, amount)
+        setAmount('')
+        reload()
+      } catch (error) {
+        onError(errMsg(error))
+      } finally {
+        setSaving(false)
+      }
+    }
+    if (!purchase.is_open || Number(purchase.remaining_amount) <= 0) return null
+    return (
+      <div className="mt-3 flex gap-2">
+        <Input
+          type="number"
+          min="0.01"
+          max={purchase.remaining_amount}
+          step="0.01"
+          value={amount}
+          onChange={event => setAmount(event.target.value)}
+          onKeyDown={event => { if (event.key === 'Enter' && Number(amount) > 0) void add() }}
+          placeholder="Add saved amount"
+        />
+        <Button size="sm" variant="ghost" onClick={add} loading={saving} disabled={Number(amount) <= 0}>Add</Button>
+      </div>
+    )
+  }
   return (
     <div className="flex flex-col gap-4">
       <PurchaseForm categories={categories} onCreated={reload} onError={onError} />
@@ -766,6 +945,7 @@ function PurchasesTab({ purchases, categories, reload, onError }: {
             <div className="mt-4 h-2 rounded-full bg-sunken overflow-hidden"><div className="h-full bg-primary" style={{ width: `${p.progress_percent}%` }} /></div>
             <p className="mt-2 text-sm text-muted">{money(p.remaining_amount)} left · {dateOnly(p.target_date)}</p>
             <div className="mt-2"><Badge tone={p.status === 'bought' ? 'success' : p.status === 'cancelled' ? 'neutral' : 'primary'}>{cap(p.status)}</Badge></div>
+            <QuickSave purchase={p} />
             <PurchaseEditor purchase={p} categories={categories} reload={reload} onError={onError} />
           </Card>
         ))}
@@ -885,7 +1065,10 @@ function PaydaysTab({ paydays, reload, onError }: {
               <Badge tone={p.is_active ? 'success' : 'neutral'}>{p.is_active ? 'Included' : 'Paused'}</Badge>
             </div>
             <div className="mt-3 flex items-center justify-between gap-3">
-              <DueBadge iso={p.pay_at} />
+              <div className="text-sm">
+                <p className="font-medium text-ink">Upcoming {dateOnly(p.next_pay_at)}</p>
+                <p className="text-xs text-muted">Known anchor {dateOnly(p.pay_at)}</p>
+              </div>
               <Button size="sm" variant="ghost" onClick={() => toggle(p)}>
                 {p.is_active ? 'Pause' : 'Include'}
               </Button>
@@ -898,18 +1081,44 @@ function PaydaysTab({ paydays, reload, onError }: {
   )
 }
 
-function ChecklistTab({ items, preferences, reload, onChange, onError }: {
+function ChecklistTab({ items, preferences, plan, generating, reload, onGenerate, onChange, onError }: {
   items: SolaceChecklistItem[]
   preferences: SolaceChecklistPreference[]
+  plan: SolacePayCyclePlan | null
+  generating: boolean
   reload: () => void
+  onGenerate: (date?: string) => void
   onChange: (items: SolaceChecklistItem[]) => void
   onError: (m: string) => void
 }) {
   const [title, setTitle] = useState('')
   const [saving, setSaving] = useState(false)
+  const [viewedPlan, setViewedPlan] = useState(plan)
+  const [loadingCycle, setLoadingCycle] = useState(false)
+  useEffect(() => setViewedPlan(plan), [plan])
+  const openCycle = async (date?: string) => {
+    setLoadingCycle(true)
+    try {
+      const selectedPlan = await api.getSolacePlan(date)
+      const selectedItems = await api.getSolaceChecklist({
+        date: selectedPlan.cycle_start,
+        latest: false,
+      })
+      setViewedPlan(selectedPlan)
+      onChange(selectedItems)
+    } catch (error) {
+      onError(errMsg(error))
+    } finally {
+      setLoadingCycle(false)
+    }
+  }
   const add = async () => {
     setSaving(true)
-    try { await api.createSolaceChecklistItem({ title }); setTitle(''); reload() }
+    try {
+      await api.createSolaceChecklistItem({ title })
+      setTitle('')
+      await openCycle(viewedPlan?.cycle_start)
+    }
     catch (e) { onError(errMsg(e)) }
     finally { setSaving(false) }
   }
@@ -954,13 +1163,32 @@ function ChecklistTab({ items, preferences, reload, onChange, onError }: {
   }
   return (
     <div className="flex flex-col gap-4">
+      {viewedPlan && (
+        <Card className="p-4">
+          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+            <div>
+              <p className="text-sm font-medium text-muted">Payday checklist</p>
+              <h2 className="text-lg font-bold text-ink">{dateOnly(viewedPlan.cycle_start)} – {dateOnly(viewedPlan.cycle_end)}</h2>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="ghost" onClick={() => openCycle()} disabled={loadingCycle}>Current</Button>
+              <Button size="sm" variant="ghost" onClick={() => openCycle(dayAfter(viewedPlan.cycle_end))} loading={loadingCycle}>Next</Button>
+              <Button size="sm" onClick={() => onGenerate(viewedPlan.cycle_start)} loading={generating} disabled={viewedPlan.buckets.length === 0}>
+                Create / refresh
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
       <Card className="p-4">
         <div className="flex flex-col gap-3 sm:flex-row">
           <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Move money to bills account" />
           <Button onClick={add} loading={saving} disabled={!title.trim()}>Add</Button>
         </div>
       </Card>
-      <div className="grid gap-2">
+      {items.length === 0 ? (
+        <EmptyState icon="✅" title="No checklist items for this cycle" hint="Create the generated transfer checklist or add a household item." />
+      ) : <div className="grid gap-2">
         {items.map(item => (
           <div key={item.id} className="flex items-center rounded-lg border border-line bg-surface">
             <button onClick={() => toggle(item)} className="flex min-w-0 flex-1 items-center justify-between px-4 py-3 text-left hover:bg-sunken/40">
@@ -978,7 +1206,7 @@ function ChecklistTab({ items, preferences, reload, onChange, onError }: {
             </Button>
           </div>
         ))}
-      </div>
+      </div>}
       {preferences.some(preference => preference.is_hidden) && (
         <Card className="p-4">
           <h3 className="font-semibold text-ink">Hidden generated items</h3>
@@ -1159,9 +1387,10 @@ function ScheduleTab({ schedule, month, loading, onMonth, onAction }: {
   )
 }
 
-function Overview({ bills, buckets, subscriptions, purchases, health, closeout, onTab }: {
+function Overview({ bills, buckets, subscriptions, purchases, health, closeout, forecast, onTab }: {
   bills: SolaceBill[]; buckets: SolaceBucket[]; subscriptions: SolaceSubscription[]
   purchases: SolacePurchase[]; health: SolaceHealth | null; closeout: SolaceCloseoutResponse | null
+  forecast: SolaceBalanceForecast | null
   onTab: (t: Tab) => void
 }) {
   const unpaidTotal = useMemo(() => bills.filter(b => !b.is_paid).reduce((sum, b) => sum + Number(b.amount || 0), 0), [bills])
@@ -1181,7 +1410,12 @@ function Overview({ bills, buckets, subscriptions, purchases, health, closeout, 
     <div className="space-y-4">
       <HealthPanel health={health} onManage={() => onTab('manage')} />
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {stat('Projected balance', closeout?.projected_balance === null || closeout?.projected_balance === undefined ? 'Not set' : money(closeout.projected_balance), 'closeout', closeout?.projected_balance && Number(closeout.projected_balance) < 0 ? 'danger' : 'primary')}
+        {stat(
+          `Available to withdraw (${forecast?.horizon_months || 12} mo)`,
+          forecast?.safe_to_withdraw === null || forecast?.safe_to_withdraw === undefined ? 'Not set' : money(forecast.safe_to_withdraw),
+          'forecast',
+          forecast?.is_covered === false ? 'danger' : forecast?.safe_to_withdraw && Number(forecast.safe_to_withdraw) > 0 ? 'success' : 'primary',
+        )}
         {stat('Unpaid this cycle', closeout ? money(closeout.summary.unpaid_total) : money(unpaidTotal), 'closeout', closeout?.summary.unpaid_count ? 'warning' : 'success')}
         {stat('Set aside', money(bucketTotal), 'buckets', 'primary')}
         {stat('Planned purchases', String(openPurchases.length), 'purchases', openPurchases.length ? 'warning' : 'success')}
@@ -1194,13 +1428,179 @@ function Overview({ bills, buckets, subscriptions, purchases, health, closeout, 
   )
 }
 
-function PayPlan({ plan, generating, onGenerate, onTab }: {
+function ForecastTab({ initial, onManage, onError }: {
+  initial: SolaceBalanceForecast | null
+  onManage: () => void
+  onError: (message: string) => void
+}) {
+  const [forecast, setForecast] = useState(initial)
+  const [months, setMonths] = useState(initial?.horizon_months || 12)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setForecast(initial)
+    setMonths(initial?.horizon_months || 12)
+  }, [initial])
+
+  const refresh = async (nextMonths = months) => {
+    setLoading(true)
+    try {
+      setForecast(await api.getSolaceForecast(nextMonths))
+    } catch (error) {
+      onError(errMsg(error))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!forecast) {
+    return <EmptyState icon="📈" title="Forecast is not available" hint="Refresh Solace to calculate the bills-account forecast." />
+  }
+  if (!forecast.latest_balance) {
+    return (
+      <div className="space-y-4">
+        <EmptyState
+          icon="🏦"
+          title="Record the bills-account balance"
+          hint={`Solace needs an opening balance to calculate what can be withdrawn. Based on scheduled cash flow, at least ${money(forecast.required_opening_balance)} is required through ${dateOnly(forecast.through)}.`}
+          action={<Button onClick={onManage}>Add balance</Button>}
+        />
+      </div>
+    )
+  }
+
+  const covered = forecast.is_covered === true
+  return (
+    <div className="space-y-4">
+      <Card className="p-4">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold text-ink">Bills-account forecast</h2>
+              <Badge tone={covered ? 'success' : 'danger'}>{covered ? 'All covered' : 'Shortfall'}</Badge>
+            </div>
+            <p className="mt-1 text-sm text-muted">
+              From the {money(forecast.opening_balance || '0')} balance recorded {dateOnly(forecast.latest_balance.snapshot_date)} through {dateOnly(forecast.through)}.
+            </p>
+          </div>
+          <div className="flex items-end gap-2">
+            <Field label="Forecast period">
+              <Select
+                value={months}
+                onChange={event => {
+                  const value = Number(event.target.value)
+                  setMonths(value)
+                  void refresh(value)
+                }}
+              >
+                {[3, 6, 12, 18, 24].map(value => <option key={value} value={value}>{value} months</option>)}
+              </Select>
+            </Field>
+            <Button variant="ghost" onClick={() => refresh()} loading={loading}>Refresh</Button>
+          </div>
+        </div>
+      </Card>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Card className="p-4">
+          <p className="text-sm font-medium text-muted">Available to withdraw</p>
+          <p className={`mt-1 text-3xl font-extrabold ${covered ? 'text-success' : 'text-danger'}`}>
+            {covered ? money(forecast.safe_to_withdraw || '0') : money('0')}
+          </p>
+          <p className="mt-1 text-xs text-muted">Keeps every listed bill covered plus the {money(forecast.buffer_amount)} safety buffer.</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm font-medium text-muted">Bills-only surplus</p>
+          <p className="mt-1 text-2xl font-extrabold text-ink">{money(forecast.bills_only_surplus || '0')}</p>
+          <p className="mt-1 text-xs text-muted">Maximum before preserving the safety buffer.</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm font-medium text-muted">Lowest forecast balance</p>
+          <p className={`mt-1 text-2xl font-extrabold ${Number(forecast.lowest_balance) < 0 ? 'text-danger' : 'text-ink'}`}>{money(forecast.lowest_balance || '0')}</p>
+          <p className="mt-1 text-xs text-muted">Reached {dateOnly(forecast.lowest_balance_date)}.</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm font-medium text-muted">Ending balance</p>
+          <p className="mt-1 text-2xl font-extrabold text-ink">{money(forecast.ending_balance || '0')}</p>
+          <p className="mt-1 text-xs text-muted">After expected transfers and bills.</p>
+        </Card>
+      </div>
+
+      {!covered && (
+        <Card className="border-danger/30 bg-danger/5 p-4">
+          <h3 className="font-bold text-danger">Projected shortfall of {money(forecast.shortfall || '0')}</h3>
+          <p className="mt-1 text-sm text-muted">
+            The account first reaches its lowest point on {dateOnly(forecast.lowest_balance_date)}. Increase Bills-bucket transfers or top up the account before then.
+          </p>
+        </Card>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card className="p-3"><p className="text-lg font-bold text-success">+{money(forecast.total_contributions)}</p><p className="text-xs text-muted">Expected Bills-bucket transfers</p></Card>
+        <Card className="p-3"><p className="text-lg font-bold text-ink">−{money(forecast.total_bills)}</p><p className="text-xs text-muted">Included bills + subscriptions due</p></Card>
+        <Card className="p-3"><p className="text-lg font-bold text-ink">{money(forecast.required_opening_balance)}</p><p className="text-xs text-muted">Minimum opening balance required</p></Card>
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="border-b border-line px-4 py-3">
+          <h3 className="font-bold text-ink">Forecast timeline</h3>
+          <p className="text-sm text-muted">Transfers are added and bills are deducted on their scheduled dates.</p>
+        </div>
+        {forecast.timeline.length === 0 ? (
+          <p className="p-4 text-sm text-muted">No scheduled bills or Bills-bucket transfers in this period.</p>
+        ) : (
+          <div className="divide-y divide-line">
+            {forecast.timeline.map(row => (
+              <details key={row.date} className="px-4 py-3">
+                <summary className="grid cursor-pointer list-none grid-cols-[1fr_auto] items-center gap-3 sm:grid-cols-[1fr_auto_auto_auto]">
+                  <span className="font-semibold text-ink">{dateOnly(row.date)}</span>
+                  <span className="hidden text-sm text-success sm:block">+{money(row.contributions)}</span>
+                  <span className="hidden text-sm text-muted sm:block">−{money(row.bills)}</span>
+                  <span className={`font-bold ${Number(row.projected_balance) < 0 ? 'text-danger' : 'text-ink'}`}>{money(row.projected_balance || '0')}</span>
+                </summary>
+                <div className="mt-3 space-y-1 border-t border-line pt-2 text-sm">
+                  {row.items.map((item, index) => (
+                    <div key={`${item.kind}-${item.record_id}-${index}`} className="flex justify-between gap-3">
+                      <span className="text-muted">{item.kind === 'contribution' ? 'Transfer from' : item.kind === 'subscription' ? 'Subscription' : 'Bill'} · {item.name}</span>
+                      <span className={item.kind === 'contribution' ? 'font-medium text-success' : 'font-medium text-ink'}>
+                        {item.kind === 'contribution' ? '+' : '−'}{money(item.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ))}
+          </div>
+        )}
+      </Card>
+      <p className="text-xs text-muted">
+        Forecasts use expected income allocations and scheduled bill amounts; they are not bank transactions. Update the balance snapshot whenever the real account changes materially.
+      </p>
+    </div>
+  )
+}
+
+function PayPlan({ plan, generating, onGenerate, onTab, onError }: {
   plan: SolacePayCyclePlan | null
   generating: boolean
-  onGenerate: () => void
+  onGenerate: (date?: string) => void
   onTab: (tab: Tab) => void
+  onError: (message: string) => void
 }) {
-  if (!plan) {
+  const [viewed, setViewed] = useState(plan)
+  const [loadingCycle, setLoadingCycle] = useState(false)
+  useEffect(() => setViewed(plan), [plan])
+  const openCycle = async (date?: string) => {
+    setLoadingCycle(true)
+    try {
+      setViewed(await api.getSolacePlan(date))
+    } catch (error) {
+      onError(errMsg(error))
+    } finally {
+      setLoadingCycle(false)
+    }
+  }
+  if (!viewed) {
     return (
       <EmptyState
         icon="🧮"
@@ -1215,14 +1615,18 @@ function PayPlan({ plan, generating, onGenerate, onTab }: {
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
           <div>
             <p className="text-sm font-medium text-muted">Pay cycle</p>
-            <h2 className="text-lg font-bold text-ink">{dateOnly(plan.cycle_start)} – {dateOnly(plan.cycle_end)}</h2>
+            <h2 className="text-lg font-bold text-ink">{dateOnly(viewed.cycle_start)} – {dateOnly(viewed.cycle_end)}</h2>
           </div>
-          <Button onClick={onGenerate} loading={generating} disabled={plan.buckets.length === 0}>
-            Create payday checklist
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="ghost" onClick={() => openCycle()} disabled={loadingCycle}>Current</Button>
+            <Button size="sm" variant="ghost" onClick={() => openCycle(dayAfter(viewed.cycle_end))} loading={loadingCycle}>Next</Button>
+            <Button onClick={() => onGenerate(viewed.cycle_start)} loading={generating} disabled={viewed.buckets.length === 0}>
+              Create payday checklist
+            </Button>
+          </div>
         </div>
       </Card>
-      {plan.sources.length === 0 && (
+      {viewed.sources.length === 0 && (
         <EmptyState
           icon="🧮"
           title="No income in this pay cycle"
@@ -1232,9 +1636,9 @@ function PayPlan({ plan, generating, onGenerate, onTab }: {
       )}
       <div className="grid gap-3 sm:grid-cols-3">
         {[
-          ['Expected income', money(plan.income_total)],
-          ['Bucket transfers', money(plan.allocated_total)],
-          ['Remaining after transfers', money(plan.remaining)],
+          ['Expected income', money(viewed.income_total)],
+          ['Bucket transfers', money(viewed.allocated_total)],
+          ['Remaining after transfers', money(viewed.remaining)],
         ].map(([label, value]) => (
           <Card key={label} className="p-4">
             <p className="text-2xl font-extrabold text-ink">{value}</p>
@@ -1247,22 +1651,22 @@ function PayPlan({ plan, generating, onGenerate, onTab }: {
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-ink">Required fortnightly set-aside</h3>
-              <Badge tone={plan.set_aside.is_covered ? 'success' : 'warning'}>
-                {plan.set_aside.is_covered ? 'Covered' : `${money(plan.set_aside.shortfall)} short`}
+              <Badge tone={viewed.set_aside.is_covered ? 'success' : 'warning'}>
+                {viewed.set_aside.is_covered ? 'Covered' : `${money(viewed.set_aside.shortfall)} short`}
               </Badge>
             </div>
             <p className="mt-1 text-sm text-muted">What needs to be reserved for bills, purchase goals and the safety buffer.</p>
           </div>
-          <p className="text-2xl font-extrabold text-ink">{money(plan.set_aside.required_total)}</p>
+          <p className="text-2xl font-extrabold text-ink">{money(viewed.set_aside.required_total)}</p>
         </div>
         <div className="mt-4 grid gap-2 border-t border-line pt-3 text-sm sm:grid-cols-4">
-          <div><p className="text-muted">Recurring bills</p><p className="font-semibold text-ink">{money(plan.set_aside.recurring_bills)}</p></div>
-          <div><p className="text-muted">Planned purchases</p><p className="font-semibold text-ink">{money(plan.set_aside.planned_purchases)}</p></div>
-          <div><p className="text-muted">Buffer</p><p className="font-semibold text-ink">{money(plan.set_aside.buffer)}</p></div>
-          <div><p className="text-muted">Bills buckets</p><p className="font-semibold text-ink">{money(plan.set_aside.bills_bucket_total)}</p></div>
+          <div><p className="text-muted">Recurring bills</p><p className="font-semibold text-ink">{money(viewed.set_aside.recurring_bills)}</p></div>
+          <div><p className="text-muted">Planned purchases</p><p className="font-semibold text-ink">{money(viewed.set_aside.planned_purchases)}</p></div>
+          <div><p className="text-muted">Buffer</p><p className="font-semibold text-ink">{money(viewed.set_aside.buffer)}</p></div>
+          <div><p className="text-muted">Bills buckets</p><p className="font-semibold text-ink">{money(viewed.set_aside.bills_bucket_total)}</p></div>
         </div>
       </Card>
-      {plan.buckets.length === 0 ? (
+      {viewed.buckets.length === 0 ? (
         <EmptyState
           icon="🪣"
           title="No active allocation rules"
@@ -1271,7 +1675,7 @@ function PayPlan({ plan, generating, onGenerate, onTab }: {
         />
       ) : (
         <Card className="divide-y divide-line">
-          {plan.buckets.map(bucket => (
+          {viewed.buckets.map(bucket => (
             <div key={bucket.bucket_id} className="flex items-center justify-between gap-3 px-4 py-3">
               <div>
                 <p className="font-semibold text-ink">{bucket.bucket_name}</p>
@@ -1283,7 +1687,7 @@ function PayPlan({ plan, generating, onGenerate, onTab }: {
         </Card>
       )}
       <div className="grid gap-3 lg:grid-cols-2">
-        {plan.sources.map(source => (
+        {viewed.sources.map(source => (
           <Card key={source.payday_id} className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -1332,6 +1736,7 @@ export function SolacePage() {
   const [health, setHealth] = useState<SolaceHealth | null>(null)
   const [categoryReport, setCategoryReport] = useState<SolaceCategoryReport | null>(null)
   const [closeout, setCloseout] = useState<SolaceCloseoutResponse | null>(null)
+  const [forecast, setForecast] = useState<SolaceBalanceForecast | null>(null)
   const [generatingChecklist, setGeneratingChecklist] = useState(false)
   const [schedule, setSchedule] = useState<SolaceSchedule | null>(null)
   const [scheduleMonth, setScheduleMonth] = useState(currentMonthKey)
@@ -1359,7 +1764,8 @@ export function SolacePage() {
       setBuckets(data.buckets); setSubscriptions(data.subscriptions); setChecklist(data.checklist)
       setPlan(data.plan); setSettings(data.settings); setCategories(data.categories)
       setBalances(data.balances); setHealth(data.health); setCategoryReport(data.category_report)
-      setCloseout(data.closeout); setChecklistPreferences(data.checklist_preferences)
+      setCloseout(data.closeout); setForecast(data.forecast)
+      setChecklistPreferences(data.checklist_preferences)
       setUnlocked(true)
       void loadSchedule()
     } catch (e) {
@@ -1392,11 +1798,15 @@ export function SolacePage() {
     } catch (e) { setError(errMsg(e)) }
   }
 
-  const generateChecklist = async () => {
+  const generateChecklist = async (date?: string) => {
     setGeneratingChecklist(true); setError('')
     try {
-      const items = await api.generateSolacePlanChecklist()
+      const [items, selectedPlan] = await Promise.all([
+        api.generateSolacePlanChecklist(date),
+        api.getSolacePlan(date),
+      ])
       setChecklist(items)
+      setPlan(selectedPlan)
       setTab('checklist')
     } catch (e) {
       setError(errMsg(e))
@@ -1414,6 +1824,7 @@ export function SolacePage() {
         occurrences: previous.occurrences.map(row => row.id === updated.id ? updated : row),
       } : previous)
       setBills(await api.getSolaceBills())
+      setForecast(await api.getSolaceForecast())
       void loadSchedule()
       return updated
     } catch (e) {
@@ -1436,6 +1847,7 @@ export function SolacePage() {
       <Tabs
         tabs={[
           { key: 'overview', label: 'Overview' },
+          { key: 'forecast', label: 'Forecast' },
           { key: 'schedule', label: 'Schedule' },
           { key: 'closeout', label: 'Closeout' },
           { key: 'plan', label: 'Pay plan' },
@@ -1450,7 +1862,8 @@ export function SolacePage() {
         active={tab}
         onChange={k => setTab(k as Tab)}
       />
-      {tab === 'overview' && <Overview bills={bills} buckets={buckets} subscriptions={subscriptions} purchases={purchases} health={health} closeout={closeout} onTab={setTab} />}
+      {tab === 'overview' && <Overview bills={bills} buckets={buckets} subscriptions={subscriptions} purchases={purchases} health={health} closeout={closeout} forecast={forecast} onTab={setTab} />}
+      {tab === 'forecast' && <ForecastTab initial={forecast} onManage={() => setTab('manage')} onError={setError} />}
       {tab === 'schedule' && (
         <ScheduleTab
           schedule={schedule}
@@ -1461,13 +1874,13 @@ export function SolacePage() {
         />
       )}
       {tab === 'closeout' && <CloseoutTab closeout={closeout} reload={load} onOccurrence={updateOccurrence} onError={setError} />}
-      {tab === 'plan' && <PayPlan plan={plan} generating={generatingChecklist} onGenerate={generateChecklist} onTab={setTab} />}
+      {tab === 'plan' && <PayPlan plan={plan} generating={generatingChecklist} onGenerate={generateChecklist} onTab={setTab} onError={setError} />}
       {tab === 'bills' && <BillsTab bills={bills} categories={(categories.filter(category => category.is_active && ['bill', 'both'].includes(category.category_type)).map(category => category.name).length ? categories.filter(category => category.is_active && ['bill', 'both'].includes(category.category_type)).map(category => category.name) : BILL_CATS)} reload={load} onOccurrence={updateOccurrence} onError={setError} />}
       {tab === 'buckets' && <BucketsTab buckets={buckets} reload={load} onError={setError} />}
       {tab === 'subscriptions' && <SubscriptionsTab subscriptions={subscriptions} reload={load} onError={setError} />}
       {tab === 'purchases' && <PurchasesTab purchases={purchases} categories={categories.filter(category => category.is_active && ['purchase', 'both'].includes(category.category_type)).map(category => category.name)} reload={load} onError={setError} />}
       {tab === 'paydays' && <PaydaysTab paydays={paydays} reload={load} onError={setError} />}
-      {tab === 'checklist' && <ChecklistTab items={checklist} preferences={checklistPreferences} reload={load} onChange={setChecklist} onError={setError} />}
+      {tab === 'checklist' && <ChecklistTab items={checklist} preferences={checklistPreferences} plan={plan} generating={generatingChecklist} reload={load} onGenerate={generateChecklist} onChange={setChecklist} onError={setError} />}
       {tab === 'manage' && (
         <ManagementTab
           settings={settings}

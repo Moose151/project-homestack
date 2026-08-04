@@ -72,14 +72,14 @@ def build_pay_cycle_plan(
     """
     as_of = as_of or timezone.localdate()
     dated_paydays = [row for row in paydays if row.pay_at]
-    if dated_paydays:
-        cycle_start = min(timezone.localdate(row.pay_at) for row in dated_paydays)
+    if cycle_anchor:
+        cycle_start = cycle_anchor
         while cycle_start > as_of:
             cycle_start -= timedelta(days=14)
         while cycle_start + timedelta(days=14) <= as_of:
             cycle_start += timedelta(days=14)
-    elif cycle_anchor:
-        cycle_start = cycle_anchor
+    elif dated_paydays:
+        cycle_start = min(timezone.localdate(row.pay_at) for row in dated_paydays)
         while cycle_start > as_of:
             cycle_start -= timedelta(days=14)
         while cycle_start + timedelta(days=14) <= as_of:

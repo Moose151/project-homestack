@@ -7,14 +7,16 @@ opt-in **nodes** (areas of household life), and a touchscreen **kiosk** for the 
 
 > **Source of truth:** the canonical docs live in [`docs/`](docs/). Read
 > [`HANDOVER.md`](HANDOVER.md) first, then `docs/00_README_and_Changelog.md` (decisions
-> D1–D18) and `docs/MILESTONE_1_Checklist.md`. If anything conflicts, the doc set wins.
+> D1–D21) and the relevant milestone checklist. If anything conflicts, the doc set wins.
 
 ## Status
 
-Milestone 1 (Walking Skeleton), Milestone 2 (Native Meridian), and Milestone 2.5 (Core Hub,
-Atlas, Calendar) are **complete**. M2.5 delivered configurable Hub widgets, Atlas FTS/UX polish,
-web + kiosk Calendar views, every-page Calendar access, and cross-surface permission/sync tests.
-Next: Milestone 3 (Home Wiki, Pets, Education). See `docs/MILESTONE_2.5_Checklist.md`.
+Milestones 1–3 are complete, including the walking skeleton, native Meridian, the core
+Hub/Atlas/Calendar surfaces, Education, Home Wiki and Pets. Homestead is available, and native
+Solace has reached standalone feature parity in v0.16.0, including a dated bills-account
+forecast and safe-withdrawal calculation. The immediate work is to deploy the latest migrations,
+import and compare the real finance data, then accept the responsive phone/laptop workflow before
+retiring standalone Solace. See [`HANDOVER.md`](HANDOVER.md).
 
 ## Tech stack
 

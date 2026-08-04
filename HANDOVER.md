@@ -96,8 +96,9 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: Solace bill occurrence/calendar parity complete locally (2026-07-29, v0.14.0) —
-deploy/live validation and remaining cutover features are next; kiosk work remains deferred.**
+**Phase: native Solace feature parity complete locally (2026-07-30, v0.16.0) —
+production deploy, real-data comparison and owner cutover acceptance are next; kiosk work
+remains deferred.**
 
 > **Owner direction, 2026-07-29.** Focus on usability, functionality, response time, navigation
 > and layout across the responsive web app. v0.12.0 delivers the shared foundation: route
@@ -124,7 +125,7 @@ deploy/live validation and remaining cutover features are next; kiosk work remai
 > exist` 500s (this bit us on the Hub page after `atlas.0002` added `quantity`/`due_at`).
 
 - [x] Documentation consolidated to one canonical set (docs 00–22 + Milestone 1/2 checklists).
-- [x] All architectural decisions made (D1–D20).
+- [x] All architectural decisions made (D1–D21).
 - [x] **Milestone 1 (Walking Skeleton) — DONE** (Phases 1.0–1.12). Only outstanding item:
   deploy to the home server for daily use (running via Podman locally).
 - [~] **Milestone 2: native Meridian — functional, now under parity/cockpit revisit (owner
@@ -192,7 +193,8 @@ deploy/live validation and remaining cutover features are next; kiosk work remai
   response-time, reliability, layout and accessibility foundation delivered across all web
   surfaces. Kiosk equivalents remain deferred.
 - [ ] Milestone 4: security maturation.
-- [~] **Milestone 5: native Solace — shell, importer, pay planner and bill schedule shipped (v0.14.0).**
+- [~] **Milestone 5: native Solace — standalone feature parity complete locally (v0.16.0);
+  production cutover validation remains.**
   Backend `apps/solace` covers bills, paydays, planned purchases, budget buckets/set-asides,
   subscriptions and payday checklist items. All rows default to `visibility="sensitive"` +
   `sensitivity="financial"`. Bills/paydays/subscriptions/planned purchases sync to Calendar via
@@ -202,15 +204,25 @@ deploy/live validation and remaining cutover features are next; kiosk work remai
   until re-auth; Solace Hub widgets return content only when unlocked and authorised. Frontend
   `/solace` route shipped with password unlock, overview, search and tabs. `import_solace`
   now dry-runs/imports the local legacy SQLite DB (`/home/moose/Documents/project-solace`):
-  recurring bills/subscriptions, paydays, planned purchases, buckets and latest payday-checklist
-  cycle. v0.13.0 restores native fortnightly pay planning with structured percentage/fixed
+  settings, categories, recurring bills and occurrence history, paydays, planned purchases,
+  buckets, balances, preferences, closeouts and the latest payday-checklist cycle. Legacy
+  subscription-category recurring payments remain Bills so their occurrence and set-aside
+  history stays intact; native subscriptions remain available for separately managed records.
+  v0.13.0 restores native fortnightly pay planning with structured percentage/fixed
   bucket rules, proportional household fixed amounts, rounding/caps, per-income splits and
   idempotent cycle-checklist generation. v0.14.0 adds independent recurring bill occurrences,
   month-end-safe generation, paid/unpaid/skipped actions, monthly bill/income calendar/list,
   full Bill management/cost summaries, legacy occurrence import and working finance Hub cards.
-  See `docs/SOLACE_PARITY_CHECKLIST.md`. **Still to do for full M5/cutover:** cycle closeout,
-  account-balance snapshots/health, full edit/delete depth on the remaining finance records,
-  exports, notifications, attachments, live home-server comparison and standalone retirement.
+  v0.15.0 completes closeout/reconciliation, account balances and projections, finance health,
+  complete record management, custom categories, settings, set-aside coverage, CSV/XLSX
+  export, reviewed bill import and generic scheduled reminders. v0.16.0 adds the auditable
+  3–24 month bills-account cash-flow forecast and closes the deeper standalone workflow gaps:
+  bill autopay/stop dates/history/edit scope and filtering, current/next pay plans and
+  checklists, standard payday workflow steps, calculated upcoming income dates, purchase
+  quick-saving, normalised/filterable category reporting and fuller setup health checks. See
+  `docs/SOLACE_PARITY_CHECKLIST.md`. **Still to do for cutover:** deploy migrations/import real
+  data, compare a full pay cycle and monthly schedule, accept the phone/laptop workflow, then
+  retire standalone Solace.
 - [~] **Homestead node — SHIPPED (2026-07-21; costs & cover v0.11.2, decision D21).** The household's home/property
   hub (maintenance, appliances/warranties, service contacts, improvements + property record). Folds the
   *home* scope of the planned **Assets** node. Protected insurance + rates/water/gas/utility cost
@@ -218,13 +230,28 @@ deploy/live validation and remaining cutover features are next; kiosk work remai
   See spec `25_Node_Homestead.md`.
 - [ ] Milestone 6: Inventory, Assets (non-home only, or retire — see D21), Hearth, Travel, Projects, Health.
 
-## 6. Active task — deploy and validate Solace v0.14.0
+## 6. Active task — deploy and validate Solace v0.16.0
 
-**Immediate next concrete step:** deploy v0.14.0, run `migrate` through
-`solace.0004_bill_occurrences`, then rerun the Solace importer dry-run/apply so existing bucket
-rules and historical occurrence states are enriched. Compare one standalone month against the
-new Schedule: bill dates/totals, paid/skipped state, income dates and month-end bills. Then verify
-Bill edit/pause, pay/Undo and Hub finance cards on phone and laptop.
+**Immediate next concrete step:** rebuild both production images (the backend now needs
+`openpyxl`), deploy v0.16.0, and run `migrate` through `solace.0007`. Rerun the Solace importer
+dry-run/apply so settings, categories, bucket rules, historical occurrences, balances,
+preferences and closeouts are enriched, then run the read-only `import_solace --verify`.
+Compare a full standalone pay cycle and month against the native Pay plan/Schedule: bill dates
+and totals, paid/skipped state, income dates, transfers, month-end bills and closeout. Record a
+fresh bills-account balance and verify the Forecast event trail, lowest balance, shortfall and
+safe-withdrawal amount against the real account. Then verify management, import/export,
+reminders, pay/Undo and Hub finance cards on phone and laptop. Retire standalone Solace only
+after the owner accepts those checks.
+
+Production command sequence (copy the legacy database into the container first because the host
+path is not mounted there):
+
+```bash
+docker cp /path/to/solace.db homestack-backend:/tmp/solace.db
+docker exec homestack-backend python manage.py import_solace --sqlite-db /tmp/solace.db --dry-run
+docker exec homestack-backend python manage.py import_solace --sqlite-db /tmp/solace.db
+docker exec homestack-backend python manage.py import_solace --sqlite-db /tmp/solace.db --verify
+```
 
 **Working rhythm (proven this milestone):** small workstream → backend (models/migration/services/
 selectors/serializers/views/urls) → tests → frontend (types/client → UI) → `tsc` + `npm run build`
@@ -356,6 +383,8 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-07-29 | Assistant | Daily UX | **Daily-use experience milestone shipped (v0.12.0).** Navigation: contextual shell header, global Search (`Ctrl/⌘ K`) + Create, custom mobile bottom bar, URL-backed node tabs, scroll restoration and working quick-create deep links. Functionality: canonical permission-aware `/api/v1/search/` aggregates Calendar + enabled nodes in one request; locked Solace is reported without searching/leaking it. Performance: route lazy-loading cut initial JS ~543→245 KB (gzip 137→75 KB); shared People/Users/Nodes/Household requests dedupe/cache with auth-boundary clearing; API `Server-Timing` + >500 ms slow logging. Reliability: self-password reset preserves the Django session; global auth-expiry, offline/network, retry/load/error states. Layout/accessibility: shared Hub/admin headers, focus-trapped mobile sheets, keyboard tabs, touch/focus/reduced-motion improvements. Fast actions: optimistic Atlas/Solace completion and Undo for paid bills. **526 backend tests green; production frontend build clean; no migration drift.** | **Deploy:** rebuild backend + frontend images; **no database migration is introduced by v0.12.0** (running the standard `migrate` remains safe). Hard-refresh once after deploy so the new split frontend assets replace the old bundle. Then live-test common phone/laptop journeys and use `Server-Timing`/slow logs for the next targeted pass. |
 | 2026-07-29 | Assistant | M5 | **Solace pay-cycle planning built (v0.13.0).** Ported the standalone app's core pay-split workflow into the native protected node. New pure budget engine calculates the current 14-day cycle, recurring income occurrences, per-income percentage allocations, proportional shares of fixed household allocations, rounding and remaining-pay caps. Buckets now hold structured allocation rules/order/active state; paydays can be paused; the new Pay plan tab shows household and source breakdowns and creates idempotent cycle-specific checklist transfers without resetting completed rows. The importer now preserves/enriches legacy bucket rules and checklist cycle/source keys. All routes remain permission/re-auth/audit gated. **530 backend tests green; production frontend build clean; no migration drift.** | **Deploy:** rebuild backend/frontend, run `migrate` (`solace.0003_budget_planner`), rerun `import_solace` dry-run/apply to enrich already imported zero-rule buckets, then verify real two-income totals against standalone Solace. Remaining M5: richer edit/delete, notifications, attachments and cutover. |
 | 2026-07-29 | Assistant | M5 | **Solace recurring bill schedule built (v0.14.0).** Added `BillOccurrence` as the independent due-date/status record so paying one recurring occurrence no longer permanently pays the definition. Generator ports standalone weekly/fortnightly/monthly/quarterly/six-monthly/yearly behaviour and clamps the 29th–31st correctly without drift. New protected Schedule API/UI combines monthly bill occurrences and recurring income with calendar/list views, totals and paid/unpaid/skipped/restore actions. Bills now have responsive create/edit/pause/delete, set-aside inclusion, annual/fortnightly costs and summaries. Importer idempotently restores legacy occurrence history. Existing Solace Hub widgets now render useful finance cards. Added `docs/SOLACE_PARITY_CHECKLIST.md`. **Expected 535 backend tests after final validation; production build clean; no migration drift.** | **Deploy:** rebuild both images, run `migrate` (`solace.0004_bill_occurrences`), rerun the importer dry-run/apply, then compare a real standalone month and pay cycle. Next parity slice: cycle closeout + account balance/health, then remaining record edit/delete, exports and notifications. |
+| 2026-07-30 | Assistant | M5 | **Standalone Solace feature parity completed (v0.15.0).** Added cycle closeout/reconciliation, balance snapshots/projections, finance health, full management flows, custom categories, checklist preferences, Solace settings, required set-aside/coverage, CSV/XLSX export, reviewed bill import and generic scheduled reminders. Expanded the idempotent legacy importer to bring across the remaining standalone state and validated it read-only against the live local SQLite database. The responsive Solace workspace now loads through one bootstrap request. Follow-up corrected the omitted v0.15 version/handover/README records, removed a dead importer statistic, fixed the configured pay-cycle anchor so it remains authoritative when income sources exist, and added read-only `import_solace --verify` cutover checks with actionable record/field drift reporting. **549 backend tests green; frontend type-check and production build clean; no migration drift.** | **Deploy/cutover:** rebuild both images (backend adds `openpyxl`), migrate through `solace.0006`, copy the legacy SQLite DB into the backend container, run importer dry-run/apply/verify, compare a full real pay cycle and month, then accept phone/laptop workflows before retiring standalone Solace. Docker is not installed in this development environment, so production deploy remains an owner/home-server operation. |
+| 2026-07-30 | Assistant | M5 | **Solace cash-flow forecast and deep standalone parity (v0.16.0).** Added an audited 3–24 month bills-account forecast that combines the latest balance, expected Bills-bucket transfers, included bills and active subscriptions into a dated running balance; it reports the low point/risk date, required opening balance, shortfall, bills-only surplus and buffer-preserving safe withdrawal. Ported bill autopay/stop dates and 12+12 occurrence detail, filter/sort, six-monthly entry and protected future/all-unpaid edit scope; current/next Pay plan and Checklist navigation; confirm-income/review-bills/record-balance steps; calculated upcoming paydays; capped purchase quick-saving; standalone-equivalent category report filters/period totals; and expanded health checks. Import/verify now preserves bill stop/autopay fields. **560 backend tests green; frontend type-check + production build clean; no migration drift.** | **Deploy/cutover:** rebuild both images, migrate through `solace.0007`, copy the legacy SQLite DB into the container, run importer dry-run/apply/verify, record a fresh real bills-account balance, and validate the forecast timeline/safe-withdrawal value plus a full pay cycle/month on phone and laptop before retiring standalone Solace. |
 
 ### Session notes (free-form, optional)
 

@@ -1,11 +1,64 @@
 # HomeStack — Version History
 
-> **Current version: 0.14.0**
+> **Current version: 0.16.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
 >
 > **Rule:** bump the version and add a row here with every push to `main`.
+
+---
+
+## 0.16 — Solace cash-flow forecast and deep parity
+
+### 0.16.0 — 2026-07-30
+- **Bills-account forecast** — a protected 3–24 month cash-flow forecast starts from the latest
+  manual balance, adds expected Bills-bucket transfers, subtracts included bills and active
+  subscriptions, and exposes the full dated running-balance trail. It reports the lowest
+  projected balance, first risk date, required opening balance, bills-only surplus, shortfall,
+  and the amount withdrawable while retaining the configured safety buffer.
+- **Bill lifecycle depth** — recurring bills now preserve standalone autopay and optional
+  stop-after metadata, expose 12 upcoming and 12 historical occurrences, support six-monthly
+  entry, category/status sorting and filtering, and let edits refresh future unpaid or all
+  budget-year unpaid occurrences while always preserving paid history.
+- **Payday workflow parity** — Pay plan and Checklist can navigate current/next cycles. Generated
+  checklists now include confirm-income, transfer, review-due-bills and record-balance steps.
+  Income cards distinguish the known recurrence anchor from the calculated upcoming payday.
+- **Management and reporting parity** — purchase cards have capped quick-add saving; category
+  reports include active/set-aside filters and weekly, fortnightly, monthly and yearly totals;
+  finance health checks cover fallback categories, remainder rules, percentage ranges and
+  missing Bills buckets.
+- **Cutover confidence** — the legacy importer preserves/enriches stop dates and autopay, and
+  read-only `import_solace --verify` performs natural-key and financially significant field
+  comparison before retirement of the standalone app.
+- Database migration required: `solace.0007_bill_end_date_bill_is_autopay`.
+- Validation: **560 backend tests**, frontend TypeScript check and production build clean; no
+  migration drift.
+
+---
+
+## 0.15 — Solace standalone parity
+
+### 0.15.0 — 2026-07-29
+- **Pay-cycle closeout and projections** — added current/next cycle navigation, close/reopen
+  reconciliation, checklist progress, manual account-balance history and projected balances
+  after unpaid bills.
+- **Finance health and planning depth** — actionable setup/overdue/balance checks, configurable
+  cycle anchor and payday-boundary handling, required fortnightly set-aside, category summaries,
+  coverage and shortfall reporting. A configured cycle anchor is authoritative even after
+  income sources have been added.
+- **Complete management workflows** — responsive create/edit/pause/status/delete flows for
+  purchases, income, buckets and subscriptions; custom bill/purchase categories; checklist
+  hiding/restoration; currency, buffer, budget-year, help and reminder settings.
+- **Cutover tooling** — CSV exports, a readable multi-sheet XLSX backup, preview/confirm/cancel
+  bill imports, generic finance-safe scheduled reminders, and full-state legacy migration for
+  settings, categories, recurring bills and occurrence history, income, purchases, buckets,
+  balances, checklist preferences and closeouts. Legacy subscription-category recurring
+  payments remain Bills so their occurrence and set-aside history stays intact. A read-only
+  `import_solace --verify` mode reports missing or drifted imported values before retirement.
+- **Performance** — the Solace workspace now loads through one consolidated bootstrap request.
+- Database migrations required: `solace.0005` and `solace.0006`. The backend image must be
+  rebuilt so the new `openpyxl` dependency is installed.
 
 ---
 

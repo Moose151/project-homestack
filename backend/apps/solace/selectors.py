@@ -63,8 +63,32 @@ def list_bills(
     return list(qs)
 
 
-def get_bill(pk: int) -> Bill | None:
-    return Bill.objects.filter(pk=pk).first()
+def get_bill(pk: int, user=None) -> Bill | None:
+    qs = Bill.objects.filter(pk=pk)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return qs.first()
+
+
+def get_bill_occurrence_timeline(
+    user,
+    bill: Bill,
+    *,
+    as_of: date | None = None,
+    limit: int = 12,
+) -> dict:
+    as_of = as_of or timezone.localdate()
+    qs = apply_visibility(
+        BillOccurrence.objects.filter(
+            bill=bill,
+            bill__deleted_at__isnull=True,
+        ),
+        user,
+    )
+    return {
+        "upcoming": list(qs.filter(due_at__date__gte=as_of).order_by("due_at")[:limit]),
+        "history": list(qs.filter(due_at__date__lt=as_of).order_by("-due_at")[:limit]),
+    }
 
 
 def list_bill_occurrences(user, *, start, end, status: str = ""):
@@ -120,8 +144,11 @@ def list_purchases(user=None, *, open_only: bool = False, limit: int | None = No
     return list(qs)
 
 
-def get_purchase(pk: int) -> PlannedPurchase | None:
-    return PlannedPurchase.objects.filter(pk=pk).first()
+def get_purchase(pk: int, user=None) -> PlannedPurchase | None:
+    qs = PlannedPurchase.objects.filter(pk=pk)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return qs.first()
 
 
 def list_buckets(user=None, *, active_only: bool = False, limit: int | None = None):
@@ -220,8 +247,13 @@ def get_balance_snapshot(pk: int) -> AccountBalanceSnapshot | None:
     return AccountBalanceSnapshot.objects.filter(pk=pk).first()
 
 
-def get_latest_balance(user=None) -> AccountBalanceSnapshot | None:
-    rows = list_balance_snapshots(user, limit=1)
+def get_latest_balance(user=None, *, as_of: date | None = None) -> AccountBalanceSnapshot | None:
+    qs = AccountBalanceSnapshot.objects.order_by("-snapshot_date", "-id")
+    if as_of is not None:
+        qs = qs.filter(snapshot_date__lte=as_of)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    rows = list(qs[:1])
     return rows[0] if rows else None
 
 

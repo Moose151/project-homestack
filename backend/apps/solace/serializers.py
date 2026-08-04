@@ -1,6 +1,8 @@
 """solace serializers."""
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -37,8 +39,9 @@ class BillSerializer(serializers.ModelSerializer):
         model = Bill
         fields = [
             "id", "name", "category", "provider", "amount", "due_at", "is_all_day",
-            "recurrence_rule", "is_paid", "paid_at", "notes", "is_overdue",
-            "is_active", "include_in_set_aside", "next_due_at", "next_occurrence_id",
+            "recurrence_rule", "end_date", "is_paid", "paid_at", "notes", "is_overdue",
+            "is_active", "is_autopay", "include_in_set_aside",
+            "next_due_at", "next_occurrence_id",
             "annual_amount", "fortnightly_amount",
             "source_node", "source_record_type", "source_record_id",
             "calendar_event_id", "visibility", "sensitivity", "created_at", "updated_at",
@@ -52,6 +55,16 @@ class BillSerializer(serializers.ModelSerializer):
 
     def validate_name(self, value: str) -> str:
         return _non_blank(value)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        due_at = attrs.get("due_at", getattr(self.instance, "due_at", None))
+        end_date = attrs.get("end_date", getattr(self.instance, "end_date", None))
+        if due_at and end_date and timezone.localdate(due_at) > end_date:
+            raise serializers.ValidationError(
+                {"end_date": "Stop-after date must be on or after the first due date."}
+            )
+        return attrs
 
     def get_next_due_at(self, obj):
         occurrence = self._next_occurrence(obj)
@@ -111,17 +124,38 @@ class BillOccurrenceSerializer(serializers.ModelSerializer):
 
 
 class PaydaySerializer(serializers.ModelSerializer):
+    next_pay_at = serializers.SerializerMethodField()
+
     class Meta:
         model = Payday
         fields = [
             "id", "title", "expected_amount", "pay_at", "is_all_day", "recurrence_rule",
-            "received_at", "is_active", "notes", "calendar_event_id", "visibility", "sensitivity",
+            "next_pay_at", "received_at", "is_active", "notes", "calendar_event_id",
+            "visibility", "sensitivity",
             "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "calendar_event_id", "created_at", "updated_at"]
+        read_only_fields = [
+            "id", "next_pay_at", "calendar_event_id", "created_at", "updated_at",
+        ]
 
     def validate_title(self, value: str) -> str:
         return _non_blank(value)
+
+    def get_next_pay_at(self, obj: Payday):
+        if not obj.is_active or not obj.pay_at:
+            return None
+        anchor = obj.pay_at
+        if timezone.is_naive(anchor):
+            anchor = timezone.make_aware(anchor, timezone.get_current_timezone())
+        now = timezone.now()
+        if not obj.recurrence_rule:
+            return anchor if anchor >= now else None
+        try:
+            from dateutil.rrule import rrulestr
+
+            return rrulestr(obj.recurrence_rule, dtstart=anchor).after(now, inc=True)
+        except (TypeError, ValueError):
+            return anchor if anchor >= now else None
 
 
 class PlannedPurchaseSerializer(serializers.ModelSerializer):
@@ -144,6 +178,14 @@ class PlannedPurchaseSerializer(serializers.ModelSerializer):
 
     def validate_name(self, value: str) -> str:
         return _non_blank(value)
+
+
+class PurchaseSavingsSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+    )
 
 
 class BudgetBucketSerializer(serializers.ModelSerializer):

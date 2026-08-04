@@ -35,7 +35,9 @@ def bill_rows(user) -> list[dict]:
             "provider": row.provider,
             "due_at": row.due_at.isoformat() if row.due_at else "",
             "recurrence_rule": row.recurrence_rule,
+            "end_date": row.end_date.isoformat() if row.end_date else "",
             "active": _yes(row.is_active),
+            "autopay": _yes(row.is_autopay),
             "include_in_set_aside": _yes(row.include_in_set_aside),
             "notes": row.notes,
         }
@@ -287,6 +289,10 @@ def parse_bill_import_rows(rows: list[dict]) -> tuple[list[dict], int]:
                     preview["errors"].append(f"Unsupported frequency: {frequency}")
                 recurrence = _FREQUENCIES.get(frequency, "")
             due_at = _due_at(row, frequency)
+            end_value = str(_pick(row, "end_date", "stop_after", default="")).strip()
+            end_date = parse_date(end_value) if end_value else None
+            if end_value and end_date is None:
+                preview["errors"].append("Stop-after date must use YYYY-MM-DD.")
             preview.update(
                 {
                     "name": name,
@@ -295,7 +301,9 @@ def parse_bill_import_rows(rows: list[dict]) -> tuple[list[dict], int]:
                     "provider": str(_pick(row, "provider", "account_name", "account", default="")).strip(),
                     "due_at": due_at.isoformat() if due_at else None,
                     "recurrence_rule": recurrence,
+                    "end_date": end_date.isoformat() if end_date else None,
                     "is_active": _bool(_pick(row, "is_active", "active", default="yes")),
+                    "is_autopay": _bool(_pick(row, "is_autopay", "autopay", default="no")),
                     "include_in_set_aside": _bool(
                         _pick(row, "include_in_set_aside", "include", default="yes")
                     ),

@@ -842,7 +842,9 @@ export interface SolaceBill {
   due_at: string | null
   is_all_day: boolean
   recurrence_rule: string
+  end_date: string | null
   is_active: boolean
+  is_autopay: boolean
   include_in_set_aside: boolean
   is_paid: boolean
   paid_at: string | null
@@ -879,6 +881,12 @@ export interface SolaceBillOccurrence {
   updated_at: string
 }
 
+export interface SolaceBillTimeline {
+  bill: SolaceBill
+  upcoming: SolaceBillOccurrence[]
+  history: SolaceBillOccurrence[]
+}
+
 export interface SolaceIncomeEvent {
   payday_id: number
   title: string
@@ -905,6 +913,7 @@ export interface SolacePayday {
   title: string
   expected_amount: string
   pay_at: string | null
+  next_pay_at: string | null
   is_all_day: boolean
   recurrence_rule: string
   received_at: string | null
@@ -1088,6 +1097,42 @@ export interface SolaceBalanceSnapshot {
   updated_at: string
 }
 
+export interface SolaceBalanceForecastItem {
+  kind: 'bill' | 'subscription' | 'contribution'
+  name: string
+  amount: string
+  record_id: number
+  status: string
+}
+
+export interface SolaceBalanceForecast {
+  as_of: string
+  forecast_start: string
+  through: string
+  horizon_months: number
+  latest_balance: SolaceBalanceSnapshot | null
+  opening_balance: string | null
+  buffer_amount: string
+  total_bills: string
+  total_contributions: string
+  required_opening_balance: string
+  ending_balance: string | null
+  lowest_balance: string | null
+  lowest_balance_date: string
+  bills_only_surplus: string | null
+  safe_to_withdraw: string | null
+  shortfall: string | null
+  is_covered: boolean | null
+  timeline: {
+    date: string
+    contributions: string
+    bills: string
+    net_change: string
+    projected_balance: string | null
+    items: SolaceBalanceForecastItem[]
+  }[]
+}
+
 export interface SolaceChecklistPreference {
   id: number
   source_key: string
@@ -1149,11 +1194,18 @@ export interface SolaceCategoryReport {
   categories: {
     category: string
     bill_count: number
+    weekly_total: string
     annual_total: string
     fortnightly_total: string
+    monthly_total: string
   }[]
+  bill_count: number
+  weekly_total: string
   annual_total: string
   fortnightly_total: string
+  monthly_total: string
+  active_only: boolean
+  included_only: boolean
 }
 
 export interface SolaceBootstrap {
@@ -1170,6 +1222,7 @@ export interface SolaceBootstrap {
   health: SolaceHealth
   category_report: SolaceCategoryReport
   closeout: SolaceCloseoutResponse
+  forecast: SolaceBalanceForecast
   checklist_preferences: SolaceChecklistPreference[]
 }
 
@@ -1182,7 +1235,9 @@ export interface SolaceBillImportRow {
   provider?: string
   due_at?: string | null
   recurrence_rule?: string
+  end_date?: string | null
   is_active?: boolean
+  is_autopay?: boolean
   include_in_set_aside?: boolean
   notes?: string
 }

@@ -12,7 +12,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.utils import timezone
 
-from apps.solace.models import Bill, BillOccurrence
+from apps.solace.models import Bill, BillOccurrence, SolaceSettings
 
 _PENNY = Decimal("0.01")
 
@@ -27,9 +27,9 @@ def _rule_parts(value: str) -> dict[str, str]:
     }
 
 
-def annual_cost(bill: Bill) -> Decimal:
+def annual_cost(bill: Bill, *, include_inactive: bool = False) -> Decimal:
     """Annualised bill amount using the same frequency factors as standalone Solace."""
-    if not bill.is_active:
+    if not bill.is_active and not include_inactive:
         return Decimal("0.00")
     parts = _rule_parts(bill.recurrence_rule)
     interval = max(1, int(parts.get("INTERVAL", "1") or 1))
@@ -72,6 +72,13 @@ def occurrence_datetimes(bill: Bill, start: date, end: date) -> list[datetime]:
     tz = timezone.get_current_timezone()
     start_at = timezone.make_aware(datetime.combine(start, time.min), tz)
     end_at = timezone.make_aware(datetime.combine(end, time.max), tz)
+    if bill.end_date:
+        end_at = min(
+            end_at,
+            timezone.make_aware(datetime.combine(bill.end_date, time.max), tz),
+        )
+    if end_at < start_at or anchor > end_at:
+        return []
     if not bill.recurrence_rule:
         return [anchor] if start_at <= anchor <= end_at else []
 
@@ -156,13 +163,30 @@ def ensure_bill_occurrences(
     )
 
 
-def refresh_future_occurrences(bill: Bill) -> None:
-    """Regenerate future unpaid rows after a bill definition changes."""
+def refresh_unpaid_occurrences(
+    bill: Bill,
+    *,
+    scope: str = "future_unpaid",
+) -> None:
+    """Regenerate unpaid rows while always preserving payment history."""
     now = timezone.now()
-    BillOccurrence.objects.filter(
-        bill=bill,
-        due_at__gte=now,
-        status=BillOccurrence.Status.UPCOMING,
-    ).delete()
     today = timezone.localdate()
-    ensure_bill_occurrences(bill, today, today + timedelta(days=550))
+    rows = BillOccurrence.objects.filter(bill=bill).exclude(
+        status=BillOccurrence.Status.PAID
+    )
+    if scope == "future_unpaid":
+        rows = rows.filter(due_at__gte=now)
+        start = today
+    elif scope == "all_unpaid":
+        settings_obj = SolaceSettings.objects.first()
+        budget_year = settings_obj.budget_year if settings_obj else today.year
+        start = date(budget_year or today.year, 1, 1)
+    else:
+        raise ValueError("Unknown bill occurrence refresh scope.")
+    rows.delete()
+    ensure_bill_occurrences(bill, start, today + timedelta(days=550))
+
+
+def refresh_future_occurrences(bill: Bill) -> None:
+    """Backward-compatible default occurrence refresh."""
+    refresh_unpaid_occurrences(bill, scope="future_unpaid")
