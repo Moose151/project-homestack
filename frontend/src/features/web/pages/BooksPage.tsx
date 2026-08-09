@@ -576,7 +576,6 @@ export function BooksPage() {
       <PageHeader
         title="Books"
         icon="📚"
-        subtitle="Books keeps personal shelves, reading queues and shared clubs together."
         mobile="show"
         actions={<Button type="button" onClick={() => setShowAdd(v => !v)}>{showAdd ? 'Close' : '+ Add book'}</Button>}
       />

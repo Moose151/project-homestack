@@ -162,3 +162,97 @@ class BillHistorySettlementTests(TestCase):
         occurrence.due_at = timezone.now() - timezone.timedelta(days=1)
         occurrence.save(update_fields=["due_at"])
         self.assertTrue(occurrence.is_overdue)
+
+
+class SettleBillHistoryCommandTests(TestCase):
+    """The one-off repair for bills entered before settlement existed.
+
+    Bills created from v0.23.5 settle their own history; these are the ones already saved with
+    years of arrears the household never actually owed.
+    """
+
+    def setUp(self):
+        self.admin = _admin()
+        enable_node(self.admin, "solace")
+
+    def _backdated_bill_with_arrears(self):
+        """A bill as it looked before v0.23.5: past occurrences left waiting to be paid."""
+        from apps.solace.models import BillOccurrence
+        from apps.solace.services import create_bill
+
+        bill = create_bill(
+            self.admin,
+            name="Rent",
+            amount="800.00",
+            due_at=timezone.now() - timezone.timedelta(days=120),
+            recurrence_rule="FREQ=MONTHLY",
+        )
+        BillOccurrence.objects.filter(bill=bill, due_at__lt=bill.created_at).update(
+            status=BillOccurrence.Status.UPCOMING, paid_at=None
+        )
+        return bill
+
+    def _stale(self, bill):
+        from apps.solace.models import BillOccurrence
+
+        return BillOccurrence.objects.filter(
+            bill=bill, status=BillOccurrence.Status.UPCOMING, due_at__lt=bill.created_at
+        )
+
+    def test_dry_run_changes_nothing(self):
+        from django.core.management import call_command
+        from io import StringIO
+
+        bill = self._backdated_bill_with_arrears()
+        before = self._stale(bill).count()
+        self.assertGreater(before, 0)
+
+        out = StringIO()
+        call_command("settle_bill_history", stdout=out)
+        self.assertIn("Would settle", out.getvalue())
+        self.assertEqual(self._stale(bill).count(), before, "a dry run must not write")
+
+    def test_apply_settles_pre_entry_arrears(self):
+        from django.core.management import call_command
+        from io import StringIO
+
+        bill = self._backdated_bill_with_arrears()
+        call_command("settle_bill_history", "--apply", stdout=StringIO())
+        self.assertEqual(self._stale(bill).count(), 0)
+
+    def test_apply_leaves_payments_missed_since_entry_alone(self):
+        """A bill you have been tracking and genuinely have not paid must stay overdue."""
+        from apps.solace.models import Bill, BillOccurrence
+        from apps.solace.services import create_bill
+        from django.core.management import call_command
+        from io import StringIO
+
+        # Entered a month ago and due since — the payment fell due while you were tracking it,
+        # which is the boundary the command must not cross.
+        bill = create_bill(
+            self.admin, name="Water", amount="60.00",
+            due_at=timezone.now() - timezone.timedelta(days=2),
+        )
+        Bill.objects.filter(pk=bill.pk).update(
+            created_at=timezone.now() - timezone.timedelta(days=30)
+        )
+        bill.refresh_from_db()
+        occurrence = BillOccurrence.objects.get(bill=bill)
+        occurrence.status = BillOccurrence.Status.UPCOMING
+        occurrence.paid_at = None
+        occurrence.save(update_fields=["status", "paid_at"])
+
+        call_command("settle_bill_history", "--apply", stdout=StringIO())
+        occurrence.refresh_from_db()
+        self.assertEqual(occurrence.status, BillOccurrence.Status.UPCOMING)
+        self.assertTrue(occurrence.is_overdue)
+
+    def test_apply_is_idempotent(self):
+        from django.core.management import call_command
+        from io import StringIO
+
+        self._backdated_bill_with_arrears()
+        call_command("settle_bill_history", "--apply", stdout=StringIO())
+        out = StringIO()
+        call_command("settle_bill_history", "--apply", stdout=out)
+        self.assertIn("Nothing to settle", out.getvalue())

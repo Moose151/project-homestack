@@ -633,7 +633,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function SearchResults({ results }: { results: AtlasSearchResults }) {
   const empty = !results.notes.length && !results.lists.length && !results.items.length && !results.reminders.length
-  if (empty) return <p className="text-sm text-muted text-center py-8">No matches.</p>
+  if (empty) return <EmptyState icon="🔍" title="No matches" hint="Try a different word, or check another list." />
 
   return (
     <div className="flex flex-col gap-4">
@@ -768,7 +768,7 @@ export function AtlasPage() {
   return (
     <div className="flex flex-col gap-4 sm:gap-5">
       <div className="hidden sm:block">
-        <PageHeader title="Lists & notes" icon="🗒" subtitle="Atlas keeps household lists, checklists, notes and reminders together." />
+        <PageHeader title="Lists & notes" icon="🗒" />
       </div>
 
       <CaptureBar lists={lists} onCapture={capture} />

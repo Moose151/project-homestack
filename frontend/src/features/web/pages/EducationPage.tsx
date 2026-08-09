@@ -1224,7 +1224,7 @@ export function EducationPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="School & study" icon="🎓" subtitle="Education keeps courses, deadlines, timetables and events together." />
+      <PageHeader title="School & study" icon="🎓" />
 
       <SearchField
         value={query}

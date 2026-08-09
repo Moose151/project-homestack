@@ -6,6 +6,7 @@ import { Button } from '../../../../components/Button'
 import { Field, Input, Textarea } from '../../../../components/ui'
 import { AssigneeSelect, assigneeLabel } from '../../../../components/AssigneeSelect'
 import { DeleteAction } from '../../../..//components/RowActions'
+import { EmptyState } from '../../../../components/EmptyState'
 import { useAuth } from '../../../auth/AuthContext'
 
 // Mirrors the legacy routines.html: daily-habit cards with done-today + streak badges and a
@@ -58,7 +59,7 @@ export function RoutinesTab({ canManage, pointsLabel }: { canManage: boolean; po
       {error && <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
 
       {routines.length === 0 ? (
-        <p className="text-sm text-muted text-center py-8">No routines yet.</p>
+        <EmptyState icon="🔁" title="No routines yet" hint="Routines are the small things that repeat — add one to start a streak." />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {routines.map(r => (

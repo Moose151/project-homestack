@@ -4,6 +4,7 @@ import type { MeridianCategory, MeridianReward, MeridianRewardRequest, Person } 
 import { Card } from '../../../../components/Card'
 import { Button } from '../../../../components/Button'
 import { Field, Input, Select, Textarea, fieldClass } from '../../../../components/ui'
+import { EmptyState } from '../../../../components/EmptyState'
 import { useAuth } from '../../../auth/AuthContext'
 
 type RewardFilter = 'active' | 'pending' | 'stock' | 'hidden' | 'all'
@@ -682,7 +683,11 @@ function ShopperView({
             </Card>
           )
         })}
-        {rewards.length === 0 && <p className="text-sm text-muted text-center py-8 sm:col-span-2 xl:col-span-3">No rewards available.</p>}
+        {rewards.length === 0 && (
+          <div className="sm:col-span-2 xl:col-span-3">
+            <EmptyState icon="🎁" title="No rewards yet" hint="Add something worth saving points for." />
+          </div>
+        )}
       </div>
     </div>
   )

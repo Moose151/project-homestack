@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.23.5**
+> **Current version: 0.23.6**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,22 @@
 ---
 
 ## 0.23 — Multi-person assignment
+
+### 0.23.6 — 2026-08-09
+- **`settle_bill_history` repairs bills entered before v0.23.5.** Settlement runs when a bill is
+  created, so it could not reach the ones already saved with years of arrears. The command
+  reports what it would change and writes only with `--apply`. It settles occurrences that fell
+  due *before the bill was entered*; a payment missed since then is real and stays overdue.
+- **Quick capture is the same everywhere.** Home offered Reminder and Note where Lists offered
+  To-do, Note and Reminder, so the same job had a different answer depending on where you started
+  it. Home now offers all three in the same order and picks a list for a to-do exactly as Lists
+  does.
+- **A node has one description again.** Once the page header stopped repeating a title the top
+  bar already shows, each node's long per-page description became text that never rendered. All
+  nine are gone; `config/stacks.ts` is the single source.
+- **Shared empty states** on the Lists search, Routines and Rewards shop, and **Hub widgets now
+  use the same corner radius as every other card** — the one genuine radius outlier.
+  **680 backend tests green; production build clean; no migration drift.**
 
 ### 0.23.5 — 2026-08-09
 - **Entering a bill no longer invents a backlog of arrears.** Giving a bill its real first due
@@ -146,6 +162,22 @@
   green (10 new, permission-first); production build clean; no migration drift.**
 
 ## 0.23 — Multi-person assignment
+
+### 0.23.6 — 2026-08-09
+- **`settle_bill_history` repairs bills entered before v0.23.5.** Settlement runs when a bill is
+  created, so it could not reach the ones already saved with years of arrears. The command
+  reports what it would change and writes only with `--apply`. It settles occurrences that fell
+  due *before the bill was entered*; a payment missed since then is real and stays overdue.
+- **Quick capture is the same everywhere.** Home offered Reminder and Note where Lists offered
+  To-do, Note and Reminder, so the same job had a different answer depending on where you started
+  it. Home now offers all three in the same order and picks a list for a to-do exactly as Lists
+  does.
+- **A node has one description again.** Once the page header stopped repeating a title the top
+  bar already shows, each node's long per-page description became text that never rendered. All
+  nine are gone; `config/stacks.ts` is the single source.
+- **Shared empty states** on the Lists search, Routines and Rewards shop, and **Hub widgets now
+  use the same corner radius as every other card** — the one genuine radius outlier.
+  **680 backend tests green; production build clean; no migration drift.**
 
 ### 0.23.5 — 2026-08-09
 - **Entering a bill no longer invents a backlog of arrears.** Giving a bill its real first due

@@ -386,7 +386,7 @@ export function HomeWikiPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Household guide" icon="📖" subtitle="Home Wiki keeps Wi-Fi, bin night, emergency information and how-tos easy to find." />
+      <PageHeader title="Household guide" icon="📖" />
 
       <SearchField value={query} onChange={e => setQuery(e.target.value)} onClear={() => setQuery('')} placeholder="Search the wiki…" />
 

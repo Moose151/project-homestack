@@ -4,6 +4,7 @@ import { api } from '../../../api/client'
 import type {
   HubResponse,
   HubWidget,
+  AtlasList,
   AtlasListItem,
   AtlasReminder,
   MeridianTask,
@@ -27,7 +28,7 @@ import type {
 } from '../../../api/types'
 import { sourceColour, sourceLabel, sourcePath } from '../../../lib/sourceLinks'
 import { Card } from '../../../components/Card'
-import { Input } from '../../../components/Field'
+import { Input, Select } from '../../../components/Field'
 import { Button } from '../../../components/Button'
 import { HubConfig } from './HubConfig'
 import { useAuth } from '../../auth/AuthContext'
@@ -620,29 +621,45 @@ function moneyLabel(value: string | number) {
   return Number(value || 0).toLocaleString(undefined, { style: 'currency', currency: 'AUD' })
 }
 
+// Same three kinds, in the same order, as the Lists page's capture box — it was the odd one
+// out offering only two, so the same job had two different answers depending on where you
+// started it. A to-do needs a list to live in, which is why one is chosen here too.
 const QUICK_KINDS = [
-  { key: 'reminder', label: 'Reminder' },
+  { key: 'todo', label: 'To-do' },
   { key: 'note', label: 'Note' },
+  { key: 'reminder', label: 'Reminder' },
 ] as const
 type QuickKind = (typeof QUICK_KINDS)[number]['key']
 
 function QuickAddWidget({ onAdded }: { onAdded: () => void }) {
-  const [kind, setKind] = useState<QuickKind>('reminder')
+  const [kind, setKind] = useState<QuickKind>('todo')
   const [text, setText] = useState('')
+  const [lists, setLists] = useState<AtlasList[]>([])
+  const [listId, setListId] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
+  useEffect(() => {
+    api.getLists()
+      .then(rows => { setLists(rows); setListId(current => current ?? rows[0]?.id ?? null) })
+      .catch(() => { /* a missing list only disables to-do capture, not the widget */ })
+  }, [])
+
+  const needsList = kind === 'todo'
+  const canSubmit = Boolean(text.trim()) && (!needsList || listId !== null)
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     const title = text.trim()
-    if (!title) return
+    if (!canSubmit) return
     setBusy(true); setErr(null); setDone(null)
     try {
       if (kind === 'reminder') await api.createReminder({ title })
-      else await api.createNote({ title })
+      else if (kind === 'note') await api.createNote({ title })
+      else await api.createItem(listId!, { title })
       setText('')
-      setDone(kind === 'reminder' ? 'Reminder added ✓' : 'Note saved ✓')
+      setDone(kind === 'reminder' ? 'Reminder added ✓' : kind === 'note' ? 'Note saved ✓' : 'To-do added ✓')
       onAdded()
       setTimeout(() => setDone(null), 2500)
     } catch (e) {
@@ -658,6 +675,7 @@ function QuickAddWidget({ onAdded }: { onAdded: () => void }) {
             key={k.key}
             type="button"
             onClick={() => setKind(k.key)}
+            aria-pressed={kind === k.key}
             className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
               kind === k.key ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'
             }`}
@@ -670,11 +688,24 @@ function QuickAddWidget({ onAdded }: { onAdded: () => void }) {
         <Input
           value={text}
           onChange={e => setText(e.target.value)}
-          placeholder={kind === 'reminder' ? 'Remind me to…' : 'Jot something down…'}
+          placeholder={kind === 'reminder' ? 'Remind me to…' : kind === 'note' ? 'Jot something down…' : 'Add a to-do…'}
           className="flex-1"
         />
-        <Button type="submit" size="sm" loading={busy} disabled={!text.trim()}>Add</Button>
+        <Button type="submit" size="sm" loading={busy} disabled={!canSubmit}>Add</Button>
       </div>
+      {needsList && (
+        lists.length > 0 ? (
+          <Select
+            value={listId ?? 0}
+            onChange={e => setListId(Number(e.target.value))}
+            aria-label="List for this to-do"
+          >
+            {lists.map(list => <option key={list.id} value={list.id}>{list.title}</option>)}
+          </Select>
+        ) : (
+          <p className="text-xs text-muted">Create a list first to capture to-dos.</p>
+        )
+      )}
       {done && <p className="text-xs text-success">{done}</p>}
       {err && <p className="text-xs text-danger">{err}</p>}
     </form>
@@ -853,7 +884,7 @@ export function HubPage() {
                 }}
                 onDragLeave={() => setDragOverWidget(current => current === w.key ? null : current)}
                 onDrop={event => void dropWidget(event, w.key)}
-                className={`${SIZE_SPAN[w.size] ?? SIZE_SPAN.medium} overflow-hidden rounded-3xl border bg-surface shadow-soft transition-all ${
+                className={`${SIZE_SPAN[w.size] ?? SIZE_SPAN.medium} overflow-hidden rounded-2xl border bg-surface shadow-soft transition-all ${
                   dragOverWidget === w.key && draggedWidget !== w.key
                     ? 'border-primary ring-2 ring-primary/20'
                     : 'border-line'

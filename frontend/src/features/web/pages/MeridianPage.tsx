@@ -36,7 +36,6 @@ export function MeridianPage() {
         <PageHeader
           title="Tasks & rewards"
           icon="⭐"
-          subtitle="Meridian brings family jobs, points, rewards and shared goals together."
         />
       </div>
 

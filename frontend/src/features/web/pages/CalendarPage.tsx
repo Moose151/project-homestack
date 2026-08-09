@@ -881,7 +881,7 @@ export function CalendarPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="hidden sm:block">
-        <PageHeader title="Calendar" icon="📅" subtitle="Calendar keeps events, shared care and household schedules together." actions={calendarActions} />
+        <PageHeader title="Calendar" icon="📅" actions={calendarActions} />
       </div>
 
       {/* Period navigation stays generous; mobile uses one compact view picker. */}

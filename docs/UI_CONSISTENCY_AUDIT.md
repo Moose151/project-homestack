@@ -31,9 +31,10 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
 
 ## 2. Duplication
 
-- [ ] **Node identity is stated twice, differently.** The top bar shows the node label plus one
-  description; the page header repeats the icon and title with *a different* description.
-  Needs a decision on which one wins before editing ten pages.
+- [x] **Node identity is stated twice, differently.** Once the page header stopped rendering a
+  title that merely repeats the destination, the long per-page description became dead text that
+  never appeared. All nine are removed; `config/stacks.ts` is now the single description a node
+  has.
 - [decided] **Home's H1 is a greeting while the top bar says "Home".** Keeping the greeting: a
   personal salutation on the household dashboard is deliberate warmth, and Home is the only
   page where the H1 is not a destination name. Recorded so it is not "fixed" by accident later.
@@ -44,8 +45,9 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
 - [~] **Same fact twice on one screen.** Books' duplicated shelf counts are gone with the rail.
   Tasks & rewards still shows the top balance in both its tile and the Balances card, and
   Money's finance-health list still restates what the all-zero tiles say.
-- [ ] **Duplicate quick-capture:** Home's "Quick add" (Reminder/Note) vs Lists' "What do you
-  need to remember?" (To-do/Note/Reminder) — same feature, different options and styling.
+- [x] **Duplicate quick-capture.** Home offered two kinds where Lists offered three, so the same
+  job had a different answer depending on where you started it. Home now offers To-do / Note /
+  Reminder in the same order, picking a list for a to-do exactly as Lists does.
 - [x] **Two copies of the node colour table and the source-link routing** (CalendarPage had its
   own `NODE_COLOUR` and `sourcePath`). **Fixed:** both now live in `lib/sourceLinks.ts`,
   shared by the Calendar and the Hub's Upcoming card.
@@ -64,7 +66,9 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
 - [x] **"clear" on Our home counters** read as an instruction rather than a status. Now
   "All clear" / "Needs attention".
 - [ ] **Primary action placement varies:** top-right (Books, Calendar), left below tabs (Pets,
-  Lists), absent (School & study, Our home, Money).
+  Lists), absent (School & study, Our home, Money). Left open deliberately — moving the Pets and
+  Lists add buttons into the page header means lifting form state out of the tab components, and
+  that is a refactor worth doing on its own rather than at the end of a polish pass.
 - ~~Home's quick-add "Add" button looks disabled.~~ **Withdrawn — not a defect.** It *is*
   disabled: the button is `disabled={!text.trim()}` and the screenshot was taken with an empty
   field. Correct behaviour.
@@ -82,10 +86,14 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
 - [x] **Two identical levels of pills** in Books, plus a checkbox filter in the tab row. The
   shelf row is now the `secondary` tab variant, and the filter sits under the tab bar instead of
   inside it — a filter is not a tab.
-- [ ] **No shared empty state.** `EmptyState` exists but is not rolled out; compare "No task
-  submissions waiting." + button, bare "No upcoming reminders", and Our home's settings form.
-- [ ] **Mixed radii/elevation:** pill search bars, `rounded-3xl` Hub widgets, `rounded-2xl`
-  cards, borderless shaded Money tiles.
+- [x] **No shared empty state.** The page-level cases (Lists search, Routines, Rewards shop) now
+  use `EmptyState`. The remaining one-line "no items" strings live inside Hub widgets, which the
+  backend drops entirely when empty — a full centred empty state inside a small widget would be
+  the wrong shape, and it is unreachable anyway.
+- [x] **Mixed radii/elevation.** Partly a bad reading on my part: search fields are already
+  `rounded-xl` like every other input, not pills, and Money's tiles now use the shared `StatCard`.
+  The genuine outlier was Hub widgets at `rounded-3xl` against `rounded-2xl` cards; they match
+  now.
 - [~] **Money's 12-tab row** now sits in the full-width underlined bar rather than a pill group
   sized to itself, so it no longer looks like a different component to Pets' three. Whether 12
   tabs is the right information architecture for Money is a separate question.
@@ -156,6 +164,10 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
   are plain date pickers; the Calendar quick-add and the class timetable, which genuinely need a
   time, use the shared `DateTimeField` so a blank time cannot void the date. No raw
   `datetime-local` input remains.
+- [x] **Bills entered before v0.23.5 keep their arrears.** Settlement runs at entry, so it does
+  not reach data already saved. `python manage.py settle_bill_history` reports what it would
+  change and only writes with `--apply`; it settles occurrences that fell due *before the bill
+  was entered*, leaving anything missed since then genuinely overdue.
 - [x] **A backdated bill arrived pre-loaded with arrears.** Entering a bill with its real first
   due date backfilled every month since as unpaid. Anything already due at the moment of entry
   is now settled as paid on its own due date; only payments missed *after* entry go overdue.

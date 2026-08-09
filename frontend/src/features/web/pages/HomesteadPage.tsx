@@ -1434,7 +1434,7 @@ export function HomesteadPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Our home" icon="🏠" subtitle="Homestead brings rooms, upkeep, appliances, contacts and improvements together." />
+      <PageHeader title="Our home" icon="🏠" />
 
       <SearchField
         value={query}

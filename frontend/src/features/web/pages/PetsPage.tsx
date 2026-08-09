@@ -489,7 +489,7 @@ export function PetsPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Pets" icon="🐾" subtitle="Pets keeps profiles, treatments, reminders and vet appointments together." />
+      <PageHeader title="Pets" icon="🐾" />
 
       <SearchField
         value={query}
