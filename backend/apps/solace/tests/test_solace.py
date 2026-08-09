@@ -473,6 +473,11 @@ class SolaceCrudAndCalendarTests(TestCase):
         paid, unpaid = past[-2:]
         paid_date = paid.due_at
         unpaid_date = unpaid.due_at
+        # Entering a backdated bill settles its history, so put one month back to unpaid to
+        # stand for a payment that really was missed — that is what "all_unpaid" acts on.
+        unpaid.status = BillOccurrence.Status.UPCOMING
+        unpaid.paid_at = None
+        unpaid.save(update_fields=["status", "paid_at"])
         self.client.post(reverse("solace-occurrence-action", args=[paid.id, "paid"]))
 
         response = self.client.patch(
@@ -772,12 +777,17 @@ class SolaceManagementTests(TestCase):
             pay_at=timezone.make_aware(datetime(2026, 8, 1, 9)),
             recurrence_rule="FREQ=WEEKLY;INTERVAL=2",
         )
-        create_bill(
+        rent = create_bill(
             self.admin,
             name="Rent",
             amount="800.00",
             due_at=timezone.make_aware(datetime(2026, 8, 3, 9)),
             recurrence_rule="FREQ=MONTHLY",
+        )
+        # This scenario is a bill that is due and not yet paid. Entering a bill settles any
+        # occurrence already past, so reopen the one the closeout is meant to act on.
+        rent.occurrences.filter(due_at__date=date(2026, 8, 3)).update(
+            status=BillOccurrence.Status.UPCOMING, paid_at=None
         )
         response = self.client.post(
             reverse("solace-balance-list"),

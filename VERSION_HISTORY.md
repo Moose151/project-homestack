@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.23.4**
+> **Current version: 0.23.5**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,22 @@
 ---
 
 ## 0.23 — Multi-person assignment
+
+### 0.23.5 — 2026-08-09
+- **Entering a bill no longer invents a backlog of arrears.** Giving a bill its real first due
+  date — often months or years back, because the household has been paying it for years —
+  backfilled every month since as unpaid, so a correct answer produced a wall of overdue
+  warnings and dragged the unpaid total and finance health down with it. Anything already due
+  when a bill is first entered is now recorded as paid on its own due date. This applies only at
+  entry: a payment missed after that is genuine and still shows as overdue.
+- **The last three date-and-time inputs are gone.** A `datetime-local` input whose time half is
+  blank is invalid, so its value is an empty string, not a partial date — filling in only the
+  date silently saved nothing. That is what lost the bill due dates in v0.23.4, and the Calendar
+  quick-add and the class timetable had the same trap. All three now use the shared date/time
+  field, which keeps the date and time separate so a blank time can never void the date.
+- Five regression tests pin the bill due-date contract (past, future, recurring, organised into
+  Homestead, and added to an existing bill) and four pin the settlement rule. **676 backend
+  tests green; production build clean; no migration drift.**
 
 ### 0.23.4 — 2026-08-09
 - **Money asks for a date, not a date and time.** A bill's due date, a subscription renewal, a
@@ -130,6 +146,22 @@
   green (10 new, permission-first); production build clean; no migration drift.**
 
 ## 0.23 — Multi-person assignment
+
+### 0.23.5 — 2026-08-09
+- **Entering a bill no longer invents a backlog of arrears.** Giving a bill its real first due
+  date — often months or years back, because the household has been paying it for years —
+  backfilled every month since as unpaid, so a correct answer produced a wall of overdue
+  warnings and dragged the unpaid total and finance health down with it. Anything already due
+  when a bill is first entered is now recorded as paid on its own due date. This applies only at
+  entry: a payment missed after that is genuine and still shows as overdue.
+- **The last three date-and-time inputs are gone.** A `datetime-local` input whose time half is
+  blank is invalid, so its value is an empty string, not a partial date — filling in only the
+  date silently saved nothing. That is what lost the bill due dates in v0.23.4, and the Calendar
+  quick-add and the class timetable had the same trap. All three now use the shared date/time
+  field, which keeps the date and time separate so a blank time can never void the date.
+- Five regression tests pin the bill due-date contract (past, future, recurring, organised into
+  Homestead, and added to an existing bill) and four pin the settlement rule. **676 backend
+  tests green; production build clean; no migration drift.**
 
 ### 0.23.4 — 2026-08-09
 - **Money asks for a date, not a date and time.** A bill's due date, a subscription renewal, a

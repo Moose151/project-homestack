@@ -59,9 +59,6 @@ function dueLabel(iso: string | null, allDay = false) {
   }
 }
 
-function fromInputValue(v: string): string | null {
-  return v ? new Date(v).toISOString() : null
-}
 function calendarDayHref(iso: string | null) {
   return iso ? `/calendar?date=${new Date(iso).toISOString().slice(0, 10)}` : '/calendar'
 }
@@ -603,7 +600,7 @@ function TimetableTab({ courses, onError }: { courses: EducationCourse[]; onErro
     try {
       const s = await api.createClassSession({
         title: title.trim(), course_id: courseId ? Number(courseId) : null,
-        location: location.trim(), start_at: fromInputValue(start)!, end_at: fromInputValue(end),
+        location: location.trim(), start_at: start, end_at: end || null,
         recurrence_rule: weekly ? 'FREQ=WEEKLY' : '',
       })
       setSessions(prev => [...prev, s])
@@ -627,10 +624,10 @@ function TimetableTab({ courses, onError }: { courses: EducationCourse[]; onErro
               {courses.map(c => <option key={c.id} value={c.id}>{c.code || c.name}</option>)}
             </select>
             <label className="text-xs text-muted-strong flex flex-col gap-1">Starts
-              <input type="datetime-local" className={inputCls} value={start} onChange={e => setStart(e.target.value)} />
+              <DateTimeField value={start || null} allDay={false} allowAllDay={false} onChange={({ value }) => setStart(value ?? '')} />
             </label>
             <label className="text-xs text-muted-strong flex flex-col gap-1">Ends
-              <input type="datetime-local" className={inputCls} value={end} onChange={e => setEnd(e.target.value)} />
+              <DateTimeField value={end || null} allDay={false} allowAllDay={false} onChange={({ value }) => setEnd(value ?? '')} />
             </label>
             <input className={inputCls} placeholder="Location (room / building)" value={location} onChange={e => setLocation(e.target.value)} />
           </div>

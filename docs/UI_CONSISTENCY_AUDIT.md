@@ -150,6 +150,16 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
 
 ## 9. Follow-up bugs found in use (2026-08-09)
 
+- [x] **`datetime-local` silently discarded date-only entries.** A datetime input whose time
+  half is blank is *invalid*, so `.value` is `''` rather than a partial date — filling in only
+  the date saved nothing at all. This lost every bill due date the owner entered. Money's fields
+  are plain date pickers; the Calendar quick-add and the class timetable, which genuinely need a
+  time, use the shared `DateTimeField` so a blank time cannot void the date. No raw
+  `datetime-local` input remains.
+- [x] **A backdated bill arrived pre-loaded with arrears.** Entering a bill with its real first
+  due date backfilled every month since as unpaid. Anything already due at the moment of entry
+  is now settled as paid on its own due date; only payments missed *after* entry go overdue.
+
 - [x] **Money asked for a time on every date.** Bill due dates, subscription renewals, purchase
   target dates and paydays are all `is_all_day` records, so the eight `datetime-local` inputs
   collected a time nothing read — and one that quietly affected same-day ordering and could

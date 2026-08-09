@@ -217,10 +217,11 @@ def create_bill(acting_user: User, **data) -> Bill:
     obj = Bill(household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data)
     obj.save()
     sync_event_for(obj)
-    from apps.solace.bill_schedule import ensure_bill_occurrences
+    from apps.solace.bill_schedule import ensure_bill_occurrences, settle_history_on_entry
 
     today = timezone.localdate()
     ensure_bill_occurrences(obj, today - timedelta(days=90), today + timedelta(days=550))
+    settle_history_on_entry(obj)
     events.bill_created(obj.id, obj.household_id)
     return obj
 

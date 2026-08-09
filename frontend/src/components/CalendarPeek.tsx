@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import type { CalendarEvent } from '../api/types'
+import { DateTimeField } from './DateTimeField'
 
 function whenLabel(iso: string, allDay: boolean) {
   const d = new Date(iso)
@@ -19,7 +20,10 @@ export function CalendarPeek() {
   const [open, setOpen] = useState(false)
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [title, setTitle] = useState('')
-  const [when, setWhen] = useState('')
+  // ISO, not a datetime-local string: an incomplete datetime input reports an empty value,
+  // so picking a date and skipping the time silently left nothing to save.
+  const [when, setWhen] = useState<string | null>(null)
+  const [whenAllDay, setWhenAllDay] = useState(true)
   const [saving, setSaving] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -38,8 +42,8 @@ export function CalendarPeek() {
     if (!title.trim() || !when) return
     setSaving(true)
     try {
-      await api.createEvent({ title: title.trim(), start_at: new Date(when).toISOString() })
-      setTitle(''); setWhen('')
+      await api.createEvent({ title: title.trim(), start_at: when, is_all_day: whenAllDay })
+      setTitle(''); setWhen(null); setWhenAllDay(true)
       load()
     } catch { /* surfaced on the full calendar page */ } finally {
       setSaving(false)
@@ -89,11 +93,11 @@ export function CalendarPeek() {
               className="px-3 py-2 rounded-xl border border-line bg-raised text-sm text-ink outline-none focus:ring-2 focus:ring-primary"
             />
             <div className="flex gap-2">
-              <input
-                type="datetime-local"
+              <DateTimeField
                 value={when}
-                onChange={e => setWhen(e.target.value)}
-                className="flex-1 px-2 py-1.5 rounded-xl border border-line bg-raised text-xs text-muted-strong outline-none focus:ring-2 focus:ring-primary"
+                allDay={whenAllDay}
+                onChange={({ value, allDay }) => { setWhen(value); setWhenAllDay(allDay) }}
+                className="flex-1"
               />
               <button type="submit" disabled={!title.trim() || !when || saving}
                 className="px-3 py-1.5 rounded-xl bg-primary text-white text-sm font-semibold disabled:opacity-40">

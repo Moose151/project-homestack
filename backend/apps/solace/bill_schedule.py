@@ -10,6 +10,7 @@ from calendar import monthrange
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
+from django.db import models
 from django.utils import timezone
 
 from apps.solace.models import Bill, BillOccurrence, SolaceSettings
@@ -114,6 +115,30 @@ def occurrence_datetimes(bill: Bill, start: date, end: date) -> list[datetime]:
         if candidate >= start_at:
             values.append(candidate)
     return values
+
+
+def settle_history_on_entry(bill: Bill) -> int:
+    """Treat everything already due when a bill is first entered as settled.
+
+    A household enters a bill it has been paying for years and gives its real first due date.
+    Backfilling those months as "upcoming" turns a correct answer into a wall of overdue
+    warnings for money that was actually paid (owner, 2026-08-09), and drags the unpaid total
+    and finance health down with it.
+
+    Only ever called when the bill is created: from then on a missed payment is genuine and
+    must still show as overdue. Occurrences are recorded paid on their own due date, since
+    that is the only date the household has told us about.
+    """
+    now = timezone.now()
+    started_today = timezone.make_aware(
+        datetime.combine(timezone.localdate(), time.min),
+        timezone.get_current_timezone(),
+    )
+    return BillOccurrence.objects.filter(
+        bill=bill,
+        status=BillOccurrence.Status.UPCOMING,
+        due_at__lt=started_today,
+    ).update(status=BillOccurrence.Status.PAID, paid_at=models.F("due_at"), updated_at=now)
 
 
 def ensure_bill_occurrences(
