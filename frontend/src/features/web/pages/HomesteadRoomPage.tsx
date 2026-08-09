@@ -15,6 +15,7 @@ import { Field, Input, Select, Textarea, fieldClass } from '../../../components/
 import { PageHeader } from '../../../components/PageHeader'
 import { DeleteAction, EditAction } from '../../../components/RowActions'
 import { StatCard } from '../../../components/StatCard'
+import { RoomIconSelect } from '../../../components/RoomIconSelect'
 import { useAuth } from '../../auth/AuthContext'
 
 const ITEM_TYPES: RoomItemType[] = ['purchase', 'maintenance', 'renovation', 'upgrade']
@@ -556,7 +557,7 @@ export function HomesteadRoomPage() {
         <Card title="Edit room or area">
           <form onSubmit={saveRoom} className="flex flex-col gap-3">
             <div className="grid gap-3 sm:grid-cols-[90px_1fr_180px]">
-              <Field label="Icon"><Input value={roomForm.icon} onChange={e => setRoomForm(f => ({ ...f, icon: e.target.value }))} /></Field>
+              <Field label="Icon"><RoomIconSelect value={roomForm.icon} onChange={icon => setRoomForm(f => ({ ...f, icon }))} className={fieldClass} /></Field>
               <Field label="Name"><Input value={roomForm.name} onChange={e => setRoomForm(f => ({ ...f, name: e.target.value }))} /></Field>
               <Field label="Type"><Select value={roomForm.area_type} onChange={e => setRoomForm(f => ({ ...f, area_type: e.target.value as RoomAreaType }))}>{AREA_TYPES.map(type => <option key={type} value={type}>{cap(type)}</option>)}</Select></Field>
             </div>

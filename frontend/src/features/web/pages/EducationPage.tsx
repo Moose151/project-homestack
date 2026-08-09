@@ -16,6 +16,7 @@ import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
+import { DeleteAction } from '../../../components/RowActions'
 import { useAuth } from '../../auth/AuthContext'
 import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 
@@ -180,11 +181,7 @@ function AssessmentDetail({ assessment, onError }: {
                         className="text-muted hover:text-primary text-xs px-1.5 py-0.5 rounded"
                         aria-label="Edit note"
                       >edit</button>
-                      <button
-                        onClick={() => deleteNote(note.id)}
-                        className="text-muted hover:text-danger text-lg leading-none px-1"
-                        aria-label="Delete note"
-                      >×</button>
+                      <DeleteAction onClick={() => deleteNote(note.id)} label="note" />
                     </div>
                   </>
                 )}
@@ -226,9 +223,9 @@ function AssessmentDetail({ assessment, onError }: {
                 )}
                 <button
                   onClick={() => deleteFile(f.id)}
-                  className="sm:opacity-0 sm:group-hover:opacity-100 text-muted hover:text-danger text-lg leading-none flex-shrink-0 transition-opacity"
-                  aria-label="Remove file"
-                >×</button>
+                  className="grid min-h-10 flex-shrink-0 place-items-center rounded-lg px-2 text-xs font-semibold text-muted transition-colors hover:bg-sunken hover:text-ink"
+                  aria-label={`Remove ${f.label || f.original_filename}`}
+                >Remove</button>
               </div>
             ))}
             <div className="flex items-center gap-2">
@@ -411,7 +408,7 @@ function AssignmentRow({ a, onChange, onDelete, onError }: {
         >
           {Object.entries(STATUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
-        <button onClick={remove} className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg text-lg leading-none text-muted transition-all hover:bg-danger-soft hover:text-danger sm:opacity-0 sm:group-hover:opacity-100" aria-label="Delete">×</button>
+        <DeleteAction onClick={remove} label={a.title} />
       </div>
     </li>
   )
@@ -546,7 +543,7 @@ function CoursesTab({ courses, reload, people, onError }: {
                   <div className={`font-semibold truncate ${c.is_completed ? 'line-through text-muted' : 'text-ink'}`}>{c.name}</div>
                   {c.code && <div className="text-xs text-primary font-medium">{c.code}</div>}
                 </div>
-                <button onClick={() => remove(c)} className="sm:opacity-0 sm:group-hover:opacity-100 text-muted hover:text-danger transition-all text-lg leading-none" aria-label="Delete">×</button>
+                <DeleteAction onClick={() => remove(c)} label={c.name} />
               </div>
               {c.teacher && <div className="text-sm text-muted mt-2">{c.teacher}</div>}
               {c.institution_name && <div className="text-xs text-muted mt-1">{c.institution_name}</div>}
@@ -670,7 +667,7 @@ function TimetableTab({ courses, onError }: { courses: EducationCourse[]; onErro
                         {s.location && <div className="text-xs text-muted">{s.location}</div>}
                       </div>
                       {s.recurrence_rule && <span className="text-xs px-2 py-0.5 rounded-full bg-sunken text-muted-strong flex-shrink-0">Weekly</span>}
-                      <button onClick={() => remove(s)} className="sm:opacity-0 sm:group-hover:opacity-100 text-muted hover:text-danger transition-all text-lg leading-none flex-shrink-0" aria-label="Delete">×</button>
+                      <DeleteAction onClick={() => remove(s)} label={s.display_title} />
                     </li>
                   )
                 })}
@@ -809,7 +806,7 @@ function EventsTab({ courses, people, institutions, defaultAssignee, onError }: 
                     </Link>
                   </div>
                 </div>
-                <button onClick={() => remove(ev)} className="sm:opacity-0 sm:group-hover:opacity-100 text-muted hover:text-danger transition-all text-lg leading-none flex-shrink-0" aria-label="Delete">×</button>
+                <DeleteAction onClick={() => remove(ev)} label={ev.title} />
               </li>
             ))}
           </ul>

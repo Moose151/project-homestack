@@ -1866,26 +1866,26 @@ export function SolacePage() {
   }
 
   useEffect(() => {
-    if (!unlocked) return
-    if (q.trim()) search()
-    else load()
-    // Unlock is the transition that triggers the initial protected load/search.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unlocked])
-
-  useEffect(() => {
     if (unlocked) void loadSchedule(scheduleMonth)
     // scheduleMonth is the explicit navigation state for this request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scheduleMonth])
 
-  const search = async () => {
-    if (!q.trim()) return load()
-    try {
-      const r = await api.searchSolace(q.trim())
-      setBills(r.bills); setPaydays(r.paydays); setPurchases(r.purchases); setBuckets(r.buckets); setSubscriptions(r.subscriptions); setChecklist(r.checklist)
-    } catch (e) { setError(errMsg(e)) }
-  }
+  // Every other node searches as you type; Money asking for a button press was the odd one.
+  useEffect(() => {
+    if (!unlocked) return
+    const term = q.trim()
+    const id = setTimeout(() => {
+      if (!term) { void load(); return }
+      api.searchSolace(term)
+        .then(r => {
+          setBills(r.bills); setPaydays(r.paydays); setPurchases(r.purchases)
+          setBuckets(r.buckets); setSubscriptions(r.subscriptions); setChecklist(r.checklist)
+        })
+        .catch(e => setError(errMsg(e)))
+    }, 300)
+    return () => clearTimeout(id)
+  }, [q, unlocked])
 
   const generateChecklist = async (date?: string) => {
     setGeneratingChecklist(true); setError('')
@@ -1932,14 +1932,10 @@ export function SolacePage() {
         <SearchField
           value={q}
           onChange={e => setQ(e.target.value)}
-          onClear={() => { setQ(''); void load() }}
-          onKeyDown={e => { if (e.key === 'Enter') void search() }}
+          onClear={() => setQ('')}
           placeholder="Search bills, plans and purchases…"
         />
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={search} className="flex-1 sm:flex-none">Search</Button>
-          <Button variant="ghost" onClick={load} loading={loading} className="flex-1 sm:flex-none">Refresh</Button>
-        </div>
+        <Button variant="ghost" onClick={load} loading={loading} className="sm:flex-none">Refresh</Button>
       </div>
       <Tabs
         tabs={SOLACE_TABS}

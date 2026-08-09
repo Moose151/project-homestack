@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.23.2**
+> **Current version: 0.23.3**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,26 @@
 ---
 
 ## 0.23 — Multi-person assignment
+
+### 0.23.3 — 2026-08-09
+- **Room icons are picked, not typed.** Creating a room asked you to type an emoji, which meant
+  knowing one existed and finding it on your keyboard — so most rooms went unmarked. There is
+  now a grouped list of about thirty room-appropriate icons (living, sleeping and bathing, work
+  and hobbies, utility and storage, outside), kept generic rather than specific to this
+  household. An icon already saved that is not on the list stays available.
+- **One vocabulary for destroying things, everywhere.** The bare `×` is gone from Books, Lists,
+  School & study and Tasks & rewards; they use the same danger-toned Edit / Delete / Remove
+  actions Pets already had. A `×` now only ever dismisses a banner, which destroys nothing.
+- **Card titles are sentence case.** `Card` rendered its title in ALL-CAPS while hand-written
+  headings beside it were sentence case, so the two read as different kinds of thing. ALL-CAPS
+  is now reserved for the small field and section labels.
+- **Money searches as you type**, on the same 300ms debounce as every other node, instead of
+  asking for a button press. Refresh stays — Money is the one page whose figures are
+  recalculated server-side and worth re-pulling on demand.
+- **Smaller tidies:** the Calendar's colour legend and its "use ‹ › to forecast" hint are
+  separate lines rather than one row doing two jobs, and Books' filter checkbox sits below the
+  tab bar instead of inside it. **667 backend tests green; production build clean; no migration
+  drift.**
 
 ### 0.23.2 — 2026-08-09
 - **Tabs are one control again.** The shared tab row was a pill group sized to its own content,
@@ -101,6 +121,26 @@
   green (10 new, permission-first); production build clean; no migration drift.**
 
 ## 0.23 — Multi-person assignment
+
+### 0.23.3 — 2026-08-09
+- **Room icons are picked, not typed.** Creating a room asked you to type an emoji, which meant
+  knowing one existed and finding it on your keyboard — so most rooms went unmarked. There is
+  now a grouped list of about thirty room-appropriate icons (living, sleeping and bathing, work
+  and hobbies, utility and storage, outside), kept generic rather than specific to this
+  household. An icon already saved that is not on the list stays available.
+- **One vocabulary for destroying things, everywhere.** The bare `×` is gone from Books, Lists,
+  School & study and Tasks & rewards; they use the same danger-toned Edit / Delete / Remove
+  actions Pets already had. A `×` now only ever dismisses a banner, which destroys nothing.
+- **Card titles are sentence case.** `Card` rendered its title in ALL-CAPS while hand-written
+  headings beside it were sentence case, so the two read as different kinds of thing. ALL-CAPS
+  is now reserved for the small field and section labels.
+- **Money searches as you type**, on the same 300ms debounce as every other node, instead of
+  asking for a button press. Refresh stays — Money is the one page whose figures are
+  recalculated server-side and worth re-pulling on demand.
+- **Smaller tidies:** the Calendar's colour legend and its "use ‹ › to forecast" hint are
+  separate lines rather than one row doing two jobs, and Books' filter checkbox sits below the
+  tab bar instead of inside it. **667 backend tests green; production build clean; no migration
+  drift.**
 
 ### 0.23.2 — 2026-08-09
 - **Tabs are one control again.** The shared tab row was a pill group sized to its own content,

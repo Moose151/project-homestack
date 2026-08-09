@@ -10,6 +10,7 @@ import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
+import { DeleteAction } from '../../..//components/RowActions'
 import { useAuth } from '../../auth/AuthContext'
 import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 
@@ -212,7 +213,7 @@ function ListCard({ list, people, defaultAssignee, onDeleted, onError }: {
             </span>
           </div>
         </div>
-        <button onClick={deleteList} className="text-muted hover:text-danger transition-colors text-xl leading-none flex-shrink-0" aria-label="Delete list">×</button>
+        <DeleteAction onClick={deleteList} label={list.title} />
       </div>
 
       {done.length > 0 && (
@@ -349,7 +350,7 @@ function NoteCard({ note, onSaved, onDeleted, onError }: {
         </div>
         <div className="flex flex-shrink-0 items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
           <button onClick={() => setEditing(true)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
-          <button onClick={remove} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger" aria-label="Delete">Delete</button>
+          <DeleteAction onClick={remove} label={note.title} />
         </div>
       </div>
     </Card>
@@ -518,7 +519,7 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
                   {due && (
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${due.tone}`}>{due.text}</span>
                   )}
-                  <button onClick={() => remove(r.id)} className="text-muted hover:text-danger transition-colors text-xl leading-none flex-shrink-0" aria-label="Delete">×</button>
+                  <DeleteAction onClick={() => remove(r.id)} label={r.title} />
                 </div>
               </Card>
             )

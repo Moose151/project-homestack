@@ -17,6 +17,7 @@ import { Modal } from '../../../components/Modal'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
 import { StatCard } from '../../../components/StatCard'
+import { RoomIconSelect } from '../../../components/RoomIconSelect'
 import { useAuth } from '../../auth/AuthContext'
 import { useStacks } from '../../stacks/StacksContext'
 import { useUrlAction, useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
@@ -311,7 +312,7 @@ function RoomsTab({ onError, canEdit }: { onError: (m: string) => void; canEdit:
         <Card title="Add a room or area">
           <form onSubmit={save} className="flex flex-col gap-3">
             <div className="grid gap-3 sm:grid-cols-[90px_1fr_180px]">
-              <Field label="Icon"><Input value={form.icon} onChange={e => setForm(f => ({ ...f, icon: e.target.value }))} placeholder="🛋️" /></Field>
+              <Field label="Icon"><RoomIconSelect value={form.icon} onChange={icon => setForm(f => ({ ...f, icon }))} /></Field>
               <Field label="Name"><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Living room" autoFocus /></Field>
               <Field label="Type">
                 <Select value={form.area_type} onChange={e => setForm(f => ({ ...f, area_type: e.target.value as RoomAreaType }))}>

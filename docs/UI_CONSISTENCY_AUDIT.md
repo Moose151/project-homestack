@@ -37,8 +37,10 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
 - [decided] **Home's H1 is a greeting while the top bar says "Home".** Keeping the greeting: a
   personal salutation on the household dashboard is deliberate warmth, and Home is the only
   page where the H1 is not a destination name. Recorded so it is not "fixed" by accident later.
-- [ ] **Two search boxes on every node page** (global top bar + in-node), styled differently.
-  Money is the only node with explicit **Search** / **Refresh** buttons.
+- [~] **Two search boxes on every node page** (global top bar + in-node). Money no longer
+  needs a **Search** button — it searches as you type on the same 300ms debounce as every other
+  node, keeping only Refresh (its figures are recalculated server-side). Whether a node needs
+  its own box at all, given the global one, is still open.
 - [~] **Same fact twice on one screen.** Books' duplicated shelf counts are gone with the rail.
   Tasks & rewards still shows the top balance in both its tile and the Balances card, and
   Money's finance-health list still restates what the all-zero tiles say.
@@ -54,10 +56,11 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
   "+ Add pet" and "+ New list" were secondary — identical rank, opposite treatment.
   **Fixed:** Pets and Lists now use the primary variant. Money's coloured **View** pills and
   the remaining ad-hoc buttons across Meridian/Homestead still need a pass.
-- [~] **Three destructive vocabularies:** "Delete" (Pets), bare `×` (Books, Lists), "clear"
-  (Our home counters), none in the danger colour. **Fixed:** `components/RowActions.tsx` gives
-  one Edit/Delete/Remove vocabulary with danger-toned deletes, applied to Pets; Books and Lists
-  still use `×`.
+- [x] **Three destructive vocabularies:** "Delete" (Pets), bare `×` (Books, Lists), "clear"
+  (Our home counters), none in the danger colour. `components/RowActions.tsx` now gives one
+  Edit/Delete/Remove vocabulary with danger-toned deletes, rolled out across Pets, Books, Lists,
+  School & study and Tasks & rewards. A `×` remains only for dismissing a banner, which destroys
+  nothing.
 - [x] **"clear" on Our home counters** read as an instruction rather than a status. Now
   "All clear" / "Needs attention".
 - [ ] **Primary action placement varies:** top-right (Books, Calendar), left below tabs (Pets,
@@ -72,8 +75,13 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
   serves Tasks & rewards, Our home, the room detail page and Money. Money's coloured "View"
   pills are gone — the tile itself is the link — and its 4-then-2 grid became one 3-across grid
   that tiles exactly.
-- [ ] **Card titles split between ALL-CAPS and sentence case**, sometimes on the same page.
-- [ ] **Two identical levels of pills** in Books, plus a checkbox filter in the tab row.
+- [x] **Card titles split between ALL-CAPS and sentence case.** `Card` rendered its title
+  uppercase while hand-written headings beside it were sentence case. Card titles are now
+  sentence case; ALL-CAPS is reserved for the small field/section labels, so the two stopped
+  reading as the same thing.
+- [x] **Two identical levels of pills** in Books, plus a checkbox filter in the tab row. The
+  shelf row is now the `secondary` tab variant, and the filter sits under the tab bar instead of
+  inside it — a filter is not a tab.
 - [ ] **No shared empty state.** `EmptyState` exists but is not rolled out; compare "No task
   submissions waiting." + button, bare "No upcoming reminders", and Our home's settings form.
 - [ ] **Mixed radii/elevation:** pill search bars, `rounded-3xl` Hub widgets, `rounded-2xl`
@@ -110,8 +118,9 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
 - [ ] **School & study opens on a dead end.** It already defaults to the signed-in user's
   Person (`personIdForUser`), so the blank state in the screenshot has another cause — needs
   reproducing on the server before a fix.
-- [ ] **Calendar legend row does two jobs** — a category label beside person swatches, with the
-  forecast hint right-aligned in the same row.
+- [x] **Calendar legend row does two jobs.** The colour legend and the "use ‹ › to forecast"
+  hint are now separate lines with a rule between them, so the row stops reading as one
+  sentence.
 
 ## 7. Hub behaviour (owner request, 2026-08-09)
 
@@ -132,7 +141,14 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
   *Note: pay cycles come from Solace (Money), not Meridian, so the cycle horizon appears only
   when Money is permitted and unlocked.*
 
-## 8. Follow-up bugs found in use (2026-08-09)
+## 8. Requests from real use (2026-08-09)
+
+- [x] **Room icons had to be typed as emoji.** You had to know one existed and find it on your
+  keyboard, so most rooms went unmarked. Now a grouped picker (`config/roomIcons.ts`) of
+  ~30 room-appropriate icons — living, sleeping, work, utility, outside — kept generic per D15.
+  An icon already saved that is not on the list is preserved as its own option.
+
+## 9. Follow-up bugs found in use (2026-08-09)
 
 - [x] **A part's quantity rejected whole numbers.** The input paired `min="0.01"` with
   `step="1"`, and a number input only accepts `min + n×step` — so 2 was invalid, the browser

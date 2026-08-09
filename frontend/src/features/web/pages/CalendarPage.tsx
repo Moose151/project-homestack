@@ -1012,16 +1012,20 @@ export function CalendarPage() {
         <QuickAddBar baseDate={view === 'day' ? anchor : new Date()} time24={time24} onAdd={quickAdd} />
       )}
 
+      {/* The legend explains the colours; the forecasting hint explains the arrows. They were
+          sharing one row, so the row did two unrelated jobs and read as one sentence. */}
       {view === 'month' && rotatingSchedules.some(schedule => schedule.is_active) && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-line bg-surface px-3 py-2 text-xs text-muted">
-          {rotatingSchedules.filter(schedule => schedule.is_active).map(schedule => (
-            <div key={`month-legend-${schedule.id}`} className="flex flex-wrap items-center gap-3">
-              <span className="font-semibold text-ink">{schedule.title}</span>
-              <span className="flex items-center gap-1.5"><span className="h-3.5 w-3.5 rounded" style={{ backgroundColor: schedule.primary_colour }} />{schedule.primary_label}</span>
-              <span className="flex items-center gap-1.5"><span className="h-3.5 w-3.5 rounded" style={{ backgroundColor: schedule.secondary_colour }} />{schedule.secondary_label}</span>
-            </div>
-          ))}
-          <span className="ml-auto hidden sm:inline">Repeats continuously · use ‹ › to forecast any month</span>
+        <div className="flex flex-col gap-1.5 rounded-xl border border-line bg-surface px-3 py-2 text-xs text-muted">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {rotatingSchedules.filter(schedule => schedule.is_active).map(schedule => (
+              <div key={`month-legend-${schedule.id}`} className="flex flex-wrap items-center gap-3">
+                <span className="font-semibold text-ink">{schedule.title}</span>
+                <span className="flex items-center gap-1.5"><span className="h-3.5 w-3.5 rounded" style={{ backgroundColor: schedule.primary_colour }} />{schedule.primary_label}</span>
+                <span className="flex items-center gap-1.5"><span className="h-3.5 w-3.5 rounded" style={{ backgroundColor: schedule.secondary_colour }} />{schedule.secondary_label}</span>
+              </div>
+            ))}
+          </div>
+          <span className="hidden border-t border-line/60 pt-1.5 sm:inline">Repeats continuously · use ‹ › to forecast any month</span>
         </div>
       )}
 

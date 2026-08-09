@@ -9,6 +9,7 @@ import { Card } from '../../../components/Card'
 import { Field, fieldClass, SearchField } from '../../../components/Field'
 import { PageHeader } from '../../../components/PageHeader'
 import { Tabs } from '../../../components/Tabs'
+import { RemoveAction } from '../../..//components/RowActions'
 import { useUrlAction, useUrlQueryState } from '../../../hooks/useUrlTab'
 
 type Surface = 'personal' | 'club'
@@ -314,7 +315,7 @@ function PersonalBookCard({ entry, clubs, onRefresh, onMove, onDelete, onAddToCl
         <BookLine title={entry.book.title} author={entry.book.author} genre={entry.book.genre} pages={entry.book.pages} />
         <div className="ml-auto flex items-center gap-1">
           <button type="button" onClick={() => setEditing(v => !v)} className="min-h-10 px-2 text-xs font-semibold text-muted hover:text-primary" aria-label={`Edit ${entry.book.title}`}>Edit</button>
-          <button type="button" onClick={onDelete} className="grid min-h-10 min-w-10 place-items-center text-xl leading-none text-muted hover:text-danger" aria-label={`Remove ${entry.book.title}`}>×</button>
+          <RemoveAction onClick={onDelete} label={entry.book.title} />
         </div>
       </div>
       {editing && <EditBookPanel book={entry.book} onCancel={() => setEditing(false)} onSaved={onRefresh} />}
@@ -354,7 +355,7 @@ function ClubBookCard({ entry, club, onRefresh, onMove, onDelete, onQueue }: {
         <BookLine title={entry.book.title} author={entry.book.author} genre={entry.book.genre} pages={entry.book.pages} />
         <div className="ml-auto flex items-center gap-1">
           <button type="button" onClick={() => setEditing(v => !v)} className="min-h-10 px-2 text-xs font-semibold text-muted hover:text-primary" aria-label={`Edit ${entry.book.title}`}>Edit</button>
-          <button type="button" onClick={onDelete} className="grid min-h-10 min-w-10 place-items-center text-xl leading-none text-muted hover:text-danger" aria-label={`Remove ${entry.book.title}`}>×</button>
+          <RemoveAction onClick={onDelete} label={entry.book.title} />
         </div>
       </div>
       {editing && <EditBookPanel book={entry.book} onCancel={() => setEditing(false)} onSaved={onRefresh} />}
@@ -633,7 +634,8 @@ export function BooksPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+      {/* The filter is not a tab, so it sits under the tab bar rather than inside it. */}
+      <div className="flex flex-col gap-2">
         <Tabs
           tabs={statuses.map(status => ({
             key: status,

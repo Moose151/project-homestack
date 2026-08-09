@@ -5,6 +5,7 @@ import { Card } from '../../../../components/Card'
 import { Button } from '../../../../components/Button'
 import { Field, Input, Textarea } from '../../../../components/ui'
 import { AssigneeSelect, assigneeLabel } from '../../../../components/AssigneeSelect'
+import { DeleteAction } from '../../../..//components/RowActions'
 import { useAuth } from '../../../auth/AuthContext'
 
 // Mirrors the legacy routines.html: daily-habit cards with done-today + streak badges and a
@@ -108,7 +109,7 @@ function RoutineCard({ routine, canManage, pointsLabel, canComplete, assignedNam
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-bold text-ink">{done && '✅ '}{routine.title}</h3>
           {canManage && (
-            <button type="button" disabled={busy} onClick={remove} className="grid min-h-10 min-w-10 place-items-center text-xl leading-none text-muted hover:text-danger disabled:opacity-40" aria-label={`Delete ${routine.title}`}>×</button>
+            <DeleteAction onClick={remove} label={routine.title} disabled={busy} />
           )}
         </div>
         <div className="flex flex-wrap gap-1.5">
