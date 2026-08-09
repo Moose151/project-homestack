@@ -4,7 +4,7 @@
 `.docx` files in the project, including the previous Doc 00 update pack and the original
 standalone documents. Archive the old files; do not edit them further.
 
-**Last revised:** 2026-08-04
+**Last revised:** 2026-08-09
 **Owner:** Solo developer (single household: two adults, two children)
 **Deployment target:** Always-on home server, self-hosted, Docker Compose.
 
@@ -19,11 +19,18 @@ standalone documents. Archive the old files; do not edit them further.
 | `02_Software_Architecture_Document.md` | Technical architecture and the decisions behind it. |
 | `03_Database_Design_Document.md` | PostgreSQL schema, base-model pattern, table definitions. |
 | `04_Development_Roadmap.md` | Revised build order tuned to a solo dev. |
-| *(to follow)* | Security, API, UI/UX, Coding Standards, Parking Lot, Node specs. |
+| `05_Security_Architecture_Document.md` | Authentication, permissions and threat boundaries. |
+| `06_API_Specification.md` | REST conventions and endpoint contracts. |
+| `07_UIUX_Design_Guide.md` | Shared responsive, kiosk and accessibility standards. |
+| `08_Coding_Standards_and_Project_Structure.md` | App layering, repository and testing rules. |
+| `09_Node_Model_Decision_Record.md` | Node boundaries and justification. |
+| `10_Future_Features_Parking_Lot.md` | Deferred ideas and promotion rules. |
+| `11`–`22`, `25`–`26_Node_*.md` | Per-node specifications, including Homestead and Home Assistant. |
+| `23_Core_Hub.md` / `24_Core_Calendar.md` | Core aggregation and scheduling surface specs. |
 
-The node specifications (Atlas, Home Wiki, Pets, Education, Inventory, Assets, Hearth,
-Travel, Projects, Health, Meridian, Solace) remain largely valid from the previous pack
-and will be folded in next; where they conflict with anything here, **this set wins**.
+The node specifications cover Atlas, Home Wiki, Pets, Education, Inventory, Assets, Hearth,
+Travel, Projects, Health, Meridian, Solace, Homestead and Home Assistant; where they conflict
+with anything here, **this set wins**.
 
 ---
 
@@ -75,6 +82,8 @@ dates. Reason: eliminates drift between a treatment's `next_due_at` and its cale
 ### D8 — One recurrence representation
 Recurrence is expressed once, as an RRULE-style rule, shared by calendar events and any
 recurring node record (treatments, maintenance). No parallel `repeat_rule` formats.
+The bounded rotating-schedule exception in D23 is a two-state calendar layer rather than a
+second general event-recurrence field.
 
 ### D9 — Search via PostgreSQL full-text
 Search uses Postgres FTS (`tsvector`) over each node's permission-filtered queryset rather
@@ -156,12 +165,39 @@ remain Solace-owned. A future Assets node may still cover non-home assets (vehic
 retired. Reason: matches how the owner thinks about "the house", keeps one daily surface, and
 respects D4/D15.
 
+### D22 — Home Assistant is a dedicated bridge node with strict source-of-truth boundaries
+Home Assistant is an important planned opt-in node (spec `26_Node_Home_Assistant.md`, Roadmap
+M5.5), not a generic integrations/plugin layer and not an iframe. **Home Assistant owns devices,
+entities, areas, live state, recorder history and automations. HomeStack owns household records,
+People, tasks, Calendar data, permissions, audit and presentation mappings.** HomeStack stores
+only selected entity/action/event mappings; it does not mirror all entity state or history.
+Integration is backend-only and REST-first, using a deployment-secret long-lived access token,
+explicit entity/action allowlists, central permissions and audited controls. WebSocket state push
+and a Home Assistant custom component are evidence-driven follow-ups, not V1 prerequisites. Other
+nodes interact through the D4 event interface and continue working when Home Assistant is offline.
+Reason: this creates useful smart-home visibility and automation without duplicate data entry,
+unsafe generic service calls or another system of record.
+
+### D23 — Rotating schedules use one cycle plus sparse date exceptions
+Alternating two-state schedules such as shared care, shift work or on-call cover are stored once
+as an anchored `P`/`S` cycle and expanded only for the Calendar range being viewed. They do
+**not** create daily `CalendarEvent` rows. A changed day creates one
+`RotatingScheduleException`; deleting it restores the calculated plan. The optional subjects are
+People, while audit ownership remains Users (D12). This is a deliberately bounded Calendar
+layer, not a new generic recurrence syntax and not household-specific custody logic (D8/D15).
+Reason: an indefinitely forecastable multi-state cycle plus individual swaps is awkward and
+fragile as multiple RRULEs, while one canonical cycle avoids repeated entry, drift and database
+growth.
+
 ---
 
 ## Change history
 
 | Date | Change |
 |------|--------|
+| 2026-08-09 | Added **D23** and shipped v0.20.0 rotating Calendar schedules: one reusable 2-state cycle, optional People, range-time forecasting, sparse one-day overrides and responsive desktop/mobile setup and editing. The requested 2/2/3/2/2/3 shared-care pattern is pre-filled without hardcoding household names or generating daily events. |
+| 2026-08-09 | Shipped the v0.19.3 interaction/UI follow-up: Homestead maintenance can create or update its single Solace cost, Calendar source events link back to their owning node, linked finance badges open filtered cross-node views, touch-only controls remain visible on coarse pointers, and dense Solace/Education desktop layouts use wider screens. No new architectural decision. |
+| 2026-08-09 | Added **D22**, Roadmap Milestone 5.5 and node spec `26_Node_Home_Assistant.md`: Home Assistant is an important dedicated bridge with REST-first read-only status, safe allowlisted controls, approved HomeStack events, explicit security/availability gates and no duplicated state/domain ownership. |
 | 2026-08-04 | Shipped the focused phone usability and Hub follow-up (v0.19.1): compact section pickers for Solace/Homestead/Education, collapsed Solace creation forms, corrected Solace card spacing, visible touch actions, stacked Homestead maintenance controls, actionable node search results, background-scroll locking for the mobile More sheet, and a configurable household countdown widget. No new architectural decision. |
 | 2026-08-04 | Shipped the household-launch mobile experience (v0.19.0): partner-friendly phone navigation/defaults, mobile Hub shortcuts, profile editing, improved shared spacing/tabs/modals/sign-in, readable mobile Calendar month and Solace schedule views, actionable notifications, richer quick-create choices, and an admin setting to disable Solace's extra password-on-entry gate without removing role permissions or auditing. No new architectural decision. |
 | 2026-08-04 | Shipped Homestead room and area planning (v0.18.0): stable linked room pages, unified purchase/maintenance/renovation/upgrade items, active/completed/archived lifecycle, estimated and actual costs, exact room/household summaries, future floor-plan metadata, and permission-aware local/global search. No new architectural decision. |

@@ -11,6 +11,7 @@ from apps.homestead.views import (
     InsurancePolicyDetailView,
     InsurancePolicyListView,
     MaintenanceCompleteView,
+    MaintenanceCostView,
     MaintenanceDetailView,
     MaintenanceListView,
     PropertyDetailView,
@@ -38,6 +39,7 @@ urlpatterns = [
     path("maintenance/", MaintenanceListView.as_view(), name="homestead-maintenance-list"),
     path("maintenance/<int:task_id>/", MaintenanceDetailView.as_view(), name="homestead-maintenance-detail"),
     path("maintenance/<int:task_id>/complete/", MaintenanceCompleteView.as_view(), name="homestead-maintenance-complete"),
+    path("maintenance/<int:task_id>/track-cost/", MaintenanceCostView.as_view(), name="homestead-maintenance-track-cost"),
 
     path("improvements/", ImprovementListView.as_view(), name="homestead-improvement-list"),
     path("improvements/<int:improvement_id>/", ImprovementDetailView.as_view(), name="homestead-improvement-detail"),

@@ -1,7 +1,7 @@
 # Document 9 — Node Model Decision Record
 
 > Canonical. Supersedes earlier versions. Records *why* HomeStack uses the node set it does.
-> Cross-cutting build/architecture decisions live in `00_README_and_Changelog.md` (D1–D18).
+> Cross-cutting build/architecture decisions live in `00_README_and_Changelog.md` (D1–D23).
 
 ## 1. Decision
 
@@ -9,7 +9,7 @@ HomeStack uses a **small, deliberate set of confirmed nodes** rather than many s
 overlapping ones.
 
 **Confirmed opt-in nodes:** Atlas · Home Wiki · Pets · Education · Inventory · Assets ·
-Hearth · Travel · Projects · Health · Meridian · Solace.
+Hearth · Travel · Projects · Health · Meridian · Solace · Homestead · Home Assistant.
 
 **Core platform services:** Hub · Calendar (`scheduling`) · People · Notifications · Search ·
 Documents/Attachments · Permissions · Settings · Backups.
@@ -26,14 +26,15 @@ system logical and keeps a solo developer able to finish it.
 
 ## 3. Consolidation decisions
 
-- Vehicles, warranties, appliances, tools, home maintenance → **Assets**
+- Home property, appliances, warranties and home maintenance → **Homestead** (D21)
+- Non-home vehicles/tools/owned items → future **Assets** scope, if still justified
 - Subscriptions → **Solace**
 - Documents → core **Documents/Attachments** service
 - People → core service
 - Garden → **Projects** or **Inventory** by context
 - Library → parked unless it outgrows simple asset tracking
 - Fitness → parked under Health/future
-- Smart Home → future integration
+- Smart Home → dedicated **Home Assistant** bridge node (D22)
 
 ## 4. Consequences
 
@@ -61,6 +62,12 @@ data. No iframe/external-link layer is built. Meridian migrates early (no sensit
 Solace migrates after the security foundation is mature.
 
 ## 7. Final position
+
+Home Assistant is the deliberate exception to treating an external system as a generic
+integration. Its unique local-device workflow, permissions, security boundary and Hub presence
+justify a dedicated node. It stores presentation/control/event mappings only: Home Assistant
+continues to own device state/history/automations and HomeStack continues to own household domain
+records. This does not authorise a general `integrations` app, plugin framework or iframe layer.
 
 HomeStack grows through deliberate expansion, not accidental sprawl. The node model stays
 stable unless a future feature clearly proves it needs its own domain.

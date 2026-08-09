@@ -1,7 +1,8 @@
 # Node Spec — Homestead
 
 > Canonical. Shipped V1 (2026-07-21, v0.10.0); costs & cover added in v0.11.2;
-> room/area planning added in v0.18.0.
+> room/area planning added in v0.18.0; single-entry Solace handoff added in v0.19.2;
+> maintenance-to-Solace cost creation added in v0.19.3.
 > Global rules from `00_README_and_Changelog.md`
 > apply. See **D21** for why this node exists and how it relates to Assets / Projects / Solace.
 
@@ -33,6 +34,9 @@ info (water/gas/electric/boiler locations, kiosk-safe). Usually one row; multipl
 **Maintenance** — title, category, `next_due_at` (source of truth), `recurrence_rule` (RRULE, D8),
 `last_done_at`, optional linked appliance/provider, assignee. **Mark done → advances to the next
 occurrence** (dateutil), clearing the reminder when non-recurring. The Pets-treatment pattern.
+Paid maintenance can start on either side without re-entry: a Solace bill can be organised here,
+or an existing Homestead task can use **Track cost** to create its one protected Solace bill.
+Homestead owns task details while Solace retains amount, schedule and payment history.
 **Appliances** — name, category, brand/model/serial, room, purchase date, warranty expiry
 (countdown), warranty provider, manual link, notes.
 **Service providers** — name, trade, company, phone/email/website, last used, notes.
@@ -59,8 +63,9 @@ and exclude archived items.
 `homestead.view` (all roles) · `homestead.create`/`homestead.edit` (admin/manager/user) ·
 `homestead.delete` (admin/manager). Finer visibility (private/sensitive records hidden from other
 users/children) via the central resolver + `apply_visibility` (D10), not extra codes.
-The **Costs & cover** endpoints additionally require `solace.*` permission, password re-auth and
-audit every access. They are therefore admin-only by default and never kiosk-visible.
+The **Costs & cover** endpoints and maintenance **Track cost** action additionally require
+`solace.*` permission, password re-auth and audit every access. They are therefore admin-only by
+default and never kiosk-visible.
 
 ## 5. Hub / Calendar / Notifications
 
@@ -69,6 +74,8 @@ improvements** (active). Calendar (via helper, D7): maintenance `next_due_at` an
 `target_date`, `source_node = "homestead"`; recurring maintenance carries an RRULE (D8). Kiosk off
 for now. Insurance renewals and household-cost due dates create **Solace** financial Calendar
 events only, avoiding duplicate Homestead events and retaining Solace re-auth filtering.
+Solace-funded maintenance follows the same rule: it appears in the Maintenance workspace but
+does not create a second Calendar row.
 Notifications: assignment/overdue reminders are a later slice.
 
 ## 6. Events (signals)
@@ -76,10 +83,15 @@ Notifications: assignment/overdue reminders are a later slice.
 Publishes (D4): `homestead.property_created`, `homestead.maintenance_completed`,
 `homestead.appliance_added`, `homestead.improvement_created`, `homestead.improvement_completed`,
 `homestead.room_created`, `homestead.room_item_created`, `homestead.room_item_completed`,
-`homestead.insurance_policy_saved`, `homestead.household_cost_saved`, and
+`homestead.insurance_policy_saved`, `homestead.household_cost_saved`,
+`homestead.maintenance_cost_requested`, and
 `homestead.home_finance_record_deleted`. Solace consumes the finance events and publishes
 `solace.home_bill_synced`; Homestead stores only that lightweight bill reference. Future
 `project_*` events link house projects to Improvements. Nodes never import each other's models.
+Solace can also publish `solace.homestead_record_requested` for an explicitly classified bill;
+Homestead idempotently creates the correct policy, cost or maintenance record and publishes the
+lightweight link back. Linked maintenance save/delete events keep that same bill aligned; repeated
+cost requests update the existing source-linked bill instead of creating another.
 
 ## 7. Search / Kiosk
 
@@ -99,6 +111,8 @@ kept out of the ordinary Homestead search response.
 `HouseholdBaseModel`. No per-item `property` FK in V1 (single home; avoids the
 `property`/`@property` clash and is YAGNI). `InsurancePolicy`/`HouseholdCost` own the home-context
 fields and keep `solace_bill_ref`; the linked `Solace.Bill` owns the financial Calendar mirror.
+Solace-funded `MaintenanceTask` rows also keep only `solace_bill_ref` and suppress their ordinary
+Homestead Calendar mirror so the shared timeline remains single-entry.
 `Improvement.project_ref` is the forward hook to the Projects node.
 
 ## 9. Scope & completion
@@ -110,5 +124,8 @@ room/area plans and costs · FTS · three Hub widgets · `homestead.*` permissio
 (Overview/Rooms/Maintenance/Appliances/Improvements/Contacts/Costs & cover), dedicated
 `/homestead/rooms/:roomId` pages, search and Hub renderers.
 Costs & cover includes annualised summaries, protected search, full CRUD and Solace sync.
+Solace bill creation/edit can hand home insurance, household services and paid maintenance into
+these workspaces without re-entry; Homestead maintenance can create the same protected financial
+record in the other direction. Linked cards deep-link between their owning workspaces.
 Future: clickable floor-plan rendering, Projects linking, meter readings, document attachments,
 seasonal maintenance templates, kiosk safe view, assignment/overdue notifications.

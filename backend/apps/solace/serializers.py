@@ -29,6 +29,12 @@ def _non_blank(value: str) -> str:
 
 
 class BillSerializer(serializers.ModelSerializer):
+    home_destination = serializers.ChoiceField(
+        choices=("insurance_policy", "household_cost", "maintenance"),
+        required=False,
+        allow_blank=True,
+        write_only=True,
+    )
     is_overdue = serializers.SerializerMethodField()
     next_due_at = serializers.SerializerMethodField()
     next_occurrence_id = serializers.SerializerMethodField()
@@ -44,6 +50,7 @@ class BillSerializer(serializers.ModelSerializer):
             "next_due_at", "next_occurrence_id",
             "annual_amount", "fortnightly_amount",
             "source_node", "source_record_type", "source_record_id",
+            "home_destination",
             "calendar_event_id", "visibility", "sensitivity", "created_at", "updated_at",
         ]
         read_only_fields = [

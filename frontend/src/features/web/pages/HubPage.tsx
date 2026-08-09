@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type DragEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type {
@@ -638,9 +638,47 @@ export function HubPage() {
   const [data, setData] = useState<HubResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [configuring, setConfiguring] = useState(false)
+  const [draggedWidget, setDraggedWidget] = useState<string | null>(null)
+  const [dragOverWidget, setDragOverWidget] = useState<string | null>(null)
+  const [savingOrder, setSavingOrder] = useState(false)
+  const [configVersion, setConfigVersion] = useState(0)
 
   const loadHub = () => api.hub().then(setData).catch(e => setError(e.message))
   useEffect(() => { loadHub() }, [])
+
+  const beginWidgetDrag = (event: DragEvent, key: string) => {
+    if (!configuring || savingOrder) { event.preventDefault(); return }
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', key)
+    setDraggedWidget(key)
+  }
+
+  const dropWidget = async (event: DragEvent, targetKey: string) => {
+    event.preventDefault()
+    const sourceKey = draggedWidget || event.dataTransfer.getData('text/plain')
+    setDraggedWidget(null); setDragOverWidget(null)
+    if (!data || !sourceKey || sourceKey === targetKey || savingOrder) return
+    const previous = data
+    const next = [...data.widgets]
+    const from = next.findIndex(widget => widget.key === sourceKey)
+    const to = next.findIndex(widget => widget.key === targetKey)
+    if (from < 0 || to < 0) return
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    setData({ widgets: next })
+    setSavingOrder(true); setError(null)
+    try {
+      await api.setUserWidgetOrder(next.map(widget => widget.key))
+      const refreshed = await api.hub()
+      setData(refreshed)
+      setConfigVersion(value => value + 1)
+    } catch (reason) {
+      setData(previous)
+      setError(reason instanceof Error ? reason.message : 'Could not save the new widget order.')
+    } finally {
+      setSavingOrder(false)
+    }
+  }
 
   const now = new Date()
   const greeting =
@@ -693,7 +731,7 @@ export function HubPage() {
       </section>
 
       {configuring && (
-        <HubConfig isAdmin={user?.role === 'admin'} onChanged={loadHub} />
+        <HubConfig key={configVersion} isAdmin={user?.role === 'admin'} onChanged={loadHub} />
       )}
 
       {!data ? (
@@ -711,7 +749,19 @@ export function HubPage() {
             return (
               <div
                 key={w.key}
-                className={`${SIZE_SPAN[w.size] ?? 'sm:col-span-2'} bg-surface rounded-2xl shadow-soft border border-line overflow-hidden`}
+                onDragOver={event => {
+                  if (!configuring) return
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
+                  setDragOverWidget(w.key)
+                }}
+                onDragLeave={() => setDragOverWidget(current => current === w.key ? null : current)}
+                onDrop={event => void dropWidget(event, w.key)}
+                className={`${SIZE_SPAN[w.size] ?? 'sm:col-span-2'} bg-surface rounded-2xl shadow-soft border overflow-hidden transition-colors ${
+                  dragOverWidget === w.key && draggedWidget !== w.key
+                    ? 'border-primary ring-2 ring-primary/20'
+                    : 'border-line'
+                } ${draggedWidget === w.key ? 'opacity-50' : ''}`}
               >
                 <div
                   className="flex items-center gap-2 px-4 py-2.5 border-b border-line"
@@ -719,6 +769,18 @@ export function HubPage() {
                 >
                   <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: accent.colour }} />
                   <h3 className="text-sm font-bold text-ink truncate">{w.name}</h3>
+                  {configuring && (
+                    <span
+                      draggable={!savingOrder}
+                      onDragStart={event => beginWidgetDrag(event, w.key)}
+                      onDragEnd={() => { setDraggedWidget(null); setDragOverWidget(null) }}
+                      className="ml-auto hidden h-8 w-9 cursor-grab select-none items-center justify-center rounded-lg bg-surface/70 text-lg text-muted hover:text-ink active:cursor-grabbing md:flex"
+                      title={`Drag ${w.name}`}
+                      aria-label={`Drag ${w.name} to reorder`}
+                    >
+                      ⠿
+                    </span>
+                  )}
                 </div>
                 <div className="p-4">{renderWidget(w, loadHub)}</div>
               </div>

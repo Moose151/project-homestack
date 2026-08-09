@@ -1,6 +1,6 @@
 # Document 4 — Database Design Document (DDD)
 
-> Canonical. Supersedes all earlier DDD versions. Decisions D1–D18 in `00_README_and_Changelog.md`.
+> Canonical. Supersedes all earlier DDD versions. Decisions D1–D23 in `00_README_and_Changelog.md`.
 
 ## 1. Purpose
 
@@ -116,6 +116,18 @@ identifies the originating record so the helper can update/delete in step.
 ### calendar_event_attendees
 `id`, `calendar_event_id`, `person_id`, `response_status`, timestamps.
 
+### rotating_schedules (D23)
+`id`, `household_id`, `title`, `primary_label`, `secondary_label`, `anchor_date`,
+`cycle_pattern` (2–62 `P`/`S` characters), `primary_colour`, `secondary_colour`, `visibility`,
+`is_active`, base fields. Optional subjects use the `rotating_schedules_people` many-to-many
+join to `people`. A schedule is a calculated Calendar layer; it does not generate daily event
+rows.
+
+### rotating_schedule_exceptions (D23)
+`id`, `household_id`, `schedule_id`, `date`, `state` ∈ {primary, secondary}, `note`, base fields.
+Unique on (`schedule_id`, `date`), including soft-deleted rows so the service restores/reuses a
+prior exception. Deleting an exception restores the canonical cycle for that date.
+
 ## 7. Notifications
 
 ### notifications
@@ -213,7 +225,22 @@ node tables are created when each is migrated:
 Each migration includes a one-time import script mapping the existing app's data onto these
 tables and onto HomeStack users/people.
 
-## 20. V1 database scope
+## 20. Home Assistant bridge tables (D22; later)
+
+The dedicated bridge persists only household presentation/control/event mappings:
+
+- `home_assistant_entity_mappings` — `entity_id`, label/group/order, presentation overrides,
+  visibility, kiosk-safe/enabled/controllable flags.
+- `home_assistant_action_mappings` — fixed allowlisted domain/service/entity target, bounded
+  service data, confirmation/re-auth/kiosk policy, visibility and enabled state.
+- `home_assistant_event_mappings` — approved HomeStack source event, `homestack_`-prefixed target
+  event and a non-sensitive payload-field allowlist.
+
+Current state, attributes, recorder history and access tokens are **not stored in these tables**.
+The deployment secret owns the Home Assistant token; existing audit tables record configuration
+and control activity with secret redaction.
+
+## 21. V1 database scope
 
 Core: `households` (single row), `users`, `people`, `roles`, `permissions`,
 `role_permissions`, `user_permissions`, `nodes`, `household_nodes`, `node_settings`,
@@ -224,6 +251,9 @@ Core: `households` (single row), `users`, `people`, `roles`, `permissions`,
 Nodes in V1: Atlas tables, `wiki_pages`, Pets tables, Education tables, and the **native
 Meridian** tables.
 
-Later: Inventory, Assets, Hearth, Travel, Projects, Health, and **native Solace**.
+Post-V1 scope originally included Inventory, Assets, Hearth, Travel, Projects, Health, native
+Solace and Homestead (Solace/Homestead have since shipped). The Home Assistant bridge is planned
+for M5.5; the roadmap/handover holds live delivery status.
 
-Not created: `event_bus_events`, `attachment_permissions`, `search_index`, `external_apps`.
+Not created: `event_bus_events`, `attachment_permissions`, `search_index`, `external_apps` or a
+generic `integrations` table.

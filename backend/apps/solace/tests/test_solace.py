@@ -15,6 +15,7 @@ from apps.accounts.models import User
 from apps.audit.models import AuditLog
 from apps.core.models import get_active_household
 from apps.hub.services import get_hub_widgets
+from apps.homestead.models import HouseholdCost, InsurancePolicy, MaintenanceTask, ServiceProvider
 from apps.notifications.models import Notification
 from apps.scheduling.models import CalendarEvent
 from apps.solace.services import (
@@ -148,6 +149,151 @@ class SolaceCrudAndCalendarTests(TestCase):
         self.assertEqual(resp.json()["visibility"], "sensitive")
         self.assertEqual(resp.json()["sensitivity"], "financial")
         self.assertIsNotNone(resp.json()["calendar_event_id"])
+
+    def test_bill_rejects_unknown_homestead_destination(self):
+        resp = self.client.post(
+            reverse("solace-bill-list"),
+            {"name": "Mystery home bill", "home_destination": "unknown"},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(Bill.objects.filter(name="Mystery home bill").exists())
+
+    def test_home_insurance_bill_creates_one_linked_homestead_policy(self):
+        renewal = _future()
+        resp = self.client.post(
+            reverse("solace-bill-list"),
+            {
+                "name": "Home and contents",
+                "provider": "Cover Co",
+                "category": "insurance",
+                "amount": "1450.25",
+                "due_at": renewal.isoformat(),
+                "recurrence_rule": "FREQ=YEARLY",
+                "home_destination": "insurance_policy",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201)
+        bill = Bill.objects.get(pk=resp.json()["id"])
+        policy = InsurancePolicy.objects.get(solace_bill_ref=bill.id)
+        self.assertEqual(bill.source_node, "homestead")
+        self.assertEqual(bill.source_record_type, "insurance_policy")
+        self.assertEqual(bill.source_record_id, policy.id)
+        self.assertEqual(policy.name, "Home and contents")
+        self.assertEqual(policy.provider, "Cover Co")
+        self.assertEqual(str(policy.premium_amount), "1450.25")
+        self.assertEqual(policy.billing_cycle, "yearly")
+        self.assertEqual(InsurancePolicy.objects.count(), 1)
+        self.assertEqual(Bill.objects.count(), 1)
+
+    def test_home_service_bill_creates_linked_household_cost(self):
+        resp = self.client.post(
+            reverse("solace-bill-list"),
+            {
+                "name": "Electricity",
+                "provider": "Energy Co",
+                "category": "utilities",
+                "amount": "220.00",
+                "due_at": _future().isoformat(),
+                "recurrence_rule": "FREQ=MONTHLY;INTERVAL=3",
+                "home_destination": "household_cost",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201)
+        bill = Bill.objects.get(pk=resp.json()["id"])
+        cost = HouseholdCost.objects.get(solace_bill_ref=bill.id)
+        self.assertEqual(cost.cost_type, "electricity")
+        self.assertEqual(cost.billing_cycle, "quarterly")
+        self.assertEqual(bill.source_record_type, "household_cost")
+        self.assertEqual(bill.source_record_id, cost.id)
+
+    def test_paid_home_maintenance_bill_creates_task_and_provider_without_duplicate_calendar(self):
+        due_at = _future()
+        resp = self.client.post(
+            reverse("solace-bill-list"),
+            {
+                "name": "Annual aircon service",
+                "provider": "Cool Air Co",
+                "category": "other",
+                "amount": "180.00",
+                "due_at": due_at.isoformat(),
+                "recurrence_rule": "FREQ=YEARLY",
+                "home_destination": "maintenance",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201)
+        bill = Bill.objects.get(pk=resp.json()["id"])
+        task = MaintenanceTask.objects.get(solace_bill_ref=bill.id)
+        self.assertEqual(task.provider.name, "Cool Air Co")
+        self.assertEqual(ServiceProvider.objects.filter(name="Cool Air Co").count(), 1)
+        self.assertEqual(bill.source_record_type, "maintenance")
+        self.assertEqual(bill.source_record_id, task.id)
+        self.assertIsNone(task.calendar_event_id)
+        self.assertEqual(
+            CalendarEvent.objects.filter(
+                source_node__key="homestead", source_record_id=task.id
+            ).count(),
+            0,
+        )
+        self.assertEqual(CalendarEvent.objects.filter(pk=bill.calendar_event_id).count(), 1)
+
+    def test_existing_bill_can_be_organised_once_without_retyping(self):
+        bill = create_bill(
+            self.admin,
+            name="Council rates",
+            category="council",
+            amount="600.00",
+            due_at=_future(),
+            recurrence_rule="FREQ=MONTHLY;INTERVAL=3",
+        )
+        url = reverse("solace-bill-detail", args=[bill.id])
+        first = self.client.patch(
+            url,
+            {"home_destination": "household_cost"},
+            content_type="application/json",
+        )
+        second = self.client.patch(
+            url,
+            {"home_destination": "household_cost"},
+            content_type="application/json",
+        )
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        bill.refresh_from_db()
+        cost = HouseholdCost.objects.get(solace_bill_ref=bill.id)
+        self.assertEqual(cost.cost_type, "rates")
+        self.assertEqual(HouseholdCost.objects.count(), 1)
+        self.assertEqual(bill.source_record_id, cost.id)
+
+    def test_linked_bill_details_cannot_diverge_from_homestead(self):
+        created = self.client.post(
+            reverse("solace-bill-list"),
+            {
+                "name": "Building cover",
+                "category": "insurance",
+                "amount": "900.00",
+                "home_destination": "insurance_policy",
+            },
+            content_type="application/json",
+        )
+        bill_id = created.json()["id"]
+        url = reverse("solace-bill-detail", args=[bill_id])
+        changed = self.client.patch(
+            url,
+            {"amount": "1.00"},
+            content_type="application/json",
+        )
+        removed = self.client.delete(url)
+        self.assertEqual(changed.status_code, 400)
+        self.assertEqual(removed.status_code, 400)
+        self.assertEqual(str(Bill.objects.get(pk=bill_id).amount), "900.00")
+        self.assertEqual(
+            str(InsurancePolicy.objects.get(solace_bill_ref=bill_id).premium_amount),
+            "900.00",
+        )
 
     def test_mark_bill_paid_removes_calendar_event(self):
         bill = create_bill(self.admin, name="Rates", amount="900.00", due_at=_future())

@@ -14,6 +14,56 @@ def maintenance_completed(task_id: int, household_id: int) -> None:
     })
 
 
+def maintenance_saved(obj, acting_user_id: int) -> None:
+    """Keep an optional Solace-funded maintenance bill aligned without sharing models."""
+    if not obj.solace_bill_ref:
+        return
+    publish("homestead.maintenance_saved", payload={
+        "source_record_type": "maintenance",
+        "source_record_id": obj.id,
+        "household_id": obj.household_id,
+        "acting_user_id": acting_user_id,
+        "solace_bill_ref": obj.solace_bill_ref,
+        "name": obj.title,
+        "provider": obj.provider.name if obj.provider_id else "",
+        "due_at": obj.next_due_at.isoformat() if obj.next_due_at else None,
+        "recurrence_rule": obj.recurrence_rule,
+        "notes": obj.notes,
+    })
+
+
+def maintenance_deleted(obj, acting_user_id: int) -> None:
+    if not obj.solace_bill_ref:
+        return
+    publish("homestead.maintenance_deleted", payload={
+        "source_record_type": "maintenance",
+        "source_record_id": obj.id,
+        "household_id": obj.household_id,
+        "acting_user_id": acting_user_id,
+        "solace_bill_ref": obj.solace_bill_ref,
+    })
+
+
+def maintenance_cost_requested(
+    obj, acting_user_id: int, *, amount, category: str
+) -> None:
+    """Ask Solace to create/update the one financial record for this task (D4)."""
+    publish("homestead.maintenance_cost_requested", payload={
+        "source_record_type": "maintenance",
+        "source_record_id": obj.id,
+        "household_id": obj.household_id,
+        "acting_user_id": acting_user_id,
+        "name": obj.title,
+        "provider": obj.provider.name if obj.provider_id else "",
+        "amount": str(amount),
+        "category": category,
+        "due_at": obj.next_due_at.isoformat() if obj.next_due_at else None,
+        "recurrence_rule": obj.recurrence_rule,
+        "is_active": True,
+        "notes": obj.notes,
+    })
+
+
 def appliance_added(appliance_id: int, household_id: int) -> None:
     publish("homestead.appliance_added", payload={
         "appliance_id": appliance_id, "household_id": household_id,
@@ -125,3 +175,16 @@ def home_finance_record_deleted(
             "acting_user_id": acting_user_id,
         },
     )
+
+
+def solace_bill_linked(
+    *, bill_id: int, record_type: str, record_id: int, household_id: int,
+    acting_user_id: int,
+) -> None:
+    publish("homestead.solace_bill_linked", payload={
+        "bill_id": bill_id,
+        "source_record_type": record_type,
+        "source_record_id": record_id,
+        "household_id": household_id,
+        "acting_user_id": acting_user_id,
+    })

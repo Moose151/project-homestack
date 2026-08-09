@@ -113,6 +113,7 @@ export interface CalendarEvent {
   recurrence_rule: string
   source_node: string | null
   source_record_type: string
+  source_record_id: number | null
   assigned_to_person_id: number | null
   colour: string
   location: string
@@ -134,6 +135,58 @@ export interface CalendarEventWrite {
   colour?: string
   location?: string
   visibility?: string
+}
+
+export interface RotatingSchedulePerson {
+  id: number
+  display_name: string
+  preferred_name: string
+  colour: string
+  profile_type: 'adult' | 'child' | 'other'
+}
+
+export interface RotatingSchedule {
+  id: number
+  title: string
+  primary_label: string
+  secondary_label: string
+  anchor_date: string
+  cycle_pattern: string
+  cycle_length: number
+  primary_colour: string
+  secondary_colour: string
+  people: RotatingSchedulePerson[]
+  visibility: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface RotatingScheduleWrite {
+  title: string
+  primary_label: string
+  secondary_label: string
+  anchor_date: string
+  cycle_pattern: string
+  primary_colour?: string
+  secondary_colour?: string
+  person_ids?: number[]
+  visibility?: string
+  is_active?: boolean
+}
+
+export interface RotatingScheduleOccurrence {
+  id: string
+  schedule_id: number
+  schedule_title: string
+  date: string
+  state: 'primary' | 'secondary'
+  planned_state: 'primary' | 'secondary'
+  label: string
+  colour: string
+  is_override: boolean
+  note: string
+  person_ids: number[]
 }
 
 // --- Meridian (Milestone 2) ---
@@ -741,6 +794,7 @@ export interface MaintenanceTask {
   recurrence_rule: string
   last_done_at: string | null
   notes: string
+  solace_bill_ref: number | null
   is_overdue: boolean
   calendar_event_id: number | null
   visibility: string

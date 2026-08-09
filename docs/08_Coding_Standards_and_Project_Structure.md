@@ -1,6 +1,6 @@
 # Document 8 — Coding Standards & Project Structure
 
-> Canonical. Supersedes all earlier coding-standards docs. Decisions D1–D18 in
+> Canonical. Supersedes all earlier coding-standards docs. Decisions D1–D23 in
 > `00_README_and_Changelog.md`.
 
 ## 1. Purpose
@@ -33,11 +33,11 @@ backend/
     core/  accounts/  people/  permissions/  nodes/  hub/  scheduling/
     notifications/  attachments/  audit/  search/  backups/  events/
     atlas/  home_wiki/  pets/  education/  inventory/  assets/  hearth/
-    travel/  projects/  health/  meridian/  solace/
+    travel/  projects/  health/  meridian/  solace/  homestead/  home_assistant/
 ```
 - `scheduling`, not `calendar` (D16).
 - `events/` is the **thin signal interface** only (D4) — no broker, no event table.
-- No `households` multi-tenant app and no `integrations` app (D1, D13).
+- No `households` multi-tenant app and no generic `integrations` app (D1, D13, D22).
 
 ## 4. Frontend structure
 
@@ -45,7 +45,8 @@ backend/
 frontend/src/
   app/  api/  components/{ui,layout,feedback}/
   features/{auth,hub,scheduling,kiosk,atlas,homeWiki,pets,education,
-            inventory,assets,hearth,travel,projects,health,meridian,solace,settings}/
+            inventory,assets,hearth,travel,projects,health,meridian,solace,
+            homestead,homeAssistant,settings}/
   hooks/  theme/  types/  utils/
 ```
 
@@ -64,8 +65,9 @@ docs/
   08_Coding_Standards_and_Project_Structure.md
   09_Node_Model_Decision_Record.md
   10_Future_Features_Parking_Lot.md
-  nodes/ (atlas, home-wiki, pets, education, inventory, assets, hearth,
-          travel, projects, health, meridian, solace).md
+  11–22_Node_*.md
+  25_Node_Homestead.md
+  26_Node_Home_Assistant.md
 ```
 This set is the single source of truth; archive all superseded `.docx` files.
 

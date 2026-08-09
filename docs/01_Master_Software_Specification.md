@@ -66,20 +66,21 @@ Documents/Attachments · Permissions · Settings · Backups.
 
 **Confirmed opt-in nodes:**
 Atlas · Home Wiki · Pets · Education · Inventory · Assets · Hearth · Travel · Projects ·
-Health · Meridian · Solace.
+Health · Meridian · Solace · Homestead · Home Assistant.
 
 ### 4.1 Consolidation rules (unchanged, still in force)
 
 These do **not** become standalone nodes:
 
-- Vehicles, warranties, appliances, tools, home maintenance → **Assets**
+- Home property, appliances, warranties and home maintenance → **Homestead** (D21)
+- Non-home vehicles/tools/owned items → future **Assets** scope, if still justified
 - Subscriptions → **Solace**
 - Documents → core **Documents/Attachments** service
 - Garden → **Projects** or **Inventory** by context
 - People → core service
 - Library → parked unless it outgrows simple asset tracking
 - Fitness → parked under Health/future
-- Smart Home → future integration
+- Smart-home status and safe controls → dedicated **Home Assistant** bridge (D22)
 
 ### 4.2 Node decision rule
 
@@ -148,6 +149,10 @@ Full per-node specs are separate documents. In brief:
   **native node early**.
 - **Solace** — bills, budgets, planned purchases, subscriptions; sensitive, re-auth required.
   Becomes a **native node after security maturation**.
+- **Homestead** — the home/property hub: maintenance, rooms, appliances, warranties, cover,
+  household services and lightweight improvements; financial mirrors remain Solace-owned.
+- **Home Assistant** — a dedicated local bridge for selected smart-home state, safe allowlisted
+  controls and approved HomeStack automation events; Home Assistant remains device/state owner.
 
 Meridian and Solace already exist as working applications in the household. They are migrated
 in natively (shell rebuilt on shared services, proven logic reused, live data imported) — no
@@ -165,8 +170,8 @@ V1 is deliberately small. It is reached in stages (see Roadmap), but the V1 *sys
 - **Meridian** migrated native.
 - **Home Wiki, Pets, Education.**
 
-V1 does **not** include: Inventory, Assets, Hearth, Travel, Projects, Health, native Solace
-(these follow), nor native mobile/desktop apps, offline mode, OCR/AI, plugin system, public
+V1 does **not** include: Inventory, Assets, Hearth, Travel, Projects, Health, native Solace or
+Home Assistant (these follow), nor native mobile/desktop apps, offline mode, OCR/AI, plugin system, public
 internet exposure, external calendar sync, or field-level encryption.
 
 ## 10. Success criteria

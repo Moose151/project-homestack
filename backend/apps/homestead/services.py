@@ -134,7 +134,17 @@ def delete_appliance(acting_user: User, obj: Appliance) -> None:
 _TASK_FIELDS = {
     "appliance_id", "provider_id", "assigned_to_person_id", "title", "category",
     "next_due_at", "is_all_day", "recurrence_rule", "last_done_at", "notes", "visibility",
+    "solace_bill_ref",
 }
+
+
+def _sync_maintenance_calendar(obj: MaintenanceTask) -> None:
+    # A Solace-funded task already has one financial Calendar row. Keep Homestead as the
+    # practical workspace without creating a second event for the same due date.
+    if obj.solace_bill_ref:
+        delete_event_for(obj)
+    else:
+        sync_event_for(obj)
 
 
 def create_maintenance(acting_user: User, **data) -> MaintenanceTask:
@@ -142,7 +152,8 @@ def create_maintenance(acting_user: User, **data) -> MaintenanceTask:
         household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
     )
     obj.save()
-    sync_event_for(obj)
+    _sync_maintenance_calendar(obj)
+    events.maintenance_saved(obj, acting_user.id)
     return obj
 
 
@@ -152,7 +163,8 @@ def update_maintenance(acting_user: User, obj: MaintenanceTask, **data) -> Maint
             setattr(obj, key, val)
     obj.updated_by = acting_user
     obj.save()
-    sync_event_for(obj)
+    _sync_maintenance_calendar(obj)
+    events.maintenance_saved(obj, acting_user.id)
     return obj
 
 
@@ -179,16 +191,163 @@ def complete_maintenance(acting_user: User, obj: MaintenanceTask) -> Maintenance
     obj.next_due_at = _next_occurrence(obj.recurrence_rule, now)
     obj.updated_by = acting_user
     obj.save()
-    sync_event_for(obj)
+    _sync_maintenance_calendar(obj)
+    events.maintenance_saved(obj, acting_user.id)
     events.maintenance_completed(obj.id, obj.household_id)
     return obj
 
 
 def delete_maintenance(acting_user: User, obj: MaintenanceTask) -> None:
     delete_event_for(obj)
+    events.maintenance_deleted(obj, acting_user.id)
     obj.updated_by = acting_user
     obj.save(update_fields=["updated_by", "updated_at"])
     obj.soft_delete()
+
+
+def request_maintenance_cost(
+    acting_user: User, obj: MaintenanceTask, *, amount, category: str = "other"
+) -> MaintenanceTask:
+    """Create/update the task's single Solace bill without importing Solace models."""
+    events.maintenance_cost_requested(
+        obj,
+        acting_user.id,
+        amount=amount,
+        category=category,
+    )
+    obj.refresh_from_db()
+    if not obj.solace_bill_ref:
+        raise RuntimeError("Solace did not return a linked bill.")
+    _sync_maintenance_calendar(obj)
+    return obj
+
+
+_RRULE_CYCLES = (
+    ("FREQ=WEEKLY;INTERVAL=2", "fortnightly"),
+    ("FREQ=WEEKLY", "weekly"),
+    ("FREQ=MONTHLY;INTERVAL=6", "half_yearly"),
+    ("FREQ=MONTHLY;INTERVAL=3", "quarterly"),
+    ("FREQ=MONTHLY", "monthly"),
+    ("FREQ=YEARLY", "yearly"),
+)
+
+
+def _billing_cycle(recurrence_rule: str) -> str:
+    normalised = recurrence_rule.upper()
+    for prefix, cycle in _RRULE_CYCLES:
+        if normalised.startswith(prefix):
+            return cycle
+    return "other"
+
+
+def _cost_type(category: str, name: str) -> str:
+    category = category.lower()
+    if category == "mortgage":
+        return HouseholdCost.CostType.MORTGAGE
+    if category == "council":
+        return HouseholdCost.CostType.RATES
+    lowered = name.lower()
+    for keyword, cost_type in (
+        ("mortgage", HouseholdCost.CostType.MORTGAGE),
+        ("rent", HouseholdCost.CostType.MORTGAGE),
+        ("council", HouseholdCost.CostType.RATES),
+        ("rates", HouseholdCost.CostType.RATES),
+        ("electric", HouseholdCost.CostType.ELECTRICITY),
+        ("water", HouseholdCost.CostType.WATER),
+        ("gas", HouseholdCost.CostType.GAS),
+        ("internet", HouseholdCost.CostType.INTERNET),
+        ("waste", HouseholdCost.CostType.WASTE),
+        ("strata", HouseholdCost.CostType.BODY_CORPORATE),
+        ("body corporate", HouseholdCost.CostType.BODY_CORPORATE),
+    ):
+        if keyword in lowered:
+            return cost_type
+    return HouseholdCost.CostType.OTHER
+
+
+def organise_solace_bill(acting_user: User, *, destination: str, bill: dict):
+    """Idempotently turn one Solace entry into its Homestead-owned record (D4)."""
+    bill_id = bill["bill_id"]
+    household = get_active_household()
+    shared = {
+        "household": household,
+        "created_by": acting_user,
+        "updated_by": acting_user,
+    }
+    if destination == "insurance_policy":
+        obj = InsurancePolicy.all_objects.filter(solace_bill_ref=bill_id).first()
+        if obj is None:
+            obj = InsurancePolicy(solace_bill_ref=bill_id, **shared)
+        obj.deleted_at = None
+        obj.name = bill["name"]
+        obj.provider = bill.get("provider", "")
+        obj.premium_amount = bill["amount"]
+        obj.billing_cycle = _billing_cycle(bill.get("recurrence_rule", ""))
+        obj.next_renewal_at = bill.get("due_at")
+        obj.recurrence_rule = bill.get("recurrence_rule", "")
+        obj.is_active = bill.get("is_active", True)
+        obj.notes = bill.get("notes", "")
+        obj.visibility = "sensitive"
+        obj.updated_by = acting_user
+        obj.save()
+        record_type = "insurance_policy"
+    elif destination == "household_cost":
+        obj = HouseholdCost.all_objects.filter(solace_bill_ref=bill_id).first()
+        if obj is None:
+            obj = HouseholdCost(solace_bill_ref=bill_id, **shared)
+        obj.deleted_at = None
+        obj.name = bill["name"]
+        obj.cost_type = _cost_type(bill.get("category", ""), bill["name"])
+        obj.provider = bill.get("provider", "")
+        obj.amount = bill["amount"]
+        obj.billing_cycle = _billing_cycle(bill.get("recurrence_rule", ""))
+        obj.next_due_at = bill.get("due_at")
+        obj.recurrence_rule = bill.get("recurrence_rule", "")
+        obj.is_active = bill.get("is_active", True)
+        obj.notes = bill.get("notes", "")
+        obj.visibility = "sensitive"
+        obj.updated_by = acting_user
+        obj.save()
+        record_type = "household_cost"
+    elif destination == "maintenance":
+        provider = None
+        if bill.get("provider"):
+            provider = ServiceProvider.all_objects.filter(
+                household=household, name__iexact=bill["provider"]
+            ).first()
+            if provider is None:
+                provider = ServiceProvider(
+                    name=bill["provider"], trade=ServiceProvider.Trade.OTHER,
+                    visibility="sensitive", **shared,
+                )
+            provider.deleted_at = None
+            provider.updated_by = acting_user
+            provider.save()
+        obj = MaintenanceTask.all_objects.filter(solace_bill_ref=bill_id).first()
+        if obj is None:
+            obj = MaintenanceTask(solace_bill_ref=bill_id, **shared)
+        obj.deleted_at = None
+        obj.title = bill["name"]
+        obj.provider = provider
+        obj.next_due_at = bill.get("due_at")
+        obj.recurrence_rule = bill.get("recurrence_rule", "")
+        obj.notes = bill.get("notes", "")
+        obj.visibility = "sensitive"
+        obj.updated_by = acting_user
+        obj.save()
+        _sync_maintenance_calendar(obj)
+        record_type = "maintenance"
+    else:
+        raise ValueError("Unsupported Homestead destination.")
+
+    events.solace_bill_linked(
+        bill_id=bill_id,
+        record_type=record_type,
+        record_id=obj.id,
+        household_id=obj.household_id,
+        acting_user_id=acting_user.id,
+    )
+    return obj
 
 
 # ---------------------------------------------------------------------------

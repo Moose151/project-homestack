@@ -1,7 +1,7 @@
 # Document 10 — Future Features & Parking Lot
 
 > Canonical. Supersedes earlier versions. Holds future ideas without licensing node sprawl or
-> premature scope. Decisions D1–D18 in `00_README_and_Changelog.md`.
+> premature scope. Decisions D1–D23 in `00_README_and_Changelog.md`.
 
 ## 1. Parking-lot rule
 
@@ -50,8 +50,13 @@ exports, encrypted finance fields.
 ## 4. Future platform features
 
 PWA · native Android/iOS · desktop app · offline mode · push/email notifications · external
-calendar sync · plugin architecture · webhooks · advanced automation · AI-assisted search ·
+calendar sync · plugin architecture · general-purpose webhooks/automation · AI-assisted search ·
 OCR · semantic search.
+
+> **Promoted from the parking lot (2026-08-09):** the dedicated **Home Assistant bridge** is now
+> important Roadmap Milestone 5.5 (D22; `26_Node_Home_Assistant.md`). General plugins, arbitrary
+> webhooks and other integrations remain parked; the promotion does not create a generic
+> integrations framework.
 
 **Node graph / "web" view (Obsidian-style)** — a visual map of the Hub at the centre with every
 node hanging off it, coloured lines connecting nodes to show how they interact and what data

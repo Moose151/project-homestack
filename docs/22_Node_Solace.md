@@ -53,6 +53,12 @@ payday checklist, calendar/list views, categories, authentication, backups.
   as account transfers.
 - Readable CSV/XLSX exports, reviewed ad-hoc CSV/XLSX bill import and an expanded idempotent
   standalone SQLite importer.
+- Single-entry Homestead handoff: an explicitly classified bill can create or claim its richer
+  home-insurance, household-service or paid-maintenance record through events. Existing bills can
+  be organised later without retyping. Homestead then owns descriptive edits while Solace keeps
+  the financial occurrence/payment history.
+- Reverse maintenance handoff: an existing Homestead task can request its one Solace cost with an
+  amount; repeat requests update the same source-linked bill and retain Solace payment ownership.
 
 ## 5. Permissions (strong)
 
@@ -72,8 +78,10 @@ subscription renewal · planned purchase approaching. Run the idempotent reminde
 ## 7. Events (signals)
 
 Publishes: `bill_due`, `bill_paid`, `payday_due`, `planned_purchase_due`, `subscription_due`,
-`budget_threshold_reached`.
-Consumes: `travel_trip_created`, `hearth_grocery_estimate_created`, `asset_purchase_created`.
+`budget_threshold_reached`, `homestead_record_requested`.
+Consumes: `homestead.insurance_policy_saved`, `homestead.household_cost_saved`,
+`homestead.maintenance_cost_requested`, `homestead.maintenance_saved/deleted`,
+`travel_trip_created`, `hearth_grocery_estimate_created`, `asset_purchase_created`.
 Example: Travel creates a trip → Solace creates an optional travel budget/set-aside.
 
 ## 8. Search / Kiosk
@@ -117,3 +125,5 @@ Complete when only authorised users access Solace through HomeStack, re-auth wor
 never leaks into unauthorised views, and the standalone app is retired at home. Future:
 travel/grocery/asset-purchase budget integration, financial documents and encrypted finance
 fields.
+For Homestead-linked bills, direct descriptive edit/delete is rejected in Solace so the two
+nodes cannot silently diverge; payment/occurrence actions remain Solace-owned.

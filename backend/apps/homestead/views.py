@@ -15,6 +15,7 @@ from apps.homestead.serializers import (
     HouseholdCostSerializer,
     ImprovementSerializer,
     InsurancePolicySerializer,
+    MaintenanceCostRequestSerializer,
     MaintenanceTaskSerializer,
     PropertySerializer,
     RoomAreaSerializer,
@@ -45,7 +46,7 @@ class HomesteadFinanceAccessMixin:
             request=request._request,
             metadata={
                 "node": "homestead",
-                "surface": "costs_cover",
+                "surface": getattr(self, "finance_surface", "costs_cover"),
                 "path": request.path,
                 "method": request.method,
             },
@@ -245,6 +246,25 @@ class MaintenanceCompleteView(APIView):
         if obj is None:
             raise NotFound()
         obj = services.complete_maintenance(request.user, obj)
+        return Response(MaintenanceTaskSerializer(obj).data)
+
+
+class MaintenanceCostView(HomesteadFinanceAccessMixin, APIView):
+    """Create/update this task's one Solace cost without duplicating maintenance data."""
+
+    finance_surface = "maintenance_cost"
+
+    def post(self, request: Request, task_id: int) -> Response:
+        obj = selectors.get_maintenance(task_id, request.user)
+        if obj is None:
+            raise NotFound()
+        serializer = MaintenanceCostRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        obj = services.request_maintenance_cost(
+            request.user,
+            obj,
+            **serializer.validated_data,
+        )
         return Response(MaintenanceTaskSerializer(obj).data)
 
 

@@ -28,6 +28,7 @@ from apps.homestead.services import (
     create_room,
     create_room_item,
     delete_maintenance,
+    update_maintenance,
     update_improvement,
 )
 from apps.scheduling.models import CalendarEvent
@@ -136,6 +137,27 @@ class HomesteadFinancePermissionTests(TestCase):
         _login(self.client, "finance_manager")
         _reauth(self.client)
         self.assertIn(self.client.get(self.url).status_code, [401, 403])
+
+    def test_tracking_maintenance_cost_requires_password_reauth(self):
+        task = create_maintenance(self.admin, title="Service air conditioner")
+        _login(self.client, "finance_admin")
+        response = self.client.post(
+            reverse("homestead-maintenance-track-cost", args=[task.id]),
+            {"amount": "180.00", "category": "other"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_cannot_track_maintenance_cost_without_solace_grant(self):
+        task = create_maintenance(self.admin, title="Service air conditioner")
+        _login(self.client, "finance_manager")
+        _reauth(self.client)
+        response = self.client.post(
+            reverse("homestead-maintenance-track-cost", args=[task.id]),
+            {"amount": "180.00", "category": "other"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
 
 
 class HomesteadRoomPermissionTests(TestCase):
@@ -625,6 +647,121 @@ class HomesteadFinanceSyncTests(TestCase):
         event = CalendarEvent.objects.get(pk=bill.calendar_event_id)
         self.assertEqual(event.source_node.key, "solace")
         self.assertEqual(event.sensitivity, "financial")
+
+    def test_homestead_maintenance_can_create_and_update_its_solace_cost(self):
+        task = create_maintenance(
+            self.admin,
+            title="Annual air conditioner service",
+            next_due_at=_future(),
+            recurrence_rule="FREQ=YEARLY",
+        )
+        original_calendar_id = task.calendar_event_id
+        url = reverse("homestead-maintenance-track-cost", args=[task.id])
+
+        response = self.client.post(
+            url,
+            {"amount": "180.00", "category": "other"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        task.refresh_from_db()
+        bill = Bill.objects.get(
+            source_node="homestead",
+            source_record_type="maintenance",
+            source_record_id=task.id,
+        )
+        self.assertEqual(task.solace_bill_ref, bill.id)
+        self.assertEqual(str(bill.amount), "180.00")
+        self.assertEqual(bill.due_at, task.next_due_at)
+        self.assertEqual(bill.recurrence_rule, task.recurrence_rule)
+        self.assertIsNone(task.calendar_event_id)
+        self.assertFalse(CalendarEvent.objects.filter(pk=original_calendar_id).exists())
+        self.assertEqual(CalendarEvent.objects.get(pk=bill.calendar_event_id).source_node.key, "solace")
+
+        response = self.client.post(
+            url,
+            {"amount": "220.50", "category": "other"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            Bill.objects.filter(
+                source_node="homestead",
+                source_record_type="maintenance",
+                source_record_id=task.id,
+            ).count(),
+            1,
+        )
+        bill.refresh_from_db()
+        self.assertEqual(str(bill.amount), "220.50")
+
+    def test_maintenance_cost_requires_positive_amount(self):
+        task = create_maintenance(self.admin, title="Gutter clean")
+        response = self.client.post(
+            reverse("homestead-maintenance-track-cost", args=[task.id]),
+            {"amount": "0", "category": "other"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Bill.objects.filter(source_record_type="maintenance").exists())
+
+    def test_linked_maintenance_edit_updates_existing_solace_bill(self):
+        bill = Bill.objects.create(
+            household=self.admin.household,
+            created_by=self.admin,
+            updated_by=self.admin,
+            name="Aircon service",
+            amount="180.00",
+            due_at=_future(),
+            recurrence_rule="FREQ=YEARLY",
+        )
+        task = create_maintenance(
+            self.admin,
+            title="Aircon service",
+            next_due_at=bill.due_at,
+            recurrence_rule=bill.recurrence_rule,
+            solace_bill_ref=bill.id,
+        )
+        bill.source_node = "homestead"
+        bill.source_record_type = "maintenance"
+        bill.source_record_id = task.id
+        bill.save()
+
+        next_due = _future(96)
+        update_maintenance(
+            self.admin,
+            task,
+            title="Ducted aircon service",
+            next_due_at=next_due,
+        )
+        bill.refresh_from_db()
+        task.refresh_from_db()
+        self.assertEqual(bill.name, "Ducted aircon service")
+        self.assertEqual(bill.due_at, next_due)
+        self.assertEqual(str(bill.amount), "180.00")
+        self.assertIsNone(task.calendar_event_id)
+
+    def test_deleting_linked_maintenance_deletes_its_solace_bill(self):
+        bill = Bill.objects.create(
+            household=self.admin.household,
+            created_by=self.admin,
+            updated_by=self.admin,
+            name="Gutter clean",
+            amount="120.00",
+        )
+        task = create_maintenance(
+            self.admin,
+            title="Gutter clean",
+            solace_bill_ref=bill.id,
+        )
+        bill.source_node = "homestead"
+        bill.source_record_type = "maintenance"
+        bill.source_record_id = task.id
+        bill.save()
+
+        delete_maintenance(self.admin, task)
+        self.assertFalse(Bill.objects.filter(pk=bill.id).exists())
 
 
 # ---------------------------------------------------------------------------

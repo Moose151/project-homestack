@@ -1,6 +1,6 @@
 # Document 5 — Security Architecture Document
 
-> Canonical. Supersedes all earlier security docs. Decisions D1–D18 in `00_README_and_Changelog.md`.
+> Canonical. Supersedes all earlier security docs. Decisions D1–D23 in `00_README_and_Changelog.md`.
 
 ## 1. Purpose
 
@@ -24,6 +24,7 @@ defence in depth · auditability · sensitive-data separation · safe kiosk beha
 - Some People profile fields (DOB, allergies, school details, emergency contacts, notes)
 - Backups
 - Admin settings
+- Home Assistant connection credentials, mapping configuration and sensitive controls
 
 These get stronger controls: restricted visibility, sensitivity tagging, re-authentication
 where noted, and audit logging.
@@ -124,6 +125,15 @@ and offsite backups, integrity checks.
 Log: logins, failed logins, sensitive-node access, permission changes, user changes, node
 enable/disable, backup creation, backup restore, and sensitive attachment downloads. Audit
 entries are immutable and admin-viewable.
+
+### 13.1 Home Assistant bridge security (D22)
+
+The Home Assistant base URL and long-lived token are backend deployment secrets, never browser
+or ordinary database settings. Discovery/configuration is admin-only. Normal reads return only
+explicitly mapped entities with sensitive attributes filtered; controls resolve a stored action
+ID to a server-side domain/service/entity allowlist and are audited. Locks, alarms, garage doors,
+cameras and safety devices remain read-only or absent until separately reviewed. Upstream
+timeouts, invalid credentials or outages fail independently and do not block HomeStack.
 
 ## 14. Remote access (pre-exposure checklist)
 

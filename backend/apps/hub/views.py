@@ -10,9 +10,16 @@ from apps.hub.selectors import list_widget_config
 from apps.hub.serializers import (
     HouseholdWidgetWriteSerializer,
     HubWidgetConfigSerializer,
+    UserWidgetOrderWriteSerializer,
     UserWidgetWriteSerializer,
 )
-from apps.hub.services import HubError, get_hub_widgets, set_household_widget, set_user_widget
+from apps.hub.services import (
+    HubError,
+    get_hub_widgets,
+    set_household_widget,
+    set_user_widget,
+    set_user_widget_order,
+)
 from apps.accounts.services import is_reauthed
 from apps.permissions.drf import HomeStackPermission
 
@@ -75,6 +82,22 @@ class UserWidgetView(APIView):
         serializer.is_valid(raise_exception=True)
         try:
             set_user_widget(request.user, key, **serializer.validated_data)
+        except HubError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"widgets": list_widget_config(request.user)})
+
+
+class UserWidgetOrderView(APIView):
+    """PATCH the caller's complete widget order in one fast, atomic request."""
+
+    permission_classes = [_HubPerm]
+    permission_action = "view"
+
+    def patch(self, request: Request) -> Response:
+        serializer = UserWidgetOrderWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            set_user_widget_order(request.user, serializer.validated_data["keys"])
         except HubError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response({"widgets": list_widget_config(request.user)})

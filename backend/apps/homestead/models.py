@@ -196,6 +196,7 @@ class MaintenanceTask(CalendarSyncMixin, HouseholdBaseModel):
     recurrence_rule = models.CharField(max_length=512, blank=True, default="")
     last_done_at = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True, default="")
+    solace_bill_ref = models.PositiveBigIntegerField(null=True, blank=True, editable=False)
     calendar_event_id = models.PositiveBigIntegerField(null=True, blank=True)
     visibility = models.CharField(
         max_length=20, choices=Visibility.choices, default=Visibility.HOUSEHOLD

@@ -5,6 +5,7 @@ from apps.hub.views import (
     HubView,
     HubWidgetConfigView,
     KioskHubView,
+    UserWidgetOrderView,
     UserWidgetView,
 )
 
@@ -12,6 +13,7 @@ urlpatterns = [
     path("", HubView.as_view(), name="hub"),
     path("kiosk/", KioskHubView.as_view(), name="kiosk-hub"),
     path("widgets/", HubWidgetConfigView.as_view(), name="hub-widget-config"),
+    path("widgets/me/order/", UserWidgetOrderView.as_view(), name="hub-widget-user-order"),
     path("widgets/<str:key>/", HouseholdWidgetView.as_view(), name="hub-widget-household"),
     path("widgets/<str:key>/me/", UserWidgetView.as_view(), name="hub-widget-user"),
 ]

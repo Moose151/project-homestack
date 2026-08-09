@@ -1,6 +1,7 @@
 import type {
   AtlasList, AtlasListItem, AtlasNote, AtlasReminder,
-  AuthUser, CalendarEvent, CalendarEventWrite, HubResponse, HubWidgetConfig, KioskUser,
+  AuthUser, CalendarEvent, CalendarEventWrite, RotatingSchedule, RotatingScheduleOccurrence,
+  RotatingScheduleWrite, HubResponse, HubWidgetConfig, KioskUser,
   KioskMeridian, MeridianPointsResponse, MeridianReward,
   MeridianRewardRequest, MeridianTask, MeridianTaskCompletion,
   MeridianCategory, MeridianRoutine, MeridianGoal,
@@ -139,6 +140,7 @@ type SolaceBillWrite = Partial<{
   due_at: string | null; is_all_day: boolean; recurrence_rule: string
   end_date: string | null; is_active: boolean; is_autopay: boolean
   include_in_set_aside: boolean
+  home_destination: '' | 'insurance_policy' | 'household_cost' | 'maintenance'
   occurrence_update_scope: 'future_unpaid' | 'all_unpaid'
   is_paid: boolean; paid_at: string | null; notes: string; visibility: string; sensitivity: string
 }>
@@ -410,6 +412,8 @@ export const api = {
   setUserWidget: (key: string, data: Partial<{ is_enabled: boolean; display_order: number }>):
     Promise<{ widgets: HubWidgetConfig[] }> =>
     _fetch(`/hub/widgets/${key}/me/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  setUserWidgetOrder: (keys: string[]): Promise<{ widgets: HubWidgetConfig[] }> =>
+    _fetch('/hub/widgets/me/order/', { method: 'PATCH', body: JSON.stringify({ keys }) }),
 
   // --- Atlas lists ---
   getLists: (): Promise<AtlasList[]> => _fetch('/atlas/lists/'),
@@ -466,6 +470,26 @@ export const api = {
     _fetch(`/calendar/events/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteEvent: (id: number): Promise<void> =>
     _fetch(`/calendar/events/${id}/`, { method: 'DELETE' }),
+  getRotatingSchedules: (): Promise<RotatingSchedule[]> =>
+    _fetch('/calendar/rotations/'),
+  createRotatingSchedule: (data: RotatingScheduleWrite): Promise<RotatingSchedule> =>
+    _fetch('/calendar/rotations/', { method: 'POST', body: JSON.stringify(data) }),
+  updateRotatingSchedule: (id: number, data: Partial<RotatingScheduleWrite>): Promise<RotatingSchedule> =>
+    _fetch(`/calendar/rotations/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteRotatingSchedule: (id: number): Promise<void> =>
+    _fetch(`/calendar/rotations/${id}/`, { method: 'DELETE' }),
+  getRotatingScheduleOccurrences: (start: string, end: string): Promise<RotatingScheduleOccurrence[]> => {
+    const q = new URLSearchParams({ start, end })
+    return _fetch(`/calendar/rotation-occurrences/?${q}`)
+  },
+  setRotatingScheduleException: (
+    scheduleId: number, date: string, data: { state: 'primary' | 'secondary'; note?: string },
+  ): Promise<void> =>
+    _fetch(`/calendar/rotations/${scheduleId}/exceptions/${date}/`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  deleteRotatingScheduleException: (scheduleId: number, date: string): Promise<void> =>
+    _fetch(`/calendar/rotations/${scheduleId}/exceptions/${date}/`, { method: 'DELETE' }),
 
   // --- Meridian: tasks ---
   getMeridianTasks: (params?: { status?: string; hot?: boolean }): Promise<MeridianTask[]> => {
@@ -850,6 +874,10 @@ export const api = {
     _fetch(`/homestead/maintenance/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   completeMaintenance: (id: number): Promise<MaintenanceTask> =>
     _fetch(`/homestead/maintenance/${id}/complete/`, { method: 'POST' }),
+  trackMaintenanceCost: (id: number, data: { amount: string; category: string }): Promise<MaintenanceTask> =>
+    _fetch(`/homestead/maintenance/${id}/track-cost/`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
   deleteMaintenance: (id: number): Promise<void> =>
     _fetch(`/homestead/maintenance/${id}/`, { method: 'DELETE' }),
 

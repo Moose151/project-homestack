@@ -6,6 +6,7 @@ in Milestone 2 when more nodes contribute hub widgets.
 """
 from __future__ import annotations
 
+from django.db import transaction
 from django.utils import timezone
 
 from apps.hub.models import HouseholdHubWidget
@@ -341,3 +342,45 @@ def set_user_widget(user, key: str, *, is_enabled=None, display_order=None):
         config.display_order = display_order
     config.save()
     return config
+
+
+def set_user_widget_order(user, keys: list[str]) -> None:
+    """Persist the caller's complete enabled-widget order in one API round trip."""
+    from apps.hub.models import HubWidget, UserHubWidget
+    from apps.hub.selectors import list_widget_config
+
+    config = [row for row in list_widget_config(user) if row["household_enabled"]]
+    allowed = {row["key"] for row in config}
+    if not set(keys).issubset(allowed) or not keys:
+        raise HubError("Only enabled widgets can be reordered.")
+    # The live Hub omits personally hidden widgets. Append any omitted rows in their current
+    # effective order so dragging visible cards still leaves a complete, collision-free order.
+    requested = set(keys)
+    keys = [*keys, *(row["key"] for row in config if row["key"] not in requested)]
+
+    widgets = {
+        widget.key: widget for widget in HubWidget.objects.filter(key__in=keys)
+    }
+    existing = {
+        row.widget_id: row
+        for row in UserHubWidget.objects.filter(
+            user=user, widget__in=widgets.values()
+        )
+    }
+    to_create = []
+    to_update = []
+    for position, key in enumerate(keys):
+        widget = widgets[key]
+        row = existing.get(widget.id)
+        if row is None:
+            to_create.append(UserHubWidget(
+                user=user, widget=widget, display_order=position
+            ))
+        elif row.display_order != position:
+            row.display_order = position
+            to_update.append(row)
+    with transaction.atomic():
+        if to_create:
+            UserHubWidget.objects.bulk_create(to_create)
+        if to_update:
+            UserHubWidget.objects.bulk_update(to_update, ["display_order"])

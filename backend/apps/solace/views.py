@@ -628,7 +628,11 @@ class BillListView(SolaceAccessMixin, APIView):
     def post(self, request: Request) -> Response:
         serializer = BillSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        obj = services.create_bill(request.user, **serializer.validated_data)
+        data = dict(serializer.validated_data)
+        destination = data.pop("home_destination", "")
+        with transaction.atomic():
+            obj = services.create_bill(request.user, **data)
+            obj = services.organise_bill_in_homestead(request.user, obj, destination)
         return Response(BillSerializer(obj).data, status=status.HTTP_201_CREATED)
 
 
@@ -642,6 +646,10 @@ class BillDetailView(SolaceAccessMixin, APIView):
     def patch(self, request: Request, bill_id: int) -> Response:
         existing = self._get(bill_id)
         payload = request.data.copy()
+        if existing.source_node and set(payload) - {"home_destination"}:
+            raise ValidationError({
+                "detail": f"Edit this linked bill from {existing.source_node.title()}."
+            })
         occurrence_scope = payload.pop("occurrence_update_scope", "future_unpaid")
         if isinstance(occurrence_scope, list):
             occurrence_scope = occurrence_scope[-1] if occurrence_scope else "future_unpaid"
@@ -651,16 +659,30 @@ class BillDetailView(SolaceAccessMixin, APIView):
             })
         serializer = BillSerializer(existing, data=payload, partial=True)
         serializer.is_valid(raise_exception=True)
-        obj = services.update_bill(
-            request.user,
-            existing,
-            occurrence_scope=occurrence_scope,
-            **serializer.validated_data,
-        )
+        data = dict(serializer.validated_data)
+        destination = data.pop("home_destination", "")
+        try:
+            with transaction.atomic():
+                obj = services.update_bill(
+                    request.user,
+                    existing,
+                    occurrence_scope=occurrence_scope,
+                    **data,
+                )
+                obj = services.organise_bill_in_homestead(
+                    request.user, obj, destination
+                )
+        except ValueError as exc:
+            raise ValidationError({"home_destination": str(exc)}) from exc
         return Response(BillSerializer(obj).data)
 
     def delete(self, request: Request, bill_id: int) -> Response:
-        services.delete_bill(request.user, self._get(bill_id))
+        existing = self._get(bill_id)
+        if existing.source_node:
+            raise ValidationError({
+                "detail": f"Delete this linked bill from {existing.source_node.title()}."
+            })
+        services.delete_bill(request.user, existing)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

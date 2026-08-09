@@ -44,3 +44,16 @@ class HouseholdWidgetWriteSerializer(serializers.Serializer):
 class UserWidgetWriteSerializer(serializers.Serializer):
     is_enabled = serializers.BooleanField(required=False)
     display_order = serializers.IntegerField(required=False)
+
+
+class UserWidgetOrderWriteSerializer(serializers.Serializer):
+    keys = serializers.ListField(
+        child=serializers.CharField(max_length=50),
+        allow_empty=False,
+        max_length=100,
+    )
+
+    def validate_keys(self, value):
+        if len(value) != len(set(value)):
+            raise serializers.ValidationError("Each widget must appear exactly once.")
+        return value

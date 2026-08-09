@@ -8,12 +8,14 @@ Tests written FIRST per D10. Covers:
 - Synced events reject direct API writes.
 - CalendarEvent ordering, detail 404.
 """
+from datetime import date
+
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import User
-from apps.scheduling.models import CalendarEvent
+from apps.scheduling.models import CalendarEvent, RotatingSchedule, RotatingScheduleException
 from apps.scheduling.services import create_event
 
 
@@ -300,3 +302,184 @@ class CalendarEventCRUDTests(TestCase):
         _login(self.client, "child_meridian")
         child_resp = self.client.get(self.list_url)
         self.assertNotIn("Private Meridian deadline", [e["title"] for e in child_resp.json()])
+
+
+class RotatingScheduleTests(TestCase):
+    """One canonical cycle can be forecast indefinitely and changed per date."""
+
+    pattern = "PPSSPPPSSPPSSS"  # 2 on, 2 off, 3 on, 2 off, 2 on, 3 off
+
+    def setUp(self):
+        self.admin = _make_user("rotation_admin", User.Role.ADMIN)
+        self.guest = _make_user("rotation_guest", User.Role.GUEST)
+        self.list_url = reverse("rotating-schedule-list")
+        self.occurrences_url = reverse("rotating-schedule-occurrence-list")
+
+    def _create(self, **overrides):
+        payload = {
+            "title": "Kids",
+            "primary_label": "With us",
+            "secondary_label": "With Dad",
+            "anchor_date": "2026-08-03",
+            "cycle_pattern": self.pattern,
+            **overrides,
+        }
+        return self.client.post(self.list_url, payload, content_type="application/json")
+
+    def test_unauthenticated_access_is_rejected(self):
+        self.assertIn(self.client.get(self.list_url).status_code, [401, 403])
+        self.assertIn(self.client.get(self.occurrences_url).status_code, [401, 403])
+
+    def test_guest_can_view_but_cannot_create(self):
+        _login(self.client, "rotation_guest")
+        self.assertEqual(self.client.get(self.list_url).status_code, 200)
+        self.assertIn(self._create().status_code, [401, 403])
+
+    def test_guest_cannot_change_or_restore_an_exception(self):
+        from apps.scheduling.services import create_rotating_schedule
+
+        schedule = create_rotating_schedule(
+            self.admin,
+            title="Kids",
+            primary_label="With us",
+            secondary_label="Other home",
+            anchor_date=date(2026, 8, 3),
+            cycle_pattern=self.pattern,
+        )
+        url = reverse(
+            "rotating-schedule-exception-detail",
+            kwargs={"schedule_id": schedule.id, "date": "2026-08-05"},
+        )
+        _login(self.client, "rotation_guest")
+        self.assertIn(
+            self.client.put(url, {"state": "primary"}, content_type="application/json").status_code,
+            [401, 403],
+        )
+        self.assertIn(self.client.delete(url).status_code, [401, 403])
+
+    def test_create_and_expand_exact_fourteen_day_pattern(self):
+        _login(self.client, "rotation_admin")
+        response = self._create()
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["cycle_length"], 14)
+        self.assertEqual(CalendarEvent.objects.count(), 0)
+
+        response = self.client.get(
+            f"{self.occurrences_url}?start=2026-08-03&end=2026-08-17"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [row["state"] for row in response.json()],
+            ["primary" if value == "P" else "secondary" for value in self.pattern],
+        )
+        self.assertTrue(all(not row["is_override"] for row in response.json()))
+
+    def test_pattern_forecasts_far_into_the_future(self):
+        _login(self.client, "rotation_admin")
+        self._create()
+        # 1400 days is exactly 100 cycles after the anchor.
+        response = self.client.get(
+            f"{self.occurrences_url}?start=2030-06-03&end=2030-06-04"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()[0]["state"], "primary")
+
+    def test_date_exception_can_swap_state_then_restore_pattern(self):
+        _login(self.client, "rotation_admin")
+        schedule_id = self._create().json()["id"]
+        exception_url = reverse(
+            "rotating-schedule-exception-detail",
+            kwargs={"schedule_id": schedule_id, "date": "2026-08-05"},
+        )
+        response = self.client.put(
+            exception_url,
+            {"state": "primary", "note": "Agreed swap"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(RotatingScheduleException.objects.count(), 1)
+
+        occurrence = self.client.get(
+            f"{self.occurrences_url}?start=2026-08-05&end=2026-08-06"
+        ).json()[0]
+        self.assertEqual(occurrence["state"], "primary")
+        self.assertTrue(occurrence["is_override"])
+        self.assertEqual(occurrence["note"], "Agreed swap")
+
+        self.assertEqual(self.client.delete(exception_url).status_code, 204)
+        restored = self.client.get(
+            f"{self.occurrences_url}?start=2026-08-05&end=2026-08-06"
+        ).json()[0]
+        self.assertEqual(restored["state"], "secondary")
+        self.assertFalse(restored["is_override"])
+
+    def test_soft_deleted_exception_is_reused_when_date_is_changed_again(self):
+        _login(self.client, "rotation_admin")
+        schedule_id = self._create().json()["id"]
+        url = reverse(
+            "rotating-schedule-exception-detail",
+            kwargs={"schedule_id": schedule_id, "date": "2026-08-05"},
+        )
+        self.client.put(url, {"state": "primary"}, content_type="application/json")
+        self.client.delete(url)
+        response = self.client.put(
+            url, {"state": "primary", "note": "Second swap"}, content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(RotatingScheduleException.all_objects.count(), 1)
+        self.assertEqual(response.json()["note"], "Second swap")
+
+    def test_invalid_pattern_and_invalid_window_are_rejected(self):
+        _login(self.client, "rotation_admin")
+        self.assertEqual(self._create(cycle_pattern="PPXSS").status_code, 400)
+        self._create()
+        self.assertEqual(
+            self.client.get(f"{self.occurrences_url}?start=bad&end=2026-08-10").status_code,
+            400,
+        )
+        self.assertEqual(
+            self.client.get(
+                f"{self.occurrences_url}?start=2026-08-10&end=2026-08-03"
+            ).status_code,
+            400,
+        )
+
+    def test_people_are_attached_once_to_schedule_not_copied_to_days(self):
+        from apps.people.services import create_person
+
+        child = create_person(self.admin, display_name="Child", profile_type="child")
+        _login(self.client, "rotation_admin")
+        response = self._create(person_ids=[child.id])
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["people"][0]["display_name"], "Child")
+        schedule = RotatingSchedule.objects.get(pk=response.json()["id"])
+        self.assertEqual(list(schedule.people.values_list("id", flat=True)), [child.id])
+
+    def test_schedule_can_be_edited_and_soft_deleted(self):
+        _login(self.client, "rotation_admin")
+        schedule_id = self._create().json()["id"]
+        url = reverse("rotating-schedule-detail", kwargs={"schedule_id": schedule_id})
+        response = self.client.patch(
+            url,
+            {"secondary_label": "With other carer", "cycle_pattern": "PS"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["secondary_label"], "With other carer")
+        self.assertEqual(response.json()["cycle_length"], 2)
+        self.assertEqual(self.client.delete(url).status_code, 204)
+        self.assertFalse(RotatingSchedule.objects.filter(pk=schedule_id).exists())
+        self.assertTrue(RotatingSchedule.all_objects.filter(pk=schedule_id).exists())
+
+    def test_private_schedule_is_hidden_from_child_account(self):
+        _login(self.client, "rotation_admin")
+        self._create(title="Private rotation", visibility="private")
+        child = _make_user("rotation_child", User.Role.USER, is_child=True)
+        _login(self.client, child.username)
+        self.assertEqual(self.client.get(self.list_url).json(), [])
+        self.assertEqual(
+            self.client.get(
+                f"{self.occurrences_url}?start=2026-08-03&end=2026-08-04"
+            ).json(),
+            [],
+        )

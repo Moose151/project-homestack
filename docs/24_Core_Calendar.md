@@ -66,9 +66,16 @@ in place.
 a node record with a date changes; removed by `delete_event_for(record)` / when the source date
 is cleared. The node owns the truth; the calendar reflects it.
 
-**Recurrence (D8)** — one format, `recurrence_rule` (RRULE), stored on the owning record and
-copied onto the event for display. *Full RRULE expansion into occurrences is deferred* — V1
-stores and displays the rule; the renderer expands a window when expansion lands.
+**Recurrence (D8)** — one format for conventional events, `recurrence_rule` (RRULE), stored on
+the owning record and copied onto the event for display. *Full RRULE expansion into occurrences
+is deferred* — V1 stores and displays the rule; the renderer expands a window when expansion
+lands.
+
+**Rotating schedules (D23)** — an anchored two-state cycle for shared care, shift work, on-call
+cover and similar calendars. One schedule stores its editable `P`/`S` pattern, labels, colours
+and optional People. The requested range is calculated on read; sparse per-date exceptions
+replace one state and can be removed to restore the plan. This creates no daily CalendarEvent
+rows and does not replace RRULE for conventional event recurrence.
 
 **Colour & assignment** — per-event `colour` and `assigned_to_person` drive a clear, glanceable,
 per-person colour-coded timeline ("nice to look at", §16).
@@ -127,6 +134,8 @@ The Calendar is reachable from **every screen**, not just a nav destination:
 - A lightweight **peek/mini-calendar** (e.g. month strip or "next up" popover) openable from any
   page without a full navigation, for a quick glance and quick-add.
 - Deep-linkable: dated items across nodes link straight to their event/day in the Calendar.
+- Synced event details provide an explicit **Open the source record** route back to the owning
+  Atlas, Pets, Education, Homestead, Solace or Meridian workspace; edits never stop in Calendar.
 - Present on web, mobile layout, and the kiosk Hub (kiosk-safe events only).
 
 ## 15. Configurability (owner requirement)
@@ -165,6 +174,11 @@ reminders/lead times, household default config, drag-to-reschedule (parked).
 `recurrence_rule` (the single source for recurrence, D8). Shared services: permissions resolver,
 notifications, search, audit.
 
+`rotating_schedules` (`RotatingSchedule`, inherits `HouseholdBaseModel`): title, two labels,
+anchor date, one `P`/`S` cycle, two colours, optional People, visibility and active state.
+`rotating_schedule_exceptions` (`RotatingScheduleException`, inherits
+`HouseholdBaseModel`): schedule, unique date, replacement state and optional note (D23).
+
 ## 19. API
 
 `GET /api/v1/calendar/events/` — list (permission-filtered; query by date window / source /
@@ -173,6 +187,10 @@ person as those filters land).
 helper, not here).
 `GET /api/v1/calendar/events/{id}/` · `PATCH …` · `DELETE …` — standalone events only; synced
 events reject direct writes (D7) — edit the source record.
+
+`GET/POST /api/v1/calendar/rotations/` · `GET/PATCH/DELETE …/{id}/` — manage canonical cycles.
+`GET /api/v1/calendar/rotation-occurrences/?start=&end=` — expand visible schedules for an
+end-exclusive date window. `PUT/DELETE …/{id}/exceptions/{date}/` — set or restore one day.
 
 ## 20. V1 scope
 

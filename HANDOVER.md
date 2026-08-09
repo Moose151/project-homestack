@@ -24,7 +24,7 @@ current scope.
 Read these in `docs/`. **If anything conflicts, this doc set wins.** Older `.docx` files are
 archived/superseded — ignore them.
 
-- `00_README_and_Changelog.md` — **all key decisions (D1–D18) with reasoning. Read this.**
+- `00_README_and_Changelog.md` — **all key decisions (D1–D23) with reasoning. Read this.**
 - `01_Master_Software_Specification.md` — vision, node model, V1 scope.
 - `02_Software_Architecture_Document.md` — architecture, base model, resolver, helpers.
 - `03_Database_Design_Document.md` — schema and conventions.
@@ -41,6 +41,8 @@ archived/superseded — ignore them.
   before the Atlas + Hub UX pass (§8).
 - `24_Core_Calendar.md` — Calendar core-service spec (app `scheduling`, D7/D8 timeline,
   every-page access, configurable views, look & feel).
+- `25_Node_Homestead.md` — home/property source of truth and Solace handoff (D21).
+- `26_Node_Home_Assistant.md` — important dedicated Home Assistant bridge contract (D22/M5.5).
 - `MILESTONE_1_Checklist.md` / `MILESTONE_2_Checklist.md` / `MILESTONE_2.5_Checklist.md` — the
   per-milestone build checklists. **M4 is active; Homestead room planning shipped alongside it.**
 
@@ -65,7 +67,8 @@ do not silently override it.**
    helper creates/updates/deletes `calendar_events` and writes `calendar_event_id` back. **Nodes
    never write calendar rows directly.**
 8. **One recurrence format (D8):** `recurrence_rule` (RRULE) on the owning record. No parallel
-   `repeat_rule`.
+   `repeat_rule`. The bounded rotating two-state Calendar layer is governed separately by D23;
+   it is not a second general event recurrence field.
 9. **Search via Postgres FTS (D9)** in selectors. No hand-maintained `search_index` table.
 10. **Central permission resolution (D10).** One resolver + one visibility queryset mixin. **No
     ad-hoc permission checks in views. Permission tests are written FIRST.**
@@ -83,6 +86,9 @@ do not silently override it.**
 17. **Backups define a working restore (D17).** Restore is tested, documented, admin-re-auth
     gated.
 18. **Walking skeleton first (D18).** Build the Milestone 1 vertical slice before any other node.
+19. **Rotations are one cycle plus exceptions (D23).** Never materialise one Calendar event per
+    day. Calculate the requested range from one anchored `P`/`S` cycle; store only changed dates
+    as exceptions. Keep it generic (shared care, shift work, on-call), not household-specific.
 
 ### Per-app layering (Coding Standards §6)
 Views are **thin** → delegate to `services` (writes) and `selectors` (reads). Every app:
@@ -96,11 +102,11 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: Household-launch responsive mobile pass and dense-workspace follow-up shipped locally
-(2026-08-04, v0.19.1),
-including optional Solace password-on-entry; deploy/pilot with the owner's partner is now the
-highest-value validation step. Milestone 4 security maturation remains the next local workstream
-and native Solace real-data comparison still requires the home server. Kiosk work remains deferred.**
+**Phase: Forecastable rotating Calendar schedules shipped locally (2026-08-09, v0.20.0) on top
+of the household-launch responsive pass and bidirectional Homestead/Solace handoff. Deploy/pilot
+the exact shared-care rotation on both partners' phones and desktop; this is now the highest-value
+validation step. Milestone 4 security maturation remains the next local workstream and native
+Solace real-data comparison still requires the home server. Kiosk work remains deferred.**
 
 > **Owner direction, 2026-07-29.** Focus on usability, functionality, response time, navigation
 > and layout across the responsive web app. v0.12.0 delivers the shared foundation: route
@@ -126,8 +132,8 @@ and native Solace real-data comparison still requires the home server. Kiosk wor
 > running Postgres schema is separate from the image. Forgetting it causes `column ... does not
 > exist` 500s (this bit us on the Hub page after `atlas.0002` added `quantity`/`due_at`).
 
-- [x] Documentation consolidated to one canonical set (docs 00–22 + Milestone 1/2 checklists).
-- [x] All architectural decisions made (D1–D21).
+- [x] Documentation consolidated to one canonical set (docs 00–26 + milestone checklists).
+- [x] All architectural decisions made (D1–D23).
 - [x] **Milestone 1 (Walking Skeleton) — DONE** (Phases 1.0–1.12). Only outstanding item:
   deploy to the home server for daily use (running via Podman locally).
 - [~] **Milestone 2: native Meridian — functional, now under parity/cockpit revisit (owner
@@ -203,6 +209,26 @@ and native Solace real-data comparison still requires the home server. Kiosk wor
   doubled card padding; hover-only actions remain visible to touch users; Homestead maintenance
   rows stack cleanly; node search results navigate to useful destinations; and the Hub offers a
   household-configured countdown widget for a named target date.
+- [x] **Inter-node single entry + fast Hub arranging (v0.19.2, 2026-08-09).** New or existing
+  Solace bills can be organised as Homestead insurance, household services/costs or paid home
+  maintenance without re-entry. Homestead owns descriptive edits, Solace retains financial
+  occurrences/payment history, direct linked-bill divergence is blocked and the Calendar stays
+  single-entry. Desktop Hub cards and configuration rows now drag-and-drop; arrow moves are
+  optimistic and persist the complete order in one batch request instead of N sequential calls.
+- [x] **Bidirectional interaction + responsive follow-up (v0.19.3, 2026-08-09).** Homestead
+  maintenance can create/update its single protected Solace cost after password re-auth, while
+  Solace retains amount/payment ownership and the Calendar retains only its financial event.
+  Linked home-finance badges open filtered Solace results; synced Calendar events route back to
+  Atlas, Pets, Education, Homestead, Solace or Meridian. Touch laptops/tablets no longer hide
+  hover actions, and dense Solace/Education pages use wider desktop layouts.
+- [x] **Forecastable rotating Calendar schedules (v0.20.0 / D23, 2026-08-09).** One anchored
+  two-state cycle is calculated for each visible range without daily `CalendarEvent` rows. The
+  setup is pre-filled with 2/2/3/2/2/3, optionally associates People once, and remains generic
+  for shared care, shift work or on-call cover. One-day exceptions swap a state, retain a note,
+  show a visible swap marker and can restore the repeating plan. Desktop and phone Month views
+  provide a continuous two-colour top strip on otherwise-neutral day cells as users move between
+  months; detailed week/day/agenda status remains available. **624 backend tests green; production build clean; no
+  migration drift.**
 - [~] **Milestone 4: security maturation — IN PROGRESS (v0.17.0).** Shared attachments now have
   protected upload/list/download/delete APIs, visibility+sensitivity enforcement through the
   central resolver, randomized non-public storage, sensitive-download audit records and frontend
@@ -250,24 +276,36 @@ and native Solace real-data comparison still requires the home server. Kiosk wor
   prepare for a future clickable floor plan. Folds the *home* scope of planned **Assets**.
   Protected insurance + rates/water/gas/utility cost tracking mirrors linked Solace bills through
   events (D4); full Projects integration remains future. See spec `25_Node_Homestead.md`.
+- [ ] **Milestone 5.5: Home Assistant bridge — IMPORTANT / PLANNED (D22).** After the household
+  pilot, remaining M4 security work and Solace production cutover validation: establish the
+  backend-only secret/connection and allowlist gate; ship read-only mapped Home Status + Hub
+  widget; add safe centrally permissioned/audited controls; then deliver approved HomeStack
+  events into Home Assistant automations. WebSocket live state and a custom component remain
+  conditional follow-ups. See `docs/26_Node_Home_Assistant.md`.
 - [ ] Milestone 6: Inventory, Assets (non-home only, or retire — see D21), Hearth, Travel, Projects, Health.
 
 ## 6. Active tasks — household pilot, then continue M4 locally
 
-**Immediate product step:** deploy v0.19.1 to the home server and let the owner's partner use the
-responsive web app naturally on her phone. Capture friction from real Calendar, Atlas, Homestead,
-notification and quick-create journeys before doing another broad visual pass. Each browser can
-edit its four bottom-bar destinations from More; new browsers default to Home/Calendar/Atlas/
-Homestead when those stacks are enabled.
+**Immediate product step:** deploy v0.20.0 to the home server. In Calendar choose **Rotation**,
+set day 1 to the Monday starting a week where “With us” covers Monday/Tuesday and Friday–Sunday,
+rename “Other home” to the preferred household wording, select the children and save. Compare at
+least one full 14-night cycle on both partners' phones and desktop, then swap a future day and restore it. Also continue
+capturing real Atlas/Homestead/notification friction before another broad visual pass.
 
 **Next local build step (no home server required):** finish the generic sensitive-node lock
 path instead of leaving it Solace-specific: move re-auth/sensitivity decisions consistently
 through the central resolver, define the web/kiosk locked-state contract and shorter kiosk
 timeout, then close the remaining permission/user-change audit gaps. Keep permission tests first.
 
+**Next important feature after those gates:** Milestone 5.5, the dedicated Home Assistant node.
+Start with its 5.5.0 contract/security gate; do not begin with a custom component or generic
+integration framework. The exact sequence and acceptance gates are in the roadmap and
+`docs/26_Node_Home_Assistant.md`.
+
 **Production track (requires the home server):** rebuild both production images, deploy through
-v0.19.1, and run `migrate` through `attachments.0001`, `permissions.0020`, `solace.0007`,
-`homestead.0003` and `hub.0013`.
+v0.20.0, and run `migrate` through `attachments.0001`, `permissions.0020`, `solace.0007`,
+`homestead.0004`, `hub.0013` and
+`scheduling.0002_rotatingschedule_rotatingscheduleexception`.
 
 The Solace cutover sequence remains: rerun the importer
 dry-run/apply so settings, categories, bucket rules, historical occurrences, balances,
@@ -425,6 +463,11 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-08-04 | Assistant | Homestead | **Room and area planning shipped (v0.18.0).** Added household-scoped `RoomArea` and `RoomPlanItem` models plus layered CRUD APIs, permission-first tests, central visibility filtering, publish-only lifecycle events, admin registration and local/global search. Each room links from the new Homestead Rooms tab to a dedicated page. Plans combine purchases, maintenance, renovations and upgrades with priority, assignee, quantity, estimated unit cost, optional actual total cost, reference link and notes. Planned/in-progress items drive remaining estimates; completed items use actual cost or estimate fallback; archived items stay visible but are excluded. Exact decimal summaries roll up per room and household. Completed/archived items can be reopened/restored; stable room routes and `floorplan_data` reserve the future clickable-map path. **593 backend tests green; frontend type-check + production build clean; no migration drift.** | **Deploy:** rebuild both images and run `docker exec homestack-backend python manage.py migrate` (`homestead.0003`). Then enable/open Homestead and live-test room creation, item completion/actual costs and phone layout. Future room slice: clickable floor-plan renderer. Otherwise resume remaining M4 lock/audit work locally. |
 | 2026-08-04 | Assistant | Mobile launch | **Household-launch mobile experience shipped (v0.19.0).** Reworked the responsive shell for partner-first daily use: avatar-led calmer phone header; safe-area-aware five-target bottom bar; new-browser defaults prioritising Home/Calendar/Atlas/Homestead; clearer active states; a three-column More grid; profile/avatar editing from mobile; and warmer login language. Added a phone-only Hub launchpad for Calendar, Lists & notes, Our home and Pets; friendlier quick-create choices/descriptions including Home plan; responsive shared headings/cards/modals and auto-centred scrollable tabs. Calendar Month renders as a readable agenda on phones, Solace Schedule defaults to List, and notification taps now follow `action_url`. Added an admin-controlled **Ask for a password when opening Solace** switch in Manage settings. It uses existing `HouseholdNode.requires_reauthentication`, defaults on, is permission-tested, preserves `solace.*` access control and continues access auditing. **597 backend tests green; frontend type-check + production build clean; no migration drift.** | Deploy/rebuild and migrate through `homestead.0003` (v0.19 itself adds no migration). On the partner's phone, sign in, choose/edit her four bottom destinations from More, then observe real Calendar/Atlas/Homestead/notification friction. Solace prompt toggle: Solace → Manage → Solace settings. Resume M4 locally after pilot feedback. |
 | 2026-08-04 | Assistant | Mobile usability | **Dense workspace, navigation and Countdown follow-up shipped (v0.19.1).** Replaced the long phone tab strips in Solace, Homestead and Education with labelled section pickers. Collapsed Solace's five large creation forms until requested, removed its accidental double card padding, kept its mobile Schedule list default, and made its search/refresh controls phone-friendly. Made hover-dependent edit/delete actions visible on touch devices, stacked Homestead maintenance rows around a prominent Done action, prevented narrow native fields overflowing, and locked background scroll behind the More sheet. Added one-tap clear to shared node search and made Atlas, Pets, Education and Homestead results navigate to their relevant tab, room or Calendar date; Atlas list creation is now progressive. Added a configurable core Countdown widget: admins set a household title/date in Tune my Hub, then it shows days remaining, today or days elapsed and participates in normal Hub enable/size/order controls. **599 backend tests green using local SQLite test settings; frontend type-check + production build clean; no migration drift.** | Deploy/rebuild both images and migrate through `hub.0013`. Configure the countdown from Home → Tune my Hub, then pilot Solace, Homestead maintenance/rooms and Education assignments on the partner's phone. Resume M4 locally after household feedback. |
+
+| 2026-08-09 | Assistant | Mobile/integration polish | **Single-entry Homestead/Solace handoff and fast Hub arranging shipped locally (v0.19.2).** Solace bill create/edit now has an explicit Homestead destination for home insurance, household costs/services and paid maintenance. The event boundary idempotently creates the richer home record, links the existing bill, keeps Homestead descriptive edits synced, blocks direct linked-bill edit/delete divergence and suppresses duplicate maintenance Calendar rows. Added mobile-first Solace bill layout, cross-node deep links, linked badges and larger Homestead finance actions. Hub ordering now has one atomic batch endpoint; arrows move optimistically and desktop users can drag config rows or live Hub cards while Tune mode is open. **609 backend tests green; frontend type-check + production build clean; no migration drift.** | **Deploy:** rebuild both images and migrate through `homestead.0004`; no Hub migration. Pilot creating/converting an insurance, utility and paid-maintenance bill, then drag Hub cards on desktop and verify mobile arrows. Resume M4 lock/audit work after pilot feedback. |
+| 2026-08-09 | Assistant | M5.5 planning | **Home Assistant promoted to an important roadmap feature (D22).** Added detailed Roadmap Milestone 5.5 with contract/security, read-only status, safe controls, HomeStack-event delivery, conditional WebSocket and optional custom-component stages, each with an acceptance gate. Added canonical node spec `docs/26_Node_Home_Assistant.md` covering source-of-truth boundaries, data model, permissions, API, phone/desktop/kiosk UI, secrets, failure behavior and tests. Updated the MSS, node decision record and parking lot consistently. Documentation only; no app version bump or runtime code change. | Complete the household pilot, remaining M4 security work and Solace cutover validation, then start M5.5.0 by validating backend-container reachability to the household's Home Assistant instance and its URL/TLS/secret arrangement. |
+| 2026-08-09 | Assistant | GUI/inter-node polish | **Bidirectional maintenance finance and source navigation shipped locally (v0.19.3).** Added protected `POST /homestead/maintenance/{id}/track-cost/`: after Solace permission + password re-auth it publishes primitive maintenance/cost data, idempotently creates or updates one source-linked Solace bill, stores only its reference in Homestead and removes the duplicate Homestead Calendar mirror. The responsive Homestead UI provides a bottom-sheet/desktop modal, explicit ownership copy and direct filtered Solace links for maintenance, insurance and household costs. Synced Calendar events now link back to source workspaces across Atlas/Pets/Education/Homestead/Solace/Meridian. Coarse-pointer devices force hover actions visible; dense Solace/Education workspaces expand on desktop. **613 backend tests green; frontend production build clean; no migration drift.** | Deploy/rebuild through v0.19.3 and migrate through `homestead.0004`. On phone and desktop, create a Homestead maintenance task, Track cost with an admin password, follow both cross-node links, mark the task done, then confirm one Solace financial Calendar event and preserved payment history. Continue M4 after pilot feedback. |
+| 2026-08-09 | Assistant | Calendar/D23 | **Forecastable rotating schedules shipped locally (v0.20.0).** Added household-scoped `RotatingSchedule` + optional People and sparse `RotatingScheduleException`; one anchored P/S cycle is expanded only for a requested window and never creates daily Calendar events. Added permission/visibility/forecast/far-future/swap/restore/reuse tests and CRUD/occurrence/exception APIs. Calendar now has a guided, editable 14-night 2/2/3/2/2/3 preset; desktop and phone Month views add a narrow state-colour strip to otherwise-neutral day cells and keep forecasting as month arrows move, while detailed week/day/agenda badges, responsive bottom sheets, notes, swap markers and restoration remain available. Recorded D23 and updated Calendar/database/API/architecture/UI docs. **624 backend tests green; frontend production build clean; no migration drift.** | Deploy/rebuild and migrate `scheduling.0002`. In Calendar → Rotation choose the Monday beginning a “With us” Monday/Tuesday + Friday–Sunday week, rename the other label, select the children and click through several months on both phones/desktop. Swap and restore one future day, then resume M4 lock/audit work. |
 
 ### Session notes (free-form, optional)
 

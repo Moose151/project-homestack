@@ -102,6 +102,53 @@ def _delete_home_bill(sender, *, payload: dict, **kwargs) -> None:
     )
 
 
+def _link_homestead_record(sender, *, payload: dict, **kwargs) -> None:
+    user = User.objects.filter(pk=payload["acting_user_id"]).first()
+    bill = Bill.objects.filter(
+        pk=payload["bill_id"], household_id=payload["household_id"]
+    ).first()
+    if user is None or bill is None:
+        return
+    services.update_bill(
+        user,
+        bill,
+        source_node="homestead",
+        source_record_type=payload["source_record_type"],
+        source_record_id=payload["source_record_id"],
+    )
+
+
+def _sync_home_maintenance_bill(sender, *, payload: dict, **kwargs) -> None:
+    user = User.objects.filter(pk=payload["acting_user_id"]).first()
+    bill = Bill.objects.filter(
+        pk=payload["solace_bill_ref"],
+        household_id=payload["household_id"],
+        source_node="homestead",
+        source_record_type="maintenance",
+        source_record_id=payload["source_record_id"],
+    ).first()
+    if user is None or bill is None:
+        return
+    services.update_bill(
+        user,
+        bill,
+        name=payload["name"],
+        provider=payload.get("provider", ""),
+        due_at=parse_datetime(payload["due_at"]) if payload.get("due_at") else None,
+        recurrence_rule=payload.get("recurrence_rule", ""),
+        notes=payload.get("notes", ""),
+    )
+
+
+def _delete_home_maintenance_bill(sender, *, payload: dict, **kwargs) -> None:
+    user = User.objects.filter(pk=payload["acting_user_id"]).first()
+    bill = Bill.objects.filter(
+        pk=payload["solace_bill_ref"], household_id=payload["household_id"]
+    ).first()
+    if user is not None and bill is not None:
+        services.delete_bill(user, bill)
+
+
 def connect() -> None:
     global _connected
     if _connected:
@@ -109,4 +156,8 @@ def connect() -> None:
     subscribe("homestead.insurance_policy_saved", _sync_home_bill)
     subscribe("homestead.household_cost_saved", _sync_home_bill)
     subscribe("homestead.home_finance_record_deleted", _delete_home_bill)
+    subscribe("homestead.solace_bill_linked", _link_homestead_record)
+    subscribe("homestead.maintenance_saved", _sync_home_maintenance_bill)
+    subscribe("homestead.maintenance_deleted", _delete_home_maintenance_bill)
+    subscribe("homestead.maintenance_cost_requested", _sync_home_bill)
     _connected = True

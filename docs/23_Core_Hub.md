@@ -58,6 +58,9 @@ enabled, plus per-household `display_order`, `size` (small/medium/large) and `se
 
 **Per-user overrides (`UserHubWidget`)** — a user may hide or reorder widgets for their own Hub
 (`is_enabled`, `display_order`, `settings_json`) without affecting other members.
+Desktop users can drag the live cards or configuration rows while Tune mode is open; mobile and
+keyboard users retain labelled arrow controls. Both paths update optimistically and persist the
+complete effective order through one atomic batch request rather than one request per widget.
 
 **Resolution** — at request time the Hub composes: catalogue → household-enabled → user
 overrides → (kiosk filter) → each widget's selector runs **permission-filtered** for the

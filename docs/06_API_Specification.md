@@ -1,6 +1,6 @@
 # Document 6 — API Specification
 
-> Canonical. Supersedes all earlier API docs. Decisions D1–D18 in `00_README_and_Changelog.md`.
+> Canonical. Supersedes all earlier API docs. Decisions D1–D23 in `00_README_and_Changelog.md`.
 
 ## 1. Purpose & conventions
 
@@ -11,8 +11,9 @@ REST API for HomeStack. Base path `/api/v1/`.
 - **Every endpoint** passes through the central layer and validates: authentication,
   household ownership, node-enabled status, role permission, record visibility,
   sensitive-node access, and re-authentication where required (D10).
-- **No `/integrations/` or external-app endpoints** — Meridian and Solace are native nodes
-  (D13); the iframe layer is not built.
+- **No generic `/integrations/` or external-app endpoints** — Meridian and Solace are native
+  nodes (D13), while Home Assistant has a dedicated `/home-assistant/` bridge contract (D22).
+  No iframe layer or arbitrary service-call proxy is built.
 - **No `/events/` endpoints** — the event interface is internal signals (D4).
 
 ## 2. Authentication
@@ -84,9 +85,21 @@ POST   /api/v1/calendar/events/
 GET    /api/v1/calendar/events/{event_id}/
 PATCH  /api/v1/calendar/events/{event_id}/
 DELETE /api/v1/calendar/events/{event_id}/
+GET    /api/v1/calendar/rotations/
+POST   /api/v1/calendar/rotations/
+GET    /api/v1/calendar/rotations/{schedule_id}/
+PATCH  /api/v1/calendar/rotations/{schedule_id}/
+DELETE /api/v1/calendar/rotations/{schedule_id}/
+GET    /api/v1/calendar/rotation-occurrences/?start=YYYY-MM-DD&end=YYYY-MM-DD
+PUT    /api/v1/calendar/rotations/{schedule_id}/exceptions/{date}/
+DELETE /api/v1/calendar/rotations/{schedule_id}/exceptions/{date}/
 ```
 Node-derived events are created/updated/deleted by the scheduling helper when their source
 record changes (D7); direct event writes are for standalone calendar entries only.
+Rotations use one anchored two-state pattern and are expanded for an end-exclusive date range
+of at most 400 days (D23). `PUT` creates or replaces the single-day exception; `DELETE` restores
+the repeating plan. These endpoints use the same `scheduling.*` permissions and visibility
+filter as events.
 
 ## 6. Notifications
 ```
@@ -191,12 +204,42 @@ POST   /api/v1/solace/occurrences/{id}/{paid|unpaid|skip}/
 GET    /api/v1/solace/search/?q=
 ```
 
-## 16. Later nodes
+## 16. Homestead
+
+The ordinary Homestead CRUD routes follow the node spec. Protected home-finance routes require
+both Homestead and Solace permissions plus password re-authentication.
+
+```
+GET/POST/PATCH/DELETE /api/v1/homestead/maintenance/[{task_id}/]
+POST /api/v1/homestead/maintenance/{task_id}/complete/
+POST /api/v1/homestead/maintenance/{task_id}/track-cost/  # one linked Solace bill
+GET/POST/PATCH/DELETE /api/v1/homestead/insurance/[{policy_id}/]
+GET/POST/PATCH/DELETE /api/v1/homestead/costs/[{cost_id}/]
+```
+
+## 17. Home Assistant bridge (planned — D22/M5.5)
+
+Backend-only credentials; endpoints never return the Home Assistant URL/token or arbitrary raw
+attributes/service payloads. Full contract: `26_Node_Home_Assistant.md`.
+
+```
+GET  /api/v1/home-assistant/health/
+POST /api/v1/home-assistant/health/test/
+GET  /api/v1/home-assistant/entities/discover/
+GET/POST/PATCH/DELETE /api/v1/home-assistant/entity-mappings/[{mapping_id}/]
+GET  /api/v1/home-assistant/state/
+GET/POST/PATCH/DELETE /api/v1/home-assistant/action-mappings/[{mapping_id}/]
+POST /api/v1/home-assistant/actions/{action_id}/run/
+GET/POST/PATCH/DELETE /api/v1/home-assistant/event-mappings/[{mapping_id}/]
+POST /api/v1/home-assistant/event-mappings/{mapping_id}/test/
+```
+
+## 18. Later nodes
 Inventory, Assets, Hearth, Travel, Projects, Health endpoints follow the same patterns as
 their node specs (CRUD + node-specific actions), each behind the central permission layer.
 Health is fully sensitive and re-auth-gated.
 
-## 17. Standard error & response shape
+## 19. Standard error & response shape
 
 Consistent envelope: list endpoints paginate; errors return a code + message + field errors.
 401 for unauthenticated, 403 for permission/re-auth failures (with a `reauth_required` flag

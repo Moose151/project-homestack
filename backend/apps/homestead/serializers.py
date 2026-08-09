@@ -1,6 +1,8 @@
 """homestead serializers."""
 from __future__ import annotations
 
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from apps.homestead.models import (
@@ -77,14 +79,22 @@ class MaintenanceTaskSerializer(serializers.ModelSerializer):
         fields = [
             "id", "appliance_id", "provider_id", "assigned_to_person_id",
             "title", "category", "next_due_at", "is_all_day", "recurrence_rule",
-            "last_done_at", "notes", "is_overdue", "calendar_event_id", "visibility",
+            "last_done_at", "notes", "solace_bill_ref", "is_overdue", "calendar_event_id", "visibility",
             "created_at", "updated_at",
         ]
         read_only_fields = [
-            "id", "is_overdue", "calendar_event_id", "created_at", "updated_at",
+            "id", "solace_bill_ref", "is_overdue", "calendar_event_id", "created_at", "updated_at",
         ]
 
     def validate_title(self, value: str) -> str:
+        return _non_blank(value)
+
+
+class MaintenanceCostRequestSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"))
+    category = serializers.CharField(max_length=80, default="other")
+
+    def validate_category(self, value: str) -> str:
         return _non_blank(value)
 
 

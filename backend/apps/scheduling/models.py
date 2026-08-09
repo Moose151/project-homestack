@@ -91,3 +91,80 @@ class CalendarEvent(HouseholdBaseModel):
     def is_synced(self) -> bool:
         """True when this event is owned by a node record (not a standalone event)."""
         return bool(self.source_record_type and self.source_record_id)
+
+
+class RotatingSchedule(HouseholdBaseModel):
+    """A repeating two-state calendar layer, expanded virtually for a requested range.
+
+    ``cycle_pattern`` is the single source of truth: P selects ``primary_label`` and S
+    selects ``secondary_label``. It deliberately does not create one CalendarEvent per
+    day. Date-specific changes live in RotatingScheduleException instead (D23).
+    """
+
+    title = models.CharField(max_length=100)
+    primary_label = models.CharField(max_length=100, default="With us")
+    secondary_label = models.CharField(max_length=100, default="Other home")
+    anchor_date = models.DateField()
+    cycle_pattern = models.CharField(max_length=62, default="PPSSPPPSSPPSSS")
+    primary_colour = models.CharField(max_length=7, default="#3F7D65")
+    secondary_colour = models.CharField(max_length=7, default="#8A718E")
+    people = models.ManyToManyField(
+        "people.Person",
+        blank=True,
+        related_name="rotating_schedules",
+    )
+    visibility = models.CharField(
+        max_length=20,
+        choices=Visibility.choices,
+        default=Visibility.HOUSEHOLD,
+    )
+    is_active = models.BooleanField(default=True)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        ordering = ["title"]
+
+    def __str__(self) -> str:
+        return self.title
+
+    @property
+    def cycle_length(self) -> int:
+        return len(self.cycle_pattern)
+
+    def state_for_date(self, value) -> str:
+        offset = (value - self.anchor_date).days % self.cycle_length
+        return "primary" if self.cycle_pattern[offset] == "P" else "secondary"
+
+
+class RotatingScheduleException(HouseholdBaseModel):
+    """A one-day state override without altering the canonical rotation."""
+
+    class State(models.TextChoices):
+        PRIMARY = "primary", "Primary"
+        SECONDARY = "secondary", "Secondary"
+
+    schedule = models.ForeignKey(
+        RotatingSchedule,
+        on_delete=models.CASCADE,
+        related_name="exceptions",
+    )
+    date = models.DateField()
+    state = models.CharField(max_length=12, choices=State.choices)
+    note = models.CharField(max_length=255, blank=True, default="")
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        ordering = ["date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["schedule", "date"],
+                name="unique_rotating_schedule_exception_date",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.schedule}: {self.date} → {self.state}"

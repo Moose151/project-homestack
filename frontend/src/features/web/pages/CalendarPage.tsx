@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../../../api/client'
-import type { CalendarEvent, CalendarEventWrite, Person } from '../../../api/types'
+import type {
+  CalendarEvent, CalendarEventWrite, Person, RotatingSchedule,
+  RotatingScheduleOccurrence, RotatingScheduleWrite,
+} from '../../../api/types'
 import { Button } from '../../../components/Button'
 import { Modal } from '../../../components/Modal'
 import { Field, Input, Select } from '../../../components/Field'
@@ -26,6 +30,13 @@ const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.get
 const addMonths = (d: Date, n: number) => { const x = new Date(d); x.setMonth(x.getMonth() + n); return x }
 const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
 const isToday = (d: Date) => sameDay(d, new Date())
+const dateKey = (d: Date) => {
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+const dateFromKey = (value: string) => new Date(`${value}T00:00:00`)
 
 function startOfWeek(d: Date, weekStart: number) {
   const x = startOfDay(d)
@@ -43,8 +54,43 @@ function fmtTime(iso: string, time24: boolean) {
   return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: !time24 })
 }
 
-const NODE_COLOUR: Record<string, string> = { atlas: '#5b57d1', meridian: '#d98324', education: '#2f9e6f' }
+const NODE_COLOUR: Record<string, string> = {
+  atlas: '#5b57d1',
+  meridian: '#d98324',
+  education: '#2f9e6f',
+  pets: '#d9642c',
+  homestead: '#b0563c',
+  solace: '#8f4e38',
+}
 const DEFAULT_COLOUR = '#9CA3AF'
+
+function sourcePath(event: CalendarEvent): string | null {
+  if (!event.source_node) return null
+  const query = encodeURIComponent(event.title)
+  if (event.source_node === 'atlas') return `/atlas?tab=reminders&q=${query}`
+  if (event.source_node === 'pets') {
+    const tab = event.source_record_type === 'PetAppointment' ? 'appointments' : 'reminders'
+    return `/pets?tab=${tab}&q=${query}`
+  }
+  if (event.source_node === 'education') {
+    const tab = event.source_record_type === 'EducationClassSession'
+      ? 'timetable'
+      : event.source_record_type === 'EducationEvent' ? 'events' : 'assignments'
+    return `/education?tab=${tab}&q=${query}`
+  }
+  if (event.source_node === 'homestead') {
+    const tab = event.source_record_type === 'Improvement' ? 'improvements' : 'maintenance'
+    return `/homestead?tab=${tab}&q=${query}`
+  }
+  if (event.source_node === 'solace') {
+    const tabs: Record<string, string> = {
+      Bill: 'bills', Payday: 'paydays', PlannedPurchase: 'purchases', Subscription: 'subscriptions',
+    }
+    return `/solace?tab=${tabs[event.source_record_type] || 'schedule'}&q=${query}`
+  }
+  if (event.source_node === 'meridian') return '/meridian?tab=tasks'
+  return null
+}
 
 // ---------------------------------------------------------------------------
 // Event modal (create / edit standalone events) — common fields up top, the
@@ -113,6 +159,7 @@ function EventModal({
   const title = event ? (synced ? 'Event' : 'Edit event') : 'New event'
 
   if (synced) {
+    const href = sourcePath(event!)
     return (
       <Modal title={title} onClose={onClose} size="sm">
         <div className="flex flex-col gap-2 text-sm">
@@ -122,6 +169,15 @@ function EventModal({
           <p className="mt-1 text-xs text-muted">
             This event comes from <span className="font-medium capitalize">{event!.source_node}</span> and is edited there, not on the calendar.
           </p>
+          {href && (
+            <Link
+              to={href}
+              onClick={onClose}
+              className="mt-2 flex min-h-11 items-center justify-between rounded-xl bg-primary-soft px-3 py-2 text-sm font-semibold text-primary"
+            >
+              Open the source record <span aria-hidden>→</span>
+            </Link>
+          )}
         </div>
       </Modal>
     )
@@ -256,36 +312,290 @@ function EventChip({ event, colour, time24, onClick }: { event: CalendarEvent; c
 }
 
 // ---------------------------------------------------------------------------
+// Rotating schedules — one compact cycle plus date-specific exceptions.
+// ---------------------------------------------------------------------------
+
+const SHARED_CARE_PATTERN = 'PPSSPPPSSPPSSS'
+
+function RotationBadge({ occurrence, onClick, compact = false }: {
+  occurrence: RotatingScheduleOccurrence
+  onClick?: () => void
+  compact?: boolean
+}) {
+  const Tag = onClick ? 'button' : 'div'
+  return (
+    <Tag
+      {...(onClick ? { type: 'button' as const, onClick } : {})}
+      className={`flex w-full items-center gap-1.5 rounded-lg text-left ${compact ? 'min-h-7 px-1.5 py-1 text-[11px]' : 'min-h-11 px-3 py-2 text-sm'} ${onClick ? 'hover:brightness-95' : ''}`}
+      style={{ borderLeft: `4px solid ${occurrence.colour}`, backgroundColor: `${occurrence.colour}18` }}
+      title={`${occurrence.schedule_title}: ${occurrence.label}${occurrence.is_override ? ' (changed for this day)' : ''}`}
+    >
+      <span className="truncate font-semibold text-ink">{occurrence.label}</span>
+      {occurrence.is_override && <span className="ml-auto flex-shrink-0 text-[10px] font-bold text-primary" aria-label="Changed day">SWAP</span>}
+    </Tag>
+  )
+}
+
+function RotationScheduleModal({ schedule, schedules, people, onSelect, onClose, onSaved, onError }: {
+  schedule: RotatingSchedule | null
+  schedules: RotatingSchedule[]
+  people: Person[]
+  onSelect: (id: number | 'new') => void
+  onClose: () => void
+  onSaved: () => void
+  onError: (message: string) => void
+}) {
+  const [f, setF] = useState<RotatingScheduleWrite>({
+    title: schedule?.title ?? 'Kids',
+    primary_label: schedule?.primary_label ?? 'With us',
+    secondary_label: schedule?.secondary_label ?? 'Other home',
+    anchor_date: schedule?.anchor_date ?? dateKey(new Date()),
+    cycle_pattern: schedule?.cycle_pattern ?? SHARED_CARE_PATTERN,
+    primary_colour: schedule?.primary_colour ?? '#3F7D65',
+    secondary_colour: schedule?.secondary_colour ?? '#8A718E',
+    person_ids: schedule?.people.map(person => person.id) ?? [],
+    visibility: schedule?.visibility ?? 'household',
+    is_active: schedule?.is_active ?? true,
+  })
+  const [saving, setSaving] = useState(false)
+  const set = <K extends keyof RotatingScheduleWrite>(key: K, value: RotatingScheduleWrite[K]) =>
+    setF(previous => ({ ...previous, [key]: value }))
+  const toggleDay = (index: number) => {
+    const values = f.cycle_pattern.split('')
+    values[index] = values[index] === 'P' ? 'S' : 'P'
+    set('cycle_pattern', values.join(''))
+  }
+  const togglePerson = (id: number) => {
+    const selected = f.person_ids ?? []
+    set('person_ids', selected.includes(id) ? selected.filter(value => value !== id) : [...selected, id])
+  }
+  const save = async () => {
+    if (!f.title.trim() || !f.primary_label.trim() || !f.secondary_label.trim()) return
+    setSaving(true)
+    try {
+      if (schedule) await api.updateRotatingSchedule(schedule.id, f)
+      else await api.createRotatingSchedule(f)
+      onSaved()
+    } catch (error) { onError(errMsg(error)) } finally { setSaving(false) }
+  }
+  const remove = async () => {
+    if (!schedule || !confirm(`Delete the “${schedule.title}” rotation?`)) return
+    try { await api.deleteRotatingSchedule(schedule.id); onSaved() } catch (error) { onError(errMsg(error)) }
+  }
+  const anchor = f.anchor_date ? dateFromKey(f.anchor_date) : new Date()
+
+  return (
+    <Modal
+      title={schedule ? 'Edit rotating schedule' : 'Set up a rotating schedule'}
+      onClose={onClose}
+      size="lg"
+      footer={(
+        <>
+          {schedule && <button type="button" onClick={remove} className="mr-auto text-sm text-danger hover:underline">Delete</button>}
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={save} loading={saving} disabled={!f.title.trim() || !f.anchor_date}>Save rotation</Button>
+        </>
+      )}
+    >
+      <div className="flex flex-col gap-4">
+        {(schedules.length > 0 || schedule) && (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {schedules.map(item => (
+              <button key={item.id} type="button" onClick={() => onSelect(item.id)}
+                className={`min-h-10 flex-shrink-0 rounded-xl border px-3 text-sm font-medium ${schedule?.id === item.id ? 'border-primary bg-primary-soft text-primary' : 'border-line text-muted'}`}>
+                {item.title}
+              </button>
+            ))}
+            <button type="button" onClick={() => onSelect('new')} className="min-h-10 flex-shrink-0 rounded-xl border border-dashed border-line-strong px-3 text-sm text-muted">+ Another</button>
+          </div>
+        )}
+
+        <div className="rounded-xl bg-primary-soft px-3 py-2.5 text-sm text-primary">
+          {schedule
+            ? 'The anchor is day one of the pattern below. Tap any day to switch its normal state.'
+            : `The 2 on, 2 off, 3 on, 2 off, 2 on, 3 off pattern is pre-filled. Choose the Monday starting a week where “${f.primary_label || 'primary'}” covers Monday, Tuesday and Friday–Sunday.`}
+          <span className="mt-1 block font-medium">This pattern repeats continuously—the 14 nights define the cycle, not the forecast limit.</span>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Schedule name">
+            <Input value={f.title} onChange={event => set('title', event.target.value)} placeholder="Kids" autoFocus />
+          </Field>
+          <Field label="Cycle starts (day 1)">
+            <Input type="date" value={f.anchor_date} onChange={event => set('anchor_date', event.target.value)} />
+          </Field>
+          <Field label="Primary label">
+            <Input value={f.primary_label} onChange={event => set('primary_label', event.target.value)} placeholder="With us" />
+          </Field>
+          <Field label="Other label">
+            <Input value={f.secondary_label} onChange={event => set('secondary_label', event.target.value)} placeholder="With Dad" />
+          </Field>
+        </div>
+
+        <Field label={`${f.cycle_pattern.length}-night pattern — tap any day to change it`}>
+          <div className="grid grid-cols-7 gap-1.5">
+            {f.cycle_pattern.split('').map((state, index) => {
+              const primary = state === 'P'
+              return (
+                <button key={index} type="button" onClick={() => toggleDay(index)}
+                  className="min-h-[58px] rounded-xl border border-line px-1 py-1.5 text-center transition-transform active:scale-95"
+                  style={{ backgroundColor: `${primary ? f.primary_colour : f.secondary_colour}20`, borderColor: primary ? f.primary_colour : f.secondary_colour }}>
+                  <span className="block text-[10px] text-muted">{addDays(anchor, index).toLocaleDateString(undefined, { weekday: 'short' })}</span>
+                  <span className="block text-xs font-bold text-ink">{primary ? f.primary_label : f.secondary_label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </Field>
+
+        {people.length > 0 && (
+          <Field label="Who this schedule is for (optional)">
+            <div className="flex flex-wrap gap-2">
+              {[...people].sort((a, b) => Number(b.profile_type === 'child') - Number(a.profile_type === 'child')).map(person => {
+                const selected = f.person_ids?.includes(person.id)
+                return (
+                  <button key={person.id} type="button" onClick={() => togglePerson(person.id)}
+                    className={`min-h-10 rounded-xl border px-3 text-sm font-medium ${selected ? 'border-primary bg-primary-soft text-primary' : 'border-line text-muted'}`}>
+                    {selected ? '✓ ' : ''}{person.display_name}
+                  </button>
+                )
+              })}
+            </div>
+          </Field>
+        )}
+
+        <details className="rounded-xl border border-line p-3 text-sm">
+          <summary className="cursor-pointer font-medium text-ink">Colours and visibility</summary>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <Field label={f.primary_label || 'Primary'}>
+              <input type="color" value={f.primary_colour} onChange={event => set('primary_colour', event.target.value)} className="h-11 w-full rounded-lg border border-line bg-surface p-1" />
+            </Field>
+            <Field label={f.secondary_label || 'Secondary'}>
+              <input type="color" value={f.secondary_colour} onChange={event => set('secondary_colour', event.target.value)} className="h-11 w-full rounded-lg border border-line bg-surface p-1" />
+            </Field>
+            <Field label="Visibility">
+              <Select value={f.visibility} onChange={event => set('visibility', event.target.value)}>
+                <option value="household">Household</option>
+                <option value="private">Private</option>
+              </Select>
+            </Field>
+            <label className="flex min-h-11 items-center gap-2 pt-5 text-sm text-ink">
+              <input type="checkbox" checked={f.is_active} onChange={event => set('is_active', event.target.checked)} /> Active
+            </label>
+          </div>
+        </details>
+      </div>
+    </Modal>
+  )
+}
+
+function RotationExceptionModal({ occurrence, schedule, onClose, onSaved, onError }: {
+  occurrence: RotatingScheduleOccurrence
+  schedule: RotatingSchedule
+  onClose: () => void
+  onSaved: () => void
+  onError: (message: string) => void
+}) {
+  const [state, setState] = useState<'primary' | 'secondary'>(occurrence.state)
+  const [note, setNote] = useState(occurrence.note)
+  const [saving, setSaving] = useState(false)
+  const save = async () => {
+    setSaving(true)
+    try {
+      await api.setRotatingScheduleException(schedule.id, occurrence.date, { state, note: note.trim() })
+      onSaved()
+    } catch (error) { onError(errMsg(error)) } finally { setSaving(false) }
+  }
+  const restore = async () => {
+    setSaving(true)
+    try { await api.deleteRotatingScheduleException(schedule.id, occurrence.date); onSaved() }
+    catch (error) { onError(errMsg(error)) } finally { setSaving(false) }
+  }
+  const plannedLabel = occurrence.planned_state === 'primary' ? schedule.primary_label : schedule.secondary_label
+
+  return (
+    <Modal
+      title={`Change ${dateFromKey(occurrence.date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}`}
+      onClose={onClose}
+      size="sm"
+      footer={(
+        <>
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={save} loading={saving}>Save this day</Button>
+        </>
+      )}
+    >
+      <div className="flex flex-col gap-4">
+        <div>
+          <p className="font-semibold text-ink">{schedule.title}</p>
+          <p className="mt-1 text-sm text-muted">The repeating plan says <strong>{plannedLabel}</strong>. Changing this date will not alter any other day.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {(['primary', 'secondary'] as const).map(value => {
+            const label = value === 'primary' ? schedule.primary_label : schedule.secondary_label
+            const colour = value === 'primary' ? schedule.primary_colour : schedule.secondary_colour
+            return (
+              <button key={value} type="button" onClick={() => setState(value)}
+                className={`min-h-[72px] rounded-xl border p-2 text-sm font-bold ${state === value ? 'ring-2 ring-primary ring-offset-2 ring-offset-surface' : ''}`}
+                style={{ borderColor: colour, backgroundColor: `${colour}20` }}>
+                {state === value && '✓ '}{label}
+              </button>
+            )
+          })}
+        </div>
+        <Field label="Note (optional)">
+          <Input value={note} onChange={event => setNote(event.target.value)} placeholder="Agreed swap, special occasion…" />
+        </Field>
+        {occurrence.is_override && (
+          <button type="button" onClick={restore} disabled={saving} className="min-h-11 self-start text-sm font-medium text-primary hover:underline">
+            Restore the repeating plan for this day
+          </button>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Agenda view
 // ---------------------------------------------------------------------------
 
-function AgendaView({ events, colourFor, time24, onOpen }: {
+function AgendaView({ events, rotations, colourFor, time24, onOpen, onOpenRotation }: {
   events: CalendarEvent[]
+  rotations: RotatingScheduleOccurrence[]
   colourFor: (e: CalendarEvent) => string
   time24: boolean
   onOpen: (e: CalendarEvent) => void
+  onOpenRotation?: (occurrence: RotatingScheduleOccurrence) => void
 }) {
   const grouped = useMemo(() => {
-    const m = new Map<string, CalendarEvent[]>()
+    const m = new Map<string, { events: CalendarEvent[]; rotations: RotatingScheduleOccurrence[] }>()
     for (const e of events) {
-      const k = new Date(e.start_at).toDateString()
-      if (!m.has(k)) m.set(k, [])
-      m.get(k)!.push(e)
+      const k = dateKey(new Date(e.start_at))
+      if (!m.has(k)) m.set(k, { events: [], rotations: [] })
+      m.get(k)!.events.push(e)
     }
-    return [...m.entries()]
-  }, [events])
+    for (const occurrence of rotations) {
+      if (!m.has(occurrence.date)) m.set(occurrence.date, { events: [], rotations: [] })
+      m.get(occurrence.date)!.rotations.push(occurrence)
+    }
+    return [...m.entries()].sort(([a], [b]) => a.localeCompare(b))
+  }, [events, rotations])
 
-  if (events.length === 0) return <EmptyState icon="📅" title="No upcoming events" hint="Your next 60 days are clear." />
+  if (events.length === 0 && rotations.length === 0) return <EmptyState icon="📅" title="No upcoming events" hint="Your next 60 days are clear." />
 
   return (
     <div className="flex flex-col gap-5">
-      {grouped.map(([dateStr, evs]) => (
+      {grouped.map(([dateStr, items]) => (
         <div key={dateStr}>
           <h2 className="text-sm font-semibold text-muted uppercase tracking-wide mb-2">
-            {sameDay(new Date(dateStr), new Date()) ? 'Today' : new Date(dateStr).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+            {dateStr === dateKey(new Date()) ? 'Today' : dateFromKey(dateStr).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
           </h2>
           <div className="flex flex-col gap-2">
-            {evs.map(e => (
+            {items.rotations.map(occurrence => (
+              <RotationBadge key={occurrence.id} occurrence={occurrence} onClick={onOpenRotation ? () => onOpenRotation(occurrence) : undefined} />
+            ))}
+            {items.events.map(e => (
               <button key={e.id} onClick={() => onOpen(e)} className="flex items-start gap-4 p-3 rounded-xl border border-line hover:bg-sunken text-left">
                 <div className="w-16 text-xs text-primary font-semibold tabular-nums flex-shrink-0">{e.is_all_day ? 'All day' : fmtTime(e.start_at, time24)}</div>
                 <div className="flex-1 min-w-0" style={{ borderLeft: `3px solid ${colourFor(e)}`, paddingLeft: 10 }}>
@@ -322,6 +632,8 @@ export function CalendarPage() {
   const [time24, setTime24] = useState<boolean>(() => lsGet('hs_cal_24h', '0') === '1')
   const [anchor, setAnchor] = useState(() => initialLinkedDate ?? new Date())
   const [events, setEvents] = useState<CalendarEvent[]>([])
+  const [rotatingSchedules, setRotatingSchedules] = useState<RotatingSchedule[]>([])
+  const [rotations, setRotations] = useState<RotatingScheduleOccurrence[]>([])
   const [people, setPeople] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -330,6 +642,8 @@ export function CalendarPage() {
   const [personFilter, setPersonFilter] = useState(0)
   const [defaultsSaved, setDefaultsSaved] = useState(false)
   const [modal, setModal] = useState<{ event: CalendarEvent | null; date: Date | null } | null>(null)
+  const [scheduleModal, setScheduleModal] = useState<number | 'new' | null>(null)
+  const [exceptionModal, setExceptionModal] = useState<RotatingScheduleOccurrence | null>(null)
   useUrlAction('event', () => setModal({ event: null, date: initialLinkedDate ?? new Date() }))
 
   // Which prefs the user has explicitly chosen (captured once, before the write-effects run,
@@ -357,6 +671,7 @@ export function CalendarPage() {
   }, [household])
 
   const isAdmin = user?.role === 'admin'
+  const canEditCalendar = user?.role === 'admin' || user?.role === 'manager'
   const saveHouseholdDefaults = async () => {
     try {
       await api.updateHousehold({
@@ -395,12 +710,22 @@ export function CalendarPage() {
 
   const reload = () => {
     setLoading(true)
-    api.getEvents({
-      start: new Date(winStart).toISOString(),
-      end: new Date(winEnd).toISOString(),
-      person: personFilter || undefined,
-    })
-      .then(setEvents)
+    const start = new Date(winStart)
+    const end = new Date(winEnd)
+    Promise.all([
+      api.getEvents({
+        start: start.toISOString(),
+        end: end.toISOString(),
+        person: personFilter || undefined,
+      }),
+      api.getRotatingSchedules(),
+      api.getRotatingScheduleOccurrences(dateKey(start), dateKey(end)),
+    ])
+      .then(([nextEvents, nextSchedules, nextRotations]) => {
+        setEvents(nextEvents)
+        setRotatingSchedules(nextSchedules)
+        setRotations(nextRotations)
+      })
       .catch(e => setError(errMsg(e)))
       .finally(() => setLoading(false))
   }
@@ -446,12 +771,32 @@ export function CalendarPage() {
   }, [visibleEvents])
   const dayEvents = (d: Date) => (eventsByDay.get(d.toDateString()) ?? [])
 
+  const visibleRotations = useMemo(
+    () => rotations.filter(occurrence => {
+      if (hiddenSources.has('__rotation__')) return false
+      if (personFilter && occurrence.person_ids.length > 0 && !occurrence.person_ids.includes(personFilter)) return false
+      if (myOnly && defaultAssignee && !occurrence.person_ids.includes(defaultAssignee)) return false
+      return true
+    }),
+    [rotations, hiddenSources, personFilter, myOnly, defaultAssignee],
+  )
+  const rotationsByDay = useMemo(() => {
+    const map = new Map<string, RotatingScheduleOccurrence[]>()
+    for (const occurrence of visibleRotations) {
+      if (!map.has(occurrence.date)) map.set(occurrence.date, [])
+      map.get(occurrence.date)!.push(occurrence)
+    }
+    return map
+  }, [visibleRotations])
+  const dayRotations = (date: Date) => rotationsByDay.get(dateKey(date)) ?? []
+
   // Source layers present in the fetched window (node sources + "direct" for user-created events).
   const layersPresent = useMemo(() => {
     const set = new Set<string>()
     for (const e of events) set.add(e.source_node || '__direct__')
+    if (rotations.length > 0) set.add('__rotation__')
     return [...set]
-  }, [events])
+  }, [events, rotations])
 
   const step = (dir: -1 | 1) => {
     if (view === 'month') setAnchor(a => addMonths(a, dir))
@@ -469,7 +814,12 @@ export function CalendarPage() {
   }
 
   const openEvent = (e: CalendarEvent) => setModal({ event: e, date: null })
-  const openNew = (d: Date | null) => setModal({ event: null, date: d })
+  const openNew = (d: Date | null) => {
+    if (canEditCalendar) setModal({ event: null, date: d })
+  }
+  const openRotation = (occurrence: RotatingScheduleOccurrence) => {
+    if (canEditCalendar) setExceptionModal(occurrence)
+  }
 
   const quickAdd = async (text: string) => {
     const p = parseQuickEvent(text, view === 'day' ? anchor : new Date())
@@ -496,12 +846,24 @@ export function CalendarPage() {
       on ? 'border-line-strong text-ink' : 'border-line text-muted line-through opacity-60'
     }`
 
+  const selectedSchedule = scheduleModal === 'new'
+    ? null
+    : rotatingSchedules.find(schedule => schedule.id === scheduleModal) ?? null
+  const exceptionSchedule = exceptionModal
+    ? rotatingSchedules.find(schedule => schedule.id === exceptionModal.schedule_id) ?? null
+    : null
+
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Calendar"
         icon="📅"
-        actions={<Button size="sm" onClick={() => openNew(view === 'day' ? anchor : new Date())}>+ New event</Button>}
+        actions={canEditCalendar ? (
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setScheduleModal(rotatingSchedules[0]?.id ?? 'new')}>Rotation</Button>
+            <Button size="sm" onClick={() => openNew(view === 'day' ? anchor : new Date())}>+ Event</Button>
+          </>
+        ) : undefined}
       />
 
       {/* Toolbar: nav on the left, Filter + view switcher on the right */}
@@ -550,9 +912,9 @@ export function CalendarPage() {
                     <span className="text-xs font-semibold uppercase tracking-wide text-muted-strong">Layers</span>
                     <div className="flex flex-wrap gap-1.5">
                       {layersPresent.map(src => {
-                        const label = src === '__direct__' ? 'Direct' : src
+                        const label = src === '__direct__' ? 'Direct' : src === '__rotation__' ? 'Rotations' : src
                         const on = !hiddenSources.has(src)
-                        const colour = src !== '__direct__' ? NODE_COLOUR[src] : undefined
+                        const colour = src === '__rotation__' ? rotatingSchedules[0]?.primary_colour : src !== '__direct__' ? NODE_COLOUR[src] : undefined
                         return (
                           <button key={src} onClick={() => toggleSource(src)} className={chipCls(on)} title={on ? `Hide ${label}` : `Show ${label}`}>
                             <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colour || DEFAULT_COLOUR }} />
@@ -604,8 +966,21 @@ export function CalendarPage() {
         </div>
       )}
 
-      {(view === 'day' || view === 'agenda') && (
+      {canEditCalendar && (view === 'day' || view === 'agenda') && (
         <QuickAddBar baseDate={view === 'day' ? anchor : new Date()} time24={time24} onAdd={quickAdd} />
+      )}
+
+      {view === 'month' && rotatingSchedules.some(schedule => schedule.is_active) && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-line bg-surface px-3 py-2 text-xs text-muted">
+          {rotatingSchedules.filter(schedule => schedule.is_active).map(schedule => (
+            <div key={`month-legend-${schedule.id}`} className="flex flex-wrap items-center gap-3">
+              <span className="font-semibold text-ink">{schedule.title}</span>
+              <span className="flex items-center gap-1.5"><span className="h-3.5 w-3.5 rounded" style={{ backgroundColor: schedule.primary_colour }} />{schedule.primary_label}</span>
+              <span className="flex items-center gap-1.5"><span className="h-3.5 w-3.5 rounded" style={{ backgroundColor: schedule.secondary_colour }} />{schedule.secondary_label}</span>
+            </div>
+          ))}
+          <span className="ml-auto">Repeats continuously · use ‹ › to forecast any month</span>
+        </div>
       )}
 
       {loading ? (
@@ -613,18 +988,53 @@ export function CalendarPage() {
       ) : view === 'month' ? (
         <>
           <div className="sm:hidden">
-            <div className="mb-3 rounded-xl bg-primary-soft px-3 py-2 text-xs text-primary">
-              Month view becomes an easy-to-read list on phones. Tap an event for details.
+            <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+              <div className="grid grid-cols-7 bg-sunken">
+                {weekdayNames.map(day => <div key={day} className="px-1 py-1.5 text-center text-[10px] font-semibold text-muted">{day.slice(0, 2)}</div>)}
+              </div>
+              <div className="grid grid-cols-7">
+                {monthGrid(anchor, weekStart).map((day, index) => {
+                  const inMonth = day.getMonth() === anchor.getMonth()
+                  const occurrence = dayRotations(day)[0]
+                  const eventCount = dayEvents(day).length
+                  return (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => { setAnchor(day); setView('day') }}
+                      className={`relative min-h-[54px] border-b border-r border-line p-1 text-left ${inMonth ? 'text-ink' : 'text-muted opacity-45'}`}
+                      style={occurrence ? {
+                        borderTop: `4px solid ${occurrence.colour}`,
+                      } : undefined}
+                      aria-label={`${day.toLocaleDateString()}${occurrence ? `, ${occurrence.label}` : ''}${eventCount ? `, ${eventCount} events` : ''}`}
+                    >
+                      <span className={`text-xs font-bold ${isToday(day) ? 'rounded-full bg-primary px-1.5 py-0.5 text-white' : ''}`}>{day.getDate()}</span>
+                      {occurrence?.is_override && <span className="absolute right-1 top-1 text-[8px] font-black text-primary">S</span>}
+                      {eventCount > 0 && <span className="absolute bottom-1 left-1.5 text-[10px] font-bold text-ink">•{eventCount > 1 ? eventCount : ''}</span>}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-            <AgendaView
-              events={visibleEvents.filter(event => {
-                const date = new Date(event.start_at)
-                return date.getMonth() === anchor.getMonth() && date.getFullYear() === anchor.getFullYear()
-              })}
-              colourFor={colourFor}
-              time24={time24}
-              onOpen={openEvent}
-            />
+            <p className="mt-2 text-xs text-muted">Tap a day for its events or to change that date. An <strong>S</strong> marks a one-day swap.</p>
+            {visibleEvents.some(event => {
+              const date = new Date(event.start_at)
+              return date.getMonth() === anchor.getMonth() && date.getFullYear() === anchor.getFullYear()
+            }) && (
+              <div className="mt-5">
+                <h2 className="mb-3 text-sm font-semibold text-ink">Events this month</h2>
+                <AgendaView
+                  events={visibleEvents.filter(event => {
+                    const date = new Date(event.start_at)
+                    return date.getMonth() === anchor.getMonth() && date.getFullYear() === anchor.getFullYear()
+                  })}
+                  rotations={[]}
+                  colourFor={colourFor}
+                  time24={time24}
+                  onOpen={openEvent}
+                />
+              </div>
+            )}
           </div>
           <div className="hidden rounded-2xl border border-line overflow-hidden sm:block">
             <div className="grid grid-cols-7 bg-sunken">
@@ -634,13 +1044,17 @@ export function CalendarPage() {
               {monthGrid(anchor, weekStart).map((d, i) => {
                 const inMonth = d.getMonth() === anchor.getMonth()
                 const evs = dayEvents(d)
+                const rotationDays = dayRotations(d)
+                const occurrence = rotationDays[0]
                 return (
-                  <div key={i} onClick={() => openNew(d)}
-                    className={`min-h-[92px] border-b border-r border-line p-1 cursor-pointer hover:bg-sunken/50 ${inMonth ? '' : 'bg-sunken/30'}`}>
+                  <div key={i} onClick={() => { setAnchor(d); setView('day') }}
+                    style={occurrence ? { borderTop: `4px solid ${occurrence.colour}` } : undefined}
+                    className={`min-h-[112px] border-b border-r border-line p-1 cursor-pointer hover:brightness-95 ${inMonth ? '' : 'opacity-45'}`}>
                     <div className={`text-xs font-semibold mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday(d) ? 'bg-primary text-white' : inMonth ? 'text-ink' : 'text-muted'}`}>
                       {d.getDate()}
                     </div>
                     <div className="flex flex-col gap-0.5">
+                      {occurrence?.is_override && <span className="px-1 text-[9px] font-bold text-primary">SWAP</span>}
                       {evs.slice(0, 3).map(e => (
                         <div key={e.id} onClick={ev => { ev.stopPropagation(); openEvent(e) }}>
                           <EventChip event={e} colour={colourFor(e)} time24={time24} onClick={() => {}} />
@@ -657,24 +1071,29 @@ export function CalendarPage() {
       ) : view === 'week' ? (
         <div className="grid grid-cols-1 sm:grid-cols-7 gap-2">
           {Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(anchor, weekStart), i)).map(d => (
-            <button
+            <div
               key={d.toDateString()}
-              onClick={() => openNew(d)}
               className="rounded-xl border border-line p-2 min-h-[72px] sm:min-h-[120px] text-left hover:bg-sunken/40"
             >
-              <div className={`text-xs font-semibold mb-2 ${isToday(d) ? 'text-primary' : 'text-muted-strong'}`}>
+              <button type="button" onClick={() => openNew(d)} className={`mb-2 min-h-8 w-full text-left text-xs font-semibold ${isToday(d) ? 'text-primary' : 'text-muted-strong'}`}>
                 {d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })}
-              </div>
-              <div className="flex flex-col gap-1" onClick={ev => ev.stopPropagation()}>
+              </button>
+              <div className="flex flex-col gap-1">
+                {dayRotations(d).map(occurrence => (
+                  <RotationBadge key={occurrence.id} occurrence={occurrence} compact onClick={canEditCalendar ? () => openRotation(occurrence) : undefined} />
+                ))}
                 {dayEvents(d).map(e => <EventChip key={e.id} event={e} colour={colourFor(e)} time24={time24} onClick={() => openEvent(e)} />)}
               </div>
-            </button>
+            </div>
           ))}
         </div>
       ) : view === 'day' ? (
         <div className="flex flex-col gap-2">
+          {dayRotations(anchor).map(occurrence => (
+            <RotationBadge key={occurrence.id} occurrence={occurrence} onClick={canEditCalendar ? () => openRotation(occurrence) : undefined} />
+          ))}
           {dayEvents(anchor).length === 0 ? (
-            <EmptyState icon="📅" title="Nothing scheduled" hint="Use the quick-add above, or “New event” for full details." />
+            <EmptyState icon="📅" title="No events scheduled" hint="Use the quick-add above, or “New event” for full details." />
           ) : dayEvents(anchor).map(e => (
             <button key={e.id} onClick={() => openEvent(e)} className="flex items-start gap-4 p-4 rounded-xl border border-line hover:bg-sunken text-left">
               <div className="w-16 text-xs text-primary font-semibold tabular-nums flex-shrink-0">{e.is_all_day ? 'All day' : fmtTime(e.start_at, time24)}</div>
@@ -687,7 +1106,14 @@ export function CalendarPage() {
           ))}
         </div>
       ) : (
-        <AgendaView events={visibleEvents} colourFor={colourFor} time24={time24} onOpen={openEvent} />
+        <AgendaView
+          events={visibleEvents}
+          rotations={visibleRotations}
+          colourFor={colourFor}
+          time24={time24}
+          onOpen={openEvent}
+          onOpenRotation={canEditCalendar ? openRotation : undefined}
+        />
       )}
 
       {/* Legend */}
@@ -700,7 +1126,36 @@ export function CalendarPage() {
             <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.colour }} /> {p.display_name}
           </span>
         ))}
+        {rotatingSchedules.filter(schedule => schedule.is_active).map(schedule => (
+          <span key={`rotation-${schedule.id}`} className="flex items-center gap-2">
+            <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full" style={{ backgroundColor: schedule.primary_colour }} />{schedule.primary_label}</span>
+            <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full" style={{ backgroundColor: schedule.secondary_colour }} />{schedule.secondary_label}</span>
+          </span>
+        ))}
       </div>
+
+      {scheduleModal !== null && (
+        <RotationScheduleModal
+          key={selectedSchedule?.id ?? 'new'}
+          schedule={selectedSchedule}
+          schedules={rotatingSchedules}
+          people={people}
+          onSelect={setScheduleModal}
+          onClose={() => setScheduleModal(null)}
+          onError={setError}
+          onSaved={() => { setScheduleModal(null); reload() }}
+        />
+      )}
+
+      {exceptionModal && exceptionSchedule && (
+        <RotationExceptionModal
+          occurrence={exceptionModal}
+          schedule={exceptionSchedule}
+          onClose={() => setExceptionModal(null)}
+          onError={setError}
+          onSaved={() => { setExceptionModal(null); reload() }}
+        />
+      )}
 
       {modal && (
         <EventModal

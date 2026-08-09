@@ -14,7 +14,14 @@ from rest_framework.views import APIView
 from apps.permissions.drf import HomeStackPermission
 from apps.accounts.services import is_reauthed
 from apps.scheduling import selectors, services
-from apps.scheduling.serializers import CalendarEventSerializer, CalendarEventWriteSerializer
+from apps.scheduling.serializers import (
+    CalendarEventSerializer,
+    CalendarEventWriteSerializer,
+    RotatingScheduleExceptionSerializer,
+    RotatingScheduleExceptionWriteSerializer,
+    RotatingScheduleSerializer,
+    RotatingScheduleWriteSerializer,
+)
 
 _CalendarPerm = HomeStackPermission.for_resource("scheduling")
 
@@ -96,4 +103,111 @@ class CalendarEventDetailView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         services.delete_event(request.user, event)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class RotatingScheduleListView(APIView):
+    permission_classes = [_CalendarPerm]
+
+    def get(self, request: Request) -> Response:
+        schedules = selectors.list_rotating_schedules(request.user)
+        return Response(RotatingScheduleSerializer(schedules, many=True).data)
+
+    def post(self, request: Request) -> Response:
+        serializer = RotatingScheduleWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        schedule = services.create_rotating_schedule(
+            request.user, **serializer.validated_data
+        )
+        return Response(
+            RotatingScheduleSerializer(schedule).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class RotatingScheduleDetailView(APIView):
+    permission_classes = [_CalendarPerm]
+
+    def _get(self, request: Request, schedule_id: int):
+        from rest_framework.exceptions import NotFound
+
+        schedule = selectors.get_rotating_schedule(schedule_id, request.user)
+        if schedule is None:
+            raise NotFound()
+        return schedule
+
+    def get(self, request: Request, schedule_id: int) -> Response:
+        return Response(RotatingScheduleSerializer(self._get(request, schedule_id)).data)
+
+    def patch(self, request: Request, schedule_id: int) -> Response:
+        schedule = self._get(request, schedule_id)
+        serializer = RotatingScheduleWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        updated = services.update_rotating_schedule(
+            request.user, schedule, **serializer.validated_data
+        )
+        return Response(RotatingScheduleSerializer(updated).data)
+
+    def delete(self, request: Request, schedule_id: int) -> Response:
+        services.delete_rotating_schedule(request.user, self._get(request, schedule_id))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class RotatingScheduleOccurrenceListView(APIView):
+    permission_classes = [_CalendarPerm]
+
+    def get(self, request: Request) -> Response:
+        start = parse_date(request.query_params.get("start", ""))
+        end = parse_date(request.query_params.get("end", ""))
+        if start is None or end is None:
+            return Response(
+                {"detail": "start and end must be ISO dates."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if end <= start:
+            return Response(
+                {"detail": "end must be after start."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if (end - start).days > 400:
+            return Response(
+                {"detail": "Request no more than 400 days at a time."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            selectors.expand_rotating_schedules(request.user, start=start, end=end)
+        )
+
+
+class RotatingScheduleExceptionDetailView(APIView):
+    permission_classes = [_CalendarPerm]
+
+    def _values(self, request: Request, schedule_id: int, date: str):
+        from rest_framework.exceptions import NotFound, ValidationError
+
+        schedule = selectors.get_rotating_schedule(schedule_id, request.user)
+        if schedule is None:
+            raise NotFound()
+        parsed_date = parse_date(date)
+        if parsed_date is None:
+            raise ValidationError({"date": "Use an ISO date."})
+        return schedule, parsed_date
+
+    def put(self, request: Request, schedule_id: int, date: str) -> Response:
+        schedule, parsed_date = self._values(request, schedule_id, date)
+        serializer = RotatingScheduleExceptionWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        exception = services.set_rotating_schedule_exception(
+            request.user,
+            schedule,
+            parsed_date,
+            **serializer.validated_data,
+        )
+        return Response(RotatingScheduleExceptionSerializer(exception).data)
+
+    def delete(self, request: Request, schedule_id: int, date: str) -> Response:
+        schedule, parsed_date = self._values(request, schedule_id, date)
+        services.delete_rotating_schedule_exception(
+            request.user, schedule, parsed_date
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)

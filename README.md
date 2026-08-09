@@ -7,7 +7,7 @@ opt-in **nodes** (areas of household life), and a touchscreen **kiosk** for the 
 
 > **Source of truth:** the canonical docs live in [`docs/`](docs/). Read
 > [`HANDOVER.md`](HANDOVER.md) first, then `docs/00_README_and_Changelog.md` (decisions
-> D1–D21) and the relevant milestone checklist. If anything conflicts, the doc set wins.
+> D1–D22) and the relevant milestone checklist. If anything conflicts, the doc set wins.
 
 ## Status
 
@@ -19,10 +19,14 @@ safe-withdrawal calculation. The v0.19 household-launch pass makes phone navigat
 calendar reading, search journeys, touch actions and quick creation easier for everyday non-admin
 use; dense Solace, Homestead and Education workspaces now have phone-friendly section navigation,
 the Hub includes a configurable household countdown, and Solace's extra password-on-entry prompt
-is an admin-controlled setting. Security maturation
+is an admin-controlled setting. Homestead maintenance and Solace costs now work in either
+direction without duplicate records, and Calendar events can take users back to their owning node.
+Security maturation
 includes the shared permission-checked attachment service, audited sensitive downloads, non-public
 file storage and five-minute password elevation.
 Production Solace import/comparison remains pending until the home-server environment is available.
+Home Assistant is now an important planned dedicated bridge (Roadmap M5.5/D22), sequenced after
+the household pilot, remaining security maturation and Solace cutover validation.
 See [`HANDOVER.md`](HANDOVER.md).
 
 ## Tech stack

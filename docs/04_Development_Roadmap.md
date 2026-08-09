@@ -1,7 +1,7 @@
 # Document 7 — Development Roadmap
 
 > Canonical. Supersedes all earlier roadmap versions. Tuned for a solo developer building for
-> one household on an always-on home server. Decisions D1–D18 in `00_README_and_Changelog.md`.
+> one household on an always-on home server. Decisions D1–D23 in `00_README_and_Changelog.md`.
 
 ## Guiding principle
 
@@ -123,6 +123,9 @@ Build, three workstreams:
   as prefs), and **nice to look at** (shared design system, dark-mode, kiosk-safe view).
 - Standalone event CRUD UI; node-derived events continue to flow only through the scheduling
   helper (D7). RRULE expansion may be tackled here or deferred per `24_Core_Calendar.md` (D8).
+- **Completed v0.20.0:** generic rotating Calendar layers (D23) calculate an anchored two-state
+  cycle without daily events, associate People once, forecast any requested window and support
+  sparse one-day swaps/restores in responsive month/week/day/agenda views.
 
 **Done when:** the Hub shows the right per-user "today" items including a live Meridian widget and
 is configurable; Atlas is pleasant and capable for daily list/reminder use on web and kiosk with
@@ -198,6 +201,111 @@ Calendar/Search/kiosk views, and the standalone Solace app is no longer needed a
 
 ---
 
+## Milestone 5.5 — Home Assistant bridge (important; D22)
+
+Build after the current household pilot, remaining M4 security work and Solace production
+cutover validation. This is a dedicated **Home Assistant node**, not a generic integrations or
+plugin framework. Full specification: `26_Node_Home_Assistant.md`.
+
+The non-negotiable ownership rule is: **Home Assistant owns devices, entities, live state,
+history, areas and automations; HomeStack owns household records, people, tasks, Calendar data,
+permissions and presentation mappings.** Neither side copies the other's durable domain data.
+
+### 5.5.0 — Contract and security gate
+
+- Confirm network reachability from the HomeStack backend container to the local Home Assistant
+  REST API and record the supported URL/TLS arrangement.
+- Add a dedicated `apps/home_assistant` node and `home_assistant.*` permissions; do not create a
+  generic `integrations` app and do not embed Home Assistant in an iframe.
+- Keep the Home Assistant base URL and long-lived access token in deployment secrets/environment,
+  never browser code, ordinary node settings, API responses, logs or audit metadata.
+- Define explicit entity and action allowlists. Locks, alarm panels, covers/garage doors and
+  cameras are read-only or absent until their separate safety/privacy review.
+- Define request timeouts, bounded response sizes, connection-health reporting, TLS verification,
+  safe URL validation and redaction. Write permission/security tests first (D10).
+
+**Gate:** a backend-only connection test can authenticate, fetch Home Assistant configuration and
+fail safely when Home Assistant is unavailable or the token is invalid.
+
+### 5.5.1 — Read-only Home Status V1
+
+- Implement a small REST client for Home Assistant state/config endpoints. Fetch only explicitly
+  mapped entities; do not mirror all entity states or recorder history into PostgreSQL.
+- Add household-scoped entity mappings: Home Assistant `entity_id`, friendly HomeStack label,
+  display group/order, icon/colour override, kiosk-safe flag and visibility. All models use
+  `HouseholdBaseModel`.
+- Build admin mapping/discovery UI with search and preview; discovery is read-only and never
+  imports devices automatically.
+- Ship a responsive **Home Status** page and Hub widget for useful glanceable state such as doors,
+  temperature, humidity, lights, energy/solar/battery and presence-safe summaries.
+- Use short in-process/request caching and clear stale/offline states. Do not add Redis/Celery
+  solely for this node (D5).
+
+**Gate:** selected entities render quickly on phone/desktop, unavailable entities degrade clearly,
+and no Home Assistant token or unmapped entity leaks to the client, Search, kiosk or audit logs.
+
+### 5.5.2 — Safe controls
+
+- Add an explicit allowlist of callable actions (`domain.service` + permitted entity targets and
+  bounded fields). Do not accept arbitrary service names or raw payloads from the browser.
+- Start with low-risk lights, switches, fans, scenes and scripts. Provide optimistic UI only where
+  the resulting state can be reconciled safely.
+- Enforce `home_assistant.control` through the central resolver and audit every attempt/result.
+  Sensitive controls require adult permission and password re-auth; child/kiosk controls are
+  separately opt-in per action.
+- Add confirmation, timeout, error and offline behavior; never claim success until Home Assistant
+  accepts the service call.
+
+**Gate:** an authorised adult can run allowlisted controls from phone/desktop, denied roles and
+tampered payloads fail in backend tests, and every control is attributable in the audit log.
+
+### 5.5.3 — HomeStack events into Home Assistant automations
+
+- Subscribe inside the dedicated node to approved HomeStack domain events through the thin D4
+  interface; other nodes never import Home Assistant code.
+- Translate only configured events to namespaced Home Assistant events such as
+  `homestack_maintenance_completed`, with minimal non-sensitive payloads and stable record links.
+- Provide event-mapping UI, test-fire support and delivery audit/health. Delivery happens after
+  the owning transaction commits, fails independently, and uses only bounded immediate retry;
+  no durable event-bus table, replay queue or broker is introduced.
+- Document example Home Assistant automations, including announcements, dashboard refreshes and
+  safe reminders.
+
+**Gate:** at least three real household workflows run reliably without duplicating HomeStack
+records or exposing finance/private data in Home Assistant event payloads.
+
+### 5.5.4 — Real-time state push (conditional follow-up)
+
+- Add the Home Assistant WebSocket API only if measured REST refresh latency is inadequate.
+- Run any persistent subscriber as a supervised, reconnecting management-command/service process;
+  do not hide a forever loop inside web workers and do not add Redis/Celery by default.
+- Subscribe only to mapped entities, coalesce bursts, reconnect with backoff and expose stale/
+  disconnected health. Live state remains ephemeral rather than copied into durable tables.
+
+**Gate:** reconnect/restart behavior is proven on the home server and loss of Home Assistant never
+blocks ordinary HomeStack pages.
+
+### 5.5.5 — Optional Home Assistant custom component
+
+- Build `custom_components/homestack` only if Home Assistant genuinely needs to consume HomeStack
+  as native sensors/calendar/to-do entities. This is not required for Home Status V1.
+- Before implementation, make an explicit security decision for a narrowly scoped machine
+  credential or signed webhook. Do not weaken D6 by exposing ordinary session or user tokens.
+- Expose read-only entities first; every entity reads HomeStack's existing API/service layer and
+  does not create a second source of truth. Add writes only for individually reviewed actions.
+- Provide config flow, unload/reload handling, diagnostics with secret redaction, version
+  compatibility tests and install/upgrade documentation.
+
+**Gate:** the component survives Home Assistant restart/reload, exposes only authorised mapped
+data and can be removed without losing any HomeStack or Home Assistant domain records.
+
+**Milestone done when:** phases 5.5.0–5.5.3 are accepted in daily use: selected smart-home state is
+useful on the HomeStack Hub, safe controls are permissioned/audited, approved HomeStack events can
+drive Home Assistant automations, both systems remain usable when the other is offline, and there
+is no duplicated ownership. Phases 5.5.4–5.5.5 remain evidence-driven extensions.
+
+---
+
 ## Milestone 6 — Remaining nodes (as appetite allows)
 
 Each built end-to-end, one at a time, in roughly this order:
@@ -241,7 +349,7 @@ Consider:
 
 ## What is explicitly NOT on this roadmap for now
 
-Native mobile/desktop apps, full offline mode, OCR/AI, plugin system, public internet
+Native mobile/desktop apps, full offline mode, OCR/AI, a general plugin system, public internet
 exposure, external calendar sync, field-level encryption, and any multi-household/SaaS
 behaviour. These stay in the Parking Lot until the core product earns them.
 

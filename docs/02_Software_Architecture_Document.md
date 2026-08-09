@@ -1,6 +1,6 @@
 # Document 2 — Software Architecture Document (SAD)
 
-> Canonical. Supersedes all earlier SAD versions. Decisions referenced as D1–D18 live in
+> Canonical. Supersedes all earlier SAD versions. Decisions referenced as D1–D23 live in
 > `00_README_and_Changelog.md`.
 
 ## 1. Purpose
@@ -48,7 +48,8 @@ Backend (Django, modular monolith)
    ├─ Core services (accounts, people, permissions, scheduling, hub,
    │                 notifications, attachments, audit, search, backups, nodes)
    ├─ Node apps (atlas, home_wiki, pets, education, inventory, assets,
-   │             hearth, travel, projects, health, meridian, solace)
+   │             hearth, travel, projects, health, meridian, solace,
+   │             homestead, home_assistant)
    └─ Internal event interface (signals; swappable for a real bus later)
                  │
                  ▼
@@ -63,7 +64,7 @@ Core: `core`, `accounts`, `people`, `permissions`, `nodes`, `hub`, `scheduling`,
 interface only)*.
 
 Nodes: `atlas`, `home_wiki`, `pets`, `education`, `inventory`, `assets`, `hearth`, `travel`,
-`projects`, `health`, `meridian`, `solace`.
+`projects`, `health`, `meridian`, `solace`, `homestead`, `home_assistant`.
 
 Notes:
 - The scheduling app is named **`scheduling`**, not `calendar`, to avoid colliding with
@@ -72,6 +73,9 @@ Notes:
   seeded at install. The tenant column is carried by the base model instead (§7, D1).
 - Meridian and Solace are **first-class node apps** (D13), not under an `integrations` shell.
   No external-link/iframe layer is built.
+- Home Assistant is a dedicated backend-only bridge node (D22), still not a generic
+  `integrations` shell. It uses supported Home Assistant APIs, stores selected mappings rather
+  than device state/history, and must never be required for other node writes to succeed.
 
 ```
 backend/
@@ -83,7 +87,7 @@ backend/
     core/  accounts/  people/  permissions/  nodes/  hub/  scheduling/
     notifications/  attachments/  audit/  search/  backups/  events/
     atlas/  home_wiki/  pets/  education/  inventory/  assets/  hearth/
-    travel/  projects/  health/  meridian/  solace/
+    travel/  projects/  health/  meridian/  solace/  homestead/  home_assistant/
 ```
 
 ## 6. The base model (D1, D12, D17)
@@ -126,7 +130,7 @@ Every endpoint passes through both. Permission tests are written **first**, befo
 features, because this is the security spine and the part that becomes critical the moment
 the app reaches families you don't know.
 
-## 8. Scheduling (Calendar) architecture (D7, D8)
+## 8. Scheduling (Calendar) architecture (D7, D8, D23)
 
 **Node records own their dates.** A single helper in the `scheduling` app creates, updates
 and deletes `calendar_events` derived from node records, and stores the resulting
@@ -136,6 +140,13 @@ treatment's `next_due_at` and its calendar event.
 
 **Recurrence is expressed once** as an RRULE-style rule on the owning record, and the helper
 expands it for the calendar. No node keeps its own parallel `repeat_rule` format.
+
+**Rotating two-state layers are calculated, not materialised (D23).** `RotatingSchedule` owns
+one anchored `P`/`S` cycle and its optional People. The selector expands only the requested
+date window and overlays any sparse `RotatingScheduleException` rows. It never creates daily
+`CalendarEvent` records. Conventional standalone and node-owned event recurrence remains RRULE
+(D8); this bounded model exists for alternating states that need both long forecasting and
+one-day swaps.
 
 ## 9. Search architecture (D9)
 

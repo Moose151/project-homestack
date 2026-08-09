@@ -280,6 +280,36 @@ class HubWidgetConfigTests(TestCase):
         keys = [w["key"] for w in self.client.get(reverse("hub")).json()["widgets"]]
         self.assertNotIn("atlas_todos", keys)
 
+    def test_user_can_reorder_enabled_widgets_in_one_request(self):
+        _login(self.client, "parentuser")
+        before = [
+            row["key"] for row in self.client.get(reverse("hub-widget-config")).json()["widgets"]
+            if row["household_enabled"]
+        ]
+        desired = list(reversed(before))
+        resp = self.client.patch(
+            reverse("hub-widget-user-order"),
+            {"keys": desired},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        actual = [
+            row["key"] for row in resp.json()["widgets"]
+            if row["household_enabled"]
+        ]
+        self.assertEqual(actual, desired)
+        hub_keys = [row["key"] for row in self.client.get(reverse("hub")).json()["widgets"]]
+        self.assertEqual(hub_keys, [key for key in desired if key in hub_keys])
+
+    def test_bulk_reorder_requires_each_enabled_widget_once(self):
+        _login(self.client, "parentuser")
+        resp = self.client.patch(
+            reverse("hub-widget-user-order"),
+            {"keys": ["atlas_todos", "atlas_todos"]},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+
     def test_unknown_widget_key_rejected(self):
         _login(self.client, "admin")
         resp = self.client.patch(

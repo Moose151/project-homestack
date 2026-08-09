@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.19.1**
+> **Current version: 0.20.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -9,7 +9,70 @@
 
 ---
 
+## 0.20 — Forecastable rotating Calendar schedules
+
+### 0.20.0 — 2026-08-09
+- **Enter the cycle once** — Calendar supports an anchored, reusable two-state rotation instead
+  of one event per day. The setup is pre-filled with the requested 2/2/3/2/2/3 shared-care
+  sequence, while labels, colours, People and every day remain editable for other households and
+  uses such as shift work.
+- **Forecast indefinitely without database growth** — occurrences are calculated only for the
+  visible range from one canonical pattern. No daily `CalendarEvent` rows or duplicate dates are
+  generated.
+- **Change one day safely** — tapping a rotation badge can swap just that date, keep an optional
+  note and visibly mark it as changed. “Restore repeating plan” removes the exception without
+  touching the underlying cycle.
+- **Continuous two-colour month forecast** — desktop and mobile Month views put a narrow state
+  colour strip along the top of every neutral day cell, retain a labelled legend and recalculate
+  as the user moves through months. Phones keep a compact seven-column month overview instead of
+  a long status list. Week/day/agenda retain detailed status badges; setup and one-day changes
+  use shared bottom sheets and large touch targets.
+- Database migration required:
+  `scheduling.0002_rotatingschedule_rotatingscheduleexception`.
+- Validation: **624 backend tests**, frontend TypeScript check and production build clean; no
+  migration drift.
+
+---
+
 ## 0.19 — Household-launch mobile experience
+
+### 0.19.3 — 2026-08-09
+- **Maintenance-to-finance round trip** — a Homestead maintenance task can now create or update
+  its one Solace bill through the event boundary. The task keeps the practical details; Solace
+  keeps amount, schedule and payment history. Finance permission, password re-auth and audit still
+  apply, and repeat requests update rather than duplicate the linked bill.
+- **Calendar stays single-entry** — once maintenance gains a Solace cost, its Homestead calendar
+  mirror is removed and the protected Solace financial event remains authoritative.
+- **Visible cross-node journeys** — linked maintenance, insurance and household-cost badges open
+  the matching filtered Solace bill view. Synced Calendar event details now offer an “Open the
+  source record” route for Atlas, Pets, Education, Homestead, Solace and Meridian.
+- **Touch and desktop polish** — hover-reveal controls remain visible on coarse-pointer tablets
+  and touch laptops, while the dense Solace and Education workspaces use more available width on
+  large desktop screens.
+- No additional database migration beyond `homestead.0004` from v0.19.2.
+- Validation: **613 backend tests**, frontend TypeScript check and production build clean; no
+  migration drift.
+
+### 0.19.2 — 2026-08-09
+- **Enter home bills once** — Solace bills can now be organised as Homestead home insurance,
+  rates/services or paid maintenance at creation time. Existing Solace bills can be handed off
+  from Edit without retyping their name, provider, amount, due date or recurrence.
+- **One editing owner** — after handoff, Homestead owns the descriptive home record and Solace
+  owns payment state/history. Direct Solace edits and deletion are blocked for linked bills;
+  Homestead changes continue to update the same bill through the event boundary.
+- **No duplicate schedule row** — linked maintenance appears in Homestead but retains only its
+  protected Solace financial Calendar event. The Homestead task stores a lightweight bill
+  reference, matching policies and household costs.
+- **Phone-first finance forms** — the Solace bill form now uses a clean responsive grid, explains
+  the Homestead destination in context, and linked cards deep-link to the exact Homestead
+  section. Homestead finance cards stack actions into full touch targets on narrow screens.
+- **Direct desktop Hub arranging** — while Tune mode is open, cards can be dragged by a visible
+  grip on the live Hub or in the configuration list. Mobile retains the accessible arrow controls.
+- **Fast reorder persistence** — arrow and drag moves update optimistically and save the full
+  order through one atomic batch request, replacing the previous sequential request per widget.
+- Database migration required: `homestead.0004_maintenancetask_solace_bill_ref`.
+- Validation: **609 backend tests**, frontend TypeScript check and production build clean; no
+  migration drift.
 
 ### 0.19.1 — 2026-08-04
 - **Usable dense workspaces on phones** — Solace, Homestead and Education replace their long

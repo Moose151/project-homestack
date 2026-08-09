@@ -1229,7 +1229,7 @@ export function EducationPage() {
   const defaultAssignee = personIdForUser(people, user?.id)
 
   return (
-    <div className="space-y-5 max-w-5xl mx-auto">
+    <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader title="Education" icon="🎓" subtitle="Your courses, deadlines, timetable and events." />
 
       <SearchField

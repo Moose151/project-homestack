@@ -225,6 +225,23 @@ def create_bill(acting_user: User, **data) -> Bill:
     return obj
 
 
+def organise_bill_in_homestead(
+    acting_user: User, obj: Bill, destination: str
+) -> Bill:
+    """Ask Homestead to claim a finance entry as its richer source record (D4)."""
+    if not destination:
+        return obj
+    if obj.source_node and obj.source_node != "homestead":
+        raise ValueError("This bill is already managed by another node.")
+    if obj.source_node == "homestead":
+        if obj.source_record_type != destination:
+            raise ValueError("This bill is already organised in a different Homestead area.")
+        return obj
+    events.homestead_record_requested(obj, acting_user.id, destination)
+    obj.refresh_from_db()
+    return obj
+
+
 def update_bill(
     acting_user: User,
     obj: Bill,

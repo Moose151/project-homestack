@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type {
   SolaceBalanceForecast, SolaceBalanceSnapshot, SolaceBill, SolaceBillOccurrence, SolaceBillTimeline, SolaceBucket, SolaceCategory,
@@ -74,6 +75,15 @@ const SOLACE_TABS: Array<{ key: Tab; label: string }> = [
 ]
 
 const BILL_CATS = ['mortgage', 'utilities', 'insurance', 'council', 'debt', 'subscription', 'childcare', 'other']
+type HomeDestination = '' | 'insurance_policy' | 'household_cost' | 'maintenance'
+const homeDestinationForCategory = (category: string): HomeDestination => {
+  const normalised = category.toLowerCase()
+  if (normalised === 'insurance') return 'insurance_policy'
+  if (['mortgage', 'utilities', 'council'].includes(normalised)) return 'household_cost'
+  return ''
+}
+const homeDestinationPath = (recordType: string) =>
+  recordType === 'maintenance' ? '/homestead?tab=maintenance' : '/homestead?tab=finances'
 const RECURRENCE = [
   { label: 'One-off', value: '' },
   { label: 'Weekly', value: 'FREQ=WEEKLY' },
@@ -170,9 +180,11 @@ function CreatePanel({ label, children }: {
 function BillForm({ categories, onCreated, onError }: {
   categories: string[]; onCreated: () => void; onError: (message: string) => void
 }) {
+  const startingCategory = categories[0] || 'other'
   const [f, setF] = useState({
-    name: '', category: categories[0] || 'other', provider: '', amount: '', due_at: '',
+    name: '', category: startingCategory, provider: '', amount: '', due_at: '',
     recurrence_rule: '', end_date: '', is_autopay: false, include_in_set_aside: true,
+    home_destination: homeDestinationForCategory(startingCategory) as HomeDestination,
   })
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: string | boolean) => setF(prev => ({ ...prev, [k]: v }))
@@ -188,8 +200,9 @@ function BillForm({ categories, onCreated, onError }: {
         is_active: true,
       })
       setF({
-        name: '', category: categories[0] || 'other', provider: '', amount: '', due_at: '',
+        name: '', category: startingCategory, provider: '', amount: '', due_at: '',
         recurrence_rule: '', end_date: '', is_autopay: false, include_in_set_aside: true,
+        home_destination: homeDestinationForCategory(startingCategory),
       })
       onCreated()
     } catch (error) {
@@ -198,16 +211,27 @@ function BillForm({ categories, onCreated, onError }: {
   }
   return (
     <Card contentClassName="p-4">
-      <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr_0.8fr_1fr_1fr_auto]">
+      <div className="mb-4 rounded-xl bg-primary-soft px-3 py-3 text-sm text-ink">
+        <p className="font-semibold">Enter home information once</p>
+        <p className="mt-0.5 text-muted-strong">Choose a Homestead destination below and this bill will appear in the right home workspace automatically.</p>
+      </div>
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <Field label="Bill"><Input value={f.name} onChange={e => set('name', e.target.value)} placeholder="Electricity" /></Field>
         <Field label="Provider"><Input value={f.provider} onChange={e => set('provider', e.target.value)} /></Field>
         <Field label="Amount"><Input type="number" step="0.01" value={f.amount} onChange={e => set('amount', e.target.value)} /></Field>
-        <Field label="Category"><Select value={f.category} onChange={e => set('category', e.target.value)}>{categories.map(c => <option key={c} value={c}>{cap(c)}</option>)}</Select></Field>
+        <Field label="Category"><Select value={f.category} onChange={e => setF(prev => ({ ...prev, category: e.target.value, home_destination: homeDestinationForCategory(e.target.value) }))}>{categories.map(c => <option key={c} value={c}>{cap(c)}</option>)}</Select></Field>
         <Field label="First due"><input type="datetime-local" className={fieldClass} value={f.due_at} onChange={e => set('due_at', e.target.value)} /></Field>
         <Field label="Repeats"><Select value={f.recurrence_rule} onChange={e => set('recurrence_rule', e.target.value)}>{RECURRENCE.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}</Select></Field>
-        <div className="flex items-end"><Button onClick={save} loading={saving} disabled={!f.name.trim()} className="w-full">Add</Button></div>
+        <Field label="Organise in Homestead" hint="Homestead becomes the place for home details; Solace keeps the amount and payment schedule." className="sm:col-span-2 xl:col-span-3">
+          <Select value={f.home_destination} onChange={e => set('home_destination', e.target.value)}>
+            <option value="">No — finance only</option>
+            <option value="insurance_policy">Home insurance / cover</option>
+            <option value="household_cost">Rates, mortgage or home service</option>
+            <option value="maintenance">Paid home maintenance</option>
+          </Select>
+        </Field>
       </div>
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_auto_auto_auto] xl:items-end">
         <Field label="Stop after (optional)">
           <Input type="date" value={f.end_date} onChange={e => set('end_date', e.target.value)} />
         </Field>
@@ -223,6 +247,7 @@ function BillForm({ categories, onCreated, onError }: {
           />
           Include in set-aside planning
         </label>
+        <Button onClick={save} loading={saving} disabled={!f.name.trim()} className="w-full sm:col-span-2 xl:col-span-1 xl:w-auto">Add bill</Button>
       </div>
     </Card>
   )
@@ -242,6 +267,7 @@ function BillEditor({ bill, categories, reload, onError }: {
     is_active: bill.is_active,
     is_autopay: bill.is_autopay,
     include_in_set_aside: bill.include_in_set_aside,
+    home_destination: '' as HomeDestination,
     notes: bill.notes,
     occurrence_update_scope: 'future_unpaid' as 'future_unpaid' | 'all_unpaid',
   })
@@ -307,6 +333,16 @@ function BillEditor({ bill, categories, reload, onError }: {
             <option value="all_unpaid">All unpaid in budget year</option>
           </Select>
         </Field>
+        {!bill.source_node && (
+          <Field label="Organise in Homestead" hint="Use the information already here—no re-entry needed." className="sm:col-span-2">
+            <Select value={f.home_destination} onChange={e => set('home_destination', e.target.value)}>
+              <option value="">Keep as finance only</option>
+              <option value="insurance_policy">Home insurance / cover</option>
+              <option value="household_cost">Rates, mortgage or home service</option>
+              <option value="maintenance">Paid home maintenance</option>
+            </Select>
+          </Field>
+        )}
       </div>
       <p className="mt-2 text-xs text-muted">Paid history is always preserved. Use all unpaid only when correcting the bill rule for the whole budget year.</p>
       <div className="mt-3 flex flex-wrap gap-4 text-sm text-muted">
@@ -499,7 +535,7 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError }: {
                   {b.is_active && b.include_in_set_aside && (
                     <p className="text-xs text-muted">{money(b.fortnightly_amount)}/fortnight · {money(b.annual_amount)}/year</p>
                   )}
-                  {b.source_node === 'homestead' && <div className="mt-1"><Badge tone="success">Synced from Homestead</Badge></div>}
+                  {b.source_node === 'homestead' && <div className="mt-1"><Badge tone="success">Managed in Homestead</Badge></div>}
                 </div>
                 <DueBadge iso={b.next_due_at || b.due_at} paid={b.is_paid && !b.recurrence_rule} />
               </div>
@@ -521,7 +557,9 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError }: {
               </div>
               <BillDetails bill={b} />
               {b.source_node
-                ? <p className="mt-3 border-t border-line pt-3 text-xs text-muted">Edit this linked bill from {cap(b.source_node)}.</p>
+                ? b.source_node === 'homestead'
+                  ? <Link to={homeDestinationPath(b.source_record_type)} className="mt-3 flex min-h-11 items-center justify-between gap-3 border-t border-line pt-3 text-sm font-semibold text-primary">View and edit in Homestead <span aria-hidden>→</span></Link>
+                  : <p className="mt-3 border-t border-line pt-3 text-xs text-muted">Edit this linked bill from {cap(b.source_node)}.</p>
                 : <BillEditor bill={b} categories={categories} reload={reload} onError={onError} />}
             </Card>
           ))}
@@ -1892,7 +1930,7 @@ export function SolacePage() {
   if (requiresPasswordUnlock && !unlocked) return <ReauthGate onUnlock={() => setUnlocked(true)} />
 
   return (
-    <div className="max-w-5xl mx-auto space-y-5">
+    <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader title="Solace" subtitle="Bills, set-asides and planned purchases" icon="💸" />
       {error && <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
       <div className="flex flex-col gap-2 sm:flex-row">

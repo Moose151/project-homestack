@@ -13,6 +13,7 @@ import { Tabs } from '../../../components/Tabs'
 import { Badge, type BadgeTone } from '../../../components/Badge'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
+import { Modal } from '../../../components/Modal'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
 import { useAuth } from '../../auth/AuthContext'
@@ -381,6 +382,12 @@ function MaintenanceTab({ people, defaultAssignee, onError }: {
   }
   const [f, setF] = useState(blank)
   const [saving, setSaving] = useState(false)
+  const [costTask, setCostTask] = useState<MaintenanceTask | null>(null)
+  const [costAmount, setCostAmount] = useState('')
+  const [costCategory, setCostCategory] = useState('other')
+  const [costPassword, setCostPassword] = useState('')
+  const [costError, setCostError] = useState('')
+  const [trackingCost, setTrackingCost] = useState(false)
   const set = (k: string, v: unknown) => setF(prev => ({ ...prev, [k]: v }))
 
   const load = () => api.getMaintenance().then(setTasks).catch(e => onError(errMsg(e))).finally(() => setLoading(false))
@@ -424,6 +431,39 @@ function MaintenanceTab({ people, defaultAssignee, onError }: {
   const remove = async (t: MaintenanceTask) => {
     if (!confirm(`Delete "${t.title}"?`)) return
     try { await api.deleteMaintenance(t.id); load() } catch (e) { onError(errMsg(e)) }
+  }
+  const startCost = (task: MaintenanceTask) => {
+    setCostTask(task)
+    setCostAmount('')
+    setCostCategory('other')
+    setCostPassword('')
+    setCostError('')
+  }
+  const closeCost = () => {
+    if (trackingCost) return
+    setCostTask(null)
+    setCostPassword('')
+    setCostError('')
+  }
+  const trackCost = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!costTask || !costPassword || Number(costAmount) <= 0) return
+    setTrackingCost(true)
+    setCostError('')
+    try {
+      await api.reauth(costPassword)
+      await api.trackMaintenanceCost(costTask.id, {
+        amount: costAmount,
+        category: costCategory,
+      })
+      setCostTask(null)
+      setCostPassword('')
+      await load()
+    } catch (e) {
+      setCostError(errMsg(e))
+    } finally {
+      setTrackingCost(false)
+    }
   }
 
   if (loading) return <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
@@ -492,6 +532,11 @@ function MaintenanceTab({ people, defaultAssignee, onError }: {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium text-ink">{t.title}</span>
                     <Badge>{cap(t.category)}</Badge>
+                    {t.solace_bill_ref && (
+                      <Link to={`/solace?tab=bills&q=${encodeURIComponent(t.title)}`} aria-label={`Open ${t.title} in Solace`}>
+                        <Badge tone="success">Cost tracked in Solace →</Badge>
+                      </Link>
+                    )}
                     {t.recurrence_rule && <Badge tone="primary">↻ {recurrenceLabel(t.recurrence_rule)}</Badge>}
                     {due && <Badge tone={due.tone}>{due.text}</Badge>}
                   </div>
@@ -502,8 +547,9 @@ function MaintenanceTab({ people, defaultAssignee, onError }: {
                     </p>
                   )}
                 </div>
-                <div className="flex w-full items-center justify-end gap-1 sm:w-auto">
+                <div className="flex w-full flex-wrap items-center justify-end gap-1 sm:w-auto">
                   {t.next_due_at && <Button size="sm" variant="secondary" onClick={() => complete(t)} className="mr-auto sm:mr-1">Done</Button>}
+                  {!t.solace_bill_ref && <Button size="sm" variant="ghost" onClick={() => startCost(t)}>Track cost</Button>}
                   <div className="flex items-center gap-1 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                     <button onClick={() => startEdit(t)} className="min-h-10 rounded-lg px-3 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
                     <button onClick={() => remove(t)} className="grid h-10 w-10 place-items-center rounded-lg text-muted hover:bg-danger-soft hover:text-danger" aria-label="Delete">✕</button>
@@ -513,6 +559,38 @@ function MaintenanceTab({ people, defaultAssignee, onError }: {
             )
           })}
         </div>
+      )}
+      {costTask && (
+        <Modal
+          title="Track maintenance cost in Solace"
+          onClose={closeCost}
+          size="sm"
+          footer={(
+            <>
+              <Button type="button" variant="ghost" size="sm" onClick={closeCost} disabled={trackingCost}>Cancel</Button>
+              <Button type="submit" form="maintenance-cost-form" size="sm" loading={trackingCost} disabled={!costPassword || Number(costAmount) <= 0}>Track cost</Button>
+            </>
+          )}
+        >
+          <form id="maintenance-cost-form" onSubmit={trackCost} className="flex flex-col gap-4">
+            <div className="rounded-xl bg-primary-soft px-3 py-2.5 text-sm text-ink">
+              <strong>{costTask.title}</strong> stays owned by Homestead. Solace will hold the
+              amount and payment history, using the same due date and recurrence.
+            </div>
+            {costError && <div className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{costError}</div>}
+            <Field label="Expected cost">
+              <Input type="number" min="0.01" step="0.01" inputMode="decimal" value={costAmount} onChange={e => setCostAmount(e.target.value)} placeholder="0.00" autoFocus />
+            </Field>
+            <Field label="Solace category">
+              <Select value={costCategory} onChange={e => setCostCategory(e.target.value)}>
+                {['other', 'utilities', 'insurance', 'council', 'mortgage'].map(category => <option key={category} value={category}>{cap(category)}</option>)}
+              </Select>
+            </Field>
+            <Field label="Password" hint="Financial actions require password confirmation.">
+              <Input type="password" value={costPassword} onChange={e => setCostPassword(e.target.value)} autoComplete="current-password" />
+            </Field>
+          </form>
+        </Modal>
       )}
     </div>
   )
@@ -1089,6 +1167,13 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3 rounded-xl bg-primary-soft px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="font-semibold text-ink">One home record, one finance schedule</p>
+          <p className="mt-0.5 text-muted-strong">Add details here and Solace updates automatically, or organise an existing Solace bill into Homestead without entering it again.</p>
+        </div>
+        <Link to="/solace?tab=bills" className="flex min-h-11 flex-shrink-0 items-center font-semibold text-primary">Open Solace bills →</Link>
+      </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <Card><p className="text-2xl font-extrabold text-ink">{policies.filter(p => p.is_active).length}</p><p className="text-sm text-muted">Active policies</p></Card>
         <Card><p className="text-2xl font-extrabold text-ink">{costs.filter(c => c.is_active).length}</p><p className="text-sm text-muted">Active home costs</p></Card>
@@ -1151,13 +1236,17 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
               const due = dueLabel(policy.next_renewal_at)
               return (
                 <Card key={policy.id} className={!policy.is_active ? 'opacity-65' : ''}>
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="font-bold text-ink">{policy.name}</h3>
                         <Badge>{cap(policy.policy_type)}</Badge>
                         {!policy.is_active && <Badge tone="neutral">Inactive</Badge>}
-                        {policy.solace_bill_ref && <Badge tone="success">Synced to Solace</Badge>}
+                        {policy.solace_bill_ref && (
+                          <Link to={`/solace?tab=bills&q=${encodeURIComponent(policy.name)}`} aria-label={`Open ${policy.name} in Solace`}>
+                            <Badge tone="success">Synced to Solace →</Badge>
+                          </Link>
+                        )}
                       </div>
                       <p className="mt-1 text-sm text-muted">{policy.provider || 'No insurer'} · {money(policy.premium_amount)} / {cap(policy.billing_cycle).toLowerCase()}</p>
                       {policy.policy_number && <p className="text-sm text-muted-strong">Policy {policy.policy_number}</p>}
@@ -1172,9 +1261,9 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
                         {policy.portal_url && <a href={policy.portal_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">Open portal ↗</a>}
                       </div>
                     </div>
-                    <div className="flex flex-shrink-0 gap-1">
-                      <button onClick={() => startPolicy(policy)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
-                      <button onClick={() => removePolicy(policy)} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger" aria-label="Delete">✕</button>
+                    <div className="flex flex-shrink-0 justify-end gap-1 border-t border-line pt-2 sm:border-0 sm:pt-0">
+                      <button onClick={() => startPolicy(policy)} className="min-h-10 rounded-lg px-3 py-1 text-sm text-muted hover:bg-sunken hover:text-ink">Edit</button>
+                      <button onClick={() => removePolicy(policy)} className="grid h-10 w-10 place-items-center rounded-lg text-muted hover:bg-danger-soft hover:text-danger" aria-label="Delete">✕</button>
                     </div>
                   </div>
                 </Card>
@@ -1223,22 +1312,26 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
               const due = dueLabel(cost.next_due_at)
               return (
                 <Card key={cost.id} className={!cost.is_active ? 'opacity-65' : ''}>
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="font-bold text-ink">{cost.name}</h3>
                         <Badge>{cap(cost.cost_type)}</Badge>
                         {!cost.is_active && <Badge tone="neutral">Inactive</Badge>}
-                        {cost.solace_bill_ref && <Badge tone="success">Synced to Solace</Badge>}
+                        {cost.solace_bill_ref && (
+                          <Link to={`/solace?tab=bills&q=${encodeURIComponent(cost.name)}`} aria-label={`Open ${cost.name} in Solace`}>
+                            <Badge tone="success">Synced to Solace →</Badge>
+                          </Link>
+                        )}
                       </div>
                       <p className="mt-1 text-sm text-muted">{cost.provider || cap(cost.cost_type)} · {money(cost.amount)} / {cap(cost.billing_cycle).toLowerCase()}</p>
                       {cost.account_number && <p className="text-sm text-muted-strong">Account {cost.account_number}</p>}
                       {due && <div className="mt-2"><Badge tone={due.tone}>Due {due.text.toLowerCase()}</Badge></div>}
                       {cost.notes && <p className="mt-2 whitespace-pre-wrap text-sm text-muted">{cost.notes}</p>}
                     </div>
-                    <div className="flex flex-shrink-0 gap-1">
-                      <button onClick={() => startCost(cost)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
-                      <button onClick={() => removeCost(cost)} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger" aria-label="Delete">✕</button>
+                    <div className="flex flex-shrink-0 justify-end gap-1 border-t border-line pt-2 sm:border-0 sm:pt-0">
+                      <button onClick={() => startCost(cost)} className="min-h-10 rounded-lg px-3 py-1 text-sm text-muted hover:bg-sunken hover:text-ink">Edit</button>
+                      <button onClick={() => removeCost(cost)} className="grid h-10 w-10 place-items-center rounded-lg text-muted hover:bg-danger-soft hover:text-danger" aria-label="Delete">✕</button>
                     </div>
                   </div>
                 </Card>
