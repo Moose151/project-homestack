@@ -150,6 +150,12 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
 
 ## 9. Follow-up bugs found in use (2026-08-09)
 
+- [x] **Money asked for a time on every date.** Bill due dates, subscription renewals, purchase
+  target dates and paydays are all `is_all_day` records, so the eight `datetime-local` inputs
+  collected a time nothing read — and one that quietly affected same-day ordering and could
+  shift a late-evening entry to the next day. All are plain date pickers now, saved at local
+  midnight.
+
 - [x] **A part's quantity rejected whole numbers.** The input paired `min="0.01"` with
   `step="1"`, and a number input only accepts `min + n×step` — so 2 was invalid, the browser
   snapped to 2.01, and the part was then priced at 2.01×. Now `step="any"`. Rows saved before

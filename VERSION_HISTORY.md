@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.23.3**
+> **Current version: 0.23.4**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,15 @@
 ---
 
 ## 0.23 — Multi-person assignment
+
+### 0.23.4 — 2026-08-09
+- **Money asks for a date, not a date and time.** A bill's due date, a subscription renewal, a
+  planned purchase's target date and a payday are all stored as all-day records — every one of
+  those models defaults `is_all_day` to true — so the forms were collecting a time nothing
+  reads. All eight fields are now plain date pickers, and a date is saved at local midnight.
+  A stray time was not harmless: two bills on the same day sorted by whatever time happened to
+  be typed, and a late-evening time could land on the neighbouring day once converted.
+  **667 backend tests green; production build clean; no migration drift.**
 
 ### 0.23.3 — 2026-08-09
 - **Room icons are picked, not typed.** Creating a room asked you to type an emoji, which meant
@@ -121,6 +130,15 @@
   green (10 new, permission-first); production build clean; no migration drift.**
 
 ## 0.23 — Multi-person assignment
+
+### 0.23.4 — 2026-08-09
+- **Money asks for a date, not a date and time.** A bill's due date, a subscription renewal, a
+  planned purchase's target date and a payday are all stored as all-day records — every one of
+  those models defaults `is_all_day` to true — so the forms were collecting a time nothing
+  reads. All eight fields are now plain date pickers, and a date is saved at local midnight.
+  A stray time was not harmless: two bills on the same day sorted by whatever time happened to
+  be typed, and a late-evening time could land on the neighbouring day once converted.
+  **667 backend tests green; production build clean; no migration drift.**
 
 ### 0.23.3 — 2026-08-09
 - **Room icons are picked, not typed.** Creating a room asked you to type an emoji, which meant

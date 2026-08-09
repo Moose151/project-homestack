@@ -24,12 +24,15 @@ import { useStacks } from '../../stacks/StacksContext'
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ')
 const dateOnly = (iso: string | null) => iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'No date'
-const fromLocalInput = (value: string) => value ? new Date(value).toISOString() : null
-const toLocalInput = (iso: string | null) => {
+/** `yyyy-mm-dd` from the date input → ISO at local midnight. */
+const fromLocalDateInput = (value: string) => value ? new Date(`${value}T00:00`).toISOString() : null
+/** ISO → `yyyy-mm-dd` in local time, for a native date input. */
+const toLocalDateInput = (iso: string | null) => {
   if (!iso) return ''
   const value = new Date(iso)
+  if (Number.isNaN(value.getTime())) return ''
   const offset = value.getTimezoneOffset() * 60000
-  return new Date(value.getTime() - offset).toISOString().slice(0, 16)
+  return new Date(value.getTime() - offset).toISOString().slice(0, 10)
 }
 const dateKey = (iso: string) => {
   const value = new Date(iso)
@@ -195,7 +198,7 @@ function BillForm({ categories, onCreated, onError }: {
       await api.createSolaceBill({
         ...f,
         amount: f.amount || '0.00',
-        due_at: fromLocalInput(f.due_at),
+        due_at: fromLocalDateInput(f.due_at),
         end_date: f.end_date || null,
         is_all_day: true,
         is_active: true,
@@ -221,7 +224,7 @@ function BillForm({ categories, onCreated, onError }: {
         <Field label="Provider"><Input value={f.provider} onChange={e => set('provider', e.target.value)} /></Field>
         <Field label="Amount"><Input type="number" step="0.01" value={f.amount} onChange={e => set('amount', e.target.value)} /></Field>
         <Field label="Category"><Select value={f.category} onChange={e => setF(prev => ({ ...prev, category: e.target.value, home_destination: homeDestinationForCategory(e.target.value) }))}>{categories.map(c => <option key={c} value={c}>{cap(c)}</option>)}</Select></Field>
-        <Field label="First due"><input type="datetime-local" className={fieldClass} value={f.due_at} onChange={e => set('due_at', e.target.value)} /></Field>
+        <Field label="First due"><input type="date" className={fieldClass} value={f.due_at} onChange={e => set('due_at', e.target.value)} /></Field>
         <Field label="Repeats"><Select value={f.recurrence_rule} onChange={e => set('recurrence_rule', e.target.value)}>{RECURRENCE.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}</Select></Field>
         <Field label="Organise in Homestead" hint="Homestead becomes the place for home details; Solace keeps the amount and payment schedule." className="sm:col-span-2 xl:col-span-3">
           <Select value={f.home_destination} onChange={e => set('home_destination', e.target.value)}>
@@ -262,7 +265,7 @@ function BillEditor({ bill, categories, reload, onError }: {
     provider: bill.provider,
     category: bill.category,
     amount: bill.amount,
-    due_at: toLocalInput(bill.due_at),
+    due_at: toLocalDateInput(bill.due_at),
     recurrence_rule: bill.recurrence_rule,
     end_date: bill.end_date || '',
     is_active: bill.is_active,
@@ -279,7 +282,7 @@ function BillEditor({ bill, categories, reload, onError }: {
     try {
       await api.updateSolaceBill(bill.id, {
         ...f,
-        due_at: fromLocalInput(f.due_at),
+        due_at: fromLocalDateInput(f.due_at),
         end_date: f.end_date || null,
         amount: f.amount || '0.00',
       })
@@ -316,7 +319,7 @@ function BillEditor({ bill, categories, reload, onError }: {
           </Select>
         </Field>
         <Field label="First due">
-          <input type="datetime-local" className={fieldClass} value={f.due_at} onChange={e => set('due_at', e.target.value)} />
+          <input type="date" className={fieldClass} value={f.due_at} onChange={e => set('due_at', e.target.value)} />
         </Field>
         <Field label="Repeats">
           <Select value={f.recurrence_rule} onChange={e => set('recurrence_rule', e.target.value)}>
@@ -773,7 +776,7 @@ function SubscriptionForm({ onCreated, onError }: {
   const save = async () => {
     setSaving(true)
     try {
-      await api.createSolaceSubscription({ ...f, amount: f.amount || '0.00', next_renewal_at: fromLocalInput(f.next_renewal_at), recurrence_rule: subscriptionRecurrence(f.billing_cycle), is_all_day: true, is_active: true })
+      await api.createSolaceSubscription({ ...f, amount: f.amount || '0.00', next_renewal_at: fromLocalDateInput(f.next_renewal_at), recurrence_rule: subscriptionRecurrence(f.billing_cycle), is_all_day: true, is_active: true })
       setF({ name: '', provider: '', amount: '', billing_cycle: 'monthly', next_renewal_at: '' })
       onCreated()
     } catch (error) {
@@ -787,7 +790,7 @@ function SubscriptionForm({ onCreated, onError }: {
         <Field label="Provider"><Input value={f.provider} onChange={e => set('provider', e.target.value)} /></Field>
         <Field label="Amount"><Input type="number" step="0.01" value={f.amount} onChange={e => set('amount', e.target.value)} /></Field>
         <Field label="Cycle"><Select value={f.billing_cycle} onChange={e => set('billing_cycle', e.target.value)}>{['weekly', 'fortnightly', 'monthly', 'quarterly', 'yearly', 'other'].map(c => <option key={c} value={c}>{cap(c)}</option>)}</Select></Field>
-        <Field label="Renewal"><input type="datetime-local" className={fieldClass} value={f.next_renewal_at} onChange={e => set('next_renewal_at', e.target.value)} /></Field>
+        <Field label="Renewal"><input type="date" className={fieldClass} value={f.next_renewal_at} onChange={e => set('next_renewal_at', e.target.value)} /></Field>
         <div className="flex items-end"><Button onClick={save} loading={saving} disabled={!f.name.trim()} className="w-full">Add</Button></div>
       </div>
     </Card>
@@ -802,7 +805,7 @@ function SubscriptionEditor({ subscription, reload, onError }: {
     provider: subscription.provider,
     amount: subscription.amount,
     billing_cycle: subscription.billing_cycle,
-    next_renewal_at: toLocalInput(subscription.next_renewal_at),
+    next_renewal_at: toLocalDateInput(subscription.next_renewal_at),
     is_active: subscription.is_active,
     notes: subscription.notes,
   })
@@ -814,7 +817,7 @@ function SubscriptionEditor({ subscription, reload, onError }: {
       await api.updateSolaceSubscription(subscription.id, {
         ...f,
         amount: f.amount || '0.00',
-        next_renewal_at: fromLocalInput(f.next_renewal_at),
+        next_renewal_at: fromLocalDateInput(f.next_renewal_at),
         recurrence_rule: subscriptionRecurrence(f.billing_cycle, subscription.recurrence_rule),
       })
       reload()
@@ -844,7 +847,7 @@ function SubscriptionEditor({ subscription, reload, onError }: {
         <Field label="Provider"><Input value={f.provider} onChange={event => set('provider', event.target.value)} /></Field>
         <Field label="Amount"><Input type="number" step="0.01" value={f.amount} onChange={event => set('amount', event.target.value)} /></Field>
         <Field label="Cycle"><Select value={f.billing_cycle} onChange={event => set('billing_cycle', event.target.value)}>{['weekly', 'fortnightly', 'monthly', 'quarterly', 'yearly', 'other'].map(cycle => <option key={cycle} value={cycle}>{cap(cycle)}</option>)}</Select></Field>
-        <Field label="Renewal"><input type="datetime-local" className={fieldClass} value={f.next_renewal_at} onChange={event => set('next_renewal_at', event.target.value)} /></Field>
+        <Field label="Renewal"><input type="date" className={fieldClass} value={f.next_renewal_at} onChange={event => set('next_renewal_at', event.target.value)} /></Field>
         <Field label="Notes"><Input value={f.notes} onChange={event => set('notes', event.target.value)} /></Field>
       </div>
       <label className="mt-3 flex items-center gap-2 text-sm text-muted">
@@ -892,7 +895,7 @@ function PurchaseForm({ categories, onCreated, onError }: {
   const save = async () => {
     setSaving(true)
     try {
-      await api.createSolacePurchase({ ...f, target_amount: f.target_amount || '0.00', saved_amount: f.saved_amount || '0.00', target_date: fromLocalInput(f.target_date), status: 'saving', is_all_day: true })
+      await api.createSolacePurchase({ ...f, target_amount: f.target_amount || '0.00', saved_amount: f.saved_amount || '0.00', target_date: fromLocalDateInput(f.target_date), status: 'saving', is_all_day: true })
       setF({ name: '', category: '', target_amount: '', saved_amount: '', target_date: '', priority: 'medium' })
       onCreated()
     } catch (error) {
@@ -906,7 +909,7 @@ function PurchaseForm({ categories, onCreated, onError }: {
         <Field label="Category"><Select value={f.category} onChange={e => set('category', e.target.value)}><option value="">Choose…</option>{categories.map(category => <option key={category} value={category}>{cap(category)}</option>)}</Select></Field>
         <Field label="Target"><Input type="number" step="0.01" value={f.target_amount} onChange={e => set('target_amount', e.target.value)} /></Field>
         <Field label="Saved"><Input type="number" step="0.01" value={f.saved_amount} onChange={e => set('saved_amount', e.target.value)} /></Field>
-        <Field label="Target date"><input type="datetime-local" className={fieldClass} value={f.target_date} onChange={e => set('target_date', e.target.value)} /></Field>
+        <Field label="Target date"><input type="date" className={fieldClass} value={f.target_date} onChange={e => set('target_date', e.target.value)} /></Field>
         <Field label="Priority"><Select value={f.priority} onChange={e => set('priority', e.target.value)}>{['low', 'medium', 'high'].map(value => <option key={value} value={value}>{cap(value)}</option>)}</Select></Field>
         <div className="flex items-end"><Button onClick={save} loading={saving} disabled={!f.name.trim()} className="w-full">Add</Button></div>
       </div>
@@ -922,7 +925,7 @@ function PurchaseEditor({ purchase, categories, reload, onError }: {
     category: purchase.category,
     target_amount: purchase.target_amount,
     saved_amount: purchase.saved_amount,
-    target_date: toLocalInput(purchase.target_date),
+    target_date: toLocalDateInput(purchase.target_date),
     priority: purchase.priority,
     status: purchase.status,
     notes: purchase.notes,
@@ -937,7 +940,7 @@ function PurchaseEditor({ purchase, categories, reload, onError }: {
         ...values,
         target_amount: values.target_amount || '0.00',
         saved_amount: values.saved_amount || '0.00',
-        target_date: fromLocalInput(values.target_date),
+        target_date: fromLocalDateInput(values.target_date),
       })
       reload()
     } catch (error) {
@@ -966,7 +969,7 @@ function PurchaseEditor({ purchase, categories, reload, onError }: {
         <Field label="Category"><Select value={f.category} onChange={event => set('category', event.target.value)}>{!categories.includes(f.category) && <option value={f.category}>{cap(f.category)}</option>}{categories.map(category => <option key={category} value={category}>{cap(category)}</option>)}</Select></Field>
         <Field label="Target"><Input type="number" min="0" step="0.01" value={f.target_amount} onChange={event => set('target_amount', event.target.value)} /></Field>
         <Field label="Saved"><Input type="number" min="0" step="0.01" value={f.saved_amount} onChange={event => set('saved_amount', event.target.value)} /></Field>
-        <Field label="Target date"><input type="datetime-local" className={fieldClass} value={f.target_date} onChange={event => set('target_date', event.target.value)} /></Field>
+        <Field label="Target date"><input type="date" className={fieldClass} value={f.target_date} onChange={event => set('target_date', event.target.value)} /></Field>
         <Field label="Priority"><Select value={f.priority} onChange={event => set('priority', event.target.value)}>{['low', 'medium', 'high'].map(value => <option key={value} value={value}>{cap(value)}</option>)}</Select></Field>
         <Field label="Status"><Select value={f.status} onChange={event => set('status', event.target.value)}>{['planned', 'saving', 'ready', 'bought', 'cancelled'].map(value => <option key={value} value={value}>{cap(value)}</option>)}</Select></Field>
         <Field label="Notes"><Input value={f.notes} onChange={event => set('notes', event.target.value)} /></Field>
@@ -1051,7 +1054,7 @@ function PaydayForm({ onCreated, onError }: {
       await api.createSolacePayday({
         ...f,
         expected_amount: f.expected_amount || '0.00',
-        pay_at: fromLocalInput(f.pay_at),
+        pay_at: fromLocalDateInput(f.pay_at),
         is_all_day: true,
         is_active: true,
       })
@@ -1066,7 +1069,7 @@ function PaydayForm({ onCreated, onError }: {
       <div className="grid gap-3 lg:grid-cols-[1.4fr_0.8fr_1fr_1fr_auto]">
         <Field label="Title"><Input value={f.title} onChange={e => set('title', e.target.value)} /></Field>
         <Field label="Expected"><Input type="number" step="0.01" value={f.expected_amount} onChange={e => set('expected_amount', e.target.value)} /></Field>
-        <Field label="Date"><input type="datetime-local" className={fieldClass} value={f.pay_at} onChange={e => set('pay_at', e.target.value)} /></Field>
+        <Field label="Date"><input type="date" className={fieldClass} value={f.pay_at} onChange={e => set('pay_at', e.target.value)} /></Field>
         <Field label="Repeats"><Select value={f.recurrence_rule} onChange={e => set('recurrence_rule', e.target.value)}>{RECURRENCE.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}</Select></Field>
         <div className="flex items-end"><Button onClick={save} loading={saving} disabled={!f.title.trim()} className="w-full">Add</Button></div>
       </div>
@@ -1089,7 +1092,7 @@ function PaydaysTab({ paydays, reload, onError }: {
     const [f, setF] = useState({
       title: payday.title,
       expected_amount: payday.expected_amount,
-      pay_at: toLocalInput(payday.pay_at),
+      pay_at: toLocalDateInput(payday.pay_at),
       recurrence_rule: payday.recurrence_rule,
       notes: payday.notes,
     })
@@ -1101,7 +1104,7 @@ function PaydaysTab({ paydays, reload, onError }: {
         await api.updateSolacePayday(payday.id, {
           ...f,
           expected_amount: f.expected_amount || '0.00',
-          pay_at: fromLocalInput(f.pay_at),
+          pay_at: fromLocalDateInput(f.pay_at),
         })
         reload()
       } catch (error) {
@@ -1128,7 +1131,7 @@ function PaydaysTab({ paydays, reload, onError }: {
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Field label="Title"><Input value={f.title} onChange={event => set('title', event.target.value)} /></Field>
           <Field label="Expected"><Input type="number" min="0" step="0.01" value={f.expected_amount} onChange={event => set('expected_amount', event.target.value)} /></Field>
-          <Field label="Next date"><input type="datetime-local" className={fieldClass} value={f.pay_at} onChange={event => set('pay_at', event.target.value)} /></Field>
+          <Field label="Next date"><input type="date" className={fieldClass} value={f.pay_at} onChange={event => set('pay_at', event.target.value)} /></Field>
           <Field label="Repeats"><Select value={f.recurrence_rule} onChange={event => set('recurrence_rule', event.target.value)}>{RECURRENCE.map(rule => <option key={rule.value} value={rule.value}>{rule.label}</option>)}</Select></Field>
           <Field label="Notes"><Input value={f.notes} onChange={event => set('notes', event.target.value)} /></Field>
         </div>
