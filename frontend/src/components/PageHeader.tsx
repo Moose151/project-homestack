@@ -15,15 +15,15 @@ export function PageHeader({
   className?: string
 }) {
   return (
-    <div className={`flex flex-wrap items-start justify-between gap-2.5 sm:gap-3 ${className}`}>
-      <div className="flex items-center gap-2.5 min-w-0 sm:gap-3">
-        {icon && <span className="text-xl leading-none sm:text-2xl">{icon}</span>}
+    <div className={`flex flex-wrap items-center justify-between gap-3 border-b border-line/70 pb-4 sm:pb-5 ${className}`}>
+      <div className="flex min-w-0 items-center gap-3 sm:gap-3.5">
+        {icon && <span className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-2xl border border-line bg-surface text-xl leading-none shadow-soft sm:h-12 sm:w-12 sm:text-2xl">{icon}</span>}
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-extrabold tracking-tight text-ink sm:text-2xl">{title}</h1>
-          {subtitle && <p className="mt-0.5 text-sm text-muted">{subtitle}</p>}
+          <h1 className="truncate text-xl font-black tracking-tight text-ink sm:text-[1.65rem]">{title}</h1>
+          {subtitle && <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted sm:text-sm">{subtitle}</p>}
         </div>
       </div>
-      {actions && <div className="flex flex-shrink-0 items-center gap-2">{actions}</div>}
+      {actions && <div className="ml-auto flex max-w-full flex-shrink-0 items-center gap-2 overflow-x-auto">{actions}</div>}
     </div>
   )
 }

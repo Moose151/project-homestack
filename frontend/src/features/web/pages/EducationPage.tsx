@@ -1230,7 +1230,7 @@ export function EducationPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
-      <PageHeader title="Education" icon="🎓" subtitle="Your courses, deadlines, timetable and events." />
+      <PageHeader title="School & study" icon="🎓" subtitle="Education keeps courses, deadlines, timetables and events together." />
 
       <SearchField
         value={query}

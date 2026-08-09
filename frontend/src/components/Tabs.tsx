@@ -40,20 +40,23 @@ export function Tabs<T extends string>({
     <>
       {mobileSelectLabel && (
         <label className="flex flex-col gap-1.5 sm:hidden">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-strong">{mobileSelectLabel}</span>
-          <select
-            value={active}
-            onChange={event => onChange(event.target.value as T)}
-            className="min-h-11 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm font-semibold capitalize text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
-          >
-            {tabs.map(tab => (
-              <option key={tab.key} value={tab.key}>{tab.label}{tab.badge ? ` (${tab.badge})` : ''}</option>
-            ))}
-          </select>
+          <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-muted">{mobileSelectLabel}</span>
+          <span className="relative block">
+            <select
+              value={active}
+              onChange={event => onChange(event.target.value as T)}
+              className="min-h-12 w-full appearance-none rounded-2xl border border-line bg-surface px-4 py-2.5 pr-11 text-sm font-bold capitalize text-ink shadow-soft outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+            >
+              {tabs.map(tab => (
+                <option key={tab.key} value={tab.key}>{tab.label}{tab.badge ? ` (${tab.badge})` : ''}</option>
+              ))}
+            </select>
+            <span className="pointer-events-none absolute inset-y-0 right-4 grid place-items-center text-sm text-muted">⌄</span>
+          </span>
         </label>
       )}
       <div className={mobileSelectLabel ? 'hidden sm:block' : ''}>
-        <div className={`tabs-scroll flex gap-1 rounded-2xl bg-sunken p-1 overflow-x-auto ${className}`} role="tablist">
+        <div className={`tabs-scroll inline-flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-line bg-sunken/70 p-1 ${className}`} role="tablist">
           {tabs.map((t, index) => {
             const isActive = t.key === active
             return (
@@ -71,7 +74,7 @@ export function Tabs<T extends string>({
                 aria-selected={isActive}
                 tabIndex={isActive ? 0 : -1}
                 className={`flex min-h-[44px] items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold capitalize transition-colors sm:min-h-[40px] sm:px-3.5 ${
-                  isActive ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'
+                  isActive ? 'bg-raised text-ink shadow-soft ring-1 ring-line/60' : 'text-muted hover:bg-surface/50 hover:text-ink'
                 }`}
               >
                 {t.label}

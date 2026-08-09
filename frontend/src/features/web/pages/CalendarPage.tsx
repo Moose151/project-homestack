@@ -27,7 +27,12 @@ type View = 'month' | 'week' | 'day' | 'agenda'
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
 const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x }
-const addMonths = (d: Date, n: number) => { const x = new Date(d); x.setMonth(x.getMonth() + n); return x }
+const addMonths = (d: Date, n: number) => {
+  const x = new Date(d.getFullYear(), d.getMonth() + n, 1)
+  const lastDay = new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate()
+  x.setDate(Math.min(d.getDate(), lastDay))
+  return x
+}
 const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
 const isToday = (d: Date) => sameDay(d, new Date())
 const dateKey = (d: Date) => {
@@ -282,7 +287,7 @@ function QuickAddBar({ baseDate, time24, onAdd }: {
         <input
           value={text}
           onChange={e => setText(e.target.value)}
-          placeholder="Quick add — e.g. “Dentist 3pm”"
+          placeholder="Try “Dentist 3pm”"
           className="min-h-[40px] flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted"
         />
         <Button type="submit" size="sm" loading={busy} disabled={!text.trim()}>Add</Button>
@@ -433,15 +438,21 @@ function RotationScheduleModal({ schedule, schedules, people, onSelect, onClose,
         </div>
 
         <Field label={`${f.cycle_pattern.length}-night pattern — tap any day to change it`}>
+          <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-5 rounded-full" style={{ backgroundColor: f.primary_colour }} />{f.primary_label}</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-5 rounded-full" style={{ backgroundColor: f.secondary_colour }} />{f.secondary_label}</span>
+          </div>
           <div className="grid grid-cols-7 gap-1.5">
             {f.cycle_pattern.split('').map((state, index) => {
               const primary = state === 'P'
               return (
                 <button key={index} type="button" onClick={() => toggleDay(index)}
-                  className="min-h-[58px] rounded-xl border border-line px-1 py-1.5 text-center transition-transform active:scale-95"
+                  className="min-h-[54px] overflow-hidden rounded-xl border border-line px-1 py-1.5 text-center transition-transform active:scale-95 sm:min-h-[64px]"
                   style={{ backgroundColor: `${primary ? f.primary_colour : f.secondary_colour}20`, borderColor: primary ? f.primary_colour : f.secondary_colour }}>
                   <span className="block text-[10px] text-muted">{addDays(anchor, index).toLocaleDateString(undefined, { weekday: 'short' })}</span>
-                  <span className="block text-xs font-bold text-ink">{primary ? f.primary_label : f.secondary_label}</span>
+                  <span className="block text-sm font-black text-ink sm:hidden">{addDays(anchor, index).getDate()}</span>
+                  <span className="hidden truncate text-xs font-bold text-ink sm:block">{primary ? f.primary_label : f.secondary_label}</span>
+                  <span className="sr-only">: {primary ? f.primary_label : f.secondary_label}</span>
                 </button>
               )
             })}
@@ -631,6 +642,7 @@ export function CalendarPage() {
   const [weekStart, setWeekStart] = useState<number>(() => Number(lsGet('hs_cal_weekstart', '1')))
   const [time24, setTime24] = useState<boolean>(() => lsGet('hs_cal_24h', '0') === '1')
   const [anchor, setAnchor] = useState(() => initialLinkedDate ?? new Date())
+  const [selectedMonthDay, setSelectedMonthDay] = useState(() => initialLinkedDate ?? new Date())
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [rotatingSchedules, setRotatingSchedules] = useState<RotatingSchedule[]>([])
   const [rotations, setRotations] = useState<RotatingScheduleOccurrence[]>([])
@@ -644,6 +656,9 @@ export function CalendarPage() {
   const [modal, setModal] = useState<{ event: CalendarEvent | null; date: Date | null } | null>(null)
   const [scheduleModal, setScheduleModal] = useState<number | 'new' | null>(null)
   const [exceptionModal, setExceptionModal] = useState<RotatingScheduleOccurrence | null>(null)
+  const [mobileMonthDayOpen, setMobileMonthDayOpen] = useState(false)
+  const monthSwipeStart = useRef<{ x: number; y: number } | null>(null)
+  const monthSwipeHandled = useRef(false)
   useUrlAction('event', () => setModal({ event: null, date: initialLinkedDate ?? new Date() }))
 
   // Which prefs the user has explicitly chosen (captured once, before the write-effects run,
@@ -799,9 +814,46 @@ export function CalendarPage() {
   }, [events, rotations])
 
   const step = (dir: -1 | 1) => {
-    if (view === 'month') setAnchor(a => addMonths(a, dir))
+    if (view === 'month') {
+      const next = addMonths(anchor, dir)
+      const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate()
+      setAnchor(next)
+      setSelectedMonthDay(new Date(next.getFullYear(), next.getMonth(), Math.min(selectedMonthDay.getDate(), lastDay)))
+    }
     else if (view === 'week') setAnchor(a => addDays(a, 7 * dir))
     else setAnchor(a => addDays(a, dir))
+  }
+  const goToday = () => {
+    const today = new Date()
+    setAnchor(today)
+    setSelectedMonthDay(today)
+  }
+  const selectMonthDay = (day: Date) => {
+    setSelectedMonthDay(day)
+    if (day.getMonth() !== anchor.getMonth() || day.getFullYear() !== anchor.getFullYear()) setAnchor(day)
+    setMobileMonthDayOpen(true)
+  }
+  const openSelectedDay = () => {
+    setMobileMonthDayOpen(false)
+    setAnchor(selectedMonthDay)
+    setView('day')
+  }
+  const changeView = (next: View) => {
+    if (next === 'month') setSelectedMonthDay(anchor)
+    setView(next)
+  }
+  const finishMonthSwipe = (event: React.TouchEvent) => {
+    const start = monthSwipeStart.current
+    monthSwipeStart.current = null
+    if (!start) return
+    const touch = event.changedTouches[0]
+    const dx = touch.clientX - start.x
+    const dy = touch.clientY - start.y
+    if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+      monthSwipeHandled.current = true
+      step(dx < 0 ? 1 : -1)
+      window.setTimeout(() => { monthSwipeHandled.current = false }, 350)
+    }
   }
   const periodLabel = () => {
     if (view === 'month') return anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
@@ -852,30 +904,43 @@ export function CalendarPage() {
   const exceptionSchedule = exceptionModal
     ? rotatingSchedules.find(schedule => schedule.id === exceptionModal.schedule_id) ?? null
     : null
+  const calendarActions = canEditCalendar ? (
+    <>
+      <Button variant="ghost" size="sm" onClick={() => setScheduleModal(rotatingSchedules[0]?.id ?? 'new')}>Rotation</Button>
+      <Button size="sm" onClick={() => openNew(view === 'day' ? anchor : view === 'month' ? selectedMonthDay : new Date())}>+ Event</Button>
+    </>
+  ) : null
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader
-        title="Calendar"
-        icon="📅"
-        actions={canEditCalendar ? (
-          <>
-            <Button variant="ghost" size="sm" onClick={() => setScheduleModal(rotatingSchedules[0]?.id ?? 'new')}>Rotation</Button>
-            <Button size="sm" onClick={() => openNew(view === 'day' ? anchor : new Date())}>+ Event</Button>
-          </>
-        ) : undefined}
-      />
+      <div className="hidden sm:block">
+        <PageHeader title="Calendar" icon="📅" subtitle="Events, shared care and household schedules in one place." actions={calendarActions} />
+      </div>
 
-      {/* Toolbar: nav on the left, Filter + view switcher on the right */}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-1">
-          <button onClick={() => step(-1)} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-sunken text-lg text-muted-strong" aria-label="Previous">‹</button>
-          <button onClick={() => setAnchor(new Date())} className="h-9 px-3 rounded-lg hover:bg-sunken text-sm font-medium text-ink">Today</button>
-          <button onClick={() => step(1)} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-sunken text-lg text-muted-strong" aria-label="Next">›</button>
-          <span className="ml-2 text-sm font-semibold text-ink">{periodLabel()}</span>
+      {/* Period navigation stays generous; mobile uses one compact view picker. */}
+      <div className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-2.5 shadow-soft sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-1">
+          <button onClick={() => step(-1)} className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl text-xl text-muted-strong hover:bg-sunken" aria-label="Previous period">‹</button>
+          <span className="min-w-0 flex-1 truncate px-1 text-center text-sm font-extrabold text-ink sm:ml-1 sm:text-left">{periodLabel()}</span>
+          <button onClick={() => step(1)} className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl text-xl text-muted-strong hover:bg-sunken" aria-label="Next period">›</button>
+          <button onClick={goToday} className="h-10 flex-shrink-0 rounded-xl px-2.5 text-xs font-bold text-primary hover:bg-primary-soft sm:px-3 sm:text-sm">Today</button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <label className="relative min-w-0 flex-1 sm:hidden">
+            <span className="sr-only">Calendar view</span>
+            <select
+              value={view}
+              onChange={event => changeView(event.target.value as View)}
+              className="min-h-10 w-full appearance-none rounded-xl border border-line bg-surface px-3 pr-9 text-sm font-bold capitalize text-ink"
+            >
+              <option value="month">Month view</option>
+              <option value="week">Week view</option>
+              <option value="day">Day view</option>
+              <option value="agenda">Agenda</option>
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted">▾</span>
+          </label>
           <Popover
             panelClassName="w-72"
             trigger={() => (
@@ -887,7 +952,7 @@ export function CalendarPage() {
               </>
             )}
           >
-            {() => (
+            {({ close }) => (
               <div className="flex flex-col gap-3 text-sm">
                 <Field label="Show">
                   <select value={personFilter} onChange={e => setPersonFilter(Number(e.target.value))} className="w-full rounded-lg border border-line bg-surface px-2 py-2 text-sm text-ink">
@@ -944,14 +1009,24 @@ export function CalendarPage() {
                     {defaultsSaved ? 'Saved ✓' : 'Set as household default'}
                   </button>
                 )}
+
+                {canEditCalendar && (
+                  <button
+                    type="button"
+                    onClick={() => { close(); setScheduleModal(rotatingSchedules[0]?.id ?? 'new') }}
+                    className="flex min-h-10 items-center justify-between rounded-xl border border-line px-3 text-left text-sm font-semibold text-ink hover:bg-sunken"
+                  >
+                    Rotating schedules <span className="text-muted">→</span>
+                  </button>
+                )}
               </div>
             )}
           </Popover>
 
-          <div className="flex gap-1 bg-sunken p-1 rounded-xl">
+          <div className="hidden min-w-0 flex-1 gap-1 rounded-xl bg-sunken p-1 sm:flex sm:flex-none">
             {(['month', 'week', 'day', 'agenda'] as View[]).map(v => (
-              <button key={v} onClick={() => setView(v)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-colors ${view === v ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'}`}>
+              <button key={v} onClick={() => changeView(v)}
+                className={`min-w-0 flex-1 rounded-lg px-2 py-1.5 text-xs font-bold capitalize transition-colors sm:flex-none sm:px-3 ${view === v ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'}`}>
                 {v}
               </button>
             ))}
@@ -979,7 +1054,7 @@ export function CalendarPage() {
               <span className="flex items-center gap-1.5"><span className="h-3.5 w-3.5 rounded" style={{ backgroundColor: schedule.secondary_colour }} />{schedule.secondary_label}</span>
             </div>
           ))}
-          <span className="ml-auto">Repeats continuously · use ‹ › to forecast any month</span>
+          <span className="ml-auto hidden sm:inline">Repeats continuously · use ‹ › to forecast any month</span>
         </div>
       )}
 
@@ -988,53 +1063,56 @@ export function CalendarPage() {
       ) : view === 'month' ? (
         <>
           <div className="sm:hidden">
-            <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+            <div
+              className="-mx-4 touch-pan-y overflow-hidden border-y border-line bg-surface shadow-soft"
+              onTouchStart={event => {
+                const touch = event.touches[0]
+                monthSwipeStart.current = { x: touch.clientX, y: touch.clientY }
+              }}
+              onTouchEnd={finishMonthSwipe}
+              onTouchCancel={() => { monthSwipeStart.current = null }}
+            >
               <div className="grid grid-cols-7 bg-sunken">
-                {weekdayNames.map(day => <div key={day} className="px-1 py-1.5 text-center text-[10px] font-semibold text-muted">{day.slice(0, 2)}</div>)}
+                {weekdayNames.map(day => <div key={day} className="px-1 py-2 text-center text-[10px] font-bold uppercase tracking-wide text-muted">{day.slice(0, 2)}</div>)}
               </div>
               <div className="grid grid-cols-7">
                 {monthGrid(anchor, weekStart).map((day, index) => {
                   const inMonth = day.getMonth() === anchor.getMonth()
                   const occurrence = dayRotations(day)[0]
-                  const eventCount = dayEvents(day).length
+                  const dayItems = dayEvents(day)
+                  const selected = sameDay(day, selectedMonthDay)
                   return (
                     <button
                       key={index}
                       type="button"
-                      onClick={() => { setAnchor(day); setView('day') }}
-                      className={`relative min-h-[54px] border-b border-r border-line p-1 text-left ${inMonth ? 'text-ink' : 'text-muted opacity-45'}`}
-                      style={occurrence ? {
-                        borderTop: `4px solid ${occurrence.colour}`,
-                      } : undefined}
-                      aria-label={`${day.toLocaleDateString()}${occurrence ? `, ${occurrence.label}` : ''}${eventCount ? `, ${eventCount} events` : ''}`}
+                      onClick={() => {
+                        if (monthSwipeHandled.current) return
+                        selectMonthDay(day)
+                      }}
+                      className={`relative min-h-[58px] border-b border-r border-line p-1.5 pt-2 text-left transition-colors ${selected ? 'z-[1] bg-primary-soft/70 ring-2 ring-inset ring-primary' : 'active:bg-sunken'} ${inMonth ? 'text-ink' : 'text-muted opacity-45'}`}
+                      aria-pressed={selected}
+                      aria-label={`${day.toLocaleDateString()}${occurrence ? `, ${occurrence.label}` : ''}${dayItems.length ? `, ${dayItems.length} events` : ''}`}
                     >
-                      <span className={`text-xs font-bold ${isToday(day) ? 'rounded-full bg-primary px-1.5 py-0.5 text-white' : ''}`}>{day.getDate()}</span>
-                      {occurrence?.is_override && <span className="absolute right-1 top-1 text-[8px] font-black text-primary">S</span>}
-                      {eventCount > 0 && <span className="absolute bottom-1 left-1.5 text-[10px] font-bold text-ink">•{eventCount > 1 ? eventCount : ''}</span>}
+                      {occurrence && <span className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: occurrence.colour }} />}
+                      <span className={`inline-grid h-6 min-w-6 place-items-center rounded-full px-1 text-xs font-bold ${isToday(day) ? 'bg-primary text-white' : ''}`}>{day.getDate()}</span>
+                      {occurrence?.is_override && <span className="absolute right-1 top-2 text-[8px] font-black text-primary" aria-label="Changed day">S</span>}
+                      {dayItems.length > 0 && (
+                        <span className="absolute inset-x-1 bottom-1 flex min-w-0 items-center gap-0.5" aria-hidden>
+                          <span
+                            className="min-w-0 flex-1 truncate rounded-[3px] px-0.5 py-px text-[8px] font-bold leading-[11px] text-ink"
+                            style={{ backgroundColor: `${colourFor(dayItems[0])}30`, borderLeft: `2px solid ${colourFor(dayItems[0])}` }}
+                          >
+                            {dayItems[0].title}
+                          </span>
+                          {dayItems.length > 1 && <span className="flex-shrink-0 text-[8px] font-black text-muted">+{dayItems.length - 1}</span>}
+                        </span>
+                      )}
                     </button>
                   )
                 })}
               </div>
             </div>
-            <p className="mt-2 text-xs text-muted">Tap a day for its events or to change that date. An <strong>S</strong> marks a one-day swap.</p>
-            {visibleEvents.some(event => {
-              const date = new Date(event.start_at)
-              return date.getMonth() === anchor.getMonth() && date.getFullYear() === anchor.getFullYear()
-            }) && (
-              <div className="mt-5">
-                <h2 className="mb-3 text-sm font-semibold text-ink">Events this month</h2>
-                <AgendaView
-                  events={visibleEvents.filter(event => {
-                    const date = new Date(event.start_at)
-                    return date.getMonth() === anchor.getMonth() && date.getFullYear() === anchor.getFullYear()
-                  })}
-                  rotations={[]}
-                  colourFor={colourFor}
-                  time24={time24}
-                  onOpen={openEvent}
-                />
-              </div>
-            )}
+            <p className="mt-2 px-1 text-[11px] text-muted">Tap a date for its details · swipe sideways to change month · <strong>S</strong> marks a changed rotation day.</p>
           </div>
           <div className="hidden rounded-2xl border border-line overflow-hidden sm:block">
             <div className="grid grid-cols-7 bg-sunken">
@@ -1117,7 +1195,7 @@ export function CalendarPage() {
       )}
 
       {/* Legend */}
-      <div className="flex flex-wrap gap-3 text-xs text-muted pt-1">
+      <div className={`${view === 'month' ? 'hidden sm:flex' : 'flex'} flex-wrap gap-3 pt-1 text-xs text-muted`}>
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-full" style={{ backgroundColor: familyColour }} /> Whole family
         </span>
@@ -1133,6 +1211,48 @@ export function CalendarPage() {
           </span>
         ))}
       </div>
+
+      {canEditCalendar && (
+        <button
+          type="button"
+          onClick={() => openNew(view === 'month' ? selectedMonthDay : view === 'day' ? anchor : new Date())}
+          className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-4 z-20 grid h-14 w-14 place-items-center rounded-2xl bg-primary text-3xl font-light leading-none text-white shadow-card active:scale-95 sm:hidden"
+          aria-label={`Add event${view === 'month' ? ` on ${selectedMonthDay.toLocaleDateString()}` : ''}`}
+        >
+          +
+        </button>
+      )}
+
+      {mobileMonthDayOpen && view === 'month' && (
+        <Modal
+          title={`${isToday(selectedMonthDay) ? 'Today' : selectedMonthDay.toLocaleDateString(undefined, { weekday: 'long' })}, ${selectedMonthDay.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}`}
+          onClose={() => setMobileMonthDayOpen(false)}
+          size="sm"
+        >
+          <div className="flex flex-col gap-2">
+            {dayRotations(selectedMonthDay).map(occurrence => (
+              <RotationBadge key={occurrence.id} occurrence={occurrence} onClick={canEditCalendar ? () => { setMobileMonthDayOpen(false); openRotation(occurrence) } : undefined} />
+            ))}
+            {dayEvents(selectedMonthDay).map(event => (
+              <button key={event.id} type="button" onClick={() => { setMobileMonthDayOpen(false); openEvent(event) }} className="flex min-h-12 items-center gap-3 rounded-xl border border-line px-3 py-2 text-left active:bg-sunken">
+                <span className="h-8 w-1 flex-shrink-0 rounded-full" style={{ backgroundColor: colourFor(event) }} />
+                <span className="w-14 flex-shrink-0 text-xs font-bold tabular-nums text-muted-strong">{event.is_all_day ? 'All day' : fmtTime(event.start_at, time24)}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-ink">{event.title}</span>
+                  {event.location && <span className="block truncate text-[11px] text-muted">{event.location}</span>}
+                </span>
+              </button>
+            ))}
+            {dayEvents(selectedMonthDay).length === 0 && dayRotations(selectedMonthDay).length === 0 && (
+              <p className="py-4 text-center text-sm text-muted">Nothing planned for this day.</p>
+            )}
+            <div className={`mt-2 grid gap-2 border-t border-line pt-3 ${canEditCalendar ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              <Button variant="ghost" onClick={openSelectedDay}>Day view</Button>
+              {canEditCalendar && <Button onClick={() => { setMobileMonthDayOpen(false); openNew(selectedMonthDay) }}>+ Event</Button>}
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {scheduleModal !== null && (
         <RotationScheduleModal

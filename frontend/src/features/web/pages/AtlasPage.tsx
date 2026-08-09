@@ -746,7 +746,7 @@ export function AtlasPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Atlas" icon="🗒" subtitle="Notes, lists, checklists and reminders." />
+      <PageHeader title="Lists & notes" icon="🗒" subtitle="Atlas keeps household lists, checklists, notes and reminders together." />
 
       <CaptureBar lists={lists} onCapture={capture} />
 

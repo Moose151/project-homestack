@@ -1931,7 +1931,7 @@ export function SolacePage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
-      <PageHeader title="Solace" subtitle="Bills, set-asides and planned purchases" icon="💸" />
+      <PageHeader title="Money" subtitle="Solace keeps bills, pay cycles, set-asides and planned purchases together." icon="💸" />
       {error && <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
       <div className="flex flex-col gap-2 sm:flex-row">
         <SearchField
@@ -1939,7 +1939,7 @@ export function SolacePage() {
           onChange={e => setQ(e.target.value)}
           onClear={() => { setQ(''); void load() }}
           onKeyDown={e => { if (e.key === 'Enter') void search() }}
-          placeholder="Search Solace"
+          placeholder="Search bills, plans and purchases…"
         />
         <div className="flex gap-2">
           <Button variant="secondary" onClick={search} className="flex-1 sm:flex-none">Search</Button>

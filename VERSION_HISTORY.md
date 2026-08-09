@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.20.0**
+> **Current version: 0.20.3**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,69 @@
 ---
 
 ## 0.20 — Forecastable rotating Calendar schedules
+
+### 0.20.3 — 2026-08-09
+- **A true app-style phone Month view** — the complete six-week month grid is now the primary
+  mobile surface and runs edge-to-edge for useful day-cell width. It no longer grows into a
+  permanent selected-day panel or duplicates the month as an agenda beneath the calendar.
+- **Useful information stays inside the month** — each occupied date shows its first event as a
+  tiny person/source-coloured label plus a `+N` count for additional events. The separate narrow
+  shared-care strip, Today treatment, selected-date outline and changed-day `S` marker remain
+  clear without colouring the whole day.
+- **Details without losing the month** — tapping a date opens a touch-friendly bottom sheet with
+  its care state, events, times and locations. Users can open full Day view, edit a changed care
+  date or add an event, then return to the unchanged Month view.
+- **More calendar, less chrome** — duplicate mobile page actions were removed, creation moved to
+  a familiar floating add button and rotation management remains available from Filter. Swipe,
+  arrow, Today and view-picker navigation are all retained.
+- No database migration required.
+- Validation: frontend TypeScript check and production build clean; backend unchanged from the
+  **624-test** v0.20.0 baseline.
+
+### 0.20.2 — 2026-08-09
+- **Month context stays visible on phones** — tapping a date now selects it in place and opens a
+  useful day preview beneath the month instead of immediately replacing the month with Day view.
+  The preview shows rotations, event times, locations and direct actions to add an event or open
+  the full day.
+- **Faster mobile month browsing** — swipe horizontally to move between months, jump back to
+  Today without losing the selected-date model and tap dimmed edge dates to move naturally into
+  the adjacent month. Month arithmetic now clamps safely at month end instead of potentially
+  skipping a short month from the 29th–31st.
+- **A clearer small-screen grid** — the selected date is unmistakable, event counts are replaced
+  by up to three person/source-coloured dots, and the care-state colour remains a narrow strip at
+  the top of each otherwise-neutral cell. Changed days retain the labelled `S` marker.
+- **Less cramped controls and setup** — phones use one accessible Calendar-view picker beside
+  Filter; the selected period gets the available width; quick-add wording is shorter; and the
+  14-night rotation editor uses a nearby colour legend plus compact weekday/date tiles rather
+  than squeezing full state labels into seven narrow columns.
+- The full monthly event agenda remains available in a collapsed section without overwhelming
+  the primary month-and-selected-day flow.
+- No database migration required.
+- Validation: frontend TypeScript check and production build clean; backend unchanged from the
+  **624-test** v0.20.0 baseline.
+
+### 0.20.1 — 2026-08-09
+- **One household, one navigation language** — the shell now leads with plain-language
+  destinations such as Lists & notes, School & study, Household guide, Tasks & rewards and
+  Money. Node brands remain visible as supporting context without making household members learn
+  internal product names before they can find something.
+- **A calmer desktop workspace** — the wider sidebar groups destinations by purpose, gives each
+  one a short explanation and keeps the current location visible in a clearer sticky header.
+  Search and quick-create are easier to recognise, while shared page headings and tabs have a
+  stronger, more consistent hierarchy.
+- **A complete mobile directory** — the bottom bar retains four personal shortcuts, while More
+  now provides a descriptive directory of every available destination and a clearer editor for
+  choosing those shortcuts. Profile, search, create, theme and account actions live in the same
+  predictable sheet.
+- **Home is useful rather than repetitive** — duplicate phone navigation cards were removed from
+  the Hub so it concentrates on household widgets. Desktop widgets can use a roomier three-column
+  grid and retain the fast drag-and-drop arrangement introduced in v0.19.2.
+- **Responsive Calendar polish** — period navigation, view selection and filters now sit in one
+  calmer responsive toolbar without changing the rotating-schedule forecast or its narrow colour
+  strips.
+- No database migration required.
+- Validation: frontend TypeScript check and production build clean; backend unchanged from the
+  **624-test** v0.20.0 baseline.
 
 ### 0.20.0 — 2026-08-09
 - **Enter the cycle once** — Calendar supports an anchored, reusable two-state rotation instead

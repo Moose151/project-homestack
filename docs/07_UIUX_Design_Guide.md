@@ -16,9 +16,16 @@ Guiding rule: **experience consistency matters more than feature count.**
 
 ## 3. Navigation model
 
-Core navigation (permission-aware; hidden/disabled nodes never appear):
-Hub · Calendar · Atlas · Home Wiki · Pets · Education · Inventory · Assets · Hearth · Travel ·
-Projects · Health · Meridian · Solace · Homestead · Home Assistant · Settings.
+Navigation leads with the household task in plain language; the node name is supporting context,
+not required vocabulary. Current shipped examples are: Home (Hub) · Calendar · Lists & notes
+(Atlas) · School & study (Education) · Books · Household guide (Home Wiki) · Pets · Our home
+(Homestead) · Tasks & rewards (Meridian) · Money (Solace). Future nodes follow the same rule.
+
+Desktop groups permission-aware destinations by purpose: Start here, Plan & organise, Household
+and Money. Mobile keeps four user-configurable shortcuts plus More; More is always a complete,
+descriptive directory of every available destination, not merely an overflow list. Admin routes
+use task labels such as People & access and Manage HomeStack. Hidden or disabled nodes never
+appear.
 
 Documents are not a separate nav item — they live in the shared Documents/Attachments service
 surfaced inside each node. Children get a simplified navigation (§4).
@@ -52,6 +59,11 @@ slate · Hearth orange/red · Travel sky blue · Projects amber · Health red/pi
 - **Tablet:** two-column, touch-first.
 - **Desktop:** sidebar navigation, widget grid, more detail.
 - **Kiosk:** large cards, minimal typing, avatar login, automatic timeout, ambient mode.
+
+The global shell owns destination navigation. Hub should not repeat the same navigation as a
+second launchpad; it should prioritise useful household widgets, summaries and next actions.
+Shared page headings show one clear title and supporting sentence, and shared tabs use a compact
+section picker on phones and a segmented control where space allows.
 
 ## 8. Kiosk UX
 
@@ -97,10 +109,15 @@ the top of each otherwise-neutral day cell, with a nearby labelled legend; movin
 recalculates every visible strip.
 Week, day and agenda views may use labelled status badges. An exception carries a visible swap
 marker, so status is not conveyed by colour alone. Phones retain a compact seven-column month
-overview for the rotation, with large enough day targets leading to the detailed day view;
-setup/exception editing uses the shared bottom sheet with at least 44px action targets. Changing
-one date must say explicitly that other dates are unaffected and must offer “restore repeating
-plan”.
+overview for the rotation. The complete six-week grid is the primary phone Month surface and may
+run edge-to-edge to preserve useful cell width. A day may show one compact coloured event label
+and a count rather than expanding into an agenda. Tapping a date opens that day's rotations and
+events in a bottom sheet; entering full Day view remains a separate explicit action, so the Month
+layout does not change while browsing. Horizontal swipe may move between months, but arrow and
+Today controls remain present and keyboard-accessible. Event labels may use person/source colours,
+while the care strip remains separate and labelled nearby. Setup/exception editing uses the
+shared bottom sheet with at least 44px action targets. Changing one date must say explicitly that
+other dates are unaffected and must offer “restore repeating plan”.
 
 ## 12. Pre-release UX checklist
 

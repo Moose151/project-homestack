@@ -33,6 +33,7 @@ export function Button({
       disabled={disabled || loading}
       className={`inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-all select-none
         disabled:opacity-50 disabled:cursor-not-allowed
+        active:scale-[0.98]
         ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
       {...props}
     >

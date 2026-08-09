@@ -10,8 +10,8 @@ const ACTIONS = [
   { key: 'home-plan', label: 'Home plan', hint: 'Plan a room purchase or project', icon: '🏠', route: '/homestead?tab=rooms', node: 'homestead' },
   { key: 'maintenance', label: 'Maintenance', hint: 'Remember a job around the house', icon: '🛠️', route: '/homestead?tab=maintenance&new=maintenance', node: 'homestead' },
   { key: 'book', label: 'Book', hint: 'Add something to read', icon: '📚', route: '/books?new=book', node: 'books' },
-  { key: 'task', label: 'Meridian task', hint: 'Create a points task', icon: '⭐', route: '/meridian?tab=tasks&new=task', node: 'meridian' },
-  { key: 'bill', label: 'Bill', hint: 'Add a household payment', icon: '💸', route: '/solace?tab=bills&new=bill', node: 'solace' },
+  { key: 'task', label: 'Points task', hint: 'Create a family job or reward task', icon: '⭐', route: '/meridian?tab=tasks&new=task', node: 'meridian' },
+  { key: 'bill', label: 'Household bill', hint: 'Add a payment to the money plan', icon: '💸', route: '/solace?tab=bills&new=bill', node: 'solace' },
 ] as const
 
 export function QuickCreate({
@@ -55,7 +55,7 @@ export function QuickCreate({
   }
 
   return (
-    <Modal title="What would you like to add?" onClose={onClose} size="md">
+    <Modal title="Add something" onClose={onClose} size="md">
       <div className="space-y-5">
         {enabledKeys.has('atlas') && (
           <form onSubmit={create} className="space-y-3 rounded-2xl bg-sunken p-3">

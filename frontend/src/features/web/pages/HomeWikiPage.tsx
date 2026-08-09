@@ -385,7 +385,7 @@ export function HomeWikiPage() {
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto">
-      <PageHeader title="Home Wiki" icon="📖" subtitle="The household knowledge base — WiFi, bin night, emergency info, how-tos." />
+      <PageHeader title="Household guide" icon="📖" subtitle="Home Wiki keeps Wi-Fi, bin night, emergency information and how-tos easy to find." />
 
       <SearchField value={query} onChange={e => setQuery(e.target.value)} onClear={() => setQuery('')} placeholder="Search the wiki…" />
 

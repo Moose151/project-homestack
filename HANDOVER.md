@@ -102,11 +102,12 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: Forecastable rotating Calendar schedules shipped locally (2026-08-09, v0.20.0) on top
-of the household-launch responsive pass and bidirectional Homestead/Solace handoff. Deploy/pilot
-the exact shared-care rotation on both partners' phones and desktop; this is now the highest-value
-validation step. Milestone 4 security maturation remains the next local workstream and native
-Solace real-data comparison still requires the home server. Kiosk work remains deferred.**
+**Phase: App-style mobile Month Calendar and household navigation refinement shipped locally
+(2026-08-09, v0.20.3) on top of forecastable rotating schedules and the bidirectional
+Homestead/Solace handoff. Deploy/pilot the full phone Month flow, navigation and exact shared-care
+rotation on both partners' phones and desktop; this is now the highest-value validation step.
+Milestone 4 security maturation remains the next local workstream and native Solace real-data
+comparison still requires the home server. Kiosk work remains deferred.**
 
 > **Owner direction, 2026-07-29.** Focus on usability, functionality, response time, navigation
 > and layout across the responsive web app. v0.12.0 delivers the shared foundation: route
@@ -229,6 +230,24 @@ Solace real-data comparison still requires the home server. Kiosk work remains d
   provide a continuous two-colour top strip on otherwise-neutral day cells as users move between
   months; detailed week/day/agenda status remains available. **624 backend tests green; production build clean; no
   migration drift.**
+- [x] **Navigation and visual-system refinement (v0.20.1, 2026-08-09).** Household-facing names
+  now lead consistently in the sidebar, mobile navigation, search and page headings, with node
+  brands retained as context. Desktop navigation is grouped and descriptive; mobile More is a
+  complete destination directory and clearer bottom-bar editor. Shared headings/tabs, Hub widget
+  layout and Calendar controls were refined, and duplicate Hub navigation was removed. **Frontend
+  production build clean; no migration; backend unchanged from the 624-test v0.20.0 baseline.**
+- [x] **Mobile Calendar selected-day flow (v0.20.2, 2026-08-09).** Phone Month view now keeps
+  the month visible when a date is tapped and presents its rotations/events in an in-place panel
+  with explicit Day view and Add event actions. Horizontal swipes, safe month-end stepping,
+  selected-day emphasis and coloured event dots make forecasting faster. The view/filter row,
+  monthly agenda and 14-night setup grid were simplified for narrow screens. **Frontend
+  production build clean; no migration; backend unchanged from the 624-test v0.20.0 baseline.**
+- [x] **Full app-style phone Month view (v0.20.3, 2026-08-09).** The complete six-week grid is
+  now the edge-to-edge primary mobile surface, with compact coloured event labels inside occupied
+  dates and no permanent day panel or duplicate agenda beneath it. Tapping a date opens details
+  and actions in a bottom sheet; a floating add button and Filter-hosted rotation management keep
+  chrome compact. **Frontend production build clean; no migration; backend unchanged from the
+  624-test v0.20.0 baseline.**
 - [~] **Milestone 4: security maturation — IN PROGRESS (v0.17.0).** Shared attachments now have
   protected upload/list/download/delete APIs, visibility+sensitivity enforcement through the
   central resolver, randomized non-public storage, sensitive-download audit records and frontend
@@ -286,11 +305,16 @@ Solace real-data comparison still requires the home server. Kiosk work remains d
 
 ## 6. Active tasks — household pilot, then continue M4 locally
 
-**Immediate product step:** deploy v0.20.0 to the home server. In Calendar choose **Rotation**,
+**Immediate product step:** deploy v0.20.3 to the home server. First confirm that both partners
+can find Calendar, Lists & notes, Our home, Tasks & rewards and Money without needing to know the
+node brands; configure each phone's four bottom shortcuts from More and drag Hub widgets on
+desktop. Then, in Calendar choose **Rotation**,
 set day 1 to the Monday starting a week where “With us” covers Monday/Tuesday and Friday–Sunday,
 rename “Other home” to the preferred household wording, select the children and save. Compare at
-least one full 14-night cycle on both partners' phones and desktop, then swap a future day and restore it. Also continue
-capturing real Atlas/Homestead/notification friction before another broad visual pass.
+least one full 14-night cycle on both partners' phones and desktop. On each phone, tap dates
+without leaving Month view, swipe across a month boundary, open one full Day view, then swap a
+future day and restore it. Also continue
+capturing real Lists/Homestead/notification friction before another broad visual pass.
 
 **Next local build step (no home server required):** finish the generic sensitive-node lock
 path instead of leaving it Solace-specific: move re-auth/sensitivity decisions consistently
@@ -303,7 +327,7 @@ integration framework. The exact sequence and acceptance gates are in the roadma
 `docs/26_Node_Home_Assistant.md`.
 
 **Production track (requires the home server):** rebuild both production images, deploy through
-v0.20.0, and run `migrate` through `attachments.0001`, `permissions.0020`, `solace.0007`,
+v0.20.3, and run `migrate` through `attachments.0001`, `permissions.0020`, `solace.0007`,
 `homestead.0004`, `hub.0013` and
 `scheduling.0002_rotatingschedule_rotatingscheduleexception`.
 
@@ -468,6 +492,10 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-08-09 | Assistant | M5.5 planning | **Home Assistant promoted to an important roadmap feature (D22).** Added detailed Roadmap Milestone 5.5 with contract/security, read-only status, safe controls, HomeStack-event delivery, conditional WebSocket and optional custom-component stages, each with an acceptance gate. Added canonical node spec `docs/26_Node_Home_Assistant.md` covering source-of-truth boundaries, data model, permissions, API, phone/desktop/kiosk UI, secrets, failure behavior and tests. Updated the MSS, node decision record and parking lot consistently. Documentation only; no app version bump or runtime code change. | Complete the household pilot, remaining M4 security work and Solace cutover validation, then start M5.5.0 by validating backend-container reachability to the household's Home Assistant instance and its URL/TLS/secret arrangement. |
 | 2026-08-09 | Assistant | GUI/inter-node polish | **Bidirectional maintenance finance and source navigation shipped locally (v0.19.3).** Added protected `POST /homestead/maintenance/{id}/track-cost/`: after Solace permission + password re-auth it publishes primitive maintenance/cost data, idempotently creates or updates one source-linked Solace bill, stores only its reference in Homestead and removes the duplicate Homestead Calendar mirror. The responsive Homestead UI provides a bottom-sheet/desktop modal, explicit ownership copy and direct filtered Solace links for maintenance, insurance and household costs. Synced Calendar events now link back to source workspaces across Atlas/Pets/Education/Homestead/Solace/Meridian. Coarse-pointer devices force hover actions visible; dense Solace/Education workspaces expand on desktop. **613 backend tests green; frontend production build clean; no migration drift.** | Deploy/rebuild through v0.19.3 and migrate through `homestead.0004`. On phone and desktop, create a Homestead maintenance task, Track cost with an admin password, follow both cross-node links, mark the task done, then confirm one Solace financial Calendar event and preserved payment history. Continue M4 after pilot feedback. |
 | 2026-08-09 | Assistant | Calendar/D23 | **Forecastable rotating schedules shipped locally (v0.20.0).** Added household-scoped `RotatingSchedule` + optional People and sparse `RotatingScheduleException`; one anchored P/S cycle is expanded only for a requested window and never creates daily Calendar events. Added permission/visibility/forecast/far-future/swap/restore/reuse tests and CRUD/occurrence/exception APIs. Calendar now has a guided, editable 14-night 2/2/3/2/2/3 preset; desktop and phone Month views add a narrow state-colour strip to otherwise-neutral day cells and keep forecasting as month arrows move, while detailed week/day/agenda badges, responsive bottom sheets, notes, swap markers and restoration remain available. Recorded D23 and updated Calendar/database/API/architecture/UI docs. **624 backend tests green; frontend production build clean; no migration drift.** | Deploy/rebuild and migrate `scheduling.0002`. In Calendar → Rotation choose the Monday beginning a “With us” Monday/Tuesday + Friday–Sunday week, rename the other label, select the children and click through several months on both phones/desktop. Swap and restore one future day, then resume M4 lock/audit work. |
+| 2026-08-09 | Assistant | UI/navigation | **Household navigation and visual-system refinement shipped locally (v0.20.1).** Replaced internal-first labels with consistent household-facing destinations while retaining node brands as supporting context. The wider desktop sidebar groups routes by purpose and explains each destination; the mobile More sheet is now a complete directory with a clearer four-shortcut editor, profile and global actions. Shared page headings/tabs, search and quick-create language now match the shell. Hub no longer repeats navigation cards and uses a roomier widget grid while retaining drag-and-drop; Calendar navigation and filters use one calmer responsive toolbar. **Frontend production build clean; no migration; backend unchanged from the 624-test v0.20.0 baseline.** | Deploy/rebuild the frontend, hard-refresh once, then test route finding and bottom-bar setup on both partners' phones, sidebar/search on desktop, Hub drag ordering and several Calendar months before resuming M4 lock/audit work. |
+
+| 2026-08-09 | Assistant | Mobile Calendar | **Phone Month browsing redeveloped locally (v0.20.2).** Tapping a date now selects it without abandoning Month view and exposes an in-place plan panel with rotating-state controls, timed/all-day events, locations, Add event and explicit Day view navigation. Added guarded horizontal month swipes, selected-day emphasis, up to three person/source-coloured event dots and safe month-end arithmetic. Replaced the cramped four-way phone switcher with a view picker beside Filter, collapsed the full monthly agenda, shortened quick add and made the 14-night rotation editor legible with compact date tiles plus a nearby label/colour key. **Frontend TypeScript check and production build clean; no migration; backend unchanged from the 624-test v0.20.0 baseline.** | Superseded in v0.20.3 by the full-grid + bottom-sheet phone model; retain the swipe, month-end and rotation-editor improvements. |
+| 2026-08-09 | Assistant | Mobile Calendar | **Full app-style phone Month view shipped locally (v0.20.3).** The complete six-week month is now an edge-to-edge primary surface. Each occupied date shows one tiny person/source-coloured event label and a `+N` count while the narrow care-state strip, selected date, Today and swap marker stay distinct. Date details, care changes and Day-view navigation move into a bottom sheet instead of permanently extending the page; duplicate phone page actions and the duplicate monthly agenda were removed, a floating add button handles creation, and rotation management is available from Filter. **Frontend TypeScript check and production build clean; no migration; backend unchanged from the 624-test v0.20.0 baseline.** | Deploy/rebuild the frontend and hard-refresh. On both partners' phones, confirm all six weeks are visible, inspect long and overlapping event names, swipe February and 31-day boundaries, open/close several date sheets, add an event to the selected date and edit/restore one care swap. |
 
 ### Session notes (free-form, optional)
 

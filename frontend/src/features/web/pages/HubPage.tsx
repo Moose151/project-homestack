@@ -32,12 +32,11 @@ import { useAuth } from '../../auth/AuthContext'
 import { STACK_BY_KEY, softColour } from '../../../config/stacks'
 import { PageHeader } from '../../../components/PageHeader'
 import { InlineAlert, PageSkeleton } from '../../../components/PageState'
-import { useStacks } from '../../stacks/StacksContext'
 
 const SIZE_SPAN: Record<string, string> = {
   small: 'sm:col-span-1',
-  medium: 'sm:col-span-2',
-  large: 'sm:col-span-2',
+  medium: 'sm:col-span-2 xl:col-span-2',
+  large: 'sm:col-span-2 xl:col-span-3',
 }
 
 // Which stack a hub widget belongs to → its accent colour + icon for the card header.
@@ -46,6 +45,9 @@ function widgetAccent(key: string): { colour: string; icon: string } {
   if (key.startsWith('atlas')) return pick('atlas')
   if (key.startsWith('meridian')) return pick('meridian')
   if (key.startsWith('education')) return pick('education')
+  if (key.startsWith('wiki')) return pick('home_wiki')
+  if (key.startsWith('pets')) return pick('pets')
+  if (key.startsWith('homestead')) return pick('homestead')
   if (key.startsWith('solace')) return pick('solace')
   if (key === 'calendar_upcoming') return pick('calendar')
   return { colour: STACK_BY_KEY.hub.colour, icon: '' } // clock, greeting, other core widgets
@@ -634,7 +636,6 @@ function renderWidget(w: HubWidget, onChanged: () => void) {
 
 export function HubPage() {
   const { user } = useAuth()
-  const { enabledKeys } = useStacks()
   const [data, setData] = useState<HubResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [configuring, setConfiguring] = useState(false)
@@ -683,52 +684,16 @@ export function HubPage() {
   const now = new Date()
   const greeting =
     now.getHours() < 12 ? 'Good morning' : now.getHours() < 18 ? 'Good afternoon' : 'Good evening'
-  const mobileDestinations = [
-    { key: 'calendar', label: "What's on", hint: 'Family calendar', icon: '📅', route: '/calendar', colour: STACK_BY_KEY.calendar.colour, enabled: true },
-    { key: 'atlas', label: 'Lists & notes', hint: 'Capture anything', icon: '🗒️', route: '/atlas', colour: STACK_BY_KEY.atlas.colour, enabled: enabledKeys.has('atlas') },
-    { key: 'homestead', label: 'Our home', hint: 'Rooms & upkeep', icon: '🏠', route: '/homestead', colour: STACK_BY_KEY.homestead.colour, enabled: enabledKeys.has('homestead') },
-    { key: 'pets', label: 'Our pets', hint: 'Care & reminders', icon: '🐾', route: '/pets', colour: STACK_BY_KEY.pets.colour, enabled: enabledKeys.has('pets') },
-  ].filter(item => item.enabled)
-
   return (
     <div className="flex flex-col gap-5 sm:gap-6">
       <PageHeader
         title={`${greeting}${user ? `, ${user.display_name}` : ''}`}
         subtitle={now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
-        actions={<button
-          onClick={() => setConfiguring(c => !c)}
-          className="text-sm text-muted hover:text-ink transition-colors px-3 py-1.5 rounded-xl hover:bg-sunken whitespace-nowrap"
-        >
-          {configuring ? 'Done' : '⚙ Tune my Hub'}
-        </button>}
+        icon="🏡"
+        actions={<Button variant="secondary" size="sm" onClick={() => setConfiguring(c => !c)}>{configuring ? 'Done tuning' : 'Tune this page'}</Button>}
       />
 
       {error && <InlineAlert message={error} onRetry={loadHub} onDismiss={() => setError(null)} />}
-
-      <section className="md:hidden" aria-labelledby="mobile-destinations-title">
-        <div className="mb-2 flex items-end justify-between gap-3">
-          <div>
-            <h2 id="mobile-destinations-title" className="font-bold text-ink">Jump back in</h2>
-            <p className="text-xs text-muted">The everyday household shortcuts.</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-2.5">
-          {mobileDestinations.map(item => (
-            <Link
-              key={item.key}
-              to={item.route}
-              className="flex min-h-[88px] items-center gap-3 rounded-2xl border border-line bg-surface p-3 shadow-soft transition-all active:scale-[0.98]"
-              style={{ background: `linear-gradient(135deg, ${softColour(item.colour, '18')}, var(--hs-surface) 72%)` }}
-            >
-              <span className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-2xl bg-surface/80 text-2xl shadow-sm">{item.icon}</span>
-              <span className="min-w-0">
-                <span className="block font-bold text-ink">{item.label}</span>
-                <span className="block text-[11px] text-muted">{item.hint}</span>
-              </span>
-            </Link>
-          ))}
-        </div>
-      </section>
 
       {configuring && (
         <HubConfig key={configVersion} isAdmin={user?.role === 'admin'} onChanged={loadHub} />
@@ -743,7 +708,7 @@ export function HubPage() {
           </p>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {data.widgets.map(w => {
             const accent = widgetAccent(w.key)
             return (
@@ -757,7 +722,7 @@ export function HubPage() {
                 }}
                 onDragLeave={() => setDragOverWidget(current => current === w.key ? null : current)}
                 onDrop={event => void dropWidget(event, w.key)}
-                className={`${SIZE_SPAN[w.size] ?? 'sm:col-span-2'} bg-surface rounded-2xl shadow-soft border overflow-hidden transition-colors ${
+                className={`${SIZE_SPAN[w.size] ?? 'sm:col-span-2'} overflow-hidden rounded-3xl border bg-surface shadow-soft transition-all ${
                   dragOverWidget === w.key && draggedWidget !== w.key
                     ? 'border-primary ring-2 ring-primary/20'
                     : 'border-line'
@@ -767,7 +732,9 @@ export function HubPage() {
                   className="flex items-center gap-2 px-4 py-2.5 border-b border-line"
                   style={{ background: softColour(accent.colour, '18') }}
                 >
-                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: accent.colour }} />
+                  {accent.icon
+                    ? <span className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-xl bg-surface/75 text-base shadow-sm">{accent.icon}</span>
+                    : <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ background: accent.colour }} />}
                   <h3 className="text-sm font-bold text-ink truncate">{w.name}</h3>
                   {configuring && (
                     <span

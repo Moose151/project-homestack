@@ -84,7 +84,7 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-5 max-w-2xl mx-auto">
-      <PageHeader title="Settings" icon="⚙️" subtitle="Household-wide configuration. Applies to everyone." />
+      <PageHeader title="Manage HomeStack" icon="⚙️" subtitle="Household-wide stacks and settings that apply to everyone." />
 
       {error && (
         <div className="flex items-center justify-between gap-3 bg-danger-soft text-danger text-sm rounded-xl px-4 py-2.5">

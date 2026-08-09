@@ -90,9 +90,9 @@ export function UsersPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Users"
+        title="People & access"
         icon="👥"
-        subtitle="Accounts, roles, login PINs and re-authentication passwords."
+        subtitle="Manage profiles, roles, login PINs and re-authentication passwords."
         actions={<Button size="sm" onClick={() => { setShowForm(s => !s); setErr(null) }}>
           {showForm ? 'Close' : 'New user'}
         </Button>}

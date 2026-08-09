@@ -33,12 +33,12 @@ export function MeridianPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Meridian"
+        title="Tasks & rewards"
         icon="⭐"
-        subtitle="Approvals, setup and household progress for the Meridian points system."
+        subtitle="Meridian brings family jobs, points, rewards and shared goals together."
       />
 
-      <Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search Meridian tasks and rewards…" />
+      <Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search tasks and rewards…" />
 
       <Tabs tabs={tabs} active={tab} onChange={setTab} className="w-fit" />
 

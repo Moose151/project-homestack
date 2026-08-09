@@ -18,7 +18,7 @@ function group(key: string, query: string, matches: string[], route?: string): S
   const stack = STACK_BY_KEY[key]
   return {
     key,
-    label: stack.label,
+    label: stack.navLabel,
     icon: stack.icon,
     route: route || `${stack.route}?q=${encodeURIComponent(query)}`,
     matches: [...new Set(matches.filter(Boolean))].slice(0, 4),
@@ -46,8 +46,8 @@ export function GlobalSearch({
     const q = query.trim().toLowerCase()
     if (!q) return []
     return Object.values(STACK_BY_KEY)
-      .filter(stack => (!stack.isNode || enabledKeys.has(stack.key)) && stack.label.toLowerCase().includes(q))
-      .map(stack => group(stack.key, query, [stack.label]))
+      .filter(stack => (!stack.isNode || enabledKeys.has(stack.key)) && `${stack.label} ${stack.navLabel} ${stack.description}`.toLowerCase().includes(q))
+      .map(stack => group(stack.key, query, [stack.navLabel]))
   }, [enabledKeys, query])
 
   useEffect(() => {
@@ -117,7 +117,7 @@ export function GlobalSearch({
           ref={inputRef}
           value={query}
           onChange={event => setQuery(event.target.value)}
-          placeholder="Search every enabled stack…"
+          placeholder="Search lists, calendar, home and more…"
           aria-label="Search HomeStack"
         />
         {loading && <div className="h-1 overflow-hidden rounded-full bg-sunken"><div className="h-full w-1/2 animate-pulse rounded-full bg-primary" /></div>}
