@@ -151,8 +151,8 @@ export function TasksTab({ canManage, pointsLabel, searchQuery = '' }: {
       )}
 
       <Card>
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="flex flex-col gap-1 text-sm">
+        <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-end">
+          <label className="col-span-2 flex flex-col gap-1 text-sm sm:col-span-1">
             <span className="text-muted font-medium">View</span>
             <select value={filter} onChange={e => setFilter(e.target.value as TaskFilter)} className={inputClass}>
               <option value="active">Active tasks</option>
@@ -162,14 +162,14 @@ export function TasksTab({ canManage, pointsLabel, searchQuery = '' }: {
               <option value="all">All tasks</option>
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className="flex min-w-0 flex-col gap-1 text-sm">
             <span className="text-muted font-medium">Category</span>
             <select value={categoryId} onChange={e => setCategoryId(e.target.value)} className={inputClass}>
               <option value="">All categories</option>
               {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className="flex min-w-0 flex-col gap-1 text-sm">
             <span className="text-muted font-medium">Assigned to</span>
             <select value={personId} onChange={e => setPersonId(e.target.value)} className={inputClass}>
               <option value="">Anyone</option>
@@ -177,11 +177,11 @@ export function TasksTab({ canManage, pointsLabel, searchQuery = '' }: {
             </select>
           </label>
           {(filter !== 'active' || categoryId || personId) && (
-            <Button size="sm" variant="ghost" onClick={() => { setFilter('active'); setCategoryId(''); setPersonId('') }}>
+            <Button size="sm" variant="ghost" className="w-full sm:w-auto" onClick={() => { setFilter('active'); setCategoryId(''); setPersonId('') }}>
               Clear
             </Button>
           )}
-          <Button size="sm" className="ml-auto" onClick={() => setShowForm(s => !s)}>
+          <Button size="sm" className="col-start-2 w-full sm:ml-auto sm:w-auto" onClick={() => setShowForm(s => !s)}>
             {showForm ? 'Close' : 'New task'}
           </Button>
         </div>
@@ -201,7 +201,38 @@ export function TasksTab({ canManage, pointsLabel, searchQuery = '' }: {
           {visible.length === 0 ? (
             <p className="text-sm text-muted py-4">No tasks match these filters.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+              <div className="flex flex-col gap-3 lg:hidden">
+                {visible.map(task => (
+                  editingId === task.id ? (
+                    <TaskEditForm
+                      key={task.id}
+                      task={task}
+                      categories={categories}
+                      people={people}
+                      onCancel={() => setEditingId(null)}
+                      onSaved={() => { setEditingId(null); reload() }}
+                      onError={setFailure}
+                    />
+                  ) : (
+                    <TaskMobileCard
+                      key={task.id}
+                      task={task}
+                      pending={pendingByTask.get(task.id) || []}
+                      pointsLabel={pointsLabel}
+                      categoryName={catName(task.category_id)}
+                      personName={personName(task.assigned_to_person_id)}
+                      onEdit={() => setEditingId(task.id)}
+                      onToggleActive={() => act(api.updateMeridianTask(task.id, { is_active: !task.is_active }))}
+                      onArchive={() => act(api.updateMeridianTask(task.id, { is_archived: !task.is_archived }))}
+                      onDelete={() => { if (confirm(`Delete "${task.title}"?`)) act(api.deleteMeridianTask(task.id)) }}
+                      onApprove={(id) => act(api.approveMeridianTaskCompletion(id))}
+                      onReject={(id) => act(api.rejectMeridianTaskCompletion(id, prompt('Reason (optional)') || ''))}
+                    />
+                  )
+                ))}
+              </div>
+              <div className="hidden overflow-x-auto lg:block">
               <table className="w-full min-w-[780px] text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-muted">
@@ -243,7 +274,8 @@ export function TasksTab({ canManage, pointsLabel, searchQuery = '' }: {
                   ))}
                 </tbody>
               </table>
-            </div>
+              </div>
+            </>
           )}
         </Card>
 
@@ -271,6 +303,92 @@ export function TasksTab({ canManage, pointsLabel, searchQuery = '' }: {
         </Card>
       </div>
     </div>
+  )
+}
+
+function TaskMobileCard({
+  task,
+  pending,
+  pointsLabel,
+  categoryName,
+  personName,
+  onEdit,
+  onToggleActive,
+  onArchive,
+  onDelete,
+  onApprove,
+  onReject,
+}: {
+  task: MeridianTask
+  pending: MeridianTaskCompletion[]
+  pointsLabel: string
+  categoryName: string
+  personName: string
+  onEdit: () => void
+  onToggleActive: () => void
+  onArchive: () => void
+  onDelete: () => void
+  onApprove: (completionId: number) => void
+  onReject: (completionId: number) => void
+}) {
+  return (
+    <article className="rounded-2xl border border-line bg-surface p-3.5 shadow-soft">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <h3 className="min-w-0 flex-1 break-words font-extrabold text-ink">{task.title}</h3>
+            {task.is_archived
+              ? <Badge>Archived</Badge>
+              : task.is_active
+                ? <Badge className="bg-success-soft text-success">Active</Badge>
+                : <Badge>Hidden</Badge>}
+          </div>
+          <p className="mt-1 text-xs text-muted">{personName || 'Anyone'}{categoryName ? ` · ${categoryName}` : ''}</p>
+        </div>
+        <div className="flex-shrink-0 rounded-xl bg-primary-soft px-2.5 py-1.5 text-right text-primary">
+          <span className="block text-base font-black leading-none">★ {task.award_value}</span>
+          <span className="text-[9px] font-bold uppercase tracking-wide">{pointsLabel}</span>
+        </div>
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {task.is_hot && <Badge className="bg-danger-soft text-danger">{task.hot_label || 'Hot'}</Badge>}
+        <Badge>{task.completion_behavior === 'hide_after_approval' ? 'One-off' : 'Repeatable'}</Badge>
+        <Badge>{task.completion_scope === 'household' ? 'Household' : 'Per person'}</Badge>
+        {task.recurrence_rule && (
+          <Badge className="bg-primary-soft text-primary">↻ {parseByday(task.recurrence_rule).map(d => WEEKDAYS.find(w => w.code === d)?.label).join(' ')}</Badge>
+        )}
+        {task.status !== 'available' && <Badge className="bg-warning-soft text-warning">{task.status}</Badge>}
+      </div>
+
+      {task.description && <p className="mt-2 text-sm leading-relaxed text-muted line-clamp-3">{task.description}</p>}
+
+      {pending.length > 0 && (
+        <div className="mt-3 flex flex-col gap-2">
+          {pending.map(completion => (
+            <div key={completion.id} className="rounded-xl bg-warning-soft p-2.5 text-xs text-warning">
+              <p><strong>{completion.person_display_name}</strong> submitted {formatWhen(completion.submitted_at)}</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button className="min-h-10 rounded-lg bg-warning px-2 font-bold text-white" onClick={() => onApprove(completion.id)}>Approve</button>
+                <button className="min-h-10 rounded-lg border border-warning/30 px-2 font-bold" onClick={() => onReject(completion.id)}>Reject</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-line pt-3">
+        <Button size="sm" variant="secondary" onClick={onEdit}>Edit task</Button>
+        <details className="group relative">
+          <summary className="grid min-h-10 cursor-pointer list-none place-items-center rounded-xl text-sm font-semibold text-muted-strong hover:bg-sunken">More</summary>
+          <div className="mt-2 grid grid-cols-3 gap-1.5 rounded-xl bg-sunken p-2">
+            <button className="min-h-10 rounded-lg px-1 text-xs font-semibold text-muted-strong hover:bg-surface" onClick={onToggleActive}>{task.is_active ? 'Hide' : 'Show'}</button>
+            <button className="min-h-10 rounded-lg px-1 text-xs font-semibold text-muted-strong hover:bg-surface" onClick={onArchive}>{task.is_archived ? 'Restore' : 'Archive'}</button>
+            <button className="min-h-10 rounded-lg px-1 text-xs font-semibold text-danger hover:bg-danger-soft" onClick={onDelete}>Delete</button>
+          </div>
+        </details>
+      </div>
+    </article>
   )
 }
 
@@ -352,14 +470,16 @@ function TaskRow({
   )
 }
 
-function TaskEditRow({ task, categories, people, onCancel, onSaved, onError }: {
+interface TaskEditProps {
   task: MeridianTask
   categories: MeridianCategory[]
   people: Person[]
   onCancel: () => void
   onSaved: () => void
   onError: () => void
-}) {
+}
+
+function TaskEditForm({ task, categories, people, onCancel, onSaved, onError }: TaskEditProps) {
   const [f, setF] = useState({
     title: task.title,
     points: String(task.points),
@@ -402,47 +522,75 @@ function TaskEditRow({ task, categories, people, onCancel, onSaved, onError }: {
   }
 
   return (
-    <tr>
-      <td colSpan={5} className="py-3">
-        <div className="rounded-xl border border-line bg-sunken p-3">
+    <div className="rounded-2xl border border-primary/30 bg-primary-soft/30 p-3">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="text-sm font-extrabold text-ink">Edit task</h3>
+        <button type="button" onClick={onCancel} className="grid h-9 w-9 place-items-center rounded-xl text-muted hover:bg-surface" aria-label="Close task editor">✕</button>
+      </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <input className={`${inputClass} md:col-span-2`} value={f.title} onChange={e => set('title', e.target.value)} />
-            <input className={inputClass} type="number" min="0" value={f.points} onChange={e => set('points', e.target.value)} />
-            <select className={inputClass} value={f.assigned_to_person_id} onChange={e => set('assigned_to_person_id', e.target.value)}>
-              <option value="">Anyone</option>
-              {people.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}
-            </select>
-            <textarea className={`${inputClass} md:col-span-2`} value={f.description} onChange={e => set('description', e.target.value)} />
-            <select className={inputClass} value={f.category_id} onChange={e => set('category_id', e.target.value)}>
-              <option value="">No category</option>
-              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <select className={inputClass} value={f.completion_behavior} onChange={e => set('completion_behavior', e.target.value as MeridianTask['completion_behavior'])}>
-              <option value="stay_active">Repeatable</option>
-              <option value="hide_after_approval">One-off</option>
-            </select>
-            <select className={inputClass} value={f.completion_scope} onChange={e => set('completion_scope', e.target.value as MeridianTask['completion_scope'])}>
-              <option value="per_person">Per person</option>
-              <option value="household">Household</option>
-            </select>
-            <label className="flex items-center gap-2 text-sm text-ink">
-              <input type="checkbox" checked={f.is_hot} onChange={e => set('is_hot', e.target.checked)} /> Hot
+            <label className="flex flex-col gap-1 text-xs font-semibold text-muted md:col-span-2">Task name
+              <input className={inputClass} value={f.title} onChange={e => set('title', e.target.value)} />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-semibold text-muted">Points
+              <input className={inputClass} type="number" min="0" value={f.points} onChange={e => set('points', e.target.value)} />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-semibold text-muted">Assigned to
+              <select className={inputClass} value={f.assigned_to_person_id} onChange={e => set('assigned_to_person_id', e.target.value)}>
+                <option value="">Anyone</option>
+                {people.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-semibold text-muted md:col-span-2">Description
+              <textarea className={inputClass} value={f.description} onChange={e => set('description', e.target.value)} />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-semibold text-muted">Category
+              <select className={inputClass} value={f.category_id} onChange={e => set('category_id', e.target.value)}>
+                <option value="">No category</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-semibold text-muted">Completion
+              <select className={inputClass} value={f.completion_behavior} onChange={e => set('completion_behavior', e.target.value as MeridianTask['completion_behavior'])}>
+                <option value="stay_active">Repeatable</option>
+                <option value="hide_after_approval">One-off</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-semibold text-muted">Completion scope
+              <select className={inputClass} value={f.completion_scope} onChange={e => set('completion_scope', e.target.value as MeridianTask['completion_scope'])}>
+                <option value="per_person">Per person</option>
+                <option value="household">Household</option>
+              </select>
+            </label>
+            <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-ink">
+              <input type="checkbox" checked={f.is_hot} onChange={e => set('is_hot', e.target.checked)} /> Hot task
             </label>
             {f.is_hot && (
               <>
-                <input className={inputClass} type="number" min="0" value={f.hot_bonus_points} onChange={e => set('hot_bonus_points', e.target.value)} />
-                <input className={inputClass} placeholder="Hot label" value={f.hot_label} onChange={e => set('hot_label', e.target.value)} />
+                <label className="flex flex-col gap-1 text-xs font-semibold text-muted">Bonus points
+                  <input className={inputClass} type="number" min="0" value={f.hot_bonus_points} onChange={e => set('hot_bonus_points', e.target.value)} />
+                </label>
+                <label className="flex flex-col gap-1 text-xs font-semibold text-muted">Hot label
+                  <input className={inputClass} placeholder="Extra credit" value={f.hot_label} onChange={e => set('hot_label', e.target.value)} />
+                </label>
               </>
             )}
           </div>
           {f.completion_behavior === 'stay_active' && (
             <div className="mt-3"><WeekdayPicker days={recurDays} onChange={setRecurDays} /></div>
           )}
-          <div className="mt-3 flex gap-2">
-            <Button size="sm" loading={saving} disabled={!f.title.trim()} onClick={save}>Save</Button>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:flex">
+            <Button size="sm" loading={saving} disabled={!f.title.trim()} onClick={save}>Save changes</Button>
             <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
           </div>
-        </div>
+    </div>
+  )
+}
+
+function TaskEditRow(props: TaskEditProps) {
+  return (
+    <tr>
+      <td colSpan={5} className="py-3">
+        <TaskEditForm {...props} />
       </td>
     </tr>
   )
@@ -492,41 +640,69 @@ function NewTaskForm({ categories, people, onCreated, onError }: {
 
   return (
     <Card title="New task">
-      <form onSubmit={submit} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-        <input className={`${inputClass} sm:col-span-2`} placeholder="Task title" value={f.title} onChange={e => set('title', e.target.value)} />
-        <input className={inputClass} type="number" min="0" placeholder="Points" value={f.points} onChange={e => set('points', e.target.value)} />
-        <select className={inputClass} value={f.assigned_to_person_id} onChange={e => set('assigned_to_person_id', e.target.value)}>
-          <option value="">Anyone</option>
-          {people.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}
-        </select>
-        <textarea className={`${inputClass} sm:col-span-2`} placeholder="Description" value={f.description} onChange={e => set('description', e.target.value)} />
-        <select className={inputClass} value={f.category_id} onChange={e => set('category_id', e.target.value)}>
-          <option value="">No category</option>
-          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <select className={inputClass} value={f.completion_behavior} onChange={e => set('completion_behavior', e.target.value as MeridianTask['completion_behavior'])}>
-          <option value="stay_active">Repeatable</option>
-          <option value="hide_after_approval">One-off</option>
-        </select>
-        <select className={inputClass} value={f.completion_scope} onChange={e => set('completion_scope', e.target.value as MeridianTask['completion_scope'])}>
-          <option value="per_person">Per person</option>
-          <option value="household">Household</option>
-        </select>
-        <label className="flex items-center gap-2 text-sm text-ink">
-          <input type="checkbox" checked={f.is_hot} onChange={e => set('is_hot', e.target.checked)} /> Hot task
-        </label>
-        {f.is_hot && (
-          <>
-            <input className={inputClass} type="number" min="0" placeholder="Bonus points" value={f.hot_bonus_points} onChange={e => set('hot_bonus_points', e.target.value)} />
-            <input className={inputClass} placeholder="Hot label" value={f.hot_label} onChange={e => set('hot_label', e.target.value)} />
-          </>
-        )}
-        {f.completion_behavior === 'stay_active' && (
-          <div className="sm:col-span-2 xl:col-span-4"><WeekdayPicker days={recurDays} onChange={setRecurDays} /></div>
-        )}
-        <div className="sm:col-span-2 xl:col-span-4">
-          <Button type="submit" loading={saving} disabled={!f.title.trim()}>Create task</Button>
+      <form onSubmit={submit} className="flex flex-col gap-3">
+        <div className="grid grid-cols-2 gap-3">
+          <label className="col-span-2 flex flex-col gap-1 text-xs font-semibold text-muted">Task name
+            <input className={inputClass} placeholder="e.g. Empty the dishwasher" value={f.title} onChange={e => set('title', e.target.value)} autoFocus />
+          </label>
+          <label className="flex min-w-0 flex-col gap-1 text-xs font-semibold text-muted">Points
+            <input className={inputClass} type="number" min="0" value={f.points} onChange={e => set('points', e.target.value)} />
+          </label>
+          <label className="flex min-w-0 flex-col gap-1 text-xs font-semibold text-muted">Who can do it
+            <select className={inputClass} value={f.assigned_to_person_id} onChange={e => set('assigned_to_person_id', e.target.value)}>
+              <option value="">Anyone</option>
+              {people.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}
+            </select>
+          </label>
         </div>
+
+        <details className="group rounded-xl border border-line">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-sm font-semibold text-muted-strong">
+            Schedule, category and other options
+            <span className="text-xs transition-transform group-open:rotate-180">▾</span>
+          </summary>
+          <div className="grid grid-cols-1 gap-3 border-t border-line p-3 sm:grid-cols-2 xl:grid-cols-4">
+            <label className="flex flex-col gap-1 text-xs font-semibold text-muted sm:col-span-2">Description
+              <textarea className={inputClass} placeholder="Optional instructions" value={f.description} onChange={e => set('description', e.target.value)} />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-semibold text-muted">Category
+              <select className={inputClass} value={f.category_id} onChange={e => set('category_id', e.target.value)}>
+                <option value="">No category</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-semibold text-muted">Task type
+              <select className={inputClass} value={f.completion_behavior} onChange={e => set('completion_behavior', e.target.value as MeridianTask['completion_behavior'])}>
+                <option value="stay_active">Repeatable</option>
+                <option value="hide_after_approval">One-off</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-semibold text-muted">Completion scope
+              <select className={inputClass} value={f.completion_scope} onChange={e => set('completion_scope', e.target.value as MeridianTask['completion_scope'])}>
+                <option value="per_person">Per person</option>
+                <option value="household">Household</option>
+              </select>
+            </label>
+            <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-ink">
+              <input type="checkbox" checked={f.is_hot} onChange={e => set('is_hot', e.target.checked)} /> Hot task
+            </label>
+            {f.is_hot && (
+              <>
+                <label className="flex flex-col gap-1 text-xs font-semibold text-muted">Bonus points
+                  <input className={inputClass} type="number" min="0" value={f.hot_bonus_points} onChange={e => set('hot_bonus_points', e.target.value)} />
+                </label>
+                <label className="flex flex-col gap-1 text-xs font-semibold text-muted">Hot label
+                  <input className={inputClass} placeholder="Extra credit" value={f.hot_label} onChange={e => set('hot_label', e.target.value)} />
+                </label>
+              </>
+            )}
+            {f.completion_behavior === 'stay_active' && (
+              <div className="sm:col-span-2 xl:col-span-4"><WeekdayPicker days={recurDays} onChange={setRecurDays} /></div>
+            )}
+          </div>
+        </details>
+
+        <Button type="submit" loading={saving} disabled={!f.title.trim()} className="w-full sm:w-auto sm:self-start">Create task</Button>
       </form>
     </Card>
   )

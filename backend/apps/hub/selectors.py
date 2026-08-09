@@ -22,10 +22,14 @@ def list_widget_config(user) -> list[dict]:
 
     # Widgets from disabled stacks aren't offered in the Customise list either.
     from apps.nodes.models import HouseholdNode
-    enabled_node_ids = set(
-        HouseholdNode.objects.filter(household=user.household, is_enabled=True)
-        .values_list("node_id", flat=True)
-    )
+    from apps.nodes.permissions import can_view_node
+    enabled_node_ids = {
+        household_node.node_id
+        for household_node in HouseholdNode.objects.filter(
+            household=user.household, is_enabled=True
+        ).select_related("node")
+        if can_view_node(user, household_node.node.key)
+    }
 
     rows = []
     for widget in HubWidget.objects.select_related("source_node").all():

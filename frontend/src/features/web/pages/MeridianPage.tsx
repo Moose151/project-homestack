@@ -10,7 +10,7 @@ import { OverviewTab } from './meridian/OverviewTab'
 import { PageHeader } from '../../../components/PageHeader'
 import { Tabs, type TabDef } from '../../../components/Tabs'
 import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
-import { Input } from '../../../components/Field'
+import { SearchField } from '../../../components/Field'
 
 type Tab = 'overview' | 'tasks' | 'routines' | 'shop' | 'goals' | 'wishlist' | 'leaderboard' | 'settings'
 const TAB_KEYS: Tab[] = ['overview', 'tasks', 'routines', 'shop', 'goals', 'wishlist', 'leaderboard', 'settings']
@@ -31,14 +31,16 @@ export function MeridianPage() {
   const tabs: TabDef<Tab>[] = tabKeys.map(t => ({ key: t, label: t }))
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        title="Tasks & rewards"
-        icon="⭐"
-        subtitle="Meridian brings family jobs, points, rewards and shared goals together."
-      />
+    <div className="flex flex-col gap-4 sm:gap-5">
+      <div className="hidden sm:block">
+        <PageHeader
+          title="Tasks & rewards"
+          icon="⭐"
+          subtitle="Meridian brings family jobs, points, rewards and shared goals together."
+        />
+      </div>
 
-      <Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search tasks and rewards…" />
+      <SearchField value={query} onChange={event => setQuery(event.target.value)} onClear={() => setQuery('')} placeholder="Search tasks and rewards…" />
 
       <Tabs tabs={tabs} active={tab} onChange={setTab} className="w-fit" />
 

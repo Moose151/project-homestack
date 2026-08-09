@@ -203,7 +203,7 @@ type ItemWrite = Partial<{
 type UserWrite = Partial<{
   username: string; display_name: string; role: string; email: string; colour: string
   avatar: string; is_child_account: boolean; is_active: boolean; pin: string; password: string
-  link_person_id: number | null; create_person: boolean
+  link_person_id: number | null; create_person: boolean; solace_access: boolean
 }>
 
 type BookWrite = Partial<{

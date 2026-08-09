@@ -14,6 +14,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from apps.accounts.models import User
+from apps.permissions.services import grant_user_permission
 
 
 def _make_user(username, role=User.Role.USER, is_child=False, pin="1234") -> User:
@@ -76,6 +77,24 @@ class NodeListViewTests(TestCase):
         resp = self.client.get(self.url)
         atlas = next(n for n in resp.json() if n["key"] == "atlas")
         self.assertTrue(atlas["is_enabled"])
+
+    def test_manager_sees_only_nodes_they_can_open(self):
+        _login(self.client, "manager")
+        nodes = {node["key"]: node for node in self.client.get(self.url).json()}
+        self.assertTrue(nodes["atlas"]["can_view"])
+        self.assertTrue(nodes["home_wiki"]["can_view"])
+        self.assertFalse(nodes["solace"]["can_view"])
+
+    def test_explicit_money_access_is_reflected_in_node_list(self):
+        grant_user_permission(self.manager, "solace.view")
+        _login(self.client, "manager")
+        nodes = {node["key"]: node for node in self.client.get(self.url).json()}
+        self.assertTrue(nodes["solace"]["can_view"])
+
+    def test_admin_can_view_money_node(self):
+        _login(self.client, "admin")
+        nodes = {node["key"]: node for node in self.client.get(self.url).json()}
+        self.assertTrue(nodes["solace"]["can_view"])
 
     def test_other_nodes_disabled(self):
         # atlas (M1), meridian (M2) and education (M3) are the built nodes; others stay disabled.

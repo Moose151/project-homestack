@@ -1229,7 +1229,7 @@ export function EducationPage() {
   const defaultAssignee = personIdForUser(people, user?.id)
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5">
+    <div className="mx-auto flex max-w-7xl flex-col gap-5">
       <PageHeader title="School & study" icon="🎓" subtitle="Education keeps courses, deadlines, timetables and events together." />
 
       <SearchField

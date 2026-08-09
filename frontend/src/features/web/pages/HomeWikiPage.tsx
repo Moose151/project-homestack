@@ -88,8 +88,8 @@ function PageForm({ categories, initial, onSubmit, onCancel, submitting }: {
       onSubmit={e => { e.preventDefault(); if (f.title.trim()) onSubmit(f) }}
       className="space-y-3 bg-sunken rounded-2xl p-4"
     >
-      <Input autoFocus placeholder="Page title (e.g. WiFi, Bin night)" value={f.title} onChange={e => set('title', e.target.value)} />
-      <Textarea placeholder="Write the details here…" rows={5} value={f.body} onChange={e => set('body', e.target.value)} />
+      <Field label="Page title"><Input autoFocus placeholder="e.g. Wi-Fi or bin night" value={f.title} onChange={e => set('title', e.target.value)} /></Field>
+      <Field label="Household information"><Textarea placeholder="Write the details here…" rows={5} value={f.body} onChange={e => set('body', e.target.value)} /></Field>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Category">
           <Select value={f.category_id} onChange={e => set('category_id', e.target.value)}>
@@ -103,11 +103,11 @@ function PageForm({ categories, initial, onSubmit, onCancel, submitting }: {
           </Select>
         </Field>
       </div>
-      <Input placeholder="Tags (comma separated)" value={f.tags} onChange={e => set('tags', e.target.value)} />
+      <Field label="Tags" hint="Separate tags with commas."><Input placeholder="e.g. internet, account" value={f.tags} onChange={e => set('tags', e.target.value)} /></Field>
       <div className="flex flex-wrap gap-4 text-sm text-muted-strong">
-        <label className="flex items-center gap-2"><input type="checkbox" checked={f.is_favourite} onChange={e => set('is_favourite', e.target.checked)} /> ⭐ Favourite</label>
-        <label className="flex items-center gap-2"><input type="checkbox" checked={f.is_emergency} onChange={e => set('is_emergency', e.target.checked)} /> 🚨 Emergency info</label>
-        <label className="flex items-center gap-2"><input type="checkbox" checked={f.is_kiosk_safe} onChange={e => set('is_kiosk_safe', e.target.checked)} /> Kiosk-safe</label>
+        <label className="flex min-h-10 items-center gap-2"><input type="checkbox" checked={f.is_favourite} onChange={e => set('is_favourite', e.target.checked)} /> ⭐ Favourite</label>
+        <label className="flex min-h-10 items-center gap-2"><input type="checkbox" checked={f.is_emergency} onChange={e => set('is_emergency', e.target.checked)} /> 🚨 Emergency info</label>
+        <label className="flex min-h-10 items-center gap-2"><input type="checkbox" checked={f.is_kiosk_safe} onChange={e => set('is_kiosk_safe', e.target.checked)} /> Kiosk-safe</label>
       </div>
       <div className="flex gap-2">
         <Button type="submit" loading={submitting} disabled={!f.title.trim()}>Save page</Button>
@@ -161,16 +161,16 @@ function PageCard({ page, categories, onChange, onDelete, onError, canDelete }: 
   return (
     <Card className="group">
       <div className="flex items-start justify-between gap-2">
-        <button className="text-left min-w-0 flex-1" onClick={() => setExpanded(v => !v)}>
+        <button type="button" className="min-h-10 min-w-0 flex-1 text-left" onClick={() => setExpanded(v => !v)}>
           <div className="font-semibold text-ink truncate">{page.title}</div>
           <div className="mt-1"><Flags page={page} /></div>
         </button>
         <div className="flex flex-shrink-0 items-center gap-1">
-          <button onClick={toggleFavourite} className="text-muted hover:text-warning px-1" title={page.is_favourite ? 'Unpin' : 'Pin as favourite'}>
+          <button type="button" onClick={toggleFavourite} className="grid min-h-10 min-w-10 place-items-center text-muted hover:text-warning" aria-label={page.is_favourite ? `Remove ${page.title} from favourites` : `Add ${page.title} to favourites`}>
             {page.is_favourite ? '⭐' : '☆'}
           </button>
-          <button onClick={() => setEditing(true)} className="sm:opacity-0 sm:group-hover:opacity-100 rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink transition">Edit</button>
-          {canDelete && <button onClick={remove} className="sm:opacity-0 sm:group-hover:opacity-100 rounded-lg px-2 py-1 text-xs text-muted hover:text-danger transition">Delete</button>}
+          <button type="button" onClick={() => setEditing(true)} className="min-h-10 rounded-lg px-2 text-xs font-semibold text-muted transition hover:bg-sunken hover:text-ink sm:opacity-0 sm:group-hover:opacity-100">Edit</button>
+          {canDelete && <button type="button" onClick={remove} className="min-h-10 rounded-lg px-2 text-xs font-semibold text-muted transition hover:text-danger sm:opacity-0 sm:group-hover:opacity-100">Delete</button>}
         </div>
       </div>
       {expanded && (
@@ -238,9 +238,10 @@ function PagesTab({ categories, isAdmin, onError }: {
         <div className="flex gap-1 rounded-xl bg-sunken p-1">
           {FILTERS.map(fl => (
             <button
+              type="button"
               key={fl.key}
               onClick={() => setFilter(fl.key)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${filter === fl.key ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'}`}
+              className={`min-h-10 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${filter === fl.key ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'}`}
             >
               {fl.label}
             </button>
@@ -318,9 +319,9 @@ function CategoriesTab({ categories, onChange, isAdmin, onError }: {
     <div className="space-y-4">
       {isAdmin && (
         <Card title="Add category">
-          <form onSubmit={add} className="flex flex-wrap items-end gap-2">
-            <Input placeholder="Category name" value={name} onChange={e => setName(e.target.value)} className="flex-1 min-w-[12rem]" />
-            <input type="color" value={colour} onChange={e => setColour(e.target.value)} className="h-11 w-14 rounded-xl border border-line bg-surface" title="Colour" />
+          <form onSubmit={add} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_5rem_auto] sm:items-end">
+            <Field label="Category name"><Input autoFocus value={name} onChange={e => setName(e.target.value)} /></Field>
+            <Field label="Colour"><input type="color" value={colour} onChange={e => setColour(e.target.value)} className="h-11 w-full rounded-xl border border-line bg-surface p-1" /></Field>
             <Button type="submit" loading={busy} disabled={!name.trim()}>Add</Button>
           </form>
         </Card>
@@ -340,8 +341,8 @@ function CategoriesTab({ categories, onChange, isAdmin, onError }: {
                 </div>
                 {isAdmin && (
                   <div className="flex flex-shrink-0 gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition">
-                    <button onClick={() => toggleHidden(c)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">{c.is_hidden ? 'Show' : 'Hide'}</button>
-                    <button onClick={() => remove(c)} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger">Delete</button>
+                    <button type="button" onClick={() => toggleHidden(c)} className="min-h-10 rounded-lg px-2 text-xs font-semibold text-muted hover:bg-sunken hover:text-ink">{c.is_hidden ? 'Show' : 'Hide'}</button>
+                    <button type="button" onClick={() => remove(c)} className="min-h-10 rounded-lg px-2 text-xs font-semibold text-muted hover:text-danger">Delete</button>
                   </div>
                 )}
               </div>
@@ -372,7 +373,7 @@ export function HomeWikiPage() {
   const [query, setQuery] = useUrlQueryState()
   const [results, setResults] = useState<WikiPage[] | null>(null)
 
-  useEffect(() => { api.getWikiCategories(isAdmin).then(setCategories).catch(() => {}) }, [isAdmin])
+  useEffect(() => { api.getWikiCategories(isAdmin).then(setCategories).catch(e => setError(errMsg(e))) }, [isAdmin])
 
   useEffect(() => {
     const q = query.trim()
@@ -384,7 +385,7 @@ export function HomeWikiPage() {
   const visibleCategories = useMemo(() => categories.filter(c => isAdmin || !c.is_hidden), [categories, isAdmin])
 
   return (
-    <div className="space-y-5 max-w-5xl mx-auto">
+    <div className="mx-auto flex max-w-5xl flex-col gap-5">
       <PageHeader title="Household guide" icon="📖" subtitle="Home Wiki keeps Wi-Fi, bin night, emergency information and how-tos easy to find." />
 
       <SearchField value={query} onChange={e => setQuery(e.target.value)} onClear={() => setQuery('')} placeholder="Search the wiki…" />

@@ -102,12 +102,15 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: App-style mobile Month Calendar and household navigation refinement shipped locally
-(2026-08-09, v0.20.3) on top of forecastable rotating schedules and the bidirectional
-Homestead/Solace handoff. Deploy/pilot the full phone Month flow, navigation and exact shared-care
-rotation on both partners' phones and desktop; this is now the highest-value validation step.
-Milestone 4 security maturation remains the next local workstream and native Solace real-data
-comparison still requires the home server. Kiosk work remains deferred.**
+**Phase: Controlled partner-pilot gate shipped locally (2026-08-09, v0.21.0). The implemented
+destinations now share a consistent phone/desktop hierarchy, partner onboarding supports an
+explicit audited Money grant without making the partner an administrator, and node navigation,
+Hub contributions plus Homestead's finance controls are permission-aware. Meridian reward and
+allowance/goal/wishlist/routine management and Books, Pets and Household guide workflows now use
+responsive, labelled and failure-aware controls. Pet treatments and appointments have complete
+create/edit/delete UI from the pet profile. `docs/PARTNER_PILOT_READINESS.md` is the acceptance
+source of truth. Deploy and run its two-account/real-device pass next; Milestone 4 security
+maturation and native Solace real-data comparison still follow. Kiosk work remains deferred.**
 
 > **Owner direction, 2026-07-29.** Focus on usability, functionality, response time, navigation
 > and layout across the responsive web app. v0.12.0 delivers the shared foundation: route
@@ -248,6 +251,12 @@ comparison still requires the home server. Kiosk work remains deferred.**
   and actions in a bottom sheet; a floating add button and Filter-hosted rotation management keep
   chrome compact. **Frontend production build clean; no migration; backend unchanged from the
   624-test v0.20.0 baseline.**
+- [x] **Daily Lists/Tasks responsive slice (v0.20.4, 2026-08-09).** Manager task tables become
+  information-complete cards below desktop size, with inline labelled editing, large approval
+  controls and progressive creation options. Atlas item rows wrap and group due/assignee details,
+  quick capture expands only when requested on phones, duplicate mobile page headings are removed
+  and rewards metrics are more compact. **Frontend production build clean; no migration; backend
+  unchanged from the 624-test v0.20.0 baseline.**
 - [~] **Milestone 4: security maturation — IN PROGRESS (v0.17.0).** Shared attachments now have
   protected upload/list/download/delete APIs, visibility+sensitivity enforcement through the
   central resolver, randomized non-public storage, sensitive-download audit records and frontend
@@ -305,16 +314,14 @@ comparison still requires the home server. Kiosk work remains deferred.**
 
 ## 6. Active tasks — household pilot, then continue M4 locally
 
-**Immediate product step:** deploy v0.20.3 to the home server. First confirm that both partners
-can find Calendar, Lists & notes, Our home, Tasks & rewards and Money without needing to know the
-node brands; configure each phone's four bottom shortcuts from More and drag Hub widgets on
-desktop. Then, in Calendar choose **Rotation**,
-set day 1 to the Monday starting a week where “With us” covers Monday/Tuesday and Friday–Sunday,
-rename “Other home” to the preferred household wording, select the children and save. Compare at
-least one full 14-night cycle on both partners' phones and desktop. On each phone, tap dates
-without leaving Month view, swipe across a month boundary, open one full Day view, then swap a
-future day and restore it. Also continue
-capturing real Lists/Homestead/notification friction before another broad visual pass.
+**Immediate product step:** deploy v0.21.0 to the home server and follow
+`docs/PARTNER_PILOT_READINESS.md`. Create the partner as a **Household manager**, link the existing
+Person, set both PIN and password, and deliberately choose Money access. Confirm the no-Money
+state hides the destination and finance widgets, then enable it if wanted and verify password
+unlock. Configure both phones' four bottom shortcuts, drag Hub widgets on desktop, and complete
+the documented Calendar, Lists, Homestead/Money and Meridian round trips. Record task/device
+friction before another broad visual pass; do not mark a node household-accepted from automated
+tests alone.
 
 **Next local build step (no home server required):** finish the generic sensitive-node lock
 path instead of leaving it Solace-specific: move re-auth/sensitivity decisions consistently
@@ -327,7 +334,7 @@ integration framework. The exact sequence and acceptance gates are in the roadma
 `docs/26_Node_Home_Assistant.md`.
 
 **Production track (requires the home server):** rebuild both production images, deploy through
-v0.20.3, and run `migrate` through `attachments.0001`, `permissions.0020`, `solace.0007`,
+v0.21.0, and run `migrate` through `attachments.0001`, `permissions.0020`, `solace.0007`,
 `homestead.0004`, `hub.0013` and
 `scheduling.0002_rotatingschedule_rotatingscheduleexception`.
 
@@ -496,6 +503,8 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 
 | 2026-08-09 | Assistant | Mobile Calendar | **Phone Month browsing redeveloped locally (v0.20.2).** Tapping a date now selects it without abandoning Month view and exposes an in-place plan panel with rotating-state controls, timed/all-day events, locations, Add event and explicit Day view navigation. Added guarded horizontal month swipes, selected-day emphasis, up to three person/source-coloured event dots and safe month-end arithmetic. Replaced the cramped four-way phone switcher with a view picker beside Filter, collapsed the full monthly agenda, shortened quick add and made the 14-night rotation editor legible with compact date tiles plus a nearby label/colour key. **Frontend TypeScript check and production build clean; no migration; backend unchanged from the 624-test v0.20.0 baseline.** | Superseded in v0.20.3 by the full-grid + bottom-sheet phone model; retain the swipe, month-end and rotation-editor improvements. |
 | 2026-08-09 | Assistant | Mobile Calendar | **Full app-style phone Month view shipped locally (v0.20.3).** The complete six-week month is now an edge-to-edge primary surface. Each occupied date shows one tiny person/source-coloured event label and a `+N` count while the narrow care-state strip, selected date, Today and swap marker stay distinct. Date details, care changes and Day-view navigation move into a bottom sheet instead of permanently extending the page; duplicate phone page actions and the duplicate monthly agenda were removed, a floating add button handles creation, and rotation management is available from Filter. **Frontend TypeScript check and production build clean; no migration; backend unchanged from the 624-test v0.20.0 baseline.** | Deploy/rebuild the frontend and hard-refresh. On both partners' phones, confirm all six weeks are visible, inspect long and overlapping event names, swipe February and 31-day boundaries, open/close several date sheets, add an event to the selected date and edit/restore one care swap. |
+| 2026-08-09 | Assistant | Lists/Tasks UI | **Daily-use responsive slice shipped locally (v0.20.4).** Replaced Meridian's horizontally scrolled manager table below `lg` with information-complete task cards, large pending-approval controls, progressive secondary actions and an inline labelled editor; desktop keeps the full table. New task creation now leads with name/points/person and groups schedule/category/rules/hot options under a clear disclosure. Atlas list items wrap and place assignee/due metadata beneath the title, delete has an independent touch target, phone quick capture is collapsed until requested and Note actions remain visible on touch. Removed redundant phone page headings for Atlas/Meridian, adopted shared Search and compacted the reward overview metrics. **Frontend TypeScript check and production build clean; no migration; backend unchanged from the 624-test v0.20.0 baseline.** | Deploy/rebuild the frontend and hard-refresh. Test long grocery items, assigned/due rows, quick capture and note actions on both phones; as manager create/edit/approve/hide/archive/restore/delete Tasks on phone, then verify the desktop table remains efficient. |
+| 2026-08-09 | Assistant | Partner pilot readiness | **Controlled two-adult pilot gate shipped locally (v0.21.0).** Added an explicit, audited per-user Money grant to admin account onboarding/editing, with manager guidance, adult-password enforcement and a child-account block; child logins are also constrained to the Household member role and converting an adult login to a child clears prior finance grants. Node discovery now returns `can_view`; navigation/routes/global discovery and contributed Hub widgets require both node enablement and current-user view permission. Homestead also hides Costs & cover, Track cost and Solace links when Money is unavailable, matching its existing protected backend. Standardised first-level mobile headings; made Meridian reward, allowance, goal, wishlist and routine management responsive, labelled and failure-aware; and refined Books with shared controls, visible action errors, destructive confirmations and full-size touch actions. Pets now has labelled pet/care forms and complete treatment/appointment create-edit-delete UI; Household guide pages/categories use the same labelled touch pattern and no longer suppress category-load errors. Corrected blank Solace empty states and added `docs/PARTNER_PILOT_READINESS.md` with implemented-node core workflows, single-entry ownership and real-device acceptance steps. **636 backend tests green; frontend TypeScript/production build clean; no migration drift.** | Deploy/rebuild v0.21.0, migrate, create/link the partner manager account, and complete the readiness document on both phones plus desktop. Keep Solace standalone until its full real-data comparison passes. |
 
 ### Session notes (free-form, optional)
 

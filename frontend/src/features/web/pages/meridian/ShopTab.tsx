@@ -3,7 +3,7 @@ import { api } from '../../../../api/client'
 import type { MeridianCategory, MeridianReward, MeridianRewardRequest, Person } from '../../../../api/types'
 import { Card } from '../../../../components/Card'
 import { Button } from '../../../../components/Button'
-import { fieldClass } from '../../../../components/ui'
+import { Field, Input, Select, Textarea, fieldClass } from '../../../../components/ui'
 import { useAuth } from '../../../auth/AuthContext'
 
 type RewardFilter = 'active' | 'pending' | 'stock' | 'hidden' | 'all'
@@ -188,7 +188,37 @@ export function ShopTab({ canManage, pointsLabel, searchQuery = '' }: {
           {visible.length === 0 ? (
             <p className="text-sm text-muted py-4">No rewards match this view.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+              <div className="flex flex-col gap-3 lg:hidden">
+                {visible.map(reward => (
+                  editingId === reward.id ? (
+                    <RewardForm
+                      key={reward.id}
+                      reward={reward}
+                      categories={categories}
+                      onCancel={() => setEditingId(null)}
+                      onSaved={() => { setEditingId(null); reload() }}
+                      onError={() => setError('Reward could not be saved.')}
+                    />
+                  ) : (
+                    <RewardMobileCard
+                      key={reward.id}
+                      reward={reward}
+                      pending={pendingByReward.get(reward.id) || []}
+                      pointsLabel={pointsLabel}
+                      categoryName={categoryName(reward.category_id)}
+                      personName={personName}
+                      onEdit={() => setEditingId(reward.id)}
+                      onToggleActive={() => act(api.updateMeridianReward(reward.id, { is_active: !reward.is_active }))}
+                      onArchive={() => act(api.updateMeridianReward(reward.id, { is_archived: !reward.is_archived }))}
+                      onDelete={() => { if (confirm(`Delete "${reward.name}"?`)) act(api.deleteMeridianReward(reward.id)) }}
+                      onApprove={(id) => act(api.approveMeridianRewardRequest(id))}
+                      onReject={(id) => act(api.rejectMeridianRewardRequest(id, prompt('Reason (optional)') || ''))}
+                    />
+                  )
+                ))}
+              </div>
+              <div className="hidden overflow-x-auto lg:block">
               <table className="w-full min-w-[820px] text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-muted">
@@ -229,7 +259,8 @@ export function ShopTab({ canManage, pointsLabel, searchQuery = '' }: {
                   ))}
                 </tbody>
               </table>
-            </div>
+              </div>
+            </>
           )}
         </Card>
 
@@ -253,6 +284,95 @@ export function ShopTab({ canManage, pointsLabel, searchQuery = '' }: {
         </Card>
       </div>
     </div>
+  )
+}
+
+function RewardMobileCard({
+  reward,
+  pending,
+  pointsLabel,
+  categoryName,
+  personName,
+  onEdit,
+  onToggleActive,
+  onArchive,
+  onDelete,
+  onApprove,
+  onReject,
+}: {
+  reward: MeridianReward
+  pending: MeridianRewardRequest[]
+  pointsLabel: string
+  categoryName: string
+  personName: (id: number | null) => string
+  onEdit: () => void
+  onToggleActive: () => void
+  onArchive: () => void
+  onDelete: () => void
+  onApprove: (id: number) => void
+  onReject: (id: number) => void
+}) {
+  const out = reward.remaining_stock !== null && reward.remaining_stock <= 0
+  return (
+    <article className="rounded-2xl border border-line bg-surface p-3.5 shadow-soft">
+      <div className="flex items-start gap-3">
+        {reward.image_url ? (
+          <img src={reward.image_url} alt="" className="h-14 w-14 flex-shrink-0 rounded-xl border border-line object-cover" />
+        ) : (
+          <div className="grid h-14 w-14 flex-shrink-0 place-items-center rounded-xl border border-line bg-sunken text-xl" aria-hidden="true">🎁</div>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start gap-1.5">
+            <h3 className="min-w-0 flex-1 break-words font-extrabold text-ink">{reward.name}</h3>
+            {reward.is_archived
+              ? <Badge>Archived</Badge>
+              : reward.is_active
+                ? <Badge className="bg-success-soft text-success">Active</Badge>
+                : <Badge>Hidden</Badge>}
+          </div>
+          <p className="mt-1 text-base font-black text-primary">★ {reward.cost_points} <span className="text-xs font-semibold">{pointsLabel}</span></p>
+        </div>
+      </div>
+
+      {reward.description && <p className="mt-2 text-sm leading-relaxed text-muted line-clamp-3">{reward.description}</p>}
+
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {categoryName && <Badge>{categoryName}</Badge>}
+        {reward.price_estimate && <Badge>{reward.price_estimate}</Badge>}
+        <Badge className={out ? 'bg-danger-soft text-danger' : undefined}>
+          {reward.remaining_stock === null ? 'Unlimited stock' : out ? 'Out of stock' : `${reward.remaining_stock} left`}
+        </Badge>
+        {reward.daily_limit_per_user !== null && <Badge>{reward.daily_limit_per_user}/day</Badge>}
+        {reward.allow_multiple_in_cart && <Badge>Multiple allowed</Badge>}
+        {reward.store_url && <a className="text-xs font-semibold text-primary underline" href={reward.store_url} target="_blank" rel="noreferrer">Open store</a>}
+      </div>
+
+      {pending.length > 0 && (
+        <div className="mt-3 flex flex-col gap-2">
+          {pending.map(request => (
+            <div key={request.id} className="rounded-xl bg-warning-soft p-2.5 text-xs text-warning">
+              <p><strong>{personName(request.requested_by_person_id)}</strong> requested this for ★ {request.points_spent}</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button className="min-h-10 rounded-lg bg-warning px-2 font-bold text-white" onClick={() => onApprove(request.id)}>Approve</button>
+                <button className="min-h-10 rounded-lg border border-warning/30 px-2 font-bold" onClick={() => onReject(request.id)}>Reject</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-line pt-3">
+        <Button size="sm" variant="secondary" onClick={onEdit}>Edit reward</Button>
+        <details className="group relative">
+          <summary className="grid min-h-10 cursor-pointer list-none place-items-center rounded-xl text-sm font-semibold text-muted-strong hover:bg-sunken">More</summary>
+          <div className="mt-2 grid grid-cols-3 gap-1.5 rounded-xl bg-sunken p-2">
+            <button className="min-h-10 rounded-lg px-1 text-xs font-semibold text-muted-strong hover:bg-surface" onClick={onToggleActive}>{reward.is_active ? 'Hide' : 'Show'}</button>
+            <button className="min-h-10 rounded-lg px-1 text-xs font-semibold text-muted-strong hover:bg-surface" onClick={onArchive}>{reward.is_archived ? 'Restore' : 'Archive'}</button>
+            <button className="min-h-10 rounded-lg px-1 text-xs font-semibold text-danger hover:bg-danger-soft" onClick={onDelete}>Delete</button>
+          </div>
+        </details>
+      </div>
+    </article>
   )
 }
 
@@ -383,6 +503,7 @@ function RewardForm({ reward, categories, onSaved, onCancel, onError }: {
     is_active: reward?.is_active ?? true,
   })
   const [saving, setSaving] = useState(false)
+  const [advancedOpen, setAdvancedOpen] = useState(Boolean(reward))
   const set = (k: string, v: unknown) => setF(prev => ({ ...prev, [k]: v }))
 
   const save = async (e?: React.FormEvent) => {
@@ -424,29 +545,61 @@ function RewardForm({ reward, categories, onSaved, onCancel, onError }: {
 
   return (
     <form onSubmit={save} className="rounded-xl border border-line bg-sunken p-3">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <input className={`${inputClass} md:col-span-2`} placeholder="Reward name" value={f.name} onChange={e => set('name', e.target.value)} />
-        <input className={inputClass} type="number" min="0" placeholder="Cost" value={f.cost_points} onChange={e => set('cost_points', e.target.value)} />
-        <select className={inputClass} value={f.category_id} onChange={e => set('category_id', e.target.value)}>
-          <option value="">No category</option>
-          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <textarea className={`${inputClass} md:col-span-2`} placeholder="Description" value={f.description} onChange={e => set('description', e.target.value)} />
-        <input className={inputClass} type="number" min="0" placeholder="Stock blank = unlimited" value={f.quantity} onChange={e => set('quantity', e.target.value)} />
-        <input className={inputClass} placeholder="Image URL" value={f.image_url} onChange={e => set('image_url', e.target.value)} />
-        <input className={inputClass} placeholder="Store URL" value={f.store_url} onChange={e => set('store_url', e.target.value)} />
-        <input className={inputClass} placeholder="Price estimate" value={f.price_estimate} onChange={e => set('price_estimate', e.target.value)} />
-        <input className={inputClass} type="number" min="0" placeholder="Daily limit" value={f.daily_limit_per_user} onChange={e => set('daily_limit_per_user', e.target.value)} />
-        <label className="flex items-center gap-2 text-sm text-ink">
-          <input type="checkbox" checked={f.allow_multiple_in_cart} onChange={e => set('allow_multiple_in_cart', e.target.checked)} /> Multiple in cart
-        </label>
-        <label className="flex items-center gap-2 text-sm text-ink">
-          <input type="checkbox" checked={f.disappear_when_empty} onChange={e => set('disappear_when_empty', e.target.checked)} /> Hide when empty
-        </label>
-        <label className="flex items-center gap-2 text-sm text-ink">
-          <input type="checkbox" checked={f.is_active} onChange={e => set('is_active', e.target.checked)} /> Active
-        </label>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Reward name">
+          <Input autoFocus={!reward} placeholder="e.g. Choose Friday dinner" value={f.name} onChange={e => set('name', e.target.value)} />
+        </Field>
+        <Field label="Cost" hint="How many household points are needed.">
+          <Input type="number" min="0" inputMode="numeric" value={f.cost_points} onChange={e => set('cost_points', e.target.value)} />
+        </Field>
+        <Field label="Category">
+          <Select value={f.category_id} onChange={e => set('category_id', e.target.value)}>
+            <option value="">No category</option>
+            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Description" className="sm:col-span-2">
+          <Textarea placeholder="What is included or any household rules." value={f.description} onChange={e => set('description', e.target.value)} />
+        </Field>
       </div>
+
+      <details
+        className="mt-3 rounded-xl border border-line bg-surface"
+        open={advancedOpen}
+        onToggle={event => setAdvancedOpen(event.currentTarget.open)}
+      >
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-sm font-bold text-muted-strong">
+          Stock, links and limits <span aria-hidden="true">▾</span>
+        </summary>
+        <div className="grid grid-cols-1 gap-3 border-t border-line p-3 sm:grid-cols-2">
+          <Field label="Available stock" hint="Leave blank for unlimited.">
+            <Input type="number" min="0" inputMode="numeric" value={f.quantity} onChange={e => set('quantity', e.target.value)} />
+          </Field>
+          <Field label="Daily limit per person" hint="Leave blank for no daily limit.">
+            <Input type="number" min="0" inputMode="numeric" value={f.daily_limit_per_user} onChange={e => set('daily_limit_per_user', e.target.value)} />
+          </Field>
+          <Field label="Image URL">
+            <Input type="url" placeholder="https://…" value={f.image_url} onChange={e => set('image_url', e.target.value)} />
+          </Field>
+          <Field label="Store or reference URL">
+            <Input type="url" placeholder="https://…" value={f.store_url} onChange={e => set('store_url', e.target.value)} />
+          </Field>
+          <Field label="Price estimate">
+            <Input placeholder="e.g. $15" value={f.price_estimate} onChange={e => set('price_estimate', e.target.value)} />
+          </Field>
+          <div className="flex flex-col justify-center gap-2 sm:pt-5">
+            <label className="flex min-h-10 items-center gap-2 text-sm text-ink">
+              <input type="checkbox" checked={f.allow_multiple_in_cart} onChange={e => set('allow_multiple_in_cart', e.target.checked)} /> Allow more than one per cart
+            </label>
+            <label className="flex min-h-10 items-center gap-2 text-sm text-ink">
+              <input type="checkbox" checked={f.disappear_when_empty} onChange={e => set('disappear_when_empty', e.target.checked)} /> Hide when stock reaches zero
+            </label>
+            <label className="flex min-h-10 items-center gap-2 text-sm text-ink">
+              <input type="checkbox" checked={f.is_active} onChange={e => set('is_active', e.target.checked)} /> Available in the shop
+            </label>
+          </div>
+        </div>
+      </details>
       <div className="mt-3 flex gap-2">
         <Button size="sm" type="submit" loading={saving} disabled={!f.name.trim()}>Save reward</Button>
         {onCancel && <Button size="sm" type="button" variant="ghost" onClick={onCancel}>Cancel</Button>}

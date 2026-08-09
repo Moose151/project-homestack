@@ -14,6 +14,7 @@ from apps.accounts.models import User
 from apps.atlas.models import Visibility as AtlasVisibility
 from apps.atlas.services import create_atlas_list, create_list_item, create_reminder
 from apps.people.services import create_person
+from apps.permissions.services import grant_user_permission
 from apps.scheduling.models import CalendarEvent
 
 
@@ -218,6 +219,21 @@ class HubWidgetConfigTests(TestCase):
         self.assertIn("atlas_todos", cfg)
         self.assertIn("household_enabled", cfg["atlas_todos"])
         self.assertIn("user_hidden", cfg["atlas_todos"])
+
+    def test_config_hides_widgets_for_node_user_cannot_open(self):
+        from apps.nodes.services import enable_node
+
+        enable_node(self.admin, "solace")
+        _login(self.client, "parentuser")
+        self.assertFalse(any(key.startswith("solace_") for key in self._config()))
+
+    def test_config_includes_widgets_after_explicit_node_access(self):
+        from apps.nodes.services import enable_node
+
+        enable_node(self.admin, "solace")
+        grant_user_permission(self.user, "solace.view")
+        _login(self.client, "parentuser")
+        self.assertTrue(any(key.startswith("solace_") for key in self._config()))
 
     def test_admin_can_configure_household_widget(self):
         _login(self.client, "admin")

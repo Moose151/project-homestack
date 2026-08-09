@@ -65,6 +65,14 @@ second launchpad; it should prioritise useful household widgets, summaries and n
 Shared page headings show one clear title and supporting sentence, and shared tabs use a compact
 section picker on phones and a segmented control where space allows.
 
+Dense management tables are desktop tools, not mobile layouts. Below the large desktop
+breakpoint, management records must become readable cards with the same information and actions;
+horizontal scrolling is reserved for genuinely tabular comparison, not routine editing. Forms
+ask for the common minimum first and place less-used scheduling, visibility or rule fields in a
+clearly labelled progressive section. The mobile shell already identifies the current
+destination, so a page may omit a second large title when doing so materially improves the
+first-screen workspace.
+
 ## 8. Kiosk UX
 
 States: ambient → avatar selection → PIN entry → personal dashboard → node kiosk view →
@@ -124,3 +132,25 @@ other dates are unaffected and must offer “restore repeating plan”.
 Before shipping a screen, confirm: does it feel like HomeStack? Is it touch-friendly? Usable
 on mobile? Safe on kiosk? Dark-mode supported? Are permissions reflected clearly (and is
 nothing sensitive leaking into a child/kiosk view)? Is it simple enough for its target users?
+
+### 12.1 Household account and navigation consistency
+
+- Navigation discovery is permission-aware as well as node-enable-aware. Do not show a
+  destination, quick action, search destination or contributed Hub widget that the current user
+  cannot open.
+- Apply the same rule within a destination: hide protected tabs, actions and cross-node links when
+  the current account cannot use the owning node, while keeping the backend permission check as
+  the authority. Do not lead a user into a predictable access-denied dead end.
+- A trusted adult partner normally uses the **manager** role. Sensitive Money access is a separate,
+  explicit account choice and must not require promoting that person to administrator.
+- The mobile shell already names the active destination. Page headers are normally desktop-only on
+  first-level screens; keep them on mobile only when they carry unique context or an action that is
+  not available elsewhere.
+- Management lists use readable cards below the desktop breakpoint when each row contains actions
+  and descriptive content. Retain a desktop table for efficient comparison; reserve horizontal
+  scrolling on phones for genuinely tabular reports.
+- Label form controls explicitly, surface failed actions beside the workflow, give touch actions
+  at least a 40–44px target and confirm removal when the effect is destructive or difficult to
+  reconstruct.
+- Use `docs/PARTNER_PILOT_READINESS.md` as the release gate for visible nodes and single-entry
+  cross-node workflows.

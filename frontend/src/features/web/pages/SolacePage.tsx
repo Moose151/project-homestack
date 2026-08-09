@@ -524,7 +524,7 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError }: {
           <p className="mt-2 text-xs text-muted">Showing {visibleBills.length} of {bills.length} bills.</p>
         </Card>
       )}
-      {bills.length === 0 ? <EmptyState icon="💸" title="No bills yet" hint="" /> : (
+      {bills.length === 0 ? <EmptyState icon="💸" title="No bills yet" hint="Add a recurring or one-off bill to start forecasting what the household needs to set aside." /> : (
         visibleBills.length === 0 ? <EmptyState icon="🔎" title="No bills match these filters" hint="Try another category or status." /> : <div className="grid gap-3 lg:grid-cols-2">
           {visibleBills.map(b => (
             <Card key={b.id} contentClassName="p-4">
@@ -735,7 +735,7 @@ function BucketsTab({ buckets, reload, onError }: {
       <CreatePanel label="Add bucket">
         {close => <BucketForm onCreated={() => { reload(); close() }} onError={onError} />}
       </CreatePanel>
-      {buckets.length === 0 ? <EmptyState icon="🪣" title="No buckets yet" hint="" /> : (
+      {buckets.length === 0 ? <EmptyState icon="🪣" title="No buckets yet" hint="Create buckets for the purposes you regularly divide household income between." /> : (
         <div className="grid gap-3 lg:grid-cols-3">
           {buckets.map(b => (
             <Card key={b.id} contentClassName="p-4">
@@ -1930,7 +1930,7 @@ export function SolacePage() {
   if (requiresPasswordUnlock && !unlocked) return <ReauthGate onUnlock={() => setUnlocked(true)} />
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5">
+    <div className="mx-auto flex max-w-7xl flex-col gap-5">
       <PageHeader title="Money" subtitle="Solace keeps bills, pay cycles, set-asides and planned purchases together." icon="💸" />
       {error && <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
       <div className="flex flex-col gap-2 sm:flex-row">

@@ -3,7 +3,11 @@ from django.test import TestCase
 from django.urls import reverse
 
 from apps.accounts.models import User
+from apps.audit.models import AuditLog
 from apps.people.models import Person
+from apps.permissions.models import UserPermission
+from apps.permissions.resolver import resolve_permission
+from apps.permissions.services import grant_user_permission
 
 
 def _make_user(username, role=User.Role.ADMIN, is_child=False):
@@ -95,6 +99,123 @@ class UserManagementCRUDTests(TestCase):
         target.refresh_from_db()
         self.assertEqual(target.role, "manager")
         self.assertTrue(target.check_pin("9999"))
+
+    def test_create_manager_with_money_access_grants_solace_without_admin_role(self):
+        resp = self.client.post(
+            self.url,
+            {
+                "username": "partner",
+                "display_name": "Partner",
+                "role": "manager",
+                "pin": "4321",
+                "password": "partner-password!",
+                "solace_access": True,
+                "create_person": True,
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertTrue(resp.json()["solace_access"])
+        partner = User.objects.get(username="partner")
+        self.assertEqual(partner.role, User.Role.MANAGER)
+        for action in ("view", "create", "edit", "delete"):
+            self.assertTrue(resolve_permission(partner, action, "solace"))
+        self.assertTrue(
+            AuditLog.objects.filter(
+                action="user_money_access_updated",
+                target_record_type="User",
+                target_record_id=partner.id,
+            ).exists()
+        )
+
+    def test_money_access_can_be_removed_and_reverts_to_role_default(self):
+        target = _make_user("partner", role=User.Role.MANAGER)
+        url = reverse("user-detail", args=[target.id])
+        grant = self.client.patch(url, {"solace_access": True}, content_type="application/json")
+        self.assertEqual(grant.status_code, 200)
+        self.assertTrue(grant.json()["solace_access"])
+        self.assertEqual(
+            UserPermission.objects.filter(user=target, permission__scope="solace", is_granted=True).count(),
+            4,
+        )
+
+        clear = self.client.patch(url, {"solace_access": False}, content_type="application/json")
+        self.assertEqual(clear.status_code, 200)
+        self.assertFalse(clear.json()["solace_access"])
+        self.assertFalse(UserPermission.objects.filter(user=target, permission__scope="solace").exists())
+        self.assertFalse(resolve_permission(target, "view", "solace"))
+
+    def test_child_account_cannot_receive_money_access(self):
+        resp = self.client.post(
+            self.url,
+            {
+                "username": "child-money",
+                "display_name": "Child",
+                "role": "user",
+                "is_child_account": True,
+                "pin": "4321",
+                "solace_access": True,
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(User.all_objects.filter(username="child-money").exists())
+
+    def test_child_account_cannot_be_created_with_adult_role(self):
+        resp = self.client.post(
+            self.url,
+            {
+                "username": "child-admin",
+                "display_name": "Child",
+                "role": "admin",
+                "is_child_account": True,
+                "pin": "4321",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(User.all_objects.filter(username="child-admin").exists())
+
+    def test_existing_child_cannot_be_promoted_to_adult_role(self):
+        child = _make_user("child-role", role=User.Role.USER, is_child=True)
+        resp = self.client.patch(
+            reverse("user-detail", args=[child.id]),
+            {"role": "manager"},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        child.refresh_from_db()
+        self.assertEqual(child.role, User.Role.USER)
+
+    def test_converting_adult_to_child_clears_existing_money_access(self):
+        target = _make_user("adult-to-child", role=User.Role.MANAGER)
+        for action in ("view", "create", "edit", "delete"):
+            grant_user_permission(target, f"solace.{action}")
+        resp = self.client.patch(
+            reverse("user-detail", args=[target.id]),
+            {"role": "user", "is_child_account": True},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        target.refresh_from_db()
+        self.assertTrue(target.is_child_account)
+        self.assertFalse(resolve_permission(target, "view", "solace"))
+        self.assertFalse(UserPermission.objects.filter(user=target, permission__scope="solace").exists())
+
+    def test_manager_needs_password_before_money_access(self):
+        resp = self.client.post(
+            self.url,
+            {
+                "username": "no-password-partner",
+                "display_name": "Partner",
+                "role": "manager",
+                "pin": "4321",
+                "solace_access": True,
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(User.all_objects.filter(username="no-password-partner").exists())
 
     def test_reset_own_password_preserves_session_and_allows_reauth(self):
         resp = self.client.patch(

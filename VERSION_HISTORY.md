@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.20.3**
+> **Current version: 0.21.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -9,7 +9,65 @@
 
 ---
 
+## 0.21 — Controlled partner household pilot
+
+### 0.21.0 — 2026-08-09
+- **Partner access without over-privileging** — the account flow now recommends Household manager
+  for a trusted adult, explains each role, labels PIN/password fields and can link one existing
+  Person. Money/home-finance access is an explicit per-user choice rather than requiring the
+  partner to become an administrator; it requires an adult password, is forbidden for child
+  accounts and records an immutable audit event. Child logins are constrained to the Household
+  member role so adult read access cannot be assigned accidentally.
+- **Every visible destination is usable** — the node catalogue now reports whether the current
+  account can view each node. Navigation, routes, global discovery and Hub contributions require
+  both household enablement and user access, so a manager without Money permission no longer sees
+  a finance destination or finance widgets that end in a denial.
+- **One mobile hierarchy across nodes** — the shared page header avoids repeating the shell's
+  destination name on first-level phone screens while retaining unique contextual headers and
+  actions. Books uses shared search, tabs and labelled forms, reports failed actions clearly,
+  confirms destructive removals and provides full-size touch controls; blank finance empty-state
+  guidance was corrected; Lists/Tasks refinements from v0.20.4 are included.
+- **Reward and allowance management are phone-native** — managers use information-complete cards
+  for reward requests and weekly allowances below the desktop breakpoint, with large actions and
+  progressively disclosed reward rules. Efficient comparison tables remain on larger screens.
+- **Daily supporting workflows no longer fail silently** — Goals, Wishlist and Routines show API
+  failures, label creation fields and use touch-sized destructive/approval controls. Pets adds
+  labelled create/edit flows plus update/delete controls for treatments and appointments, while
+  Household guide applies the same labelled, touch-friendly pattern to pages and categories.
+- **Cross-node permissions continue inside a destination** — a manager without Money access no
+  longer sees Homestead's Costs & cover section, Track cost action or links into protected Solace
+  records. Existing backend permission, password re-authentication and audit gates remain the
+  authority; the UI now presents the same boundary without dead ends.
+- **An honest pilot gate** — `docs/PARTNER_PILOT_READINESS.md` defines account setup, acceptance
+  criteria, implemented-node core workflows, single-entry ownership and the real-device checks
+  still required before calling the household rollout accepted.
+- No database migration required; the Money grant uses the existing per-user permission model.
+- Validation: **636 backend tests**, frontend TypeScript check and production build clean; no
+  migration drift.
+
+---
+
 ## 0.20 — Forecastable rotating Calendar schedules
+
+### 0.20.4 — 2026-08-09
+- **Task management designed for phones** — managers now see readable task cards below the large
+  breakpoint instead of a 780px table squeezed into horizontal scrolling. Each card keeps owner,
+  category, points, status, recurrence and description legible, with large approval controls and
+  progressive secondary management actions. Desktop retains the efficient full table.
+- **A real responsive task editor** — mobile editing now happens inline in a labelled card form.
+  Creating a task asks only for its name, points and eligible person first; schedule, category,
+  completion rules and hot-task options remain available in a clearly named advanced section.
+- **Lists use their narrow width better** — item titles may wrap, assignment and due information
+  sit together beneath the title, and delete remains a distinct touch target rather than forcing
+  every piece of metadata onto one line.
+- **Less first-screen clutter** — Lists quick capture is one clear launcher on phones and expands
+  only when needed. Lists and Tasks rely on the shell's existing mobile destination heading rather
+  than repeating a second large page title, and Tasks now uses the shared searchable field.
+- **A calmer rewards overview** — the three summary metrics use a compact two-column phone layout
+  while keeping the approvals total prominent.
+- No database migration required.
+- Validation: frontend TypeScript check and production build clean; backend unchanged from the
+  **624-test** v0.20.0 baseline.
 
 ### 0.20.3 — 2026-08-09
 - **A true app-style phone Month view** — the complete six-week month grid is now the primary

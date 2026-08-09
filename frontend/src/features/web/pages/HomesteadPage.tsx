@@ -17,6 +17,7 @@ import { Modal } from '../../../components/Modal'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
 import { useAuth } from '../../auth/AuthContext'
+import { useStacks } from '../../stacks/StacksContext'
 import { useUrlAction, useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
@@ -142,7 +143,11 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function OverviewTab({ onError, onGoTab }: { onError: (m: string) => void; onGoTab: (t: Tab) => void }) {
+function OverviewTab({ onError, onGoTab, canUseMoney }: {
+  onError: (m: string) => void
+  onGoTab: (t: Tab) => void
+  canUseMoney: boolean
+}) {
   const [property, setProperty] = useState<Property | null>(null)
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
@@ -230,9 +235,13 @@ function OverviewTab({ onError, onGoTab }: { onError: (m: string) => void; onGoT
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="font-semibold text-ink">Costs &amp; cover</p>
-            <p className="text-sm text-muted">Insurance, rates and utilities are protected and synced into Solace.</p>
+            <p className="text-sm text-muted">
+              {canUseMoney
+                ? 'Insurance, rates and utilities are protected and synced into Solace.'
+                : 'Home finance access is not enabled for this account.'}
+            </p>
           </div>
-          <Button variant="secondary" size="sm" onClick={() => onGoTab('finances')}>Open finances</Button>
+          {canUseMoney && <Button variant="secondary" size="sm" onClick={() => onGoTab('finances')}>Open finances</Button>}
         </div>
       </Card>
     </div>
@@ -366,8 +375,11 @@ function RoomsTab({ onError, canEdit }: { onError: (m: string) => void; canEdit:
 // Maintenance tab
 // ---------------------------------------------------------------------------
 
-function MaintenanceTab({ people, defaultAssignee, onError }: {
-  people: Person[]; defaultAssignee: number | null; onError: (m: string) => void
+function MaintenanceTab({ people, defaultAssignee, onError, canUseMoney }: {
+  people: Person[]
+  defaultAssignee: number | null
+  onError: (m: string) => void
+  canUseMoney: boolean
 }) {
   const [tasks, setTasks] = useState<MaintenanceTask[]>([])
   const [appliances, setAppliances] = useState<Appliance[]>([])
@@ -532,7 +544,7 @@ function MaintenanceTab({ people, defaultAssignee, onError }: {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium text-ink">{t.title}</span>
                     <Badge>{cap(t.category)}</Badge>
-                    {t.solace_bill_ref && (
+                    {t.solace_bill_ref && canUseMoney && (
                       <Link to={`/solace?tab=bills&q=${encodeURIComponent(t.title)}`} aria-label={`Open ${t.title} in Solace`}>
                         <Badge tone="success">Cost tracked in Solace →</Badge>
                       </Link>
@@ -549,7 +561,7 @@ function MaintenanceTab({ people, defaultAssignee, onError }: {
                 </div>
                 <div className="flex w-full flex-wrap items-center justify-end gap-1 sm:w-auto">
                   {t.next_due_at && <Button size="sm" variant="secondary" onClick={() => complete(t)} className="mr-auto sm:mr-1">Done</Button>}
-                  {!t.solace_bill_ref && <Button size="sm" variant="ghost" onClick={() => startCost(t)}>Track cost</Button>}
+                  {!t.solace_bill_ref && canUseMoney && <Button size="sm" variant="ghost" onClick={() => startCost(t)}>Track cost</Button>}
                   <div className="flex items-center gap-1 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                     <button onClick={() => startEdit(t)} className="min-h-10 rounded-lg px-3 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
                     <button onClick={() => remove(t)} className="grid h-10 w-10 place-items-center rounded-lg text-muted hover:bg-danger-soft hover:text-danger" aria-label="Delete">✕</button>
@@ -1394,6 +1406,7 @@ const TAB_KEYS: Tab[] = ['overview', 'rooms', 'maintenance', 'appliances', 'impr
 
 export function HomesteadPage() {
   const { user } = useAuth()
+  const { enabledKeys, loading: stacksLoading } = useStacks()
   const [tab, setTab] = useUrlTab<Tab>('overview', TAB_KEYS)
   const [people, setPeople] = useState<Person[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -1412,6 +1425,11 @@ export function HomesteadPage() {
   }, [query])
 
   const defaultAssignee = personIdForUser(people, user?.id)
+  const canUseMoney = enabledKeys.has('solace')
+
+  useEffect(() => {
+    if (!stacksLoading && tab === 'finances' && !canUseMoney) setTab('overview')
+  }, [canUseMoney, setTab, stacksLoading, tab])
 
   return (
     <div className="flex flex-col gap-5">
@@ -1443,7 +1461,7 @@ export function HomesteadPage() {
               { key: 'appliances', label: 'appliances' },
               { key: 'improvements', label: 'improvements' },
               { key: 'contacts', label: 'contacts' },
-              { key: 'finances', label: 'costs & cover' },
+              ...(canUseMoney ? [{ key: 'finances' as const, label: 'costs & cover' }] : []),
             ]}
             active={tab}
             onChange={setTab}
@@ -1451,13 +1469,13 @@ export function HomesteadPage() {
             mobileSelectLabel="Homestead section"
           />
 
-          {tab === 'overview' && <OverviewTab onError={setError} onGoTab={setTab} />}
+          {tab === 'overview' && <OverviewTab onError={setError} onGoTab={setTab} canUseMoney={canUseMoney} />}
           {tab === 'rooms' && <RoomsTab onError={setError} canEdit={Boolean(user && user.role !== 'guest' && !user.is_child_account)} />}
-          {tab === 'maintenance' && <MaintenanceTab people={people} defaultAssignee={defaultAssignee} onError={setError} />}
+          {tab === 'maintenance' && <MaintenanceTab people={people} defaultAssignee={defaultAssignee} onError={setError} canUseMoney={canUseMoney} />}
           {tab === 'appliances' && <AppliancesTab onError={setError} />}
           {tab === 'improvements' && <ImprovementsTab people={people} defaultAssignee={defaultAssignee} onError={setError} />}
           {tab === 'contacts' && <ContactsTab onError={setError} />}
-          {tab === 'finances' && <FinanceTab onError={setError} />}
+          {tab === 'finances' && canUseMoney && <FinanceTab onError={setError} />}
         </>
       )}
     </div>

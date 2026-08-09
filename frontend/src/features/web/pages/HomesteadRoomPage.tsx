@@ -204,6 +204,7 @@ export function HomesteadRoomPage() {
         title={data.room.name}
         icon={data.room.icon || (data.room.area_type === 'outdoor' ? '🌿' : '🚪')}
         subtitle={data.room.description || `${cap(data.room.area_type)} room plan`}
+        mobile="show"
       />
 
       {error && <div className="rounded-xl bg-danger-soft px-4 py-2.5 text-sm text-danger">{error}</div>}

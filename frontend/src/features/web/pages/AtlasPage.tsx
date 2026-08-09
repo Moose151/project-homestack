@@ -82,38 +82,42 @@ function ItemRow({
   }
 
   return (
-    <li className="flex items-center gap-2 group">
+    <li className="group flex items-start gap-1">
       {/* Whole checkbox+title is one tap target (comfortable on mobile). */}
       <button
         onClick={toggle}
         disabled={busy}
-        className="flex flex-1 min-w-0 items-center gap-3 py-2.5 min-h-[44px] text-left disabled:opacity-60"
+        className="flex min-h-[52px] min-w-0 flex-1 items-start gap-3 py-2.5 text-left disabled:opacity-60"
         aria-label={item.is_complete ? 'Mark not done' : 'Mark done'}
       >
         <span
-          className={`w-6 h-6 rounded-full border-2 grid place-items-center flex-shrink-0 transition-all ${
+          className={`mt-0.5 grid h-6 w-6 flex-shrink-0 place-items-center rounded-full border-2 transition-all ${
             item.is_complete ? 'bg-success border-success text-white' : 'border-line-strong group-hover:border-success'
           }`}
         >
           {item.is_complete && <span className="text-xs">✓</span>}
         </span>
-        <span className={`flex-1 min-w-0 truncate text-sm ${item.is_complete ? 'line-through text-muted' : 'text-ink'}`}>
-          {item.quantity && <span className="text-muted-strong font-medium mr-1.5">{item.quantity}×</span>}
-          {item.title}
+        <span className="min-w-0 flex-1">
+          <span className={`block break-words text-sm leading-5 ${item.is_complete ? 'line-through text-muted' : 'text-ink'}`}>
+            {item.quantity && <span className="mr-1.5 font-medium text-muted-strong">{item.quantity}×</span>}
+            {item.title}
+          </span>
+          {!item.is_complete && (assignee || due) && (
+            <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
+              {assignee && (
+                <span className="flex min-w-0 items-center gap-1">
+                  <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: assignee.colour || 'var(--hs-muted)' }} />
+                  <span className="truncate">{assignee.preferred_name || assignee.display_name}</span>
+                </span>
+              )}
+              {due && <span className={`rounded-full px-1.5 py-0.5 font-semibold ${due.tone}`}>{due.text}</span>}
+            </span>
+          )}
         </span>
       </button>
-      {assignee && !item.is_complete && (
-        <span className="flex items-center gap-1 text-xs text-muted-strong flex-shrink-0" title={`Assigned to ${assignee.display_name}`}>
-          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: assignee.colour || 'var(--hs-muted)' }} />
-          <span className="hidden sm:inline">{assignee.preferred_name || assignee.display_name}</span>
-        </span>
-      )}
-      {due && !item.is_complete && (
-        <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${due.tone}`}>{due.text}</span>
-      )}
       <button
         onClick={() => onDelete(item)}
-        className="sm:opacity-0 sm:group-hover:opacity-100 text-muted hover:text-danger transition-all text-lg leading-none"
+        className="grid h-11 w-9 flex-shrink-0 place-items-center rounded-xl text-lg leading-none text-muted transition-all hover:bg-danger-soft hover:text-danger sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
         aria-label="Delete"
       >
         ×
@@ -338,7 +342,7 @@ function NoteCard({ note, onSaved, onDeleted, onError }: {
           </div>
           {note.body && <p className="mt-1 whitespace-pre-wrap text-sm text-muted-strong">{note.body}</p>}
         </div>
-        <div className="flex flex-shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="flex flex-shrink-0 items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
           <button onClick={() => setEditing(true)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
           <button onClick={remove} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger" aria-label="Delete">Delete</button>
         </div>
@@ -397,7 +401,7 @@ function NotesTab({ onError }: { onError: (m: string) => void }) {
       )}
 
       {notes.length === 0 ? (
-        <EmptyState icon="📝" title="No notes yet" hint="Jot down anything you want to remember — recipes, ideas, passwords hints." />
+        <EmptyState icon="📝" title="No notes yet" hint="Jot down anything you want to remember — recipes, ideas or household information." />
       ) : (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {notes.map(n => (
@@ -534,6 +538,7 @@ function CaptureBar({ lists, onCapture }: {
   const [text, setText] = useState('')
   const [listId, setListId] = useState<number | null>(lists[0]?.id ?? null)
   const [busy, setBusy] = useState(false)
+  const [open, setOpen] = useState(false)
 
   // Keep a valid target list selected as lists load / change.
   useEffect(() => {
@@ -564,14 +569,24 @@ function CaptureBar({ lists, onCapture }: {
   )
 
   return (
-    <Card>
-      <form onSubmit={submit} className="flex flex-col gap-2">
+    <Card contentClassName="p-2.5 sm:p-4 sm:pt-3">
+      {!open && (
+        <button type="button" onClick={() => setOpen(true)} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-2 text-left text-sm font-semibold text-muted-strong sm:hidden">
+          <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary-soft text-primary">＋</span>
+          Quickly capture a to-do, note or reminder
+        </button>
+      )}
+      <form onSubmit={submit} className={`${open ? 'flex' : 'hidden'} flex-col gap-2 sm:flex`}>
+        <div className="flex items-center justify-between sm:hidden">
+          <span className="text-xs font-bold uppercase tracking-wide text-muted">Quick capture</span>
+          <button type="button" onClick={() => setOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl text-muted" aria-label="Close quick capture">✕</button>
+        </div>
         <div className="flex items-center gap-2">
           <span className="pl-1 text-muted-strong" aria-hidden>✎</span>
           <input
             value={text}
             onChange={e => setText(e.target.value)}
-            placeholder="Capture a quick to-do, note or reminder…"
+            placeholder="What do you need to remember?"
             className="min-h-[40px] flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted"
           />
           <Button type="submit" size="sm" loading={busy} disabled={!canSubmit}>Add</Button>
@@ -745,8 +760,10 @@ export function AtlasPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader title="Lists & notes" icon="🗒" subtitle="Atlas keeps household lists, checklists, notes and reminders together." />
+    <div className="flex flex-col gap-4 sm:gap-5">
+      <div className="hidden sm:block">
+        <PageHeader title="Lists & notes" icon="🗒" subtitle="Atlas keeps household lists, checklists, notes and reminders together." />
+      </div>
 
       <CaptureBar lists={lists} onCapture={capture} />
 

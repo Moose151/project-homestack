@@ -6,8 +6,9 @@ import type {
 } from '../../../api/types'
 import { Button } from '../../../components/Button'
 import { Card } from '../../../components/Card'
-import { fieldClass, Input } from '../../../components/Field'
+import { Field, fieldClass, SearchField } from '../../../components/Field'
 import { PageHeader } from '../../../components/PageHeader'
+import { Tabs } from '../../../components/Tabs'
 import { useUrlAction, useUrlQueryState } from '../../../hooks/useUrlTab'
 
 type Surface = 'personal' | 'club'
@@ -62,6 +63,7 @@ function RatingEditor({ bookId, rating, notes, onSaved }: {
   const [text, setText] = useState(notes || '')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     setValue(rating ?? '')
@@ -69,7 +71,7 @@ function RatingEditor({ bookId, rating, notes, onSaved }: {
   }, [rating, notes])
 
   const save = async () => {
-    setBusy(true)
+    setBusy(true); setError(null)
     try {
       await api.upsertBookRating({
         book_id: bookId,
@@ -78,6 +80,8 @@ function RatingEditor({ bookId, rating, notes, onSaved }: {
       })
       setOpen(false)
       onSaved()
+    } catch (e) {
+      setError(errMsg(e))
     } finally {
       setBusy(false)
     }
@@ -90,23 +94,27 @@ function RatingEditor({ bookId, rating, notes, onSaved }: {
       </button>
       {open && (
         <div className="grid gap-2 bg-sunken rounded-xl p-2">
-          <div className="flex gap-2">
+          {error && <p className="text-xs text-danger">{error}</p>}
+          <Field label="Rating out of 10">
             <input
               type="number"
               min={0}
               max={10}
-              className={`${inputCls} max-w-[6rem]`}
+              inputMode="numeric"
+              className={`${inputCls} max-w-[8rem]`}
               value={value}
               onChange={e => setValue(e.target.value === '' ? '' : Number(e.target.value))}
             />
-            <Button type="button" size="sm" loading={busy} onClick={save}>Save</Button>
-          </div>
-          <textarea
-            className={`${inputCls} min-h-[72px] resize-none`}
-            placeholder="Notes"
-            value={text}
-            onChange={e => setText(e.target.value)}
-          />
+          </Field>
+          <Field label="Your notes">
+            <textarea
+              className={`${inputCls} min-h-[72px] resize-none`}
+              placeholder="What did you think?"
+              value={text}
+              onChange={e => setText(e.target.value)}
+            />
+          </Field>
+          <Button type="button" size="sm" loading={busy} onClick={save} className="justify-self-start">Save rating</Button>
         </div>
       )}
     </div>
@@ -125,6 +133,7 @@ function EditBookPanel({ book, onCancel, onSaved }: {
   const [isbn, setIsbn] = useState(book.isbn)
   const [description, setDescription] = useState(book.description)
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     setTitle(book.title)
@@ -138,7 +147,7 @@ function EditBookPanel({ book, onCancel, onSaved }: {
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
-    setBusy(true)
+    setBusy(true); setError(null)
     try {
       await api.updateBook(book.id, {
         title: title.trim(),
@@ -150,6 +159,8 @@ function EditBookPanel({ book, onCancel, onSaved }: {
       })
       await onSaved()
       onCancel()
+    } catch (e2) {
+      setError(errMsg(e2))
     } finally {
       setBusy(false)
     }
@@ -157,19 +168,15 @@ function EditBookPanel({ book, onCancel, onSaved }: {
 
   return (
     <form onSubmit={submit} className="space-y-2 rounded-xl bg-sunken p-2">
+      {error && <p className="text-xs text-danger">{error}</p>}
       <div className="grid sm:grid-cols-2 gap-2">
-        <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" />
-        <input className={inputCls} value={author} onChange={e => setAuthor(e.target.value)} placeholder="Author" />
-        <input className={inputCls} type="number" min={1} value={pages} onChange={e => setPages(e.target.value)} placeholder="Pages" />
-        <input className={inputCls} value={genre} onChange={e => setGenre(e.target.value)} placeholder="Genre" />
+        <Field label="Title"><input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} /></Field>
+        <Field label="Author"><input className={inputCls} value={author} onChange={e => setAuthor(e.target.value)} /></Field>
+        <Field label="Pages"><input className={inputCls} type="number" min={1} inputMode="numeric" value={pages} onChange={e => setPages(e.target.value)} /></Field>
+        <Field label="Genre"><input className={inputCls} value={genre} onChange={e => setGenre(e.target.value)} /></Field>
       </div>
-      <input className={inputCls} value={isbn} onChange={e => setIsbn(e.target.value)} placeholder="ISBN" />
-      <textarea
-        className={`${inputCls} min-h-[72px] resize-none`}
-        value={description}
-        onChange={e => setDescription(e.target.value)}
-        placeholder="Description"
-      />
+      <Field label="ISBN"><input className={inputCls} value={isbn} onChange={e => setIsbn(e.target.value)} /></Field>
+      <Field label="Description"><textarea className={`${inputCls} min-h-[72px] resize-none`} value={description} onChange={e => setDescription(e.target.value)} /></Field>
       <div className="flex flex-wrap gap-2 justify-end">
         <Button type="button" size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
         <Button type="submit" size="sm" loading={busy} disabled={!title.trim()}>Save book</Button>
@@ -195,6 +202,7 @@ function AddBookPanel({ mode, clubs, selectedClub, defaultStatus, onClose, onAdd
   const [busy, setBusy] = useState(false)
   const [matches, setMatches] = useState<Book[]>([])
   const [picked, setPicked] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => setStatus(defaultStatus), [defaultStatus])
   useEffect(() => setClubId(selectedClub?.id || clubs[0]?.id || ''), [selectedClub?.id, clubs.length])
@@ -215,7 +223,7 @@ function AddBookPanel({ mode, clubs, selectedClub, defaultStatus, onClose, onAdd
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
-    setBusy(true)
+    setBusy(true); setError(null)
     try {
       const book = {
         title: title.trim(),
@@ -237,19 +245,22 @@ function AddBookPanel({ mode, clubs, selectedClub, defaultStatus, onClose, onAdd
       setMatches([])
       await onAdded()
       onClose()
+    } catch (e2) {
+      setError(errMsg(e2))
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <Card>
+    <Card title={mode === 'club' ? 'Add a book to this club' : 'Add a book to your shelves'}>
       <form onSubmit={submit} className="space-y-3">
+        {error && <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
         <div className="grid md:grid-cols-[1.3fr_1fr_7rem_1fr] gap-2">
-          <input className={inputCls} value={title} onChange={e => { setTitle(e.target.value); setPicked(false) }} placeholder="Title" />
-          <input className={inputCls} value={author} onChange={e => setAuthor(e.target.value)} placeholder="Author" />
-          <input className={inputCls} type="number" min={1} value={pages} onChange={e => setPages(e.target.value)} placeholder="Pages" />
-          <input className={inputCls} value={genre} onChange={e => setGenre(e.target.value)} placeholder="Genre" />
+          <Field label="Title"><input autoFocus className={inputCls} value={title} onChange={e => { setTitle(e.target.value); setPicked(false) }} placeholder="Start typing to find an existing book" /></Field>
+          <Field label="Author"><input className={inputCls} value={author} onChange={e => setAuthor(e.target.value)} /></Field>
+          <Field label="Pages"><input className={inputCls} type="number" min={1} inputMode="numeric" value={pages} onChange={e => setPages(e.target.value)} /></Field>
+          <Field label="Genre"><input className={inputCls} value={genre} onChange={e => setGenre(e.target.value)} /></Field>
         </div>
         {matches.length > 0 && (
           <div className="rounded-xl border border-line bg-surface p-2 text-sm">
@@ -264,16 +275,20 @@ function AddBookPanel({ mode, clubs, selectedClub, defaultStatus, onClose, onAdd
           </div>
         )}
         <div className="grid md:grid-cols-[1fr_1fr_auto_auto] gap-2 items-center">
-          <select className={selectCls} value={status} onChange={e => setStatus(e.target.value as BookShelfStatus)}>
-            {statuses.map(s => <option key={s} value={s}>{shelfLabels[s]}</option>)}
-          </select>
-          {mode === 'club' && (
-            <select className={selectCls} value={clubId} onChange={e => setClubId(Number(e.target.value))}>
-              {clubs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          <Field label="Shelf">
+            <select className={selectCls} value={status} onChange={e => setStatus(e.target.value as BookShelfStatus)}>
+              {statuses.map(s => <option key={s} value={s}>{shelfLabels[s]}</option>)}
             </select>
+          </Field>
+          {mode === 'club' && (
+            <Field label="Book club">
+              <select className={selectCls} value={clubId} onChange={e => setClubId(Number(e.target.value))}>
+                {clubs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </Field>
           )}
-          <Button type="submit" loading={busy} disabled={!title.trim() || (mode === 'club' && !clubId)}>Add book</Button>
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" className="md:self-end" loading={busy} disabled={!title.trim() || (mode === 'club' && !clubId)}>Add book</Button>
+          <Button type="button" className="md:self-end" variant="ghost" onClick={onClose}>Cancel</Button>
         </div>
       </form>
     </Card>
@@ -298,18 +313,18 @@ function PersonalBookCard({ entry, clubs, onRefresh, onMove, onDelete, onAddToCl
       <div className="flex items-start gap-2">
         <BookLine title={entry.book.title} author={entry.book.author} genre={entry.book.genre} pages={entry.book.pages} />
         <div className="ml-auto flex items-center gap-1">
-          <button type="button" onClick={() => setEditing(v => !v)} className="text-xs font-semibold text-muted hover:text-primary" title="Edit book">Edit</button>
-          <button type="button" onClick={onDelete} className="text-muted hover:text-danger text-xl leading-none" title="Remove">×</button>
+          <button type="button" onClick={() => setEditing(v => !v)} className="min-h-10 px-2 text-xs font-semibold text-muted hover:text-primary" aria-label={`Edit ${entry.book.title}`}>Edit</button>
+          <button type="button" onClick={onDelete} className="grid min-h-10 min-w-10 place-items-center text-xl leading-none text-muted hover:text-danger" aria-label={`Remove ${entry.book.title}`}>×</button>
         </div>
       </div>
       {editing && <EditBookPanel book={entry.book} onCancel={() => setEditing(false)} onSaved={onRefresh} />}
       <div className="space-y-2">
-        <select className={selectCls} value={entry.status} onChange={e => onMove(e.target.value as BookShelfStatus)}>
+        <select aria-label={`Shelf for ${entry.book.title}`} className={selectCls} value={entry.status} onChange={e => onMove(e.target.value as BookShelfStatus)}>
           {statuses.map(s => <option key={s} value={s}>{shelfLabels[s]}</option>)}
         </select>
         {entry.status === 'backlog' && clubs.length > 0 && (
           <div className="flex gap-2">
-            <select className={selectCls} value={clubId} onChange={e => setClubId(Number(e.target.value))}>
+            <select aria-label={`Book club for ${entry.book.title}`} className={selectCls} value={clubId} onChange={e => setClubId(Number(e.target.value))}>
               {clubs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <Button type="button" size="sm" variant="secondary" className="flex-shrink-0 whitespace-nowrap" disabled={!clubId} onClick={() => onAddToClub(Number(clubId))}>
@@ -338,13 +353,13 @@ function ClubBookCard({ entry, club, onRefresh, onMove, onDelete, onQueue }: {
       <div className="flex items-start gap-2">
         <BookLine title={entry.book.title} author={entry.book.author} genre={entry.book.genre} pages={entry.book.pages} />
         <div className="ml-auto flex items-center gap-1">
-          <button type="button" onClick={() => setEditing(v => !v)} className="text-xs font-semibold text-muted hover:text-primary" title="Edit book">Edit</button>
-          <button type="button" onClick={onDelete} className="text-muted hover:text-danger text-xl leading-none" title="Remove">×</button>
+          <button type="button" onClick={() => setEditing(v => !v)} className="min-h-10 px-2 text-xs font-semibold text-muted hover:text-primary" aria-label={`Edit ${entry.book.title}`}>Edit</button>
+          <button type="button" onClick={onDelete} className="grid min-h-10 min-w-10 place-items-center text-xl leading-none text-muted hover:text-danger" aria-label={`Remove ${entry.book.title}`}>×</button>
         </div>
       </div>
       {editing && <EditBookPanel book={entry.book} onCancel={() => setEditing(false)} onSaved={onRefresh} />}
       <div className="flex items-center gap-2">
-        <select className={selectCls} value={entry.status} onChange={e => onMove(e.target.value as BookShelfStatus)}>
+        <select aria-label={`Club shelf for ${entry.book.title}`} className={selectCls} value={entry.status} onChange={e => onMove(e.target.value as BookShelfStatus)}>
           {statuses.map(s => <option key={s} value={s}>{shelfLabels[s]}</option>)}
         </select>
         {entry.status === 'backlog' && (
@@ -377,6 +392,8 @@ function ClubSettings({ club, users, onChanged }: {
   const [name, setName] = useState(club.name)
   const [colour, setColour] = useState(club.colour)
   const [memberId, setMemberId] = useState<number | ''>('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     setName(club.name)
@@ -386,34 +403,62 @@ function ClubSettings({ club, users, onChanged }: {
   const memberIds = new Set(club.memberships.map(m => m.user_id))
   const availableUsers = users.filter(u => !memberIds.has(u.id))
 
+  const act = async (work: () => Promise<void>) => {
+    setBusy(true)
+    setError(null)
+    try {
+      await work()
+    } catch (e) {
+      setError(errMsg(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-3 rounded-xl bg-sunken p-3">
-      <div className="grid md:grid-cols-[1fr_3.5rem_auto] gap-2">
-        <input className={inputCls} value={name} onChange={e => setName(e.target.value)} />
-        <input type="color" value={colour} onChange={e => setColour(e.target.value)} className="w-full h-11 rounded-xl border border-line p-1 bg-surface" />
-        <Button type="button" variant="secondary" onClick={async () => { await api.updateBookClub(club.id, { name, colour }); await onChanged() }}>
+      {error && <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+      <div className="grid sm:grid-cols-[minmax(0,1fr)_5rem_auto] gap-2 items-end">
+        <Field label="Club name">
+          <input className={inputCls} value={name} onChange={e => setName(e.target.value)} />
+        </Field>
+        <Field label="Colour">
+          <input type="color" value={colour} onChange={e => setColour(e.target.value)} className="w-full h-11 rounded-xl border border-line p-1 bg-surface" />
+        </Field>
+        <Button type="button" variant="secondary" loading={busy} disabled={!name.trim()} onClick={() => act(async () => { await api.updateBookClub(club.id, { name: name.trim(), colour }); await onChanged() })}>
           Save club
         </Button>
       </div>
       <div className="flex flex-wrap gap-2 items-center">
         {club.memberships.map(m => (
-          <span key={m.id} className="inline-flex items-center gap-1.5 rounded-full bg-surface px-2.5 py-1 text-xs text-muted-strong">
+          <span key={m.id} className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-surface pl-3 pr-1 text-xs text-muted-strong">
             <span className="w-2 h-2 rounded-full" style={{ background: m.user_colour }} />
             {m.user_name}
-            <button type="button" onClick={async () => { await api.removeBookClubMember(club.id, m.id); await onChanged() }} className="text-muted hover:text-danger">×</button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                if (!confirm(`Remove ${m.user_name} from ${club.name}?`)) return
+                void act(async () => { await api.removeBookClubMember(club.id, m.id); await onChanged() })
+              }}
+              className="grid min-h-10 min-w-10 place-items-center text-lg text-muted hover:text-danger disabled:opacity-40"
+              aria-label={`Remove ${m.user_name} from ${club.name}`}
+            >
+              ×
+            </button>
           </span>
         ))}
         {availableUsers.length > 0 && (
           <>
-            <select className="rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink" value={memberId} onChange={e => setMemberId(Number(e.target.value))}>
+            <select aria-label="Person to add" className="min-h-11 rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink" value={memberId} onChange={e => setMemberId(Number(e.target.value))}>
               <option value="">Add member</option>
               {availableUsers.map(u => <option key={u.id} value={u.id}>{u.display_name}</option>)}
             </select>
-            <Button type="button" size="sm" variant="secondary" disabled={!memberId} onClick={async () => {
+            <Button type="button" size="sm" variant="secondary" loading={busy} disabled={!memberId} onClick={() => act(async () => {
               await api.addBookClubMember(club.id, Number(memberId))
               setMemberId('')
               await onChanged()
-            }}>
+            })}>
               Add
             </Button>
           </>
@@ -487,6 +532,15 @@ export function BooksPage() {
     await loadClub()
   }
 
+  const act = async (work: () => Promise<void>) => {
+    setError(null)
+    try {
+      await work()
+    } catch (e) {
+      setError(errMsg(e))
+    }
+  }
+
   useEffect(() => { loadCore() }, [showClubItems])
   useEffect(() => { loadClub(selectedClub?.id) }, [selectedClub?.id])
 
@@ -522,17 +576,23 @@ export function BooksPage() {
         title="Books"
         icon="📚"
         subtitle="Personal shelves and shared book clubs."
+        mobile="show"
         actions={<Button type="button" onClick={() => setShowAdd(v => !v)}>{showAdd ? 'Close' : '+ Add book'}</Button>}
       />
 
-      <Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search your books and clubs…" />
+      <SearchField value={query} onChange={event => setQuery(event.target.value)} onClear={() => setQuery('')} placeholder="Search your books and clubs…" />
 
       {error && <div className="rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">{error}</div>}
 
-      <div className="flex flex-wrap gap-2">
-        <TabButton active={surface === 'personal'} onClick={() => setSurface('personal')}>Individual</TabButton>
-        <TabButton active={surface === 'club'} onClick={() => setSurface('club')} colour={selectedClub?.colour}>Book club</TabButton>
-      </div>
+      <Tabs
+        tabs={[
+          { key: 'personal', label: 'My books' },
+          { key: 'club', label: 'Book clubs', badge: clubs.length || undefined },
+        ]}
+        active={surface}
+        onChange={setSurface}
+        mobileSelectLabel="Books section"
+      />
 
       {showAdd && (
         <AddBookPanel
@@ -559,12 +619,12 @@ export function BooksPage() {
             <Button
               type="button"
               disabled={!newClubName.trim()}
-              onClick={async () => {
+              onClick={() => act(async () => {
                 const club = await api.createBookClub({ name: newClubName.trim(), colour: '#8B5CF6' })
                 setNewClubName('')
                 setSelectedClubId(club.id)
                 await reloadAll()
-              }}
+              })}
             >
               Create club
             </Button>
@@ -574,13 +634,18 @@ export function BooksPage() {
       )}
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-        <div className="flex flex-wrap gap-2">
-          {statuses.map(s => (
-            <TabButton key={s} active={activeShelf === s} onClick={() => setActiveShelf(s)} colour={surface === 'club' ? selectedClub?.colour : undefined}>
-              {shelfLabels[s]}
-            </TabButton>
-          ))}
-        </div>
+        <Tabs
+          tabs={statuses.map(status => ({
+            key: status,
+            label: shelfLabels[status],
+            badge: surface === 'club'
+              ? clubCounts.find(row => row.status === status)?.count || undefined
+              : personalCounts.find(row => row.status === status)?.count || undefined,
+          }))}
+          active={activeShelf}
+          onChange={setActiveShelf}
+          mobileSelectLabel="Book shelf"
+        />
         {surface === 'personal' && (
           <label className="inline-flex items-center gap-2 text-sm text-muted-strong">
             <input type="checkbox" checked={showClubItems} onChange={e => setShowClubItems(e.target.checked)} />
@@ -608,9 +673,12 @@ export function BooksPage() {
                     entry={entry}
                     clubs={clubs}
                     onRefresh={reloadAll}
-                    onMove={async status => { await api.updatePersonalBook(entry.id, { status }); await reloadAll() }}
-                    onDelete={async () => { await api.deletePersonalBook(entry.id); await reloadAll() }}
-                    onAddToClub={async clubId => { await api.createClubBook(clubId, { book_id: entry.book_id, status: 'backlog', position: 0 }); await reloadAll() }}
+                    onMove={status => act(async () => { await api.updatePersonalBook(entry.id, { status }); await reloadAll() })}
+                    onDelete={() => {
+                      if (!confirm(`Remove "${entry.book.title}" from your books?`)) return Promise.resolve()
+                      return act(async () => { await api.deletePersonalBook(entry.id); await reloadAll() })
+                    }}
+                    onAddToClub={clubId => act(async () => { await api.createClubBook(clubId, { book_id: entry.book_id, status: 'backlog', position: 0 }); await reloadAll() })}
                   />
                 ))}
               </div>
@@ -667,9 +735,12 @@ export function BooksPage() {
                     entry={entry}
                     club={selectedClub}
                     onRefresh={reloadAll}
-                    onMove={async status => { await api.updateClubBook(selectedClub.id, entry.id, { status }); await reloadAll() }}
-                    onDelete={async () => { await api.deleteClubBook(selectedClub.id, entry.id); await reloadAll() }}
-                    onQueue={async () => { await api.addClubQueueItem(selectedClub.id, entry.id, queue.length + 1); await loadClub() }}
+                    onMove={status => act(async () => { await api.updateClubBook(selectedClub.id, entry.id, { status }); await reloadAll() })}
+                    onDelete={() => {
+                      if (!confirm(`Remove "${entry.book.title}" from ${selectedClub.name}?`)) return Promise.resolve()
+                      return act(async () => { await api.deleteClubBook(selectedClub.id, entry.id); await reloadAll() })
+                    }}
+                    onQueue={() => act(async () => { await api.addClubQueueItem(selectedClub.id, entry.id, queue.length + 1); await loadClub() })}
                   />
                 ))}
               </div>
@@ -704,9 +775,32 @@ export function BooksPage() {
                     <div key={item.id} className="flex items-center gap-2 rounded-xl bg-sunken p-2">
                       <span className="text-xs font-bold text-muted w-5">{idx + 1}</span>
                       <BookLine title={item.club_book.book.title} author={item.club_book.book.author} />
-                      <button disabled={idx === 0} onClick={async () => { await api.updateClubQueueItem(selectedClub.id, item.id, Math.max(0, item.position - 2)); await loadClub() }} className="ml-auto text-xs text-muted hover:text-primary disabled:opacity-30">Up</button>
-                      <button onClick={async () => { await api.updateClubQueueItem(selectedClub.id, item.id, item.position + 2); await loadClub() }} className="text-xs text-muted hover:text-primary">Down</button>
-                      <button onClick={async () => { await api.deleteClubQueueItem(selectedClub.id, item.id); await loadClub() }} className="text-muted hover:text-danger text-xl leading-none">×</button>
+                      <button
+                        type="button"
+                        aria-label={`Move ${item.club_book.book.title} up`}
+                        disabled={idx === 0}
+                        onClick={() => act(async () => { await api.updateClubQueueItem(selectedClub.id, item.id, Math.max(0, item.position - 2)); await loadClub() })}
+                        className="ml-auto min-h-10 px-2 text-xs font-semibold text-muted hover:text-primary disabled:opacity-30"
+                      >
+                        Up
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Move ${item.club_book.book.title} down`}
+                        disabled={idx === queue.length - 1}
+                        onClick={() => act(async () => { await api.updateClubQueueItem(selectedClub.id, item.id, item.position + 2); await loadClub() })}
+                        className="min-h-10 px-2 text-xs font-semibold text-muted hover:text-primary disabled:opacity-30"
+                      >
+                        Down
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${item.club_book.book.title} from up next`}
+                        onClick={() => act(async () => { await api.deleteClubQueueItem(selectedClub.id, item.id); await loadClub() })}
+                        className="grid min-h-10 min-w-10 place-items-center text-xl leading-none text-muted hover:text-danger"
+                      >
+                        ×
+                      </button>
                     </div>
                   ))}
                 </div>

@@ -284,7 +284,48 @@ export function SettingsTab() {
         {allowances.length === 0 ? (
           <p className="text-sm text-muted py-3">No people found.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div>
+            <div className="grid gap-3 md:hidden">
+              {allowances.map(row => (
+                <div key={row.person_id} className="rounded-xl border border-line bg-sunken p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-bold text-ink">{row.display_name}</p>
+                    <label className="inline-flex min-h-10 items-center gap-2 text-sm text-ink">
+                      <input
+                        type="checkbox"
+                        checked={row.is_active}
+                        onChange={e => setAllowance(row.person_id, { is_active: e.target.checked })}
+                      />
+                      Enabled
+                    </label>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-muted-strong">
+                      Amount
+                      <input
+                        className={fieldClass}
+                        type="number"
+                        min="0"
+                        inputMode="numeric"
+                        value={row.amount}
+                        onChange={e => setAllowance(row.person_id, { amount: Number(e.target.value) || 0 })}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-muted-strong">
+                      Award every
+                      <select
+                        className={fieldClass}
+                        value={row.weekday}
+                        onChange={e => setAllowance(row.person_id, { weekday: Number(e.target.value) })}
+                      >
+                        {WEEKDAYS.map((day, idx) => <option key={day} value={idx}>{day}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[620px] text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-muted">
@@ -330,9 +371,8 @@ export function SettingsTab() {
                 ))}
               </tbody>
             </table>
-            <div className="mt-3">
-              <Button onClick={saveAllowances} loading={saving}>Save allowances</Button>
             </div>
+            <div className="mt-3"><Button onClick={saveAllowances} loading={saving}>Save allowances</Button></div>
           </div>
         )}
       </Card>

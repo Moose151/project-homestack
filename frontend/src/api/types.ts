@@ -33,6 +33,7 @@ export interface AdminUser {
   linked_person_id: number | null
   linked_person_name: string | null
   has_password: boolean
+  solace_access: boolean
 }
 
 export interface AuthUser {
@@ -1419,6 +1420,7 @@ export interface NodeInfo {
   is_core: boolean
   supports_kiosk: boolean
   supports_sensitive_lock: boolean
+  can_view: boolean
   is_enabled: boolean
   is_hidden: boolean
   requires_reauthentication: boolean

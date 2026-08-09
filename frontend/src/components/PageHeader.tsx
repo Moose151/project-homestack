@@ -7,15 +7,18 @@ export function PageHeader({
   icon,
   actions,
   className = '',
+  mobile = 'hide',
 }: {
   title: ReactNode
   subtitle?: ReactNode
   icon?: ReactNode
   actions?: ReactNode
   className?: string
+  /** The mobile shell already names the destination. Show only when the page adds useful context. */
+  mobile?: 'hide' | 'show'
 }) {
   return (
-    <div className={`flex flex-wrap items-center justify-between gap-3 border-b border-line/70 pb-4 sm:pb-5 ${className}`}>
+    <div className={`${mobile === 'show' ? 'flex' : 'hidden sm:flex'} flex-wrap items-center justify-between gap-3 border-b border-line/70 pb-4 sm:pb-5 ${className}`}>
       <div className="flex min-w-0 items-center gap-3 sm:gap-3.5">
         {icon && <span className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-2xl border border-line bg-surface text-xl leading-none shadow-soft sm:h-12 sm:w-12 sm:text-2xl">{icon}</span>}
         <div className="min-w-0">

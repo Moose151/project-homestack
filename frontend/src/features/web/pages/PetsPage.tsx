@@ -48,34 +48,37 @@ const calendarDayHref = (iso: string | null) => iso ? `/calendar?date=${new Date
 // Treatment + appointment forms
 // ===========================================================================
 
-function TreatmentForm({ petId, onCreated, onError, onCancel }: {
-  petId: number; onCreated: (t: PetTreatment) => void; onError: (m: string) => void; onCancel: () => void
+function TreatmentForm({ petId, treatment, onSaved, onError, onCancel }: {
+  petId: number; treatment?: PetTreatment; onSaved: (t: PetTreatment) => void; onError: (m: string) => void; onCancel: () => void
 }) {
-  const [type, setType] = useState<TreatmentType>('flea')
-  const [name, setName] = useState('')
-  const [due, setDue] = useState<string | null>(null)
-  const [recurrence, setRecurrence] = useState('FREQ=MONTHLY')
+  const [type, setType] = useState<TreatmentType>(treatment?.treatment_type ?? 'flea')
+  const [name, setName] = useState(treatment?.name ?? '')
+  const [due, setDue] = useState<string | null>(treatment?.next_due_at ?? null)
+  const [recurrence, setRecurrence] = useState(treatment?.recurrence_rule ?? 'FREQ=MONTHLY')
   const [busy, setBusy] = useState(false)
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setBusy(true)
     try {
-      const t = await api.createPetTreatment({
+      const data = {
         pet_id: petId, treatment_type: type, name: name.trim(),
         next_due_at: due, recurrence_rule: recurrence,
-      })
-      onCreated(t)
+      }
+      const saved = treatment
+        ? await api.updatePetTreatment(treatment.id, data)
+        : await api.createPetTreatment(data)
+      onSaved(saved)
     } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
 
   return (
     <form onSubmit={submit} className="space-y-3 bg-sunken rounded-2xl p-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <Select value={type} onChange={e => setType(e.target.value as TreatmentType)}>
+        <Field label="Treatment type"><Select value={type} onChange={e => setType(e.target.value as TreatmentType)}>
           {Object.entries(TREATMENT_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </Select>
-        <Input placeholder="Product / name (optional)" value={name} onChange={e => setName(e.target.value)} />
+        </Select></Field>
+        <Field label="Product or name"><Input placeholder="Optional" value={name} onChange={e => setName(e.target.value)} /></Field>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <Field label="Next due"><DateTimeField value={due} allDay onChange={({ value }) => setDue(value)} /></Field>
@@ -84,19 +87,19 @@ function TreatmentForm({ petId, onCreated, onError, onCancel }: {
         </Select></Field>
       </div>
       <div className="flex gap-2">
-        <Button type="submit" size="sm" loading={busy}>Add treatment</Button>
+        <Button type="submit" size="sm" loading={busy}>{treatment ? 'Save treatment' : 'Add treatment'}</Button>
         <Button type="button" size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
       </div>
     </form>
   )
 }
 
-function AppointmentForm({ petId, onCreated, onError, onCancel }: {
-  petId: number; onCreated: (a: PetAppointment) => void; onError: (m: string) => void; onCancel: () => void
+function AppointmentForm({ petId, appointment, onSaved, onError, onCancel }: {
+  petId: number; appointment?: PetAppointment; onSaved: (a: PetAppointment) => void; onError: (m: string) => void; onCancel: () => void
 }) {
-  const [title, setTitle] = useState('')
-  const [provider, setProvider] = useState('')
-  const [start, setStart] = useState<string | null>(null)
+  const [title, setTitle] = useState(appointment?.title ?? '')
+  const [provider, setProvider] = useState(appointment?.provider ?? '')
+  const [start, setStart] = useState<string | null>(appointment?.start_at ?? null)
   const [busy, setBusy] = useState(false)
 
   const submit = async (e: React.FormEvent) => {
@@ -104,22 +107,25 @@ function AppointmentForm({ petId, onCreated, onError, onCancel }: {
     if (!start) { onError('A date is required.'); return }
     setBusy(true)
     try {
-      const a = await api.createPetAppointment({
+      const data = {
         pet_id: petId, title: title.trim(), provider: provider.trim(), start_at: start,
-      })
-      onCreated(a)
+      }
+      const saved = appointment
+        ? await api.updatePetAppointment(appointment.id, data)
+        : await api.createPetAppointment(data)
+      onSaved(saved)
     } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
 
   return (
     <form onSubmit={submit} className="space-y-3 bg-sunken rounded-2xl p-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <Input placeholder="Title (e.g. Annual check-up)" value={title} onChange={e => setTitle(e.target.value)} />
-        <Input placeholder="Vet / provider" value={provider} onChange={e => setProvider(e.target.value)} />
+        <Field label="Appointment"><Input autoFocus placeholder="e.g. Annual check-up" value={title} onChange={e => setTitle(e.target.value)} /></Field>
+        <Field label="Vet or provider"><Input value={provider} onChange={e => setProvider(e.target.value)} /></Field>
       </div>
       <Field label="When"><DateTimeField value={start} allDay={false} allowAllDay={false} onChange={({ value }) => setStart(value)} /></Field>
       <div className="flex gap-2">
-        <Button type="submit" size="sm" loading={busy}>Add appointment</Button>
+        <Button type="submit" size="sm" loading={busy} disabled={!title.trim() || !start}>{appointment ? 'Save appointment' : 'Add appointment'}</Button>
         <Button type="button" size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
       </div>
     </form>
@@ -133,16 +139,27 @@ function AppointmentForm({ petId, onCreated, onError, onCancel }: {
 function TreatmentRow({ t, onChange, onDelete, onError }: {
   t: PetTreatment; onChange: (t: PetTreatment) => void; onDelete: (id: number) => void; onError: (m: string) => void
 }) {
+  const [editing, setEditing] = useState(false)
+  const [busy, setBusy] = useState(false)
   const badge = dueBadge(t.next_due_at, t.is_overdue)
   const complete = async () => {
-    try { onChange(await api.completePetTreatment(t.id)) } catch (e) { onError(errMsg(e)) }
+    setBusy(true)
+    try { onChange(await api.completePetTreatment(t.id)) } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
   const remove = async () => {
     if (!confirm('Delete this treatment?')) return
     try { await api.deletePetTreatment(t.id); onDelete(t.id) } catch (e) { onError(errMsg(e)) }
   }
+  if (editing) {
+    return (
+      <li className="py-2">
+        <TreatmentForm petId={t.pet_id} treatment={t} onError={onError} onCancel={() => setEditing(false)}
+          onSaved={saved => { onChange(saved); setEditing(false) }} />
+      </li>
+    )
+  }
   return (
-    <li className="flex items-center gap-2 py-2 group">
+    <li className="flex items-center gap-1 py-2 group">
       <div className="flex-1 min-w-0">
         <div className="text-sm text-ink truncate">{t.display_name}</div>
         <div className="flex items-center gap-1.5 mt-0.5">
@@ -152,8 +169,48 @@ function TreatmentRow({ t, onChange, onDelete, onError }: {
           {t.recurrence_rule && <span className="text-xs text-muted">repeats</span>}
         </div>
       </div>
-      {t.next_due_at && <Button size="sm" variant="secondary" onClick={complete}>Done</Button>}
-      <button onClick={remove} className="sm:opacity-0 sm:group-hover:opacity-100 text-muted hover:text-danger text-lg leading-none transition" aria-label="Delete">×</button>
+      {t.next_due_at && <Button size="sm" variant="secondary" loading={busy} onClick={complete}>Done</Button>}
+      <button type="button" onClick={() => setEditing(true)} className="grid min-h-10 min-w-10 place-items-center text-xs font-semibold text-muted hover:text-primary" aria-label={`Edit ${t.display_name}`}>Edit</button>
+      <button type="button" onClick={remove} className="grid min-h-10 min-w-10 place-items-center text-xl leading-none text-muted hover:text-danger" aria-label={`Delete ${t.display_name}`}>×</button>
+    </li>
+  )
+}
+
+function AppointmentRow({ appointment, onChange, onDelete, onError }: {
+  appointment: PetAppointment
+  onChange: (appointment: PetAppointment) => void
+  onDelete: (id: number) => void
+  onError: (message: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+
+  const remove = async () => {
+    if (!confirm(`Delete "${appointment.display_title}"?`)) return
+    try {
+      await api.deletePetAppointment(appointment.id)
+      onDelete(appointment.id)
+    } catch (e) {
+      onError(errMsg(e))
+    }
+  }
+
+  if (editing) {
+    return (
+      <li className="py-2">
+        <AppointmentForm petId={appointment.pet_id} appointment={appointment} onError={onError} onCancel={() => setEditing(false)}
+          onSaved={saved => { onChange(saved); setEditing(false) }} />
+      </li>
+    )
+  }
+
+  return (
+    <li className="flex items-center gap-1 py-2 text-sm">
+      <span className="min-w-0 flex-1 truncate text-ink">{appointment.display_title}{appointment.provider ? ` · ${appointment.provider}` : ''}</span>
+      <Link to={calendarDayHref(appointment.start_at)} className="min-h-10 content-center px-2 text-xs text-primary">
+        {new Date(appointment.start_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+      </Link>
+      <button type="button" onClick={() => setEditing(true)} className="grid min-h-10 min-w-10 place-items-center text-xs font-semibold text-muted hover:text-primary" aria-label={`Edit ${appointment.display_title}`}>Edit</button>
+      <button type="button" onClick={remove} className="grid min-h-10 min-w-10 place-items-center text-xl leading-none text-muted hover:text-danger" aria-label={`Delete ${appointment.display_title}`}>×</button>
     </li>
   )
 }
@@ -191,17 +248,17 @@ function PetCard({ pet, onChange, onDelete, onError, canDelete }: {
     return (
       <Card>
         <form onSubmit={saveEdit} className="space-y-2">
-          <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Name" />
+          <Field label="Pet name"><Input autoFocus value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field>
           <div className="grid grid-cols-2 gap-2">
-            <Select value={form.species} onChange={e => setForm(f => ({ ...f, species: e.target.value as PetSpecies }))}>
+            <Field label="Species"><Select value={form.species} onChange={e => setForm(f => ({ ...f, species: e.target.value as PetSpecies }))}>
               {Object.entries(SPECIES_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </Select>
-            <Input value={form.breed} onChange={e => setForm(f => ({ ...f, breed: e.target.value }))} placeholder="Breed" />
-            <Input value={form.vet_name} onChange={e => setForm(f => ({ ...f, vet_name: e.target.value }))} placeholder="Vet name" />
-            <Input value={form.vet_phone} onChange={e => setForm(f => ({ ...f, vet_phone: e.target.value }))} placeholder="Vet phone" />
+            </Select></Field>
+            <Field label="Breed"><Input value={form.breed} onChange={e => setForm(f => ({ ...f, breed: e.target.value }))} /></Field>
+            <Field label="Vet name"><Input value={form.vet_name} onChange={e => setForm(f => ({ ...f, vet_name: e.target.value }))} /></Field>
+            <Field label="Vet phone"><Input type="tel" value={form.vet_phone} onChange={e => setForm(f => ({ ...f, vet_phone: e.target.value }))} /></Field>
           </div>
-          <Input value={form.microchip_number} onChange={e => setForm(f => ({ ...f, microchip_number: e.target.value }))} placeholder="Microchip number" />
-          <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Notes" rows={2} />
+          <Field label="Microchip number"><Input value={form.microchip_number} onChange={e => setForm(f => ({ ...f, microchip_number: e.target.value }))} /></Field>
+          <Field label="Care notes"><Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></Field>
           <div className="flex gap-2"><Button type="submit" size="sm" loading={busy}>Save</Button><Button type="button" size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button></div>
         </form>
       </Card>
@@ -217,8 +274,8 @@ function PetCard({ pet, onChange, onDelete, onError, canDelete }: {
           <div className="text-xs text-muted">{SPECIES_LABELS[pet.species]}{pet.breed ? ` · ${pet.breed}` : ''}</div>
         </button>
         <div className="flex flex-shrink-0 gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition">
-          <button onClick={() => setEditing(true)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
-          {canDelete && <button onClick={remove} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger">Delete</button>}
+          <button type="button" onClick={() => setEditing(true)} className="min-h-10 rounded-lg px-2 text-xs font-semibold text-muted hover:bg-sunken hover:text-ink">Edit</button>
+          {canDelete && <button type="button" onClick={remove} className="min-h-10 rounded-lg px-2 text-xs font-semibold text-muted hover:text-danger">Delete</button>}
         </div>
       </div>
 
@@ -235,10 +292,10 @@ function PetCard({ pet, onChange, onDelete, onError, canDelete }: {
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs font-semibold text-muted-strong uppercase tracking-wide">Treatments</span>
-              {!addingT && <button onClick={() => setAddingT(true)} className="text-xs text-primary hover:underline">+ Add</button>}
+              {!addingT && <button type="button" onClick={() => setAddingT(true)} className="min-h-10 px-2 text-xs font-semibold text-primary hover:underline">+ Add treatment</button>}
             </div>
             {addingT && <TreatmentForm petId={pet.id} onError={onError} onCancel={() => setAddingT(false)}
-              onCreated={t => { setTreatments(prev => [...(prev ?? []), t]); setAddingT(false) }} />}
+              onSaved={t => { setTreatments(prev => [...(prev ?? []), t]); setAddingT(false) }} />}
             {treatments === null ? <p className="text-xs text-muted">Loading…</p>
               : treatments.length === 0 ? <p className="text-xs text-muted">No treatments yet.</p>
               : <ul className="divide-y divide-line">{treatments.map(t => (
@@ -251,17 +308,16 @@ function PetCard({ pet, onChange, onDelete, onError, canDelete }: {
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs font-semibold text-muted-strong uppercase tracking-wide">Appointments</span>
-              {!addingA && <button onClick={() => setAddingA(true)} className="text-xs text-primary hover:underline">+ Add</button>}
+              {!addingA && <button type="button" onClick={() => setAddingA(true)} className="min-h-10 px-2 text-xs font-semibold text-primary hover:underline">+ Add appointment</button>}
             </div>
             {addingA && <AppointmentForm petId={pet.id} onError={onError} onCancel={() => setAddingA(false)}
-              onCreated={a => { setAppointments(prev => [...(prev ?? []), a]); setAddingA(false) }} />}
+              onSaved={a => { setAppointments(prev => [...(prev ?? []), a]); setAddingA(false) }} />}
             {appointments === null ? <p className="text-xs text-muted">Loading…</p>
               : appointments.length === 0 ? <p className="text-xs text-muted">No upcoming appointments.</p>
               : <ul className="divide-y divide-line">{appointments.map(a => (
-                  <li key={a.id} className="flex items-center justify-between gap-2 py-2 text-sm">
-                    <span className="text-ink truncate">{a.display_title}{a.provider ? ` · ${a.provider}` : ''}</span>
-                    <Link to={calendarDayHref(a.start_at)} className="text-xs text-primary flex-shrink-0">{new Date(a.start_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Link>
-                  </li>
+                  <AppointmentRow key={a.id} appointment={a} onError={onError}
+                    onChange={updated => setAppointments(prev => prev!.map(item => item.id === updated.id ? updated : item))}
+                    onDelete={id => setAppointments(prev => prev!.filter(item => item.id !== id))} />
                 ))}</ul>}
           </div>
         </div>
@@ -297,12 +353,12 @@ function PetsTab({ pets, reload, isAdmin, onError }: {
     <div className="space-y-4">
       {open ? (
         <form onSubmit={submit} className="space-y-3 bg-sunken rounded-2xl p-4">
-          <Input autoFocus placeholder="Pet name" value={name} onChange={e => setName(e.target.value)} />
+          <Field label="Pet name"><Input autoFocus value={name} onChange={e => setName(e.target.value)} /></Field>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Select value={species} onChange={e => setSpecies(e.target.value as PetSpecies)}>
+            <Field label="Species"><Select value={species} onChange={e => setSpecies(e.target.value as PetSpecies)}>
               {Object.entries(SPECIES_LABELS).map(([v, l]) => <option key={v} value={v}>{SPECIES_EMOJI[v as PetSpecies]} {l}</option>)}
-            </Select>
-            <Input placeholder="Breed (optional)" value={breed} onChange={e => setBreed(e.target.value)} />
+            </Select></Field>
+            <Field label="Breed"><Input placeholder="Optional" value={breed} onChange={e => setBreed(e.target.value)} /></Field>
           </div>
           <div className="flex gap-2"><Button type="submit" loading={busy}>Add pet</Button><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button></div>
         </form>
@@ -425,7 +481,7 @@ export function PetsPage() {
   const isAdmin = user?.role === 'admin' || user?.role === 'manager'
 
   return (
-    <div className="space-y-5 max-w-5xl mx-auto">
+    <div className="mx-auto flex max-w-5xl flex-col gap-5">
       <PageHeader title="Pets" icon="🐾" subtitle="Pet profiles, treatment reminders and vet appointments." />
 
       <SearchField

@@ -83,7 +83,7 @@ export function SettingsPage() {
   const inputCls = 'w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary/40'
 
   return (
-    <div className="space-y-5 max-w-2xl mx-auto">
+    <div className="mx-auto flex max-w-2xl flex-col gap-5">
       <PageHeader title="Manage HomeStack" icon="⚙️" subtitle="Household-wide stacks and settings that apply to everyone." />
 
       {error && (

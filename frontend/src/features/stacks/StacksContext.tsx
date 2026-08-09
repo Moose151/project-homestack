@@ -38,7 +38,9 @@ export function StacksProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { refresh() }, [refresh])
 
-  const enabledKeys = new Set(nodes.filter(n => n.is_enabled && !n.is_hidden).map(n => n.key))
+  // A destination must be both active for the household and available to this
+  // account. This prevents sensitive nodes such as Money appearing as a dead-end.
+  const enabledKeys = new Set(nodes.filter(n => n.is_enabled && !n.is_hidden && n.can_view).map(n => n.key))
 
   return (
     <Ctx.Provider value={{ nodes, enabledKeys, household, loading, error, refresh }}>

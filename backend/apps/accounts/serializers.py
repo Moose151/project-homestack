@@ -45,6 +45,7 @@ class UserAdminSerializer(serializers.ModelSerializer):
     linked_person_id = serializers.SerializerMethodField()
     linked_person_name = serializers.SerializerMethodField()
     has_password = serializers.SerializerMethodField()
+    solace_access = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -52,6 +53,7 @@ class UserAdminSerializer(serializers.ModelSerializer):
             "id", "display_name", "username", "email", "avatar", "role",
             "is_active", "is_child_account", "colour", "last_login", "created_at",
             "linked_person_id", "linked_person_name", "has_password",
+            "solace_access",
         ]
         read_only_fields = fields
 
@@ -68,6 +70,11 @@ class UserAdminSerializer(serializers.ModelSerializer):
 
     def get_has_password(self, obj) -> bool:
         return obj.has_usable_password()
+
+    def get_solace_access(self, obj) -> bool:
+        from apps.permissions.resolver import resolve_permission
+
+        return resolve_permission(obj, "view", "solace")
 
 
 class UserWriteSerializer(serializers.Serializer):
@@ -86,6 +93,9 @@ class UserWriteSerializer(serializers.Serializer):
     # Person linking (create only): attach an existing unlinked person, or make a new one.
     link_person_id = serializers.IntegerField(required=False, allow_null=True)
     create_person = serializers.BooleanField(required=False)
+    # Solace is denied to non-admin roles by default. Admin onboarding may deliberately grant
+    # the complete node permission set to a trusted adult without promoting them to admin.
+    solace_access = serializers.BooleanField(required=False)
 
     def validate_pin(self, value: str) -> str:
         if value and not (value.isdigit() and 4 <= len(value) <= 6):

@@ -3,11 +3,13 @@ import { api } from '../../../../api/client'
 import type { MeridianRoutine, Person } from '../../../../api/types'
 import { Card } from '../../../../components/Card'
 import { Button } from '../../../../components/Button'
-import { fieldClass } from '../../../../components/ui'
+import { Field, Input, Select, Textarea } from '../../../../components/ui'
 import { useAuth } from '../../../auth/AuthContext'
 
 // Mirrors the legacy routines.html: daily-habit cards with done-today + streak badges and a
 // Mark-Done button; admin create/manage. Points award immediately on completion.
+
+const errMsg = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong.'
 
 export function RoutinesTab({ canManage, pointsLabel }: { canManage: boolean; pointsLabel: string }) {
   const { user } = useAuth()
@@ -16,15 +18,21 @@ export function RoutinesTab({ canManage, pointsLabel }: { canManage: boolean; po
   const [myPersonId, setMyPersonId] = useState<number | undefined>()
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const reload = async () => {
-    const ppl = await api.getPeople().catch(() => [])
-    setPeople(ppl)
-    const mine = ppl.find(p => p.linked_user_id === user?.id)
-    setMyPersonId(mine?.id)
-    const r = await api.getMeridianRoutines(mine?.id).catch(() => [])
-    setRoutines(r)
-    setLoading(false)
+    setError(null)
+    try {
+      const ppl = await api.getPeople()
+      setPeople(ppl)
+      const mine = ppl.find(p => p.linked_user_id === user?.id)
+      setMyPersonId(mine?.id)
+      setRoutines(await api.getMeridianRoutines(mine?.id))
+    } catch (e) {
+      setError(errMsg(e))
+    } finally {
+      setLoading(false)
+    }
   }
   useEffect(() => { reload() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -42,8 +50,10 @@ export function RoutinesTab({ canManage, pointsLabel }: { canManage: boolean; po
         </div>
       )}
       {canManage && showForm && (
-        <NewRoutineForm people={people} onCreated={() => { setShowForm(false); reload() }} />
+        <NewRoutineForm people={people} onCreated={() => { setShowForm(false); void reload() }} />
       )}
+
+      {error && <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
 
       {routines.length === 0 ? (
         <p className="text-sm text-muted text-center py-8">No routines yet.</p>
@@ -52,7 +62,7 @@ export function RoutinesTab({ canManage, pointsLabel }: { canManage: boolean; po
           {routines.map(r => (
             <RoutineCard key={r.id} routine={r} canManage={canManage} pointsLabel={pointsLabel}
               canComplete={!!myPersonId} assignedName={personName(r.assigned_to_person_id)}
-              onChanged={reload} />
+              onChanged={reload} onError={setError} />
           ))}
         </div>
       )}
@@ -60,21 +70,35 @@ export function RoutinesTab({ canManage, pointsLabel }: { canManage: boolean; po
   )
 }
 
-function RoutineCard({ routine, canManage, pointsLabel, canComplete, assignedName, onChanged }: {
+function RoutineCard({ routine, canManage, pointsLabel, canComplete, assignedName, onChanged, onError }: {
   routine: MeridianRoutine; canManage: boolean; pointsLabel: string; canComplete: boolean
-  assignedName?: string; onChanged: () => void
+  assignedName?: string; onChanged: () => Promise<void>; onError: (message: string) => void
 }) {
   const [busy, setBusy] = useState(false)
   const done = !!routine.done_today
 
   const complete = async () => {
     setBusy(true)
-    try { await api.completeMeridianRoutine(routine.id) } finally { setBusy(false); onChanged() }
+    try {
+      await api.completeMeridianRoutine(routine.id)
+      await onChanged()
+    } catch (e) {
+      onError(errMsg(e))
+    } finally {
+      setBusy(false)
+    }
   }
   const remove = async () => {
     if (!confirm(`Delete "${routine.title}"?`)) return
-    await api.deleteMeridianRoutine(routine.id).catch(() => {})
-    onChanged()
+    setBusy(true)
+    try {
+      await api.deleteMeridianRoutine(routine.id)
+      await onChanged()
+    } catch (e) {
+      onError(errMsg(e))
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -83,7 +107,7 @@ function RoutineCard({ routine, canManage, pointsLabel, canComplete, assignedNam
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-bold text-ink">{done && '✅ '}{routine.title}</h3>
           {canManage && (
-            <button onClick={remove} className="text-muted hover:text-danger text-lg leading-none" aria-label="Delete">×</button>
+            <button type="button" disabled={busy} onClick={remove} className="grid min-h-10 min-w-10 place-items-center text-xl leading-none text-muted hover:text-danger disabled:opacity-40" aria-label={`Delete ${routine.title}`}>×</button>
           )}
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -111,32 +135,37 @@ function RoutineCard({ routine, canManage, pointsLabel, canComplete, assignedNam
 function NewRoutineForm({ people, onCreated }: { people: Person[]; onCreated: () => void }) {
   const [f, setF] = useState({ title: '', points: '1', description: '', assigned_to_person_id: '' })
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const set = (k: string, v: string) => setF(prev => ({ ...prev, [k]: v }))
-  const input = fieldClass
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!f.title.trim()) return
-    setSaving(true)
+    setSaving(true); setError(null)
     try {
       await api.createMeridianRoutine({
         title: f.title.trim(), points: Number(f.points) || 1, description: f.description,
         assigned_to_person_id: f.assigned_to_person_id ? Number(f.assigned_to_person_id) : null,
       })
       onCreated()
+    } catch (e2) {
+      setError(errMsg(e2))
     } finally { setSaving(false) }
   }
 
   return (
     <Card title="New routine">
       <form onSubmit={submit} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <input className={input} placeholder="Routine (e.g. Brush teeth)" value={f.title} onChange={e => set('title', e.target.value)} />
-        <input className={input} type="number" min="0" placeholder="Points" value={f.points} onChange={e => set('points', e.target.value)} />
-        <select className={input} value={f.assigned_to_person_id} onChange={e => set('assigned_to_person_id', e.target.value)}>
-          <option value="">Everyone</option>
-          {people.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}
-        </select>
-        <input className={input} placeholder="Description (optional)" value={f.description} onChange={e => set('description', e.target.value)} />
+        {error && <p className="sm:col-span-2 rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+        <Field label="Routine name"><Input autoFocus placeholder="e.g. Brush teeth" value={f.title} onChange={e => set('title', e.target.value)} /></Field>
+        <Field label="Points"><Input type="number" min="0" inputMode="numeric" value={f.points} onChange={e => set('points', e.target.value)} /></Field>
+        <Field label="Who is it for?">
+          <Select value={f.assigned_to_person_id} onChange={e => set('assigned_to_person_id', e.target.value)}>
+            <option value="">Everyone</option>
+            {people.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Instructions"><Textarea placeholder="Optional details that make the routine clear." value={f.description} onChange={e => set('description', e.target.value)} /></Field>
         <div className="sm:col-span-2"><Button type="submit" loading={saving} disabled={!f.title.trim()}>Create routine</Button></div>
       </form>
     </Card>

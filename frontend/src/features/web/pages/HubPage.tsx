@@ -690,6 +690,7 @@ export function HubPage() {
         title={`${greeting}${user ? `, ${user.display_name}` : ''}`}
         subtitle={now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
         icon="🏡"
+        mobile="show"
         actions={<Button variant="secondary" size="sm" onClick={() => setConfiguring(c => !c)}>{configuring ? 'Done tuning' : 'Tune this page'}</Button>}
       />
 

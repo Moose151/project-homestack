@@ -26,7 +26,7 @@ class NodeListView(APIView):
 
     def get(self, request: Request) -> Response:
         nodes = selectors.list_household_nodes()
-        return Response(NodeSerializer(nodes, many=True).data)
+        return Response(NodeSerializer(nodes, many=True, context={"request": request}).data)
 
 
 class NodeEnableView(APIView):
@@ -38,7 +38,7 @@ class NodeEnableView(APIView):
             hn = services.enable_node(request.user, node_key)
         except Node.DoesNotExist:
             return Response({"detail": "Node not found."}, status=status.HTTP_404_NOT_FOUND)
-        return Response(NodeSerializer(hn).data)
+        return Response(NodeSerializer(hn, context={"request": request}).data)
 
 
 class NodeDisableView(APIView):
@@ -50,7 +50,7 @@ class NodeDisableView(APIView):
             hn = services.disable_node(request.user, node_key)
         except Node.DoesNotExist:
             return Response({"detail": "Node not found."}, status=status.HTTP_404_NOT_FOUND)
-        return Response(NodeSerializer(hn).data)
+        return Response(NodeSerializer(hn, context={"request": request}).data)
 
 
 class NodeConfigurationView(APIView):
@@ -72,7 +72,7 @@ class NodeConfigurationView(APIView):
             )
         except Node.DoesNotExist:
             return Response({"detail": "Node not found."}, status=status.HTTP_404_NOT_FOUND)
-        return Response(NodeSerializer(hn).data)
+        return Response(NodeSerializer(hn, context={"request": request}).data)
 
 
 class NodeSettingsView(APIView):

@@ -27,6 +27,7 @@ standalone documents. Archive the old files; do not edit them further.
 | `10_Future_Features_Parking_Lot.md` | Deferred ideas and promotion rules. |
 | `11`–`22`, `25`–`26_Node_*.md` | Per-node specifications, including Homestead and Home Assistant. |
 | `23_Core_Hub.md` / `24_Core_Calendar.md` | Core aggregation and scheduling surface specs. |
+| `PARTNER_PILOT_READINESS.md` | Two-adult account setup, per-destination readiness and real-device acceptance gate. |
 
 The node specifications cover Atlas, Home Wiki, Pets, Education, Inventory, Assets, Hearth,
 Travel, Projects, Health, Meridian, Solace, Homestead and Home Assistant; where they conflict
@@ -195,6 +196,8 @@ growth.
 
 | Date | Change |
 |------|--------|
+| 2026-08-09 | Prepared v0.21.0 for the controlled partner pilot: explicit per-user Money access during account onboarding; permission-aware node discovery, Hub widgets and Homestead finance actions; consistent mobile page hierarchy; responsive manager reward/allowance/goal/wishlist/routine workflows; labelled and failure-aware Books/Pets/Household guide forms; complete pet treatment/appointment management; and a canonical per-destination readiness/single-entry acceptance document. No database migration. |
+| 2026-08-09 | Continued the UI overhaul in v0.20.4: Meridian manager tasks use responsive cards and inline labelled editing below desktop size instead of a horizontally scrolled table; task creation progressively reveals advanced fields; Atlas list items wrap with grouped assignment/due metadata; quick capture is progressive on phones; and rewards metrics use a more compact mobile hierarchy. No new architectural decision or database migration. |
 | 2026-08-09 | Shipped the v0.20.3 app-style mobile Month view: the complete six-week grid is the edge-to-edge primary screen, occupied dates show compact coloured event labels, date details and actions open in a bottom sheet, and a floating add button plus Filter-hosted rotation management preserve calendar space. No new architectural decision or database migration. |
 | 2026-08-09 | Shipped the v0.20.2 mobile Calendar redevelopment: in-place selected-day previews preserve Month context; swipes and safe month-end navigation accelerate forecasting; coloured event dots and the existing narrow care strip clarify the grid; view/filter controls and the 14-night rotation editor fit small screens; and the full monthly agenda is available without dominating the page. No new architectural decision or database migration. |
 | 2026-08-09 | Shipped the v0.20.1 navigation and visual-system refinement: plain-language destination names with node brands as context, a purpose-grouped descriptive desktop sidebar, a complete mobile More directory with clearer bottom-bar editing, consistent shared headings/tabs, a non-duplicative widget-focused Hub and a calmer responsive Calendar toolbar. No new architectural decision or database migration. |

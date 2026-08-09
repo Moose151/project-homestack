@@ -91,8 +91,8 @@ export function OverviewTab({ canManage, pointsLabel, onOpenTasks, onOpenShop }:
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Metric label="Pending approvals" value={String(pendingCount)} detail={`${taskCompletions.length} tasks · ${rewardRequests.length} rewards`} />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4">
+        <Metric className="col-span-2 md:col-span-1" label="Pending approvals" value={String(pendingCount)} detail={`${taskCompletions.length} tasks · ${rewardRequests.length} rewards`} />
         <Metric label="Active earners" value={String(topBalances.length)} detail="People with Meridian activity" />
         <Metric label={`Top ${pointsLabel} balance`} value={topBalances[0] ? `★ ${topBalances[0].balance}` : '★ 0'} detail={topBalances[0]?.display_name || 'No activity yet'} />
       </div>
@@ -188,12 +188,12 @@ export function OverviewTab({ canManage, pointsLabel, onOpenTasks, onOpenShop }:
   )
 }
 
-function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
+function Metric({ label, value, detail, className = '' }: { label: string; value: string; detail: string; className?: string }) {
   return (
-    <div className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</p>
-      <p className="mt-1 text-2xl font-extrabold text-ink">{value}</p>
-      <p className="mt-1 text-sm text-muted">{detail}</p>
+    <div className={`rounded-2xl border border-line bg-surface p-3.5 shadow-soft sm:p-4 ${className}`}>
+      <p className="text-[10px] font-bold uppercase tracking-wide text-muted sm:text-xs">{label}</p>
+      <p className="mt-1 text-xl font-extrabold text-ink sm:text-2xl">{value}</p>
+      <p className="mt-1 text-xs leading-relaxed text-muted sm:text-sm">{detail}</p>
     </div>
   )
 }

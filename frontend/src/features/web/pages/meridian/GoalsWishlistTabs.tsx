@@ -5,10 +5,12 @@ import type {
 } from '../../../../api/types'
 import { Card } from '../../../../components/Card'
 import { Button } from '../../../../components/Button'
-import { fieldClass } from '../../../../components/ui'
+import { Field, Input, Textarea, fieldClass } from '../../../../components/ui'
 import { useAuth } from '../../../auth/AuthContext'
 
 // Shared bits ---------------------------------------------------------------
+
+const errMsg = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong.'
 
 function Progress({ pct }: { pct: number }) {
   return (
@@ -42,8 +44,8 @@ function useMyBalance() {
   const [balance, setBalance] = useState<number | null>(null)
   const refresh = async () => {
     const [ppl, pts] = await Promise.all([
-      api.getPeople().catch(() => []),
-      api.getMeridianPoints().catch(() => ({ summary: [], entries: [] })),
+      api.getPeople(),
+      api.getMeridianPoints(),
     ])
     const mine = ppl.find(p => p.linked_user_id === user?.id)
     setPersonId(mine?.id)
@@ -62,11 +64,18 @@ export function GoalsTab({ canManage, pointsLabel }: { canManage: boolean; point
   const [showForm, setShowForm] = useState(false)
   const { balance, refresh } = useMyBalance()
   const [msg, setMsg] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const reload = async () => {
-    await refresh()
-    setGoals(await api.getMeridianGoals().catch(() => []))
-    setLoading(false)
+    setError(null)
+    try {
+      await refresh()
+      setGoals(await api.getMeridianGoals())
+    } catch (e) {
+      setError(errMsg(e))
+    } finally {
+      setLoading(false)
+    }
   }
   useEffect(() => { reload() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -82,8 +91,9 @@ export function GoalsTab({ canManage, pointsLabel }: { canManage: boolean; point
           </Button>
         )}
       </div>
+      {error && <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
       {msg && <p className="text-sm text-primary text-center">{msg}</p>}
-      {canManage && showForm && <NewGoalForm onCreated={() => { setShowForm(false); reload() }} />}
+      {canManage && showForm && <NewGoalForm onCreated={() => { setShowForm(false); void reload() }} />}
 
       {goals.length === 0 ? (
         <p className="text-sm text-muted text-center py-8">No group goals yet.</p>
@@ -95,8 +105,18 @@ export function GoalsTab({ canManage, pointsLabel }: { canManage: boolean; point
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-bold text-ink">{g.title}</h3>
                   {canManage && (
-                    <button onClick={() => { if (confirm(`Delete "${g.title}"?`)) api.deleteMeridianGoal(g.id).then(reload) }}
-                      className="text-muted hover:text-danger text-lg leading-none">×</button>
+                    <button
+                      type="button"
+                      aria-label={`Delete ${g.title}`}
+                      onClick={async () => {
+                        if (!confirm(`Delete "${g.title}"?`)) return
+                        setError(null)
+                        try { await api.deleteMeridianGoal(g.id); await reload() } catch (e) { setError(errMsg(e)) }
+                      }}
+                      className="grid min-h-10 min-w-10 place-items-center text-xl leading-none text-muted hover:text-danger"
+                    >
+                      ×
+                    </button>
                   )}
                 </div>
                 {g.description && <p className="text-sm text-muted">{g.description}</p>}
@@ -110,9 +130,9 @@ export function GoalsTab({ canManage, pointsLabel }: { canManage: boolean; point
                   <Contribute
                     disabled={balance === 0}
                     onContribute={async n => {
-                      setMsg(null)
+                      setMsg(null); setError(null)
                       try { await api.contributeToGoal(g.id, n); await reload() }
-                      catch { setMsg('Could not contribute — not enough points.') }
+                      catch (e) { setError(errMsg(e)) }
                     }}
                   />
                 )}
@@ -128,22 +148,25 @@ export function GoalsTab({ canManage, pointsLabel }: { canManage: boolean; point
 function NewGoalForm({ onCreated }: { onCreated: () => void }) {
   const [f, setF] = useState({ title: '', target_points: '100', description: '' })
   const [saving, setSaving] = useState(false)
-  const input = fieldClass
+  const [error, setError] = useState<string | null>(null)
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!f.title.trim()) return
-    setSaving(true)
+    setSaving(true); setError(null)
     try {
       await api.createMeridianGoal({ title: f.title.trim(), target_points: Number(f.target_points) || 0, description: f.description })
       onCreated()
+    } catch (e2) {
+      setError(errMsg(e2))
     } finally { setSaving(false) }
   }
   return (
     <Card title="New group goal">
       <form onSubmit={submit} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <input className={input} placeholder="Goal (e.g. Family movie night)" value={f.title} onChange={e => setF({ ...f, title: e.target.value })} />
-        <input className={input} type="number" min="0" placeholder="Target points" value={f.target_points} onChange={e => setF({ ...f, target_points: e.target.value })} />
-        <input className={`${input} sm:col-span-2`} placeholder="Description (optional)" value={f.description} onChange={e => setF({ ...f, description: e.target.value })} />
+        {error && <p className="sm:col-span-2 rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+        <Field label="Goal name"><Input autoFocus placeholder="e.g. Family movie night" value={f.title} onChange={e => setF({ ...f, title: e.target.value })} /></Field>
+        <Field label="Target" hint="Total household points needed."><Input type="number" min="1" inputMode="numeric" value={f.target_points} onChange={e => setF({ ...f, target_points: e.target.value })} /></Field>
+        <Field label="Description" className="sm:col-span-2"><Textarea placeholder="What are you working towards together?" value={f.description} onChange={e => setF({ ...f, description: e.target.value })} /></Field>
         <div className="sm:col-span-2"><Button type="submit" loading={saving} disabled={!f.title.trim()}>Create goal</Button></div>
       </form>
     </Card>
@@ -160,15 +183,24 @@ export function WishlistTab({ canManage, pointsLabel }: { canManage: boolean; po
   const { personId, balance, refresh } = useMyBalance()
   const [reqName, setReqName] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [requestBusy, setRequestBusy] = useState(false)
 
   const reload = async () => {
-    const ppl = await refresh()
-    setPeople(ppl)
-    const [it, rq] = await Promise.all([
-      api.getWishlistItems().catch(() => []),
-      canManage ? api.getWishlistRequests('requested').catch(() => []) : Promise.resolve([]),
-    ])
-    setItems(it); setRequests(rq); setLoading(false)
+    setError(null)
+    try {
+      const ppl = await refresh()
+      setPeople(ppl)
+      const [it, rq] = await Promise.all([
+        api.getWishlistItems(),
+        canManage ? api.getWishlistRequests('requested') : Promise.resolve([]),
+      ])
+      setItems(it); setRequests(rq)
+    } catch (e) {
+      setError(errMsg(e))
+    } finally {
+      setLoading(false)
+    }
   }
   useEffect(() => { reload() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -181,20 +213,27 @@ export function WishlistTab({ canManage, pointsLabel }: { canManage: boolean; po
       <div className="flex items-center gap-3 flex-wrap">
         {balance !== null && <span className="text-sm text-muted">Your balance: <strong className="text-primary">★ {balance}</strong></span>}
       </div>
+      {error && <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
       {msg && <p className="text-sm text-primary text-center">{msg}</p>}
 
       {/* Request a new item (anyone with a person) */}
       {personId && (
         <Card title="Ask for a wishlist item">
-          <form className="flex gap-2" onSubmit={async e => {
+          <form className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end" onSubmit={async e => {
             e.preventDefault()
             if (!reqName.trim()) return
-            await api.requestWishlistItem({ requested_name: reqName.trim() }).catch(() => {})
-            setReqName(''); setMsg('Requested — a parent will set it up.'); reload()
+            setRequestBusy(true); setError(null); setMsg(null)
+            try {
+              await api.requestWishlistItem({ requested_name: reqName.trim() })
+              setReqName(''); setMsg('Requested — a household manager will set it up.'); await reload()
+            } catch (e2) {
+              setError(errMsg(e2))
+            } finally {
+              setRequestBusy(false)
+            }
           }}>
-            <input value={reqName} onChange={e => setReqName(e.target.value)} placeholder="What would you like?"
-              className={`${fieldClass} flex-1`} />
-            <Button size="sm" type="submit" disabled={!reqName.trim()}>Request</Button>
+            <Field label="Wishlist item"><Input autoFocus value={reqName} onChange={e => setReqName(e.target.value)} placeholder="What would you like?" /></Field>
+            <Button type="submit" loading={requestBusy} disabled={!reqName.trim()}>Send request</Button>
           </form>
         </Card>
       )}
@@ -204,14 +243,19 @@ export function WishlistTab({ canManage, pointsLabel }: { canManage: boolean; po
         <Card title="Wishlist requests">
           <ul className="flex flex-col gap-2">
             {requests.map(r => (
-              <li key={r.id} className="flex items-center justify-between gap-3">
+              <li key={r.id} className="flex flex-col gap-3 rounded-xl bg-sunken p-3 sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-sm text-ink">{personName(r.person_id)} · {r.requested_name}</span>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:flex">
                   <Button size="sm" onClick={async () => {
                     const cost = Number(prompt(`Point cost for "${r.requested_name}"?`, '50'))
-                    if (cost > 0) { await api.approveWishlistRequest(r.id, cost).catch(() => {}); reload() }
+                    if (cost <= 0) return
+                    setError(null)
+                    try { await api.approveWishlistRequest(r.id, cost); await reload() } catch (e) { setError(errMsg(e)) }
                   }}>Approve</Button>
-                  <Button size="sm" variant="ghost" onClick={() => api.rejectWishlistRequest(r.id).then(reload)}>Reject</Button>
+                  <Button size="sm" variant="ghost" onClick={async () => {
+                    setError(null)
+                    try { await api.rejectWishlistRequest(r.id); await reload() } catch (e) { setError(errMsg(e)) }
+                  }}>Reject</Button>
                 </div>
               </li>
             ))}
@@ -229,8 +273,18 @@ export function WishlistTab({ canManage, pointsLabel }: { canManage: boolean; po
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-bold text-ink">{it.name} <span className="text-xs text-muted font-normal">· {personName(it.person_id)}</span></h3>
                   {canManage && (
-                    <button onClick={() => { if (confirm(`Delete "${it.name}"?`)) api.deleteWishlistItem(it.id).then(reload) }}
-                      className="text-muted hover:text-danger text-lg leading-none">×</button>
+                    <button
+                      type="button"
+                      aria-label={`Delete ${it.name}`}
+                      onClick={async () => {
+                        if (!confirm(`Delete "${it.name}"?`)) return
+                        setError(null)
+                        try { await api.deleteWishlistItem(it.id); await reload() } catch (e) { setError(errMsg(e)) }
+                      }}
+                      className="grid min-h-10 min-w-10 place-items-center text-xl leading-none text-muted hover:text-danger"
+                    >
+                      ×
+                    </button>
                   )}
                 </div>
                 <Progress pct={it.progress_percentage} />
@@ -240,13 +294,16 @@ export function WishlistTab({ canManage, pointsLabel }: { canManage: boolean; po
                 </p>
                 {it.status === 'active' && it.person_id === personId && (
                   <Contribute disabled={balance === 0} onContribute={async n => {
-                    setMsg(null)
+                    setMsg(null); setError(null)
                     try { await api.contributeToWishlist(it.id, n); await reload() }
-                    catch { setMsg('Could not contribute — not enough points.') }
+                    catch (e) { setError(errMsg(e)) }
                   }} />
                 )}
                 {canManage && it.status === 'funded' && (
-                  <Button size="sm" variant="secondary" onClick={() => api.fulfillWishlistItem(it.id).then(reload)}>Mark fulfilled</Button>
+                  <Button size="sm" variant="secondary" onClick={async () => {
+                    setError(null)
+                    try { await api.fulfillWishlistItem(it.id); await reload() } catch (e) { setError(errMsg(e)) }
+                  }}>Mark fulfilled</Button>
                 )}
               </div>
             </Card>
