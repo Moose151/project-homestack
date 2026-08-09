@@ -821,7 +821,7 @@ export function AtlasPage() {
                   </div>
                 </form>
               ) : lists.length > 0 ? (
-                <Button variant="secondary" onClick={() => setCreatingList(true)} className="self-start">+ New list</Button>
+                <Button onClick={() => setCreatingList(true)} className="self-start">+ New list</Button>
               ) : null}
 
               {loading ? (

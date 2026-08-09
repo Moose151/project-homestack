@@ -443,7 +443,22 @@ export interface HubWidget {
   size: string
   supports_kiosk: boolean
   items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | PetTreatment[] | PetAppointment[] | MaintenanceTask[] | Appliance[] | Improvement[] | SolaceBill[] | SolaceSubscription[] | SolacePurchase[] | AppNotification[]
-  meta?: { unread_count?: number; title?: string; target_date?: string }
+  meta?: {
+    unread_count?: number
+    title?: string
+    target_date?: string
+    /** Upcoming widget: selectable ranges, narrowest first. */
+    horizons?: UpcomingHorizon[]
+    default_horizon?: string
+    window_days?: number
+  }
+}
+
+/** A range the Upcoming widget can be clipped to. `until` is an inclusive YYYY-MM-DD date. */
+export interface UpcomingHorizon {
+  key: string
+  label: string
+  until: string
 }
 
 export interface HubResponse {
@@ -455,7 +470,10 @@ export interface HubWidgetConfig {
   name: string
   description: string
   source_node: string | null
+  source_node_name: string
   supports_kiosk: boolean
+  /** Ambient widgets render even when empty; everything else is dropped while it has nothing. */
+  always_visible: boolean
   household_enabled: boolean
   household_order: number
   size: 'small' | 'medium' | 'large'
@@ -855,6 +873,24 @@ export interface RoomArea {
   updated_at: string
 }
 
+/** One candidate purchase behind a room job. `image_url` is a remote link, not an upload. */
+export interface RoomPlanProduct {
+  id: number
+  plan_item_id: number
+  title: string
+  url: string
+  image_url: string
+  retailer: string
+  quantity: string
+  unit_cost: string
+  total_cost: string
+  is_chosen: boolean
+  notes: string
+  position: number
+  created_at: string
+  updated_at: string
+}
+
 export interface RoomPlanItem {
   id: number
   room_id: number
@@ -869,11 +905,12 @@ export interface RoomPlanItem {
   estimated_total: string
   actual_cost: string | null
   effective_cost: string
-  link_url: string
   notes: string
   position: number
   completed_at: string | null
   visibility: string
+  /** Shopping-list options for this job — what to buy, from where, at what price. */
+  products: RoomPlanProduct[]
   created_at: string
   updated_at: string
 }

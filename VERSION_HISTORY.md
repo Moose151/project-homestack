@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.21.0**
+> **Current version: 0.22.1**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,72 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.22 — Attention-driven Hub and shell consistency
+
+### 0.22.1 — 2026-08-09
+- **Room jobs carry a shopping list, not one link.** A room plan item held a single `link_url`,
+  which could not answer "which of the three sofas were we looking at?". Each job now has any
+  number of options, and each option records what it is, a link to it, the shop, the quantity and
+  price, and a picture. Marking one **Chosen** copies its price onto the job, so room and
+  whole-house estimates follow the option actually picked, and only one option stays chosen at a
+  time. Re-pricing the chosen option updates the estimate too.
+- **Images are links, not uploads.** `image_url` stores a remote address, so adding a picture is a
+  copy-paste of a product photo's URL rather than a download-then-upload round trip. A link that
+  fails to load falls back to the job's type icon instead of a broken-image glyph, and images are
+  requested with `referrerPolicy="no-referrer"`. Note that displaying one does make the viewer's
+  browser fetch it from that third-party host.
+- **Link fields are scheme-checked.** Both the product link and the image link must start with
+  `http://` or `https://`; these render as `href`/`src`, so a `javascript:` URL saved here would
+  otherwise run in another household member's session.
+- The existing `link_url` on each plan item is migrated into a chosen option so no saved link is
+  lost, then removed — two places to store a link is how they drift apart. **652 backend tests
+  green (10 new, permission-first); production build clean; no migration drift.**
+
+## 0.22 — Attention-driven Hub and shell consistency
+
+### 0.22.0 — 2026-08-09
+- **The Hub only carries what needs attention.** A widget with nothing to show is dropped from
+  the Hub response instead of rendering a card that says "Nothing due". Ambient widgets (clock,
+  quick add, daily quote, countdown) opt out through the new `HubWidget.always_visible` flag, so
+  the board never empties itself completely.
+- **One "Upcoming" card replaces a card per node.** It reads calendar events — which already
+  mirror every dated household record via the scheduling helper (D7) — so Lists, Pets, School &
+  study, Our home, Tasks & rewards and Money aggregate in a single pass with no double counting
+  and with visibility/sensitivity filtering already applied. Items group by day under Overdue /
+  Today / Tomorrow / weekday, and the horizon switches between Next 7 days, This pay cycle (when
+  Money is permitted and unlocked) and Next 30 days without a round trip. A migration enables it
+  and switches off the nine per-node dated widgets it subsumes; they stay re-enablable.
+- **Choosing Hub cards is one action in one place.** "Tune this page" is now a single "On your
+  Home page" list (drag, arrow moves, width, Remove) plus a searchable "Add a card" catalogue
+  grouped by originating destination. Previously the same widget appeared in two flat lists and
+  adding one meant toggling it in the admin list then finding it again in the personal list.
+- **The Hub grid tiles.** The board was a 3-column grid whose widgets defaulted to a 2-column
+  span, so the third column was structurally always empty. It is now 4 columns at desktop with
+  1/2/4 spans, so same-size widgets fill a row exactly.
+- **One content column for the whole app.** Pages set their own `max-w-5xl` / `max-w-7xl` / no
+  constraint, moving the content box by ~600px between destinations. A single
+  `CONTENT_CONTAINER` token now drives the top bar, `<main>` and every page.
+- **The two headers line up.** The sidebar brand block was 76px tall against a 62/68px top bar,
+  with different padding again in `<main>`. Both headers now share a height and the top bar's
+  content sits in the shared container, so its title aligns with the page title beneath it.
+- **Shell corrections:** the HomeStack logo navigates to Home; the search hint shows Ctrl or ⌘
+  by platform instead of always ⌘ (contradicting its own tooltip); the top-bar calendar button is
+  a drawn icon rather than the 📅 emoji, which permanently displayed 17 July; the sidebar's
+  active indicator moved to the left edge and is absolutely positioned, so labels no longer
+  truncate and jitter only on the current page; and the nav list fades its last row so a
+  half-visible destination reads as "scroll for more" rather than a clipped layout.
+- **One vocabulary for row actions.** `RowActions` provides Edit / Delete / Remove with
+  danger-toned deletes, replacing a mix of the word "Delete", a bare `×` and a "clear" chip;
+  applied to Pets. Our home's counters read "All clear" / "Needs attention" instead of "clear",
+  Money's health badge reads "Setup needed" instead of "Error" on an unconfigured household, and
+  Pets and Lists use the primary button variant for their add actions, matching Books.
+- **Deduplicated node metadata.** The Calendar's private node-colour table and source-link
+  routing moved to `lib/sourceLinks.ts`, shared with the Hub's Upcoming card.
+- **Audit recorded.** `docs/UI_CONSISTENCY_AUDIT.md` lists every finding from the desktop pass
+  with its status; the open items are the tab-pill treatment, duplicated node identity, stat-card
+  and empty-state rollout, and the Books rail. **642 backend tests green; production build clean;
+  no migration drift.**
 
 ## 0.21 — Controlled partner household pilot
 

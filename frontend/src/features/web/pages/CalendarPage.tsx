@@ -14,6 +14,7 @@ import { DateTimeField } from '../../../components/DateTimeField'
 import { Popover } from '../../../components/Popover'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
 import { parseQuickEvent, quickEventPreview } from '../../../lib/quickParse'
+import { sourceColour, sourcePath } from '../../../lib/sourceLinks'
 import { useAuth } from '../../auth/AuthContext'
 import { useStacks } from '../../stacks/StacksContext'
 import { useUrlAction } from '../../../hooks/useUrlTab'
@@ -59,43 +60,9 @@ function fmtTime(iso: string, time24: boolean) {
   return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: !time24 })
 }
 
-const NODE_COLOUR: Record<string, string> = {
-  atlas: '#5b57d1',
-  meridian: '#d98324',
-  education: '#2f9e6f',
-  pets: '#d9642c',
-  homestead: '#b0563c',
-  solace: '#8f4e38',
-}
+// Node accents and source deep links come from the shared module so the Calendar and the
+// Hub's Upcoming card can never drift apart.
 const DEFAULT_COLOUR = '#9CA3AF'
-
-function sourcePath(event: CalendarEvent): string | null {
-  if (!event.source_node) return null
-  const query = encodeURIComponent(event.title)
-  if (event.source_node === 'atlas') return `/atlas?tab=reminders&q=${query}`
-  if (event.source_node === 'pets') {
-    const tab = event.source_record_type === 'PetAppointment' ? 'appointments' : 'reminders'
-    return `/pets?tab=${tab}&q=${query}`
-  }
-  if (event.source_node === 'education') {
-    const tab = event.source_record_type === 'EducationClassSession'
-      ? 'timetable'
-      : event.source_record_type === 'EducationEvent' ? 'events' : 'assignments'
-    return `/education?tab=${tab}&q=${query}`
-  }
-  if (event.source_node === 'homestead') {
-    const tab = event.source_record_type === 'Improvement' ? 'improvements' : 'maintenance'
-    return `/homestead?tab=${tab}&q=${query}`
-  }
-  if (event.source_node === 'solace') {
-    const tabs: Record<string, string> = {
-      Bill: 'bills', Payday: 'paydays', PlannedPurchase: 'purchases', Subscription: 'subscriptions',
-    }
-    return `/solace?tab=${tabs[event.source_record_type] || 'schedule'}&q=${query}`
-  }
-  if (event.source_node === 'meridian') return '/meridian?tab=tasks'
-  return null
-}
 
 // ---------------------------------------------------------------------------
 // Event modal (create / edit standalone events) — common fields up top, the
@@ -771,7 +738,7 @@ export function CalendarPage() {
     if (e.colour) return e.colour
     if (e.assigned_to_person_id)
       return personColour[e.assigned_to_person_id]
-        || (e.source_node ? NODE_COLOUR[e.source_node] : '') || DEFAULT_COLOUR
+        || (e.source_node ? sourceColour(e.source_node) : '') || DEFAULT_COLOUR
     return familyColour
   }
 
@@ -979,7 +946,7 @@ export function CalendarPage() {
                       {layersPresent.map(src => {
                         const label = src === '__direct__' ? 'Direct' : src === '__rotation__' ? 'Rotations' : src
                         const on = !hiddenSources.has(src)
-                        const colour = src === '__rotation__' ? rotatingSchedules[0]?.primary_colour : src !== '__direct__' ? NODE_COLOUR[src] : undefined
+                        const colour = src === '__rotation__' ? rotatingSchedules[0]?.primary_colour : src !== '__direct__' ? sourceColour(src) : undefined
                         return (
                           <button key={src} onClick={() => toggleSource(src)} className={chipCls(on)} title={on ? `Hide ${label}` : `Show ${label}`}>
                             <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colour || DEFAULT_COLOUR }} />

@@ -27,6 +27,7 @@ from apps.homestead.services import (
     create_insurance_policy,
     create_room,
     create_room_item,
+    create_room_product,
     delete_maintenance,
     update_maintenance,
     update_improvement,
@@ -158,6 +159,130 @@ class HomesteadFinancePermissionTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 403)
+
+
+class RoomPlanProductTests(TestCase):
+    """The shopping list behind a room job (owner request, 2026-08-09).
+
+    A plan item used to carry one `link_url`, which could not hold the two or three options a
+    household is actually comparing. Permission tests first (D10).
+    """
+
+    def setUp(self):
+        self.admin = _make_user("product_admin", User.Role.ADMIN)
+        self.member = _make_user("product_member", User.Role.USER)
+        self.child = _make_user("product_child", User.Role.USER, is_child=True)
+        self.room = create_room(self.admin, name="Lounge")
+        self.item = create_room_item(self.admin, self.room, title="New sofa")
+        self.list_url = reverse(
+            "homestead-room-product-list", args=[self.room.id, self.item.id]
+        )
+
+    def _detail_url(self, product_id):
+        return reverse(
+            "homestead-room-product-detail",
+            args=[self.room.id, self.item.id, product_id],
+        )
+
+    def test_unauthenticated_rejected(self):
+        self.assertIn(self.client.get(self.list_url).status_code, [401, 403])
+
+    def test_child_cannot_add_a_product(self):
+        self.client.force_login(self.child)
+        response = self.client.post(
+            self.list_url, {"title": "Corner sofa"}, content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_member_can_add_several_options_to_one_item(self):
+        self.client.force_login(self.member)
+        for title in ("Corner sofa", "Two seater", "Chesterfield"):
+            response = self.client.post(
+                self.list_url, {"title": title}, content_type="application/json"
+            )
+            self.assertEqual(response.status_code, 201)
+        self.assertEqual(len(self.client.get(self.list_url).json()), 3)
+
+    def test_product_carries_link_image_and_cost(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            self.list_url,
+            {
+                "title": "Corner sofa",
+                "url": "https://example.com/sofa",
+                "image_url": "https://example.com/sofa.jpg",
+                "retailer": "Example Furniture",
+                "quantity": "1.00",
+                "unit_cost": "899.00",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["url"], "https://example.com/sofa")
+        self.assertEqual(body["image_url"], "https://example.com/sofa.jpg")
+        self.assertEqual(body["total_cost"], "899.00")
+
+    def test_non_http_link_is_rejected(self):
+        """These render as href/src, so a javascript: URL would run in someone's session."""
+        self.client.force_login(self.admin)
+        for field in ("url", "image_url"):
+            response = self.client.post(
+                self.list_url,
+                {"title": "Dodgy", field: "javascript:alert(1)"},
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 400, field)
+
+    def test_choosing_an_option_sets_the_item_estimate(self):
+        self.client.force_login(self.admin)
+        create_room_product(self.admin, self.item, title="Cheap", unit_cost="400.00")
+        chosen = create_room_product(self.admin, self.item, title="Nice", unit_cost="899.00")
+        self.client.patch(
+            self._detail_url(chosen.id), {"is_chosen": True}, content_type="application/json"
+        )
+        self.item.refresh_from_db()
+        self.assertEqual(str(self.item.estimated_unit_cost), "899.00")
+
+    def test_only_one_option_stays_chosen(self):
+        self.client.force_login(self.admin)
+        first = create_room_product(self.admin, self.item, title="Cheap", is_chosen=True)
+        second = create_room_product(self.admin, self.item, title="Nice")
+        self.client.patch(
+            self._detail_url(second.id), {"is_chosen": True}, content_type="application/json"
+        )
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertFalse(first.is_chosen)
+        self.assertTrue(second.is_chosen)
+
+    def test_repricing_the_chosen_option_updates_the_item(self):
+        self.client.force_login(self.admin)
+        product = create_room_product(
+            self.admin, self.item, title="Nice", unit_cost="899.00", is_chosen=True
+        )
+        self.client.patch(
+            self._detail_url(product.id), {"unit_cost": "799.00"}, content_type="application/json"
+        )
+        self.item.refresh_from_db()
+        self.assertEqual(str(self.item.estimated_unit_cost), "799.00")
+
+    def test_products_are_returned_with_their_plan_item(self):
+        create_room_product(self.admin, self.item, title="Corner sofa")
+        self.client.force_login(self.admin)
+        items = self.client.get(
+            reverse("homestead-room-item-list", args=[self.room.id])
+        ).json()
+        self.assertEqual([p["title"] for p in items[0]["products"]], ["Corner sofa"])
+
+    def test_products_of_a_hidden_item_are_unreachable(self):
+        private_room = create_room(self.admin, name="Study", visibility="private")
+        private_item = create_room_item(self.admin, private_room, title="Desk")
+        self.client.force_login(self.member)
+        response = self.client.get(
+            reverse("homestead-room-product-list", args=[private_room.id, private_item.id])
+        )
+        self.assertEqual(response.status_code, 404)
 
 
 class HomesteadRoomPermissionTests(TestCase):

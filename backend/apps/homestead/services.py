@@ -19,6 +19,7 @@ from apps.homestead.models import (
     Property,
     RoomArea,
     RoomPlanItem,
+    RoomPlanProduct,
     ServiceProvider,
 )
 from apps.scheduling.helpers import delete_event_for, sync_event_for
@@ -400,7 +401,7 @@ _ROOM_FIELDS = {
 }
 _ROOM_ITEM_FIELDS = {
     "assigned_to_person_id", "title", "item_type", "status", "priority", "description",
-    "quantity", "estimated_unit_cost", "actual_cost", "link_url", "notes", "position",
+    "quantity", "estimated_unit_cost", "actual_cost", "notes", "position",
     "visibility",
 }
 
@@ -469,6 +470,70 @@ def update_room_item(
 
 
 def delete_room_item(acting_user: User, obj: RoomPlanItem) -> None:
+    obj.updated_by = acting_user
+    obj.save(update_fields=["updated_by", "updated_at"])
+    obj.soft_delete()
+
+
+# ---------------------------------------------------------------------------
+# Room plan products — the shopping list behind one plan item
+# ---------------------------------------------------------------------------
+
+_ROOM_PRODUCT_FIELDS = {
+    "title", "url", "image_url", "retailer", "quantity", "unit_cost",
+    "is_chosen", "notes", "position",
+}
+
+
+def _apply_chosen_product(acting_user: User, product: RoomPlanProduct) -> None:
+    """Make `product` the only chosen option and copy its price onto the plan item.
+
+    Choosing an option is how a household says "this is the one" — so the room and
+    whole-house estimates should follow it rather than keeping a stale number typed in
+    before the options were compared.
+    """
+    item = product.plan_item
+    RoomPlanProduct.objects.filter(plan_item=item).exclude(pk=product.pk).filter(
+        is_chosen=True
+    ).update(is_chosen=False)
+    item.quantity = product.quantity
+    item.estimated_unit_cost = product.unit_cost
+    item.updated_by = acting_user
+    item.save(update_fields=["quantity", "estimated_unit_cost", "updated_by", "updated_at"])
+
+
+def create_room_product(
+    acting_user: User, item: RoomPlanItem, **data
+) -> RoomPlanProduct:
+    obj = RoomPlanProduct(
+        household=get_active_household(),
+        plan_item=item,
+        created_by=acting_user,
+        updated_by=acting_user,
+        **data,
+    )
+    obj.save()
+    if obj.is_chosen:
+        _apply_chosen_product(acting_user, obj)
+    return obj
+
+
+def update_room_product(
+    acting_user: User, obj: RoomPlanProduct, **data
+) -> RoomPlanProduct:
+    became_chosen = data.get("is_chosen") and not obj.is_chosen
+    for key, value in data.items():
+        if key in _ROOM_PRODUCT_FIELDS:
+            setattr(obj, key, value)
+    obj.updated_by = acting_user
+    obj.save()
+    # Also re-apply when the chosen option's own price changes, so the estimate stays true.
+    if obj.is_chosen and (became_chosen or "unit_cost" in data or "quantity" in data):
+        _apply_chosen_product(acting_user, obj)
+    return obj
+
+
+def delete_room_product(acting_user: User, obj: RoomPlanProduct) -> None:
     obj.updated_by = acting_user
     obj.save(update_fields=["updated_by", "updated_at"])
     obj.soft_delete()

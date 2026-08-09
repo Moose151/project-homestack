@@ -26,13 +26,18 @@ export function HealthPanel({ health, onManage }: {
 }) {
   if (!health) return null
   const tone = health.status === 'healthy' ? 'success' : health.status === 'error' ? 'danger' : 'warning'
+  // "Error" made a household that simply hasn't finished setting Money up think something
+  // had broken. The listed issues are onboarding steps, so the badge names the state.
+  const statusLabel = health.status === 'healthy'
+    ? 'Ready'
+    : health.status === 'error' ? 'Setup needed' : 'Needs attention'
   return (
     <Card className="p-4">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="font-bold text-ink">Finance health</h2>
-            <Badge tone={tone}>{cap(health.status)}</Badge>
+            <Badge tone={tone}>{statusLabel}</Badge>
           </div>
           {health.issues.length === 0 ? (
             <p className="mt-2 text-sm text-muted">Income, bills, allocations and account balance are ready.</p>

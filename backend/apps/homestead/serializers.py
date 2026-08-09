@@ -14,6 +14,7 @@ from apps.homestead.models import (
     Property,
     RoomArea,
     RoomPlanItem,
+    RoomPlanProduct,
     ServiceProvider,
 )
 
@@ -21,6 +22,21 @@ from apps.homestead.models import (
 def _non_blank(value: str) -> str:
     if not value.strip():
         raise serializers.ValidationError("This field may not be blank.")
+    return value
+
+
+def _web_url(value: str) -> str:
+    """Accept only http(s) links.
+
+    These values are rendered as `href`/`src` in the browser, so a `javascript:` or `data:`
+    URL saved here would execute in another household member's session when they click the
+    product. Blank stays blank — the field is optional.
+    """
+    value = value.strip()
+    if not value:
+        return ""
+    if not value.lower().startswith(("http://", "https://")):
+        raise serializers.ValidationError("Enter a link starting with http:// or https://.")
     return value
 
 
@@ -153,23 +169,47 @@ class RoomAreaSerializer(serializers.ModelSerializer):
         }))
 
 
+class RoomPlanProductSerializer(serializers.ModelSerializer):
+    plan_item_id = serializers.IntegerField(read_only=True)
+    total_cost = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = RoomPlanProduct
+        fields = [
+            "id", "plan_item_id", "title", "url", "image_url", "retailer",
+            "quantity", "unit_cost", "total_cost", "is_chosen", "notes", "position",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "plan_item_id", "total_cost", "created_at", "updated_at"]
+
+    def validate_title(self, value: str) -> str:
+        return _non_blank(value)
+
+    def validate_url(self, value: str) -> str:
+        return _web_url(value)
+
+    def validate_image_url(self, value: str) -> str:
+        return _web_url(value)
+
+
 class RoomPlanItemSerializer(serializers.ModelSerializer):
     room_id = serializers.IntegerField(read_only=True)
     assigned_to_person_id = serializers.IntegerField(required=False, allow_null=True)
     estimated_total = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
     effective_cost = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    products = RoomPlanProductSerializer(many=True, read_only=True)
 
     class Meta:
         model = RoomPlanItem
         fields = [
             "id", "room_id", "assigned_to_person_id", "title", "item_type", "status",
             "priority", "description", "quantity", "estimated_unit_cost", "estimated_total",
-            "actual_cost", "effective_cost", "link_url", "notes", "position",
-            "completed_at", "visibility", "created_at", "updated_at",
+            "actual_cost", "effective_cost", "notes", "position",
+            "completed_at", "visibility", "products", "created_at", "updated_at",
         ]
         read_only_fields = [
             "id", "room_id", "estimated_total", "effective_cost", "completed_at",
-            "created_at", "updated_at",
+            "products", "created_at", "updated_at",
         ]
 
     def validate_title(self, value: str) -> str:

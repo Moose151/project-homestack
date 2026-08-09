@@ -393,7 +393,6 @@ class RoomPlanItem(HouseholdBaseModel):
         blank=True,
         validators=[MinValueValidator(Decimal("0.00"))],
     )
-    link_url = models.CharField(max_length=500, blank=True, default="")
     notes = models.TextField(blank=True, default="")
     position = models.PositiveSmallIntegerField(default=0)
     completed_at = models.DateTimeField(null=True, blank=True)
@@ -420,6 +419,60 @@ class RoomPlanItem(HouseholdBaseModel):
         if self.status == self.Status.COMPLETED and self.actual_cost is not None:
             return self.actual_cost
         return self.estimated_total
+
+
+class RoomPlanProduct(HouseholdBaseModel):
+    """A candidate purchase for a room plan item — the shopping list behind "New sofa".
+
+    A plan item used to carry a single `link_url`, which could not answer "which of the three
+    we were looking at?". Each product is one option: what it is, where to buy it, what it
+    costs and what it looks like.
+
+    Images are stored as a URL rather than an upload, so adding an option is a copy-paste from
+    a retailer's page. Note that rendering one makes the viewer's browser request the image
+    from that third-party host.
+
+    Marking an option `is_chosen` copies its price onto the parent plan item, so room and
+    whole-house estimates reflect the option actually picked. Only one option per item can be
+    chosen at a time.
+    """
+
+    plan_item = models.ForeignKey(
+        RoomPlanItem, on_delete=models.CASCADE, related_name="products"
+    )
+    title = models.CharField(max_length=255)
+    url = models.CharField(max_length=500, blank=True, default="")
+    image_url = models.CharField(max_length=500, blank=True, default="")
+    retailer = models.CharField(max_length=120, blank=True, default="")
+    quantity = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("1.00"),
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
+    unit_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+    )
+    is_chosen = models.BooleanField(default=False)
+    notes = models.TextField(blank=True, default="")
+    position = models.PositiveSmallIntegerField(default=0)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "room plan product"
+        ordering = ["position", "id"]
+
+    def __str__(self) -> str:
+        return self.title
+
+    @property
+    def total_cost(self) -> Decimal:
+        return (self.quantity * self.unit_cost).quantize(Decimal("0.01"))
 
 
 class InsurancePolicy(HouseholdBaseModel):

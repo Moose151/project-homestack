@@ -20,6 +20,13 @@ class HubWidget(models.Model):
     )
     supports_kiosk = models.BooleanField(default=False)
     display_order = models.PositiveIntegerField(default=0)
+    always_visible = models.BooleanField(
+        default=False,
+        help_text=(
+            "Ambient widgets (clock, quick add, countdown) render even with no content. "
+            "Every other widget is dropped from the Hub while it has nothing to show."
+        ),
+    )
 
     class Meta:
         ordering = ["display_order", "key"]

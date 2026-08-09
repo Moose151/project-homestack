@@ -13,7 +13,7 @@ import type {
   WikiCategory, WikiPage,
   Pet, PetTreatment, PetAppointment,
   Property, ServiceProvider, Appliance, MaintenanceTask, Improvement, HomesteadSearchResults,
-  InsurancePolicy, HouseholdCost, RoomArea, RoomDetailResponse, RoomListResponse, RoomPlanItem,
+  InsurancePolicy, HouseholdCost, RoomArea, RoomDetailResponse, RoomListResponse, RoomPlanItem, RoomPlanProduct,
   RoomAreaType, RoomItemPriority, RoomItemStatus, RoomItemType,
   SolaceBill, SolaceBillOccurrence, SolaceBillTimeline, SolacePayday, SolacePurchase, SolaceSchedule,
   SolaceBucket, SolaceSubscription,
@@ -132,7 +132,12 @@ type RoomItemWrite = Partial<{
   assigned_to_person_id: number | null; title: string; item_type: RoomItemType
   status: RoomItemStatus; priority: RoomItemPriority; description: string
   quantity: string; estimated_unit_cost: string; actual_cost: string | null
-  link_url: string; notes: string; position: number; visibility: string
+  notes: string; position: number; visibility: string
+}>
+
+type RoomProductWrite = Partial<{
+  title: string; url: string; image_url: string; retailer: string
+  quantity: string; unit_cost: string; is_chosen: boolean; notes: string; position: number
 }>
 
 type SolaceBillWrite = Partial<{
@@ -904,6 +909,13 @@ export const api = {
     _fetch(`/homestead/rooms/${roomId}/items/${itemId}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteRoomItem: (roomId: number, itemId: number): Promise<void> =>
     _fetch(`/homestead/rooms/${roomId}/items/${itemId}/`, { method: 'DELETE' }),
+
+  createRoomProduct: (roomId: number, itemId: number, data: RoomProductWrite): Promise<RoomPlanProduct> =>
+    _fetch(`/homestead/rooms/${roomId}/items/${itemId}/products/`, { method: 'POST', body: JSON.stringify(data) }),
+  updateRoomProduct: (roomId: number, itemId: number, productId: number, data: RoomProductWrite): Promise<RoomPlanProduct> =>
+    _fetch(`/homestead/rooms/${roomId}/items/${itemId}/products/${productId}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteRoomProduct: (roomId: number, itemId: number, productId: number): Promise<void> =>
+    _fetch(`/homestead/rooms/${roomId}/items/${itemId}/products/${productId}/`, { method: 'DELETE' }),
 
   getInsurancePolicies: (active = false): Promise<InsurancePolicy[]> =>
     _fetch(`/homestead/insurance/${active ? '?active=1' : ''}`),

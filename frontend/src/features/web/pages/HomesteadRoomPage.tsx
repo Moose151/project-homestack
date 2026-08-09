@@ -13,6 +13,7 @@ import { Card } from '../../../components/Card'
 import { EmptyState } from '../../../components/EmptyState'
 import { Field, Input, Select, Textarea, fieldClass } from '../../../components/Field'
 import { PageHeader } from '../../../components/PageHeader'
+import { DeleteAction, EditAction } from '../../../components/RowActions'
 import { useAuth } from '../../auth/AuthContext'
 
 const ITEM_TYPES: RoomItemType[] = ['purchase', 'maintenance', 'renovation', 'upgrade']
@@ -30,6 +31,275 @@ const STATUS_TONE: Record<RoomItemStatus, BadgeTone> = {
   planned: 'neutral', in_progress: 'warning', completed: 'success', archived: 'neutral',
 }
 
+const EMPTY_PRODUCT = {
+  title: '', url: '', image_url: '', retailer: '', quantity: '1', unit_cost: '',
+}
+
+/**
+ * The shopping list behind one room job.
+ *
+ * A job used to hold a single link, which could not represent the two or three options a
+ * household is actually comparing. Each option carries what it is, where to buy it, what it
+ * costs and a picture — the picture as a URL, so adding one is a copy-paste from a retailer
+ * page rather than a download-then-upload round trip.
+ */
+function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
+  roomId: number
+  item: RoomPlanItem
+  canEdit: boolean
+  canDelete: boolean
+  onChanged: () => Promise<void> | void
+  onError: (message: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [form, setForm] = useState(EMPTY_PRODUCT)
+  const [busy, setBusy] = useState(false)
+  // A remote image can 404 or be blocked; remember which ones failed so the card falls back
+  // to a placeholder instead of showing a broken-image glyph.
+  const [brokenImages, setBrokenImages] = useState<number[]>([])
+
+  const products = item.products ?? []
+  const chosen = products.find(product => product.is_chosen)
+  const cheapest = products.reduce<number | null>(
+    (low, product) => (low === null || Number(product.total_cost) < low ? Number(product.total_cost) : low),
+    null,
+  )
+
+  const startAdd = () => { setEditingId(null); setForm(EMPTY_PRODUCT); setAdding(true); setOpen(true) }
+
+  const startEdit = (productId: number) => {
+    const product = products.find(row => row.id === productId)
+    if (!product) return
+    setEditingId(productId)
+    setForm({
+      title: product.title, url: product.url, image_url: product.image_url,
+      retailer: product.retailer, quantity: product.quantity, unit_cost: product.unit_cost,
+    })
+    setAdding(true)
+  }
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!form.title.trim()) return
+    setBusy(true)
+    const payload = {
+      ...form,
+      title: form.title.trim(),
+      quantity: form.quantity || '1',
+      unit_cost: form.unit_cost || '0.00',
+    }
+    try {
+      if (editingId) await api.updateRoomProduct(roomId, item.id, editingId, payload)
+      else await api.createRoomProduct(roomId, item.id, payload)
+      setAdding(false); setEditingId(null); setForm(EMPTY_PRODUCT)
+      await onChanged()
+    } catch (error) { onError(errMsg(error)) } finally { setBusy(false) }
+  }
+
+  const choose = async (productId: number, isChosen: boolean) => {
+    setBusy(true)
+    try {
+      await api.updateRoomProduct(roomId, item.id, productId, { is_chosen: isChosen })
+      await onChanged()
+    } catch (error) { onError(errMsg(error)) } finally { setBusy(false) }
+  }
+
+  const remove = async (productId: number, title: string) => {
+    if (!confirm(`Remove "${title}" from the options?`)) return
+    setBusy(true)
+    try {
+      await api.deleteRoomProduct(roomId, item.id, productId)
+      await onChanged()
+    } catch (error) { onError(errMsg(error)) } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="mt-3 border-t border-line pt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen(value => !value)}
+          className="flex min-h-10 items-center gap-1.5 rounded-lg px-1.5 text-xs font-bold text-muted-strong hover:text-ink"
+          aria-expanded={open}
+        >
+          <span aria-hidden>{open ? '▾' : '▸'}</span>
+          {products.length === 0 ? 'Options' : `Options (${products.length})`}
+        </button>
+        {!open && products.length > 0 && (
+          <span className="text-xs text-muted">
+            {chosen ? `Chosen: ${chosen.title} · ${money(chosen.total_cost)}` : `from ${money(cheapest ?? 0)}`}
+          </span>
+        )}
+        {canEdit && open && !adding && (
+          <Button size="sm" variant="ghost" onClick={startAdd} className="ml-auto">+ Add option</Button>
+        )}
+      </div>
+
+      {open && (
+        <div className="mt-2 flex flex-col gap-2">
+          {products.length === 0 && !adding && (
+            <p className="text-xs text-muted">
+              No options yet. Add what you are considering — name, link, price and a picture.
+            </p>
+          )}
+
+          {products.length > 0 && (
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {products.map(product => {
+                const imageBroken = brokenImages.includes(product.id)
+                return (
+                  <li
+                    key={product.id}
+                    className={`flex gap-2.5 rounded-xl border p-2 ${
+                      product.is_chosen ? 'border-primary bg-primary-soft/40' : 'border-line'
+                    }`}
+                  >
+                    <div className="grid h-16 w-16 flex-shrink-0 place-items-center overflow-hidden rounded-lg bg-sunken">
+                      {product.image_url && !imageBroken ? (
+                        <img
+                          src={product.image_url}
+                          alt=""
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          onError={() => setBrokenImages(current => [...current, product.id])}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-xl" aria-hidden>{TYPE_ICON[item.item_type]}</span>
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="truncate text-sm font-semibold text-ink">{product.title}</span>
+                        {product.is_chosen && <Badge tone="success">Chosen</Badge>}
+                      </div>
+                      <p className="text-xs text-muted">
+                        {Number(product.quantity) !== 1 && `${Number(product.quantity).toLocaleString()} × `}
+                        {money(product.unit_cost)}
+                        {Number(product.quantity) !== 1 && ` = ${money(product.total_cost)}`}
+                        {product.retailer && ` · ${product.retailer}`}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {product.url && (
+                          <a
+                            href={product.url}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="grid min-h-10 place-items-center rounded-lg px-1.5 text-xs font-semibold text-primary hover:underline"
+                          >
+                            Open ↗
+                          </a>
+                        )}
+                        {canEdit && !product.is_chosen && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => choose(product.id, true)}
+                            className="grid min-h-10 place-items-center rounded-lg px-1.5 text-xs font-semibold text-muted hover:bg-sunken hover:text-ink disabled:opacity-40"
+                          >
+                            Choose
+                          </button>
+                        )}
+                        {canEdit && product.is_chosen && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => choose(product.id, false)}
+                            className="grid min-h-10 place-items-center rounded-lg px-1.5 text-xs font-semibold text-muted hover:bg-sunken hover:text-ink disabled:opacity-40"
+                          >
+                            Unchoose
+                          </button>
+                        )}
+                        {canEdit && <EditAction onClick={() => startEdit(product.id)} label={product.title} disabled={busy} />}
+                        {canDelete && <DeleteAction onClick={() => remove(product.id, product.title)} label={product.title} disabled={busy} />}
+                      </div>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+
+          {adding && (
+            <form onSubmit={save} className="grid gap-2 rounded-xl bg-sunken p-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <Field label="What is it?">
+                  <Input
+                    autoFocus
+                    value={form.title}
+                    onChange={event => setForm(f => ({ ...f, title: event.target.value }))}
+                    placeholder="Corner sofa, oak finish"
+                  />
+                </Field>
+              </div>
+              <Field label="Link to the item">
+                <Input
+                  type="url"
+                  value={form.url}
+                  onChange={event => setForm(f => ({ ...f, url: event.target.value }))}
+                  placeholder="https://…"
+                />
+              </Field>
+              <Field label="Image link" hint="Right-click the product photo → Copy image address">
+                <Input
+                  type="url"
+                  value={form.image_url}
+                  onChange={event => setForm(f => ({ ...f, image_url: event.target.value }))}
+                  placeholder="https://…/photo.jpg"
+                />
+              </Field>
+              <Field label="Shop">
+                <Input
+                  value={form.retailer}
+                  onChange={event => setForm(f => ({ ...f, retailer: event.target.value }))}
+                  placeholder="Optional"
+                />
+              </Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Price each">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.unit_cost}
+                    onChange={event => setForm(f => ({ ...f, unit_cost: event.target.value }))}
+                    placeholder="0.00"
+                  />
+                </Field>
+                <Field label="Qty">
+                  <Input
+                    type="number"
+                    min="0.01"
+                    step="1"
+                    value={form.quantity}
+                    onChange={event => setForm(f => ({ ...f, quantity: event.target.value }))}
+                  />
+                </Field>
+              </div>
+              <div className="flex gap-2 sm:col-span-2">
+                <Button type="submit" size="sm" loading={busy} disabled={!form.title.trim()}>
+                  {editingId ? 'Save option' : 'Add option'}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => { setAdding(false); setEditingId(null) }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const EMPTY_DETAIL: RoomDetailResponse = {
   room: {
     id: 0, name: '', area_type: 'interior', description: '', icon: '', colour: '#B0563C',
@@ -44,7 +314,7 @@ const EMPTY_DETAIL: RoomDetailResponse = {
 const EMPTY_ITEM = {
   title: '', item_type: 'purchase' as RoomItemType, status: 'planned' as RoomItemStatus,
   priority: 'medium' as RoomItemPriority, description: '', quantity: '1',
-  estimated_unit_cost: '', actual_cost: '', link_url: '', notes: '',
+  estimated_unit_cost: '', actual_cost: '', notes: '',
   assigned_to_person_id: null as number | null,
 }
 
@@ -122,7 +392,7 @@ export function HomesteadRoomPage() {
       title: item.title, item_type: item.item_type, status: item.status,
       priority: item.priority, description: item.description, quantity: item.quantity,
       estimated_unit_cost: item.estimated_unit_cost, actual_cost: item.actual_cost ?? '',
-      link_url: item.link_url, notes: item.notes,
+      notes: item.notes,
       assigned_to_person_id: item.assigned_to_person_id,
     })
     setItemOpen(true)
@@ -180,9 +450,16 @@ export function HomesteadRoomPage() {
               <span>{Number(item.quantity).toLocaleString()} × {money(item.estimated_unit_cost)} = <strong className="text-ink">{money(item.estimated_total)}</strong></span>
               {item.actual_cost !== null && <span>Actual <strong className="text-ink">{money(item.actual_cost)}</strong></span>}
               {person && <span>👤 {person.preferred_name || person.display_name}</span>}
-              {item.link_url && <a href={item.link_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">Open link ↗</a>}
             </div>
             {item.notes && <p className="mt-2 whitespace-pre-wrap text-xs text-muted">{item.notes}</p>}
+            <ProductList
+              roomId={id}
+              item={item}
+              canEdit={canEdit}
+              canDelete={canDelete}
+              onChanged={load}
+              onError={setError}
+            />
           </div>
           <div className="flex flex-wrap items-center gap-1">
             {canEdit && item.status !== 'completed' && item.status !== 'archived' && <Button size="sm" variant="secondary" onClick={() => setStatus(item, 'completed')}>Complete</Button>}
@@ -190,7 +467,7 @@ export function HomesteadRoomPage() {
             {canEdit && item.status !== 'archived' && <Button size="sm" variant="ghost" onClick={() => setStatus(item, 'archived')}>Archive</Button>}
             {canEdit && item.status === 'archived' && <Button size="sm" variant="ghost" onClick={() => setStatus(item, 'planned')}>Restore</Button>}
             {canEdit && <Button size="sm" variant="ghost" onClick={() => startEdit(item)}>Edit</Button>}
-            {canDelete && <button onClick={() => removeItem(item)} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger" aria-label="Delete item">✕</button>}
+            {canDelete && <DeleteAction onClick={() => removeItem(item)} label={item.title} />}
           </div>
         </div>
       </div>
@@ -257,7 +534,6 @@ export function HomesteadRoomPage() {
               <Field label="Actual total cost"><Input type="number" min="0" step="0.01" value={itemForm.actual_cost} onChange={e => setItemForm(f => ({ ...f, actual_cost: e.target.value }))} placeholder="Optional" /></Field>
             </div>
             <Field label="Assigned to"><AssigneeSelect people={people} value={itemForm.assigned_to_person_id} onChange={value => setItemForm(f => ({ ...f, assigned_to_person_id: value }))} className={fieldClass} /></Field>
-            <Field label="Product or reference link"><Input type="url" value={itemForm.link_url} onChange={e => setItemForm(f => ({ ...f, link_url: e.target.value }))} placeholder="https://…" /></Field>
             <Field label="Notes"><Textarea rows={2} value={itemForm.notes} onChange={e => setItemForm(f => ({ ...f, notes: e.target.value }))} /></Field>
             <div className="flex justify-end gap-2"><Button type="button" variant="ghost" size="sm" onClick={() => setItemOpen(false)}>Cancel</Button><Button type="submit" size="sm" loading={itemSaving} disabled={!itemForm.title.trim()}>Save item</Button></div>
           </form>

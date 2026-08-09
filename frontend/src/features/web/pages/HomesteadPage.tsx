@@ -177,7 +177,9 @@ function OverviewTab({ onError, onGoTab, canUseMoney }: {
     <button onClick={() => onGoTab(tab)} className="flex-1 rounded-2xl border border-line bg-surface p-4 text-left hover:bg-sunken/40">
       <div className="flex items-center justify-between">
         <span className="text-2xl font-extrabold text-ink">{n}</span>
-        <Badge tone={n > 0 ? tone : 'neutral'}>{n > 0 ? 'view' : 'clear'}</Badge>
+        {/* "clear" read as an instruction to clear the count rather than a status. Both
+            labels now describe state, and the tile itself is the thing you click. */}
+        <Badge tone={n > 0 ? tone : 'neutral'}>{n > 0 ? 'Needs attention' : 'All clear'}</Badge>
       </div>
       <p className="mt-1 text-sm text-muted">{label}</p>
     </button>

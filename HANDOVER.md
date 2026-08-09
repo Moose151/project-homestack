@@ -257,6 +257,29 @@ maturation and native Solace real-data comparison still follow. Kiosk work remai
   quick capture expands only when requested on phones, duplicate mobile page headings are removed
   and rewards metrics are more compact. **Frontend production build clean; no migration; backend
   unchanged from the 624-test v0.20.0 baseline.**
+- [x] **Room shopping lists (v0.22.1, 2026-08-09).** A room plan item's single `link_url` is
+  replaced by `RoomPlanProduct` — any number of options per job, each with a title, link, image
+  URL, shop, quantity and price. The option marked `is_chosen` drives the plan item's estimate
+  (only one at a time; re-pricing it re-applies), so room and whole-house totals follow the
+  option actually picked. Images are remote URLs, not uploads; both URL fields are restricted to
+  http(s) because they render as `href`/`src`. Migration `homestead.0005` carries existing
+  `link_url` values into a chosen option before dropping the field. **Still open from this
+  request:** an "All adults / non-child accounts" assignment target — see §8.
+- [x] **Attention-driven Hub + shell consistency (v0.22.0, 2026-08-09).** Owner UI review of the
+  desktop surfaces; every finding is recorded with its status in
+  `docs/UI_CONSISTENCY_AUDIT.md` — **read that before another UI pass.** Shipped: the Hub drops
+  any widget with nothing to show (`HubWidget.always_visible` exempts ambient cards); a single
+  `upcoming` widget replaces nine per-node dated widgets, aggregating calendar events (D7, so no
+  double counting) grouped by day with Next 7 days / This pay cycle / Next 30 days horizons; Hub
+  configuration became one ordered list plus one searchable grouped catalogue; the Hub grid tiles
+  properly (4 columns, 1/2/4 spans) instead of always leaving a dead third column; one
+  `CONTENT_CONTAINER` token replaced four different per-page max-widths; the sidebar and top bar
+  headers share a height and container; and shell fixes (logo links home, platform-correct
+  Ctrl/⌘ K, drawn calendar icon replacing the 📅 emoji that always read 17 July, left-edge active
+  indicator that no longer truncates labels, faded nav overflow). `RowActions` gives one
+  Edit/Delete/Remove vocabulary, applied to Pets. **642 backend tests green; production build
+  clean; no migration drift.** Open items in the audit: tab-pill treatment, duplicated node
+  identity between top bar and page header, stat-card/empty-state rollout, and the Books rail.
 - [~] **Milestone 4: security maturation — IN PROGRESS (v0.17.0).** Shared attachments now have
   protected upload/list/download/delete APIs, visibility+sensitivity enforcement through the
   central resolver, randomized non-public storage, sensitive-download audit records and frontend
@@ -323,6 +346,25 @@ the documented Calendar, Lists, Homestead/Money and Meridian round trips. Record
 friction before another broad visual pass; do not mark a node household-accepted from automated
 tests alone.
 
+**Queued build task — multi-person assignment (owner request, 2026-08-09).** Today an assignment
+is a single `assigned_to_person_id` where `null` means "Whole family", so there is no way to say
+"both of us" or "the two adults". The owner's chosen shape (revised same day, superseding an
+earlier "All adults" group idea) is **selecting any number of people**, which covers all-adults as
+an ordinary case and stays general per D15.
+
+Add an `assigned_to_people` M2M to `people.Person` alongside the existing single FK on all five
+models that carry an assignee — `atlas.AtlasListItem`, `scheduling.CalendarEvent`,
+`meridian.MeridianTask`, the `education` records and
+`homestead.MaintenanceTask`/`RoomPlanItem` — plus their serializers, service field-sets and
+migrations, then turn the shared `AssigneeSelect` into a multi-select and update its eight call
+sites and every place an assignee is displayed or filtered. Keep `assigned_to_person` as the
+single-assignee fast path or migrate it into the M2M; decide once, up front, rather than per app.
+
+Do it in one pass across all five: a picker that accepts several people but silently keeps one on
+some screens is worse than not offering it yet. Note the one thing a multi-select does not give
+you that a dynamic "all adults" group would — a person added to the household later is not picked
+up automatically — which is unlikely to matter for this household but should be a conscious call.
+
 **Next local build step (no home server required):** finish the generic sensitive-node lock
 path instead of leaving it Solace-specific: move re-auth/sensitivity decisions consistently
 through the central resolver, define the web/kiosk locked-state contract and shorter kiosk
@@ -334,8 +376,8 @@ integration framework. The exact sequence and acceptance gates are in the roadma
 `docs/26_Node_Home_Assistant.md`.
 
 **Production track (requires the home server):** rebuild both production images, deploy through
-v0.21.0, and run `migrate` through `attachments.0001`, `permissions.0020`, `solace.0007`,
-`homestead.0004`, `hub.0013` and
+v0.22.0, and run `migrate` through `attachments.0001`, `permissions.0020`, `solace.0007`,
+`homestead.0004`, `hub.0014_upcoming_widget_and_always_visible` and
 `scheduling.0002_rotatingschedule_rotatingscheduleexception`.
 
 The Solace cutover sequence remains: rerun the importer
@@ -381,6 +423,14 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 ## 8. Open questions / decisions still pending
 
 *(Append here when something needs the owner's call. None blocking Milestone 1 currently.)*
+
+- **Multi-person assignment (owner request, 2026-08-09) — SCOPED, NOT STARTED.** RESOLVED shape:
+  select **any number of people**, rather than the "All adults" group first proposed the same day
+  — a multi-select covers all-adults as an ordinary case and needs no new group vocabulary. Full
+  file-by-file scope is in §6. Two decisions to make before starting: (1) whether
+  `assigned_to_person` stays as the single-assignee fast path or is migrated into the new M2M, and
+  (2) whether a person added to the household later should be picked up automatically — a
+  multi-select says no, a dynamic group would say yes.
 
 - Mobile/desktop client tech (React Native vs. Tauri vs. PWA) — deferred until after core
   product proves itself (D3). PWA is the likely first bridge.

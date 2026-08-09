@@ -385,7 +385,7 @@ export function HomeWikiPage() {
   const visibleCategories = useMemo(() => categories.filter(c => isAdmin || !c.is_hidden), [categories, isAdmin])
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-5">
+    <div className="flex flex-col gap-5">
       <PageHeader title="Household guide" icon="📖" subtitle="Home Wiki keeps Wi-Fi, bin night, emergency information and how-tos easy to find." />
 
       <SearchField value={query} onChange={e => setQuery(e.target.value)} onClear={() => setQuery('')} placeholder="Search the wiki…" />

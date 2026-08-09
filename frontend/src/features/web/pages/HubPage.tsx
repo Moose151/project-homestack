@@ -23,7 +23,9 @@ import type {
   SolaceBill,
   SolacePurchase,
   SolaceSubscription,
+  UpcomingHorizon,
 } from '../../../api/types'
+import { sourceColour, sourceLabel, sourcePath } from '../../../lib/sourceLinks'
 import { Card } from '../../../components/Card'
 import { Input } from '../../../components/Field'
 import { Button } from '../../../components/Button'
@@ -33,10 +35,12 @@ import { STACK_BY_KEY, softColour } from '../../../config/stacks'
 import { PageHeader } from '../../../components/PageHeader'
 import { InlineAlert, PageSkeleton } from '../../../components/PageState'
 
+// Spans are chosen so a board of same-size widgets tiles a row exactly and leaves no dead
+// column: at xl the grid is 4 columns, so 4 small / 2 medium / 1 large fills a row.
 const SIZE_SPAN: Record<string, string> = {
-  small: 'sm:col-span-1',
-  medium: 'sm:col-span-2 xl:col-span-2',
-  large: 'sm:col-span-2 xl:col-span-3',
+  small: 'md:col-span-1 xl:col-span-1',
+  medium: 'md:col-span-1 xl:col-span-2',
+  large: 'md:col-span-2 xl:col-span-4',
 }
 
 // Which stack a hub widget belongs to → its accent colour + icon for the card header.
@@ -49,7 +53,7 @@ function widgetAccent(key: string): { colour: string; icon: string } {
   if (key.startsWith('pets')) return pick('pets')
   if (key.startsWith('homestead')) return pick('homestead')
   if (key.startsWith('solace')) return pick('solace')
-  if (key === 'calendar_upcoming') return pick('calendar')
+  if (key === 'calendar_upcoming' || key === 'upcoming') return pick('calendar')
   return { colour: STACK_BY_KEY.hub.colour, icon: '' } // clock, greeting, other core widgets
 }
 
@@ -207,8 +211,13 @@ function CountdownWidget({ title, targetDate }: { title?: string; targetDate?: s
   const targetUtc = Date.UTC(year, month - 1, day)
   const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
   const days = Math.round((targetUtc - todayUtc) / 86_400_000)
-  const targetLabel = new Date(year, month - 1, day).toLocaleDateString(undefined, {
-    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  // Match the page header's date format: the year only earns its place when it isn't this one.
+  const target = new Date(year, month - 1, day)
+  const targetLabel = target.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    ...(year === now.getFullYear() ? {} : { year: 'numeric' }),
   })
 
   return (
@@ -229,7 +238,123 @@ function CountdownWidget({ title, targetDate }: { title?: string; targetDate?: s
   )
 }
 
-function UpcomingWidget({ items }: { items: CalendarEvent[] }) {
+// ---------------------------------------------------------------------------
+// Upcoming — one card for everything dated, replacing a permanent card per node.
+// The backend sends a wide window plus the horizon boundaries, so switching range
+// is instant and costs no round trip.
+// ---------------------------------------------------------------------------
+
+const HORIZON_STORAGE_KEY = 'hs-upcoming-horizon'
+
+function localDateKey(iso: string) {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** "Overdue" / "Today" / "Tomorrow" / "Thu 14 Aug" for a day group. */
+function dayHeading(dateKey: string, todayKey: string) {
+  if (dateKey < todayKey) return 'Overdue'
+  const [y, m, d] = dateKey.split('-').map(Number)
+  const date = new Date(y, m - 1, d)
+  const today = new Date()
+  const diff = Math.round((date.getTime() - new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) / 86400000)
+  if (diff === 0) return 'Today'
+  if (diff === 1) return 'Tomorrow'
+  return date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
+function UpcomingWidget({ items, horizons }: { items: CalendarEvent[]; horizons?: UpcomingHorizon[] }) {
+  const ranges = horizons?.length ? horizons : [{ key: 'week', label: 'Next 7 days', until: '9999-12-31' }]
+  const [horizonKey, setHorizonKey] = useState(
+    () => localStorage.getItem(HORIZON_STORAGE_KEY) || ranges[0].key,
+  )
+  const active = ranges.find(r => r.key === horizonKey) ?? ranges[0]
+
+  const chooseHorizon = (key: string) => {
+    setHorizonKey(key)
+    localStorage.setItem(HORIZON_STORAGE_KEY, key)
+  }
+
+  const todayKey = localDateKey(new Date().toISOString())
+  const visible = items.filter(item => localDateKey(item.start_at) <= active.until)
+
+  // Group by day so a busy week reads as a short agenda rather than a flat list.
+  const groups: { key: string; heading: string; items: CalendarEvent[] }[] = []
+  for (const item of visible) {
+    const dateKey = localDateKey(item.start_at)
+    const heading = dayHeading(dateKey, todayKey)
+    const bucket = heading === 'Overdue' ? 'overdue' : dateKey
+    const existing = groups.find(g => g.key === bucket)
+    if (existing) existing.items.push(item)
+    else groups.push({ key: bucket, heading, items: [item] })
+  }
+  groups.sort((a, b) => (a.key === 'overdue' ? -1 : b.key === 'overdue' ? 1 : a.key.localeCompare(b.key)))
+
+  return (
+    <div className="flex flex-col gap-3">
+      {ranges.length > 1 && (
+        <div className="flex gap-1 rounded-xl bg-sunken p-1" role="group" aria-label="Time range">
+          {ranges.map(range => (
+            <button
+              key={range.key}
+              type="button"
+              onClick={() => chooseHorizon(range.key)}
+              aria-pressed={range.key === active.key}
+              className={`min-h-9 flex-1 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors ${
+                range.key === active.key ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'
+              }`}
+            >
+              {range.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {groups.length === 0 ? (
+        <p className="text-sm text-muted">Nothing in this range — try a longer one.</p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {groups.map(group => (
+            <div key={group.key} className="flex flex-col gap-1.5">
+              <p className={`text-xs font-bold uppercase tracking-wide ${group.key === 'overdue' ? 'text-danger' : 'text-muted'}`}>
+                {group.heading}
+              </p>
+              <ul className="flex flex-col gap-1.5">
+                {group.items.map(item => {
+                  const href = sourcePath(item) ?? calendarDayHref(item.start_at)
+                  const time = item.is_all_day
+                    ? null
+                    : new Date(item.start_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+                  return (
+                    <li key={item.id}>
+                      <Link
+                        to={href}
+                        className="flex min-h-11 items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-sunken"
+                      >
+                        <span
+                          className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
+                          style={{ background: sourceColour(item.source_node) }}
+                          aria-hidden
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-ink">{item.title}</span>
+                          <span className="block truncate text-xs text-muted">{sourceLabel(item.source_node)}</span>
+                        </span>
+                        {time && <span className="flex-shrink-0 text-xs tabular-nums text-muted">{time}</span>}
+                      </Link>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CalendarUpcomingWidget({ items }: { items: CalendarEvent[] }) {
   if (items.length === 0) return <p className="text-sm text-muted">Nothing upcoming</p>
   return (
     <ul className="flex flex-col gap-2">
@@ -587,8 +712,10 @@ function renderWidget(w: HubWidget, onChanged: () => void) {
       return <QuickAddWidget onAdded={onChanged} />
     case 'daily_quote':
       return <DailyQuoteWidget />
+    case 'upcoming':
+      return <UpcomingWidget items={w.items as CalendarEvent[]} horizons={w.meta?.horizons} />
     case 'calendar_upcoming':
-      return <UpcomingWidget items={w.items as CalendarEvent[]} />
+      return <CalendarUpcomingWidget items={w.items as CalendarEvent[]} />
     case 'atlas_todos':
       return <TodoWidget items={w.items as AtlasListItem[]} />
     case 'atlas_reminders':
@@ -704,12 +831,13 @@ export function HubPage() {
         <PageSkeleton />
       ) : data.widgets.length === 0 ? (
         <Card>
-          <p className="text-muted text-sm text-center py-4">
-            No cards on your Hub yet. Use <span className="font-medium text-ink">Tune my Hub</span> to choose what helps you.
+          <p className="py-4 text-center text-sm text-muted">
+            Nothing needs your attention right now. Cards appear here as things come up — use{' '}
+            <span className="font-medium text-ink">Tune this page</span> to choose which ones.
           </p>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
           {data.widgets.map(w => {
             const accent = widgetAccent(w.key)
             return (
@@ -723,7 +851,7 @@ export function HubPage() {
                 }}
                 onDragLeave={() => setDragOverWidget(current => current === w.key ? null : current)}
                 onDrop={event => void dropWidget(event, w.key)}
-                className={`${SIZE_SPAN[w.size] ?? 'sm:col-span-2'} overflow-hidden rounded-3xl border bg-surface shadow-soft transition-all ${
+                className={`${SIZE_SPAN[w.size] ?? SIZE_SPAN.medium} overflow-hidden rounded-3xl border bg-surface shadow-soft transition-all ${
                   dragOverWidget === w.key && draggedWidget !== w.key
                     ? 'border-primary ring-2 ring-primary/20'
                     : 'border-line'

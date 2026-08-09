@@ -20,6 +20,7 @@ from apps.homestead.serializers import (
     PropertySerializer,
     RoomAreaSerializer,
     RoomPlanItemSerializer,
+    RoomPlanProductSerializer,
     ServiceProviderSerializer,
 )
 from apps.nodes.models import Node
@@ -430,6 +431,66 @@ class RoomItemDetailView(APIView):
     def delete(self, request: Request, room_id: int, item_id: int) -> Response:
         services.delete_room_item(
             request.user, self._get(room_id, item_id, request.user)
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class _RoomProductBase(APIView):
+    """Shared lookup: a product is only reachable through a room + item the user may see."""
+
+    permission_classes = [_Perm]
+
+    def _item(self, room_id: int, item_id: int, user):
+        room = selectors.get_room(room_id, user)
+        if room is None:
+            raise NotFound()
+        item = selectors.get_room_item(item_id, room, user)
+        if item is None:
+            raise NotFound()
+        return item
+
+
+class RoomProductListView(_RoomProductBase):
+    def get(self, request: Request, room_id: int, item_id: int) -> Response:
+        item = self._item(room_id, item_id, request.user)
+        return Response(RoomPlanProductSerializer(
+            selectors.list_room_products(item), many=True
+        ).data)
+
+    def post(self, request: Request, room_id: int, item_id: int) -> Response:
+        item = self._item(room_id, item_id, request.user)
+        serializer = RoomPlanProductSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        product = services.create_room_product(
+            request.user, item, **serializer.validated_data
+        )
+        return Response(
+            RoomPlanProductSerializer(product).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class RoomProductDetailView(_RoomProductBase):
+    def _get(self, room_id: int, item_id: int, product_id: int, user):
+        product = selectors.get_room_product(
+            product_id, self._item(room_id, item_id, user)
+        )
+        if product is None:
+            raise NotFound()
+        return product
+
+    def patch(self, request: Request, room_id: int, item_id: int, product_id: int) -> Response:
+        product = self._get(room_id, item_id, product_id, request.user)
+        serializer = RoomPlanProductSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        product = services.update_room_product(
+            request.user, product, **serializer.validated_data
+        )
+        return Response(RoomPlanProductSerializer(product).data)
+
+    def delete(self, request: Request, room_id: int, item_id: int, product_id: int) -> Response:
+        services.delete_room_product(
+            request.user, self._get(room_id, item_id, product_id, request.user)
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
 

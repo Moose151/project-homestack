@@ -22,6 +22,8 @@ from apps.homestead.views import (
     RoomItemDetailView,
     RoomItemListView,
     RoomListView,
+    RoomProductDetailView,
+    RoomProductListView,
 )
 
 urlpatterns = [
@@ -48,6 +50,8 @@ urlpatterns = [
     path("rooms/<int:room_id>/", RoomDetailView.as_view(), name="homestead-room-detail"),
     path("rooms/<int:room_id>/items/", RoomItemListView.as_view(), name="homestead-room-item-list"),
     path("rooms/<int:room_id>/items/<int:item_id>/", RoomItemDetailView.as_view(), name="homestead-room-item-detail"),
+    path("rooms/<int:room_id>/items/<int:item_id>/products/", RoomProductListView.as_view(), name="homestead-room-product-list"),
+    path("rooms/<int:room_id>/items/<int:item_id>/products/<int:product_id>/", RoomProductDetailView.as_view(), name="homestead-room-product-detail"),
 
     path("insurance/", InsurancePolicyListView.as_view(), name="homestead-insurance-list"),
     path("insurance/<int:policy_id>/", InsurancePolicyDetailView.as_view(), name="homestead-insurance-detail"),

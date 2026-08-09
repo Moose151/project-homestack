@@ -8,6 +8,7 @@ import { Input, SearchField, Textarea, Select, Field } from '../../../components
 import { Tabs, type TabDef } from '../../../components/Tabs'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
+import { DeleteAction, EditAction, RowActions } from '../../../components/RowActions'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { useAuth } from '../../auth/AuthContext'
 import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
@@ -170,8 +171,10 @@ function TreatmentRow({ t, onChange, onDelete, onError }: {
         </div>
       </div>
       {t.next_due_at && <Button size="sm" variant="secondary" loading={busy} onClick={complete}>Done</Button>}
-      <button type="button" onClick={() => setEditing(true)} className="grid min-h-10 min-w-10 place-items-center text-xs font-semibold text-muted hover:text-primary" aria-label={`Edit ${t.display_name}`}>Edit</button>
-      <button type="button" onClick={remove} className="grid min-h-10 min-w-10 place-items-center text-xl leading-none text-muted hover:text-danger" aria-label={`Delete ${t.display_name}`}>×</button>
+      <RowActions>
+        <EditAction onClick={() => setEditing(true)} label={t.display_name} />
+        <DeleteAction onClick={remove} label={t.display_name} />
+      </RowActions>
     </li>
   )
 }
@@ -209,8 +212,10 @@ function AppointmentRow({ appointment, onChange, onDelete, onError }: {
       <Link to={calendarDayHref(appointment.start_at)} className="min-h-10 content-center px-2 text-xs text-primary">
         {new Date(appointment.start_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
       </Link>
-      <button type="button" onClick={() => setEditing(true)} className="grid min-h-10 min-w-10 place-items-center text-xs font-semibold text-muted hover:text-primary" aria-label={`Edit ${appointment.display_title}`}>Edit</button>
-      <button type="button" onClick={remove} className="grid min-h-10 min-w-10 place-items-center text-xl leading-none text-muted hover:text-danger" aria-label={`Delete ${appointment.display_title}`}>×</button>
+      <RowActions>
+        <EditAction onClick={() => setEditing(true)} label={appointment.display_title} />
+        <DeleteAction onClick={remove} label={appointment.display_title} />
+      </RowActions>
     </li>
   )
 }
@@ -274,8 +279,10 @@ function PetCard({ pet, onChange, onDelete, onError, canDelete }: {
           <div className="text-xs text-muted">{SPECIES_LABELS[pet.species]}{pet.breed ? ` · ${pet.breed}` : ''}</div>
         </button>
         <div className="flex flex-shrink-0 gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition">
-          <button type="button" onClick={() => setEditing(true)} className="min-h-10 rounded-lg px-2 text-xs font-semibold text-muted hover:bg-sunken hover:text-ink">Edit</button>
-          {canDelete && <button type="button" onClick={remove} className="min-h-10 rounded-lg px-2 text-xs font-semibold text-muted hover:text-danger">Delete</button>}
+          <RowActions>
+            <EditAction onClick={() => setEditing(true)} label={pet.name} />
+            {canDelete && <DeleteAction onClick={remove} label={pet.name} />}
+          </RowActions>
         </div>
       </div>
 
@@ -363,7 +370,7 @@ function PetsTab({ pets, reload, isAdmin, onError }: {
           <div className="flex gap-2"><Button type="submit" loading={busy}>Add pet</Button><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button></div>
         </form>
       ) : (
-        <Button variant="secondary" onClick={() => setOpen(true)}>+ Add pet</Button>
+        <Button onClick={() => setOpen(true)}>+ Add pet</Button>
       )}
 
       {pets.length === 0 ? (
@@ -481,7 +488,7 @@ export function PetsPage() {
   const isAdmin = user?.role === 'admin' || user?.role === 'manager'
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-5">
+    <div className="flex flex-col gap-5">
       <PageHeader title="Pets" icon="🐾" subtitle="Pet profiles, treatment reminders and vet appointments." />
 
       <SearchField

@@ -74,23 +74,45 @@ class HubContentTests(TestCase):
         self.admin = _make_user("admin", User.Role.ADMIN)
         _login(self.client, "admin")
 
-    def test_hub_contains_atlas_todos_widget(self):
-        resp = self.client.get(reverse("hub"))
-        widget_keys = [w["key"] for w in resp.json()["widgets"]]
-        self.assertIn("atlas_todos", widget_keys)
+    def _keys(self, url_name="hub"):
+        return [w["key"] for w in self.client.get(reverse(url_name)).json()["widgets"]]
 
-    def test_hub_contains_atlas_reminders_widget(self):
-        resp = self.client.get(reverse("hub"))
-        widget_keys = [w["key"] for w in resp.json()["widgets"]]
-        self.assertIn("atlas_reminders", widget_keys)
+    def _widget(self, key, url_name="hub"):
+        """The named widget, or None when the Hub dropped it for having nothing to show."""
+        return next(
+            (w for w in self.client.get(reverse(url_name)).json()["widgets"] if w["key"] == key),
+            None,
+        )
+
+    def test_hub_contains_atlas_todos_widget_once_it_has_content(self):
+        atlas_list = create_atlas_list(self.admin, title="Chores", list_type="todo")
+        create_list_item(self.admin, atlas_list, title="Clean bathroom")
+        self.assertIn("atlas_todos", self._keys())
+
+    def test_empty_widget_is_dropped_from_the_hub(self):
+        """An empty card spends a grid slot to say nothing — it must not be returned."""
+        self.assertNotIn("atlas_todos", self._keys())
+
+    def test_ambient_widgets_survive_being_empty(self):
+        """Clock/quick add own no domain data; suppressing them would empty the Hub."""
+        keys = self._keys()
+        self.assertIn("clock", keys)
+        self.assertIn("quick_add", keys)
 
     def test_disabled_stack_hides_its_widgets(self):
+        from apps.meridian.services import create_task
         from apps.nodes.services import disable_node
-        keys = [w["key"] for w in self.client.get(reverse("hub")).json()["widgets"]]
-        self.assertTrue(any(k.startswith("meridian_") for k in keys), "meridian widgets expected while enabled")
+
+        create_task(self.admin, title="Tidy the lounge", points=5)
+        self.assertTrue(
+            any(k.startswith("meridian_") for k in self._keys()),
+            "meridian widgets expected while enabled",
+        )
         disable_node(self.admin, "meridian")
-        keys = [w["key"] for w in self.client.get(reverse("hub")).json()["widgets"]]
-        self.assertFalse(any(k.startswith("meridian_") for k in keys), "meridian widgets should vanish when stack disabled")
+        self.assertFalse(
+            any(k.startswith("meridian_") for k in self._keys()),
+            "meridian widgets should vanish when stack disabled",
+        )
 
     def test_todos_widget_includes_open_items(self):
         atlas_list = create_atlas_list(self.admin, title="Chores", list_type="todo")
@@ -100,51 +122,104 @@ class HubContentTests(TestCase):
         item_titles = [i["title"] for i in todos["items"]]
         self.assertIn("Clean bathroom", item_titles)
 
-    def test_todos_widget_excludes_completed_items(self):
+    def test_todos_widget_is_dropped_when_every_item_is_complete(self):
         from apps.atlas.services import complete_list_item
         atlas_list = create_atlas_list(self.admin, title="Tasks", list_type="todo")
         item = create_list_item(self.admin, atlas_list, title="Done task")
         complete_list_item(self.admin, item)
-        resp = self.client.get(reverse("hub"))
-        todos = next(w for w in resp.json()["widgets"] if w["key"] == "atlas_todos")
-        item_titles = [i["title"] for i in todos["items"]]
-        self.assertNotIn("Done task", item_titles)
-
-    def test_reminders_widget_includes_upcoming(self):
-        create_reminder(self.admin, title="Doctor visit", due_at=_future(48))
-        resp = self.client.get(reverse("hub"))
-        reminders_w = next(w for w in resp.json()["widgets"] if w["key"] == "atlas_reminders")
-        titles = [r["title"] for r in reminders_w["items"]]
-        self.assertIn("Doctor visit", titles)
-
-    def test_reminders_widget_excludes_far_future(self):
-        create_reminder(self.admin, title="Next year", due_at=_future(hours=24 * 30))
-        resp = self.client.get(reverse("hub"))
-        reminders_w = next(w for w in resp.json()["widgets"] if w["key"] == "atlas_reminders")
-        titles = [r["title"] for r in reminders_w["items"]]
-        self.assertNotIn("Next year", titles)
-
-    def test_dated_reminder_appears_on_hub_and_calendar_once(self):
-        reminder = create_reminder(self.admin, title="Book dentist", due_at=_future(36))
-        self.assertIsNotNone(reminder.calendar_event_id)
-        self.assertEqual(CalendarEvent.objects.filter(source_record_type="AtlasReminder", source_record_id=reminder.id).count(), 1)
-
-        resp = self.client.get(reverse("hub"))
-        reminders_w = next(w for w in resp.json()["widgets"] if w["key"] == "atlas_reminders")
-        calendar_w = next(w for w in resp.json()["widgets"] if w["key"] == "calendar_upcoming")
-        self.assertIn("Book dentist", [r["title"] for r in reminders_w["items"]])
-        self.assertIn("Book dentist", [e["title"] for e in calendar_w["items"]])
+        self.assertIsNone(self._widget("atlas_todos"))
 
     def test_todos_widget_hides_items_from_private_list_for_child(self):
-        child = _make_user("child", User.Role.USER, is_child=True)
+        _make_user("child", User.Role.USER, is_child=True)
+        shared = create_atlas_list(self.admin, title="Shared tasks", list_type="todo")
+        create_list_item(self.admin, shared, title="Visible task")
         private_list = create_atlas_list(
             self.admin, title="Private tasks", list_type="todo", visibility=AtlasVisibility.PRIVATE
         )
         create_list_item(self.admin, private_list, title="Hidden task")
         _login(self.client, "child")
-        resp = self.client.get(reverse("hub"))
-        todos = next(w for w in resp.json()["widgets"] if w["key"] == "atlas_todos")
-        self.assertNotIn("Hidden task", [i["title"] for i in todos["items"]])
+        todos = self._widget("atlas_todos")
+        self.assertIsNotNone(todos)
+        titles = [i["title"] for i in todos["items"]]
+        self.assertIn("Visible task", titles)
+        self.assertNotIn("Hidden task", titles)
+
+
+class UpcomingWidgetTests(TestCase):
+    """The unified Upcoming widget — one card for everything dated (owner, 2026-08-09).
+
+    It reads calendar events, which already mirror every dated node record via the
+    scheduling helper (D7), so a record must appear exactly once however many nodes
+    contributed it.
+    """
+
+    def setUp(self):
+        self.admin = _make_user("admin", User.Role.ADMIN)
+        _login(self.client, "admin")
+
+    def _upcoming(self):
+        return next(
+            (w for w in self.client.get(reverse("hub")).json()["widgets"] if w["key"] == "upcoming"),
+            None,
+        )
+
+    def test_includes_a_dated_reminder(self):
+        create_reminder(self.admin, title="Doctor visit", due_at=_future(48))
+        self.assertIn("Doctor visit", [i["title"] for i in self._upcoming()["items"]])
+
+    def test_dated_record_appears_exactly_once(self):
+        reminder = create_reminder(self.admin, title="Book dentist", due_at=_future(36))
+        self.assertIsNotNone(reminder.calendar_event_id)
+        self.assertEqual(
+            CalendarEvent.objects.filter(
+                source_record_type="AtlasReminder", source_record_id=reminder.id
+            ).count(),
+            1,
+        )
+        titles = [i["title"] for i in self._upcoming()["items"]]
+        self.assertEqual(titles.count("Book dentist"), 1)
+
+    def test_excludes_beyond_the_fetch_window(self):
+        create_reminder(self.admin, title="Next year", due_at=_future(hours=24 * 200))
+        self.assertIsNone(self._upcoming(), "a lone far-future item leaves nothing to show")
+
+    def test_aggregates_more_than_one_node(self):
+        from apps.pets.services import create_appointment, create_pet
+
+        create_reminder(self.admin, title="Doctor visit", due_at=_future(48))
+        pet = create_pet(self.admin, name="Allan", species="cat")
+        create_appointment(self.admin, pet=pet, title="Annual vaccination", start_at=_future(72))
+        titles = [i["title"] for i in self._upcoming()["items"]]
+        self.assertIn("Doctor visit", titles)
+        self.assertIn("Allan: Annual vaccination", titles)
+
+    def test_overdue_due_type_record_is_kept(self):
+        """A missed reminder still needs attention, so it survives its own due date."""
+        create_reminder(self.admin, title="Overdue thing", due_at=_future(hours=-72))
+        self.assertIn("Overdue thing", [i["title"] for i in self._upcoming()["items"]])
+
+    def test_past_standalone_event_is_dropped(self):
+        """A party last Tuesday is history, not something coming up."""
+        from apps.scheduling.services import create_event
+
+        create_event(self.admin, title="Last week's party", start_at=_future(hours=-72))
+        self.assertIsNone(self._upcoming())
+
+    def test_meta_offers_horizons(self):
+        create_reminder(self.admin, title="Doctor visit", due_at=_future(48))
+        meta = self._upcoming()["meta"]
+        self.assertEqual(meta["default_horizon"], "week")
+        self.assertIn("week", [h["key"] for h in meta["horizons"]])
+        self.assertIn("month", [h["key"] for h in meta["horizons"]])
+
+    def test_financial_events_stay_hidden_until_reauth(self):
+        from apps.nodes.services import enable_node
+        from apps.solace.services import create_bill
+
+        enable_node(self.admin, "solace")
+        create_bill(self.admin, name="Electricity", amount="120.00", due_at=_future(48))
+        titles = [i["title"] for i in (self._upcoming() or {"items": []})["items"]]
+        self.assertNotIn("Electricity", titles)
 
     def test_kiosk_hub_returns_kiosk_safe_widgets_only(self):
         resp = self.client.get(reverse("kiosk-hub"))

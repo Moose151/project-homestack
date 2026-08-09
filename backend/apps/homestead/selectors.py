@@ -17,6 +17,7 @@ from apps.homestead.models import (
     Property,
     RoomArea,
     RoomPlanItem,
+    RoomPlanProduct,
     ServiceProvider,
 )
 from apps.permissions.visibility import apply_visibility
@@ -186,6 +187,19 @@ def get_room_item(pk: int, room: RoomArea, user=None) -> RoomPlanItem | None:
     if user is not None:
         qs = apply_visibility(qs, user)
     return qs.first()
+
+
+def list_room_products(item: RoomPlanItem) -> list[RoomPlanProduct]:
+    """Shopping-list options for one plan item.
+
+    Visibility is carried by the parent plan item — the caller has already resolved that —
+    so options are not filtered again here.
+    """
+    return list(RoomPlanProduct.objects.filter(plan_item=item).order_by("position", "id"))
+
+
+def get_room_product(pk: int, item: RoomPlanItem) -> RoomPlanProduct | None:
+    return RoomPlanProduct.objects.filter(pk=pk, plan_item=item).first()
 
 
 def summarize_room_items(items: list[RoomPlanItem]) -> dict:

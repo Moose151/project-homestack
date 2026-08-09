@@ -1930,7 +1930,7 @@ export function SolacePage() {
   if (requiresPasswordUnlock && !unlocked) return <ReauthGate onUnlock={() => setUnlocked(true)} />
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-5">
+    <div className="flex flex-col gap-5">
       <PageHeader title="Money" subtitle="Solace keeps bills, pay cycles, set-asides and planned purchases together." icon="💸" />
       {error && <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
       <div className="flex flex-col gap-2 sm:flex-row">

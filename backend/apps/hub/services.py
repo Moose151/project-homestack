@@ -6,16 +6,43 @@ in Milestone 2 when more nodes contribute hub widgets.
 """
 from __future__ import annotations
 
+from datetime import datetime, time, timedelta
+
 from django.db import transaction
 from django.utils import timezone
 
 from apps.hub.models import HouseholdHubWidget
+
+# How far ahead the unified "Upcoming" widget fetches. The client clips this to the
+# horizon the reader picked, so one request serves every horizon without a round trip.
+UPCOMING_MAX_DAYS = 62
+
+# How far back an unfinished dated record still counts as "overdue" rather than history.
+UPCOMING_OVERDUE_GRACE_DAYS = 30
+
+# Source record types that mean "this is due by then". A missed one still needs attention,
+# so it survives past its date. Point-in-time records (appointments, classes, one-off
+# events) are history once they pass and are dropped instead.
+UPCOMING_DUE_RECORD_TYPES = frozenset({
+    "AtlasReminder",
+    "Bill",
+    "BillOccurrence",
+    "EducationAssessment",
+    "MaintenanceTask",
+    "MeridianTask",
+    "PetTreatment",
+    "PlannedPurchase",
+})
 
 
 def get_hub_widgets(user, *, kiosk_mode: bool = False, sensitive_unlocked: bool = False) -> list[dict]:
     """Return assembled hub widget content for the authenticated user.
 
     kiosk_mode=True restricts to widgets where supports_kiosk=True.
+
+    A widget with nothing to show is dropped from the response rather than rendered as an
+    empty card, so the Hub only carries things that actually need attention. Ambient
+    widgets opt out of that with ``HubWidget.always_visible``.
     """
     from apps.atlas.selectors import list_open_items, list_reminders
     from apps.atlas.serializers import AtlasListItemSerializer, AtlasReminderSerializer
@@ -95,6 +122,11 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False, sensitive_unlocked: bool 
             upcoming = list_events(user, upcoming_only=True)[:8]
             content = CalendarEventSerializer(upcoming, many=True).data
 
+        elif key == "upcoming":
+            content, meta = _upcoming_widget_content(
+                user, sensitive_unlocked=sensitive_unlocked
+            )
+
         elif key.startswith("meridian_"):
             content = _meridian_widget_content(key, user)
 
@@ -113,6 +145,12 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False, sensitive_unlocked: bool 
         elif key.startswith("solace_"):
             content = _solace_widget_content(key, user) if sensitive_unlocked else []
 
+        # An empty card is noise on a dashboard: it takes a grid slot to say "nothing here".
+        # Drop it unless the widget is ambient (clock/quick add/countdown), which has no
+        # content by design and is still worth showing.
+        if not content and not hw.widget.always_visible:
+            continue
+
         widgets.append({
             "key": key,
             "name": hw.widget.name,
@@ -123,6 +161,83 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False, sensitive_unlocked: bool 
         })
 
     return widgets
+
+
+def _upcoming_widget_content(user, *, sensitive_unlocked: bool) -> tuple[list, dict]:
+    """One card for everything dated, instead of a permanent card per node.
+
+    The Calendar already owns every dated household record (D7) — nodes sync into it via
+    the scheduling helper and never write it directly — so aggregating calendar events
+    covers Atlas, Pets, Education, Homestead, Meridian and Solace in a single pass, with
+    no double counting and with visibility/sensitivity filtering already applied (D10).
+
+    Returns the full ``UPCOMING_MAX_DAYS`` window plus the horizon boundaries; the client
+    clips to the horizon the reader chose, so switching horizon costs no round trip.
+    """
+    from apps.scheduling.selectors import list_events
+    from apps.scheduling.serializers import CalendarEventSerializer
+
+    today = timezone.localdate()
+    start_of_today = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    events = list_events(
+        user,
+        start=start_of_today - timedelta(days=UPCOMING_OVERDUE_GRACE_DAYS),
+        end=start_of_today + timedelta(days=UPCOMING_MAX_DAYS),
+        sensitive_unlocked=sensitive_unlocked,
+    )
+    relevant = [
+        event
+        for event in events
+        if event.start_at >= start_of_today
+        or event.source_record_type in UPCOMING_DUE_RECORD_TYPES
+    ]
+
+    meta = {
+        "horizons": _upcoming_horizons(user, today, sensitive_unlocked=sensitive_unlocked),
+        "default_horizon": "week",
+        "window_days": UPCOMING_MAX_DAYS,
+    }
+    return CalendarEventSerializer(relevant, many=True).data, meta
+
+
+def _upcoming_horizons(user, today, *, sensitive_unlocked: bool) -> list[dict]:
+    """Selectable ranges for the Upcoming widget, narrowest first.
+
+    Labels state the actual window rather than "this week"/"this month" so a Friday reader
+    is not shown a two-day list under a label that promises a week.
+    """
+    horizons = [
+        {"key": "week", "label": "Next 7 days", "until": (today + timedelta(days=7)).isoformat()},
+    ]
+    cycle_end = _pay_cycle_end(user) if sensitive_unlocked else None
+    if cycle_end and cycle_end > today:
+        horizons.append(
+            {"key": "cycle", "label": "This pay cycle", "until": cycle_end.isoformat()}
+        )
+    horizons.append(
+        {"key": "month", "label": "Next 30 days", "until": (today + timedelta(days=30)).isoformat()}
+    )
+    return horizons
+
+
+def _pay_cycle_end(user):
+    """End of the current Solace pay cycle, or None when Money is unavailable/unconfigured.
+
+    A horizon is a display convenience — a household with no paydays configured yet must
+    still get a working Hub, so a failure here drops the horizon rather than the widget.
+    """
+    from datetime import date
+
+    from apps.permissions.resolver import resolve_permission
+
+    if not resolve_permission(user, "view", "solace"):
+        return None
+    try:
+        from apps.solace.selectors import get_pay_cycle_plan
+        return date.fromisoformat(get_pay_cycle_plan(user)["cycle_end"])
+    except Exception:  # noqa: BLE001 — unconfigured Solace must not break the Hub
+        return None
 
 
 def _meridian_widget_content(key: str, user) -> list:

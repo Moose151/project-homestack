@@ -48,10 +48,17 @@ export function CalendarPeek() {
 
   return (
     <div className="relative" ref={ref}>
+      {/* Drawn rather than an emoji: the 📅 glyph bakes in a date (17 July on most platforms),
+          so a control that opens today's schedule was always showing the wrong day. */}
       <button onClick={toggle}
-        className="w-10 h-10 grid place-items-center rounded-xl hover:bg-sunken text-muted-strong"
-        aria-label="Calendar">
-        <span className="text-lg">📅</span>
+        className="grid h-10 w-10 place-items-center rounded-xl text-muted-strong hover:bg-sunken"
+        aria-label="Calendar"
+        title="Calendar">
+        <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+          <rect x="2.75" y="4.25" width="14.5" height="13" rx="2.5" />
+          <path d="M2.75 8.25h14.5M6.75 2.75v3M13.25 2.75v3" strokeLinecap="round" />
+          <circle cx="10" cy="12.5" r="1.15" fill="currentColor" stroke="none" />
+        </svg>
       </button>
 
       {open && (

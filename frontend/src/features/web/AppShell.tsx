@@ -12,6 +12,7 @@ import { APP_VERSION } from '../../config/version'
 import { api } from '../../api/client'
 import type { AuthUser } from '../../api/types'
 import { ConnectionBanner } from '../../components/ConnectionBanner'
+import { CONTENT_CONTAINER } from '../../components/PageContainer'
 import { GlobalSearch } from '../../components/GlobalSearch'
 import { QuickCreate } from '../../components/QuickCreate'
 import { useScrollRestoration } from '../../hooks/useScrollRestoration'
@@ -44,6 +45,12 @@ const MOBILE_DEFAULT_PRIORITY = [
 ]
 
 const EMOJI_OPTS = ['🐱','🐶','🦊','🐼','🐻','🦋','🦄','🐸','🐳','🌻','🌙','⭐','🎸','🎮','🏄','🍕','🎩','🔮','🌈','🦅']
+
+// The search shortcut is Cmd on Apple hardware and Ctrl everywhere else. Showing "⌘K" to a
+// Linux or Windows household advertises a key they do not have.
+const SHORTCUT_MODIFIER = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
+  ? '⌘'
+  : 'Ctrl '
 
 function ProfileEditor({ user, onSaved, onClose }: {
   user: AuthUser
@@ -124,6 +131,16 @@ function SidebarLink({ item, accent }: { item: NavItem; accent: boolean }) {
     >
       {({ isActive }) => (
         <>
+          {/* Absolutely positioned so the label box is the same width active or not —
+              otherwise the description truncates only on the current page and text jitters
+              as you navigate. On the left, where it reads as an indicator not a scrollbar. */}
+          {isActive && (
+            <span
+              className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full"
+              style={{ backgroundColor: accent ? item.colour : 'var(--hs-primary)' }}
+              aria-hidden
+            />
+          )}
           <span
             className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl text-lg transition-transform group-hover:scale-105"
             style={{ background: softColour(item.colour, isActive ? '25' : '12') }}
@@ -134,7 +151,6 @@ function SidebarLink({ item, accent }: { item: NavItem; accent: boolean }) {
             <span className="block truncate text-sm font-bold">{item.label}</span>
             <span className={`mt-0.5 block truncate text-[10px] font-medium ${isActive ? 'opacity-75' : 'text-muted'}`}>{item.description}</span>
           </span>
-          {isActive && <span className="h-5 w-1 flex-shrink-0 rounded-full" style={{ backgroundColor: accent ? item.colour : 'var(--hs-primary)' }} />}
         </>
       )}
     </NavLink>
@@ -243,15 +259,25 @@ export function AppShell() {
     <div className="min-h-screen flex">
       {/* Sidebar — md+ */}
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-[272px] flex-col border-r border-line bg-surface/92 backdrop-blur-xl md:flex">
-        <div className="flex h-[76px] items-center gap-3 border-b border-line px-5">
-          <span className="inline-grid h-11 w-11 place-items-center rounded-2xl bg-primary text-lg font-black text-white shadow-soft">◇</span>
+        {/* Height and padding match the main header exactly so the two bottom borders and the
+            two title baselines line up across the sidebar seam. */}
+        <NavLink
+          to="/hub"
+          className="flex h-[62px] flex-shrink-0 items-center gap-3 border-b border-line px-3 transition-colors hover:bg-sunken/60 md:h-[68px] md:px-6"
+          aria-label="HomeStack home"
+        >
+          <span className="inline-grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl bg-primary text-base font-black text-white shadow-soft">◇</span>
           <span className="min-w-0">
-            <span className="block text-xl font-extrabold tracking-tight text-ink">HomeStack</span>
-            <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">Our household</span>
+            <span className="block truncate text-base font-extrabold tracking-tight text-ink">HomeStack</span>
+            <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">Our household</span>
           </span>
-        </div>
+        </NavLink>
 
-        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 py-2">
+        {/* The mask fades the last row when the list overflows, so a half-visible destination
+            reads as "scroll for more" instead of a clipped layout. */}
+        <nav
+          className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3 py-2 [mask-image:linear-gradient(to_bottom,black_calc(100%-1.5rem),transparent)]"
+        >
           {NAV_GROUPS.map(group => {
             const items = stackNav.filter(item => item.group === group.key)
             if (items.length === 0) return null
@@ -322,7 +348,8 @@ export function AppShell() {
 
       {/* Main content */}
       <div className="flex min-h-screen flex-1 flex-col md:ml-[272px]">
-        <header className="sticky top-0 z-10 flex h-[62px] items-center gap-1.5 border-b border-line bg-surface/82 px-3 backdrop-blur-xl sm:px-4 md:h-[68px] md:px-6 lg:px-8">
+        <header className="sticky top-0 z-10 h-[62px] border-b border-line bg-surface/82 backdrop-blur-xl md:h-[68px]">
+          <div className={`${CONTENT_CONTAINER} flex h-full items-center gap-1.5`}>
           <div className="mr-auto flex min-w-0 items-center gap-2.5">
             <span
               className="inline-grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl text-lg shadow-sm"
@@ -341,9 +368,9 @@ export function AppShell() {
             onClick={() => setSearchOpen(true)}
             className="grid h-10 min-w-10 place-items-center rounded-xl border border-transparent px-2 text-muted transition-colors hover:border-line hover:bg-sunken hover:text-ink md:flex md:gap-2 lg:min-w-[176px] lg:justify-start lg:border-line lg:bg-surface lg:px-3"
             aria-label="Search HomeStack"
-            title="Search (Ctrl/⌘ K)"
+            title={`Search (${SHORTCUT_MODIFIER}K)`}
           >
-            <span className="text-lg">⌕</span><span className="hidden text-xs font-semibold lg:inline">Search anything</span><span className="ml-auto hidden rounded-md border border-line px-1.5 py-0.5 text-[9px] text-muted xl:inline">⌘K</span>
+            <span className="text-lg">⌕</span><span className="hidden text-xs font-semibold lg:inline">Search anything</span><span className="ml-auto hidden rounded-md border border-line px-1.5 py-0.5 text-[9px] text-muted xl:inline">{SHORTCUT_MODIFIER}K</span>
           </button>
           <button
             onClick={() => setQuickOpen(true)}
@@ -355,14 +382,15 @@ export function AppShell() {
           </button>
           <div className="hidden lg:block"><CalendarPeek /></div>
           <NotificationBell />
+          </div>
         </header>
         <ConnectionBanner />
         {stacksError && (
-          <div className="px-4 pt-4 md:px-8">
+          <div className={`${CONTENT_CONTAINER} pt-4`}>
             <InlineAlert message={stacksError} onRetry={refreshStacks} />
           </div>
         )}
-        <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-5 md:px-7 md:py-7 md:pb-8 lg:px-9 xl:px-11">
+        <main className={`${CONTENT_CONTAINER} flex-1 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] md:py-7 md:pb-8`}>
           <Outlet />
         </main>
       </div>
