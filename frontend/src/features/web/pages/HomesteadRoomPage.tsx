@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type {
   Person, RoomAreaType, RoomDetailResponse, RoomItemPriority, RoomItemStatus,
-  RoomItemType, RoomPlanItem,
+  RoomItemType, RoomPlanItem, RoomPlanMode,
 } from '../../../api/types'
 import { AssigneeSelect, assigneeLabel } from '../../../components/AssigneeSelect'
 import { Badge, type BadgeTone } from '../../../components/Badge'
@@ -61,11 +61,20 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
   const [brokenImages, setBrokenImages] = useState<number[]>([])
 
   const products = item.products ?? []
+  const isProject = item.plan_mode === 'project'
+  // A project's rows are parts that are all needed; a single item's are alternatives.
+  const noun = isProject ? 'Parts' : 'Options'
   const chosen = products.find(product => product.is_chosen)
   const cheapest = products.reduce<number | null>(
     (low, product) => (low === null || Number(product.total_cost) < low ? Number(product.total_cost) : low),
     null,
   )
+
+  const summaryLine = isProject
+    ? `${item.parts_bought_count} of ${item.parts_count} bought · ${money(item.spent_cost)} spent, ${money(item.remaining_cost)} to go`
+    : chosen
+      ? `Chosen: ${chosen.title} · ${money(chosen.total_cost)}`
+      : `from ${money(cheapest ?? 0)}`
 
   const startAdd = () => { setEditingId(null); setForm(EMPTY_PRODUCT); setAdding(true); setOpen(true) }
 
@@ -106,6 +115,28 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
     } catch (error) { onError(errMsg(error)) } finally { setBusy(false) }
   }
 
+  /** Tick a part off. Asking the paid price here is the only moment the household knows it. */
+  const setPurchased = async (productId: number, purchased: boolean) => {
+    const product = products.find(row => row.id === productId)
+    let actual_cost: string | null = null
+    if (purchased && product) {
+      const answer = prompt(
+        `What did "${product.title}" actually cost? Leave blank to use the estimate.`,
+        product.total_cost,
+      )
+      if (answer === null) return
+      actual_cost = answer.trim() === '' ? null : answer.trim()
+    }
+    setBusy(true)
+    try {
+      await api.updateRoomProduct(roomId, item.id, productId, {
+        is_purchased: purchased,
+        actual_cost: purchased ? actual_cost : null,
+      })
+      await onChanged()
+    } catch (error) { onError(errMsg(error)) } finally { setBusy(false) }
+  }
+
   const remove = async (productId: number, title: string) => {
     if (!confirm(`Remove "${title}" from the options?`)) return
     setBusy(true)
@@ -125,15 +156,13 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
           aria-expanded={open}
         >
           <span aria-hidden>{open ? '▾' : '▸'}</span>
-          {products.length === 0 ? 'Options' : `Options (${products.length})`}
+          {products.length === 0 ? noun : `${noun} (${products.length})`}
         </button>
-        {!open && products.length > 0 && (
-          <span className="text-xs text-muted">
-            {chosen ? `Chosen: ${chosen.title} · ${money(chosen.total_cost)}` : `from ${money(cheapest ?? 0)}`}
-          </span>
-        )}
+        {products.length > 0 && <span className="text-xs text-muted">{summaryLine}</span>}
         {canEdit && open && !adding && (
-          <Button size="sm" variant="ghost" onClick={startAdd} className="ml-auto">+ Add option</Button>
+          <Button size="sm" variant="ghost" onClick={startAdd} className="ml-auto">
+            {isProject ? '+ Add part' : '+ Add option'}
+          </Button>
         )}
       </div>
 
@@ -141,7 +170,9 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
         <div className="mt-2 flex flex-col gap-2">
           {products.length === 0 && !adding && (
             <p className="text-xs text-muted">
-              No options yet. Add what you are considering — name, link, price and a picture.
+              {isProject
+                ? 'No parts yet. Add everything the project needs — each with its link, price and picture.'
+                : 'No options yet. Add what you are considering — name, link, price and a picture.'}
             </p>
           )}
 
@@ -153,7 +184,9 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
                   <li
                     key={product.id}
                     className={`flex gap-2.5 rounded-xl border p-2 ${
-                      product.is_chosen ? 'border-primary bg-primary-soft/40' : 'border-line'
+                      (isProject ? product.is_purchased : product.is_chosen)
+                        ? 'border-primary bg-primary-soft/40'
+                        : 'border-line'
                     }`}
                   >
                     <div className="grid h-16 w-16 flex-shrink-0 place-items-center overflow-hidden rounded-lg bg-sunken">
@@ -174,13 +207,17 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="truncate text-sm font-semibold text-ink">{product.title}</span>
-                        {product.is_chosen && <Badge tone="success">Chosen</Badge>}
+                        {isProject
+                          ? product.is_purchased && <Badge tone="success">Bought</Badge>
+                          : product.is_chosen && <Badge tone="success">Chosen</Badge>}
                       </div>
                       <p className="text-xs text-muted">
                         {Number(product.quantity) !== 1 && `${Number(product.quantity).toLocaleString()} × `}
                         {money(product.unit_cost)}
                         {Number(product.quantity) !== 1 && ` = ${money(product.total_cost)}`}
                         {product.retailer && ` · ${product.retailer}`}
+                        {isProject && product.is_purchased && product.actual_cost !== null
+                          && ` · paid ${money(product.actual_cost)}`}
                       </p>
                       <div className="mt-1 flex flex-wrap items-center gap-1">
                         {product.url && (
@@ -193,24 +230,18 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
                             Open ↗
                           </a>
                         )}
-                        {canEdit && !product.is_chosen && (
+                        {canEdit && (
                           <button
                             type="button"
                             disabled={busy}
-                            onClick={() => choose(product.id, true)}
+                            onClick={() => (isProject
+                              ? setPurchased(product.id, !product.is_purchased)
+                              : choose(product.id, !product.is_chosen))}
                             className="grid min-h-10 place-items-center rounded-lg px-1.5 text-xs font-semibold text-muted hover:bg-sunken hover:text-ink disabled:opacity-40"
                           >
-                            Choose
-                          </button>
-                        )}
-                        {canEdit && product.is_chosen && (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => choose(product.id, false)}
-                            className="grid min-h-10 place-items-center rounded-lg px-1.5 text-xs font-semibold text-muted hover:bg-sunken hover:text-ink disabled:opacity-40"
-                          >
-                            Unchoose
+                            {isProject
+                              ? (product.is_purchased ? 'Not bought' : 'Mark bought')
+                              : (product.is_chosen ? 'Unchoose' : 'Choose')}
                           </button>
                         )}
                         {canEdit && <EditAction onClick={() => startEdit(product.id)} label={product.title} disabled={busy} />}
@@ -312,7 +343,8 @@ const EMPTY_DETAIL: RoomDetailResponse = {
 }
 
 const EMPTY_ITEM = {
-  title: '', item_type: 'purchase' as RoomItemType, status: 'planned' as RoomItemStatus,
+  title: '', plan_mode: 'single' as RoomPlanMode,
+  item_type: 'purchase' as RoomItemType, status: 'planned' as RoomItemStatus,
   priority: 'medium' as RoomItemPriority, description: '', quantity: '1',
   estimated_unit_cost: '', actual_cost: '', notes: '',
   assigned_to_person_ids: [] as number[],
@@ -389,7 +421,7 @@ export function HomesteadRoomPage() {
   const startEdit = (item: RoomPlanItem) => {
     setEditItemId(item.id)
     setItemForm({
-      title: item.title, item_type: item.item_type, status: item.status,
+      title: item.title, plan_mode: item.plan_mode, item_type: item.item_type, status: item.status,
       priority: item.priority, description: item.description, quantity: item.quantity,
       estimated_unit_cost: item.estimated_unit_cost, actual_cost: item.actual_cost ?? '',
       notes: item.notes,
@@ -447,7 +479,14 @@ export function HomesteadRoomPage() {
             </div>
             {item.description && <p className="mt-1 whitespace-pre-wrap text-sm text-muted-strong">{item.description}</p>}
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-              <span>{Number(item.quantity).toLocaleString()} × {money(item.estimated_unit_cost)} = <strong className="text-ink">{money(item.estimated_total)}</strong></span>
+              {item.plan_mode === 'project' ? (
+                <span>
+                  {item.parts_count} part{item.parts_count === 1 ? '' : 's'} ={' '}
+                  <strong className="text-ink">{money(item.estimated_total)}</strong>
+                </span>
+              ) : (
+                <span>{Number(item.quantity).toLocaleString()} × {money(item.estimated_unit_cost)} = <strong className="text-ink">{money(item.estimated_total)}</strong></span>
+              )}
               {item.actual_cost !== null && <span>Actual <strong className="text-ink">{money(item.actual_cost)}</strong></span>}
               {item.assigned_to_person_ids.length > 0 && <span>👤 {assigneeName}</span>}
             </div>
@@ -523,15 +562,41 @@ export function HomesteadRoomPage() {
           <form onSubmit={saveItem} className="flex flex-col gap-3">
             <Input value={itemForm.title} onChange={e => setItemForm(f => ({ ...f, title: e.target.value }))} placeholder="What do you want to buy or do?" autoFocus />
             <div className="grid gap-3 sm:grid-cols-3">
+              <Field label="What is this?" hint="A project's parts all add up; a single item's options are alternatives.">
+                <div className="flex gap-1 rounded-xl bg-sunken p-1">
+                  {([['single', 'Single item'], ['project', 'Project']] as const).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setItemForm(f => ({ ...f, plan_mode: mode }))}
+                      aria-pressed={itemForm.plan_mode === mode}
+                      className={`min-h-10 flex-1 rounded-lg px-2 text-xs font-semibold transition-colors ${
+                        itemForm.plan_mode === mode ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </Field>
               <Field label="Type"><Select value={itemForm.item_type} onChange={e => setItemForm(f => ({ ...f, item_type: e.target.value as RoomItemType }))}>{ITEM_TYPES.map(type => <option key={type} value={type}>{cap(type)}</option>)}</Select></Field>
               <Field label="Status"><Select value={itemForm.status} onChange={e => setItemForm(f => ({ ...f, status: e.target.value as RoomItemStatus }))}>{ITEM_STATUSES.map(status => <option key={status} value={status}>{cap(status)}</option>)}</Select></Field>
               <Field label="Priority"><Select value={itemForm.priority} onChange={e => setItemForm(f => ({ ...f, priority: e.target.value as RoomItemPriority }))}>{PRIORITIES.map(priority => <option key={priority} value={priority}>{cap(priority)}</option>)}</Select></Field>
             </div>
             <Field label="Description"><Textarea rows={2} value={itemForm.description} onChange={e => setItemForm(f => ({ ...f, description: e.target.value }))} /></Field>
             <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Quantity"><Input type="number" min="0.01" step="0.01" value={itemForm.quantity} onChange={e => setItemForm(f => ({ ...f, quantity: e.target.value }))} /></Field>
-              <Field label="Estimated unit cost"><Input type="number" min="0" step="0.01" value={itemForm.estimated_unit_cost} onChange={e => setItemForm(f => ({ ...f, estimated_unit_cost: e.target.value }))} placeholder="0.00" /></Field>
-              <Field label="Actual total cost"><Input type="number" min="0" step="0.01" value={itemForm.actual_cost} onChange={e => setItemForm(f => ({ ...f, actual_cost: e.target.value }))} placeholder="Optional" /></Field>
+              {itemForm.plan_mode === 'project' ? (
+                <p className="text-xs text-muted sm:col-span-3">
+                  A project costs the total of its parts, so there is nothing to type here —
+                  add the parts below and the estimate follows them.
+                </p>
+              ) : (
+                <>
+                  <Field label="Quantity"><Input type="number" min="0.01" step="0.01" value={itemForm.quantity} onChange={e => setItemForm(f => ({ ...f, quantity: e.target.value }))} /></Field>
+                  <Field label="Estimated unit cost"><Input type="number" min="0" step="0.01" value={itemForm.estimated_unit_cost} onChange={e => setItemForm(f => ({ ...f, estimated_unit_cost: e.target.value }))} placeholder="0.00" /></Field>
+                  <Field label="Actual total cost"><Input type="number" min="0" step="0.01" value={itemForm.actual_cost} onChange={e => setItemForm(f => ({ ...f, actual_cost: e.target.value }))} placeholder="Optional" /></Field>
+                </>
+              )}
             </div>
             <Field label="Assigned to"><AssigneeSelect people={people} value={itemForm.assigned_to_person_ids} onChange={value => setItemForm(f => ({ ...f, assigned_to_person_ids: value }))} className={fieldClass} /></Field>
             <Field label="Notes"><Textarea rows={2} value={itemForm.notes} onChange={e => setItemForm(f => ({ ...f, notes: e.target.value }))} /></Field>

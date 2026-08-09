@@ -257,6 +257,13 @@ maturation and native Solace real-data comparison still follow. Kiosk work remai
   quick capture expands only when requested on phones, duplicate mobile page headings are removed
   and rewards metrics are more compact. **Frontend production build clean; no migration; backend
   unchanged from the 624-test v0.20.0 baseline.**
+- [x] **Room jobs as projects (v0.23.1, 2026-08-09).** `RoomPlanItem.plan_mode` is `single`
+  (products are alternatives; the chosen one sets the estimate) or `project` (products are parts
+  that are all required and sum). A project's estimate is derived from its parts, so the manual
+  cost fields are hidden and `_apply_chosen_product` no-ops in project mode. Parts carry
+  `is_purchased` + `actual_cost`, giving `spent_cost` / `remaining_cost` /
+  `parts_bought_count`. Cost properties read `products`, so any path that totals plan items must
+  `prefetch_related("products")` — `room_summaries` does.
 - [x] **Multi-person assignment (v0.23.0, 2026-08-09).** `assigned_to_person` is replaced by an
   `assigned_to_people` M2M on all nine assignable models (Atlas items, Calendar events, Meridian
   tasks/routines, Education assessments/events, Homestead maintenance/improvements/room items):
@@ -356,15 +363,6 @@ unlock. Configure both phones' four bottom shortcuts, drag Hub widgets on deskto
 the documented Calendar, Lists, Homestead/Money and Meridian round trips. Record task/device
 friction before another broad visual pass; do not mark a node household-accepted from automated
 tests alone.
-
-**Queued build task — room jobs as projects (owner, 2026-08-09; design confirmed).** A room plan
-item's products are currently *alternatives* — pick one, its price becomes the estimate. The
-owner also wants a *project* job: parts that are all required, whose prices sum. Confirmed
-design: (1) a `plan_mode` on the plan item, `single` (products are alternatives) or `project`
-(products are parts); (2) in project mode the estimate is the automatic sum of its parts and the
-manual cost fields are hidden; (3) each part can be ticked bought with the actual price paid, so
-a project reads "3 of 5 bought · $700 spent, $250 to go". Same rows and same add-form in both
-modes — only the maths and wording change.
 
 **Next local build step (no home server required):** finish the generic sensitive-node lock
 path instead of leaving it Solace-specific: move re-auth/sensitivity decisions consistently

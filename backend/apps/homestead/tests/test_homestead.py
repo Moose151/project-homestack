@@ -285,6 +285,105 @@ class RoomPlanProductTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class RoomPlanProjectModeTests(TestCase):
+    """A project's parts are all required and sum; a single item's options are alternatives.
+
+    Owner request, 2026-08-09. Same rows on screen, opposite arithmetic — so the maths is
+    what these tests pin down.
+    """
+
+    def setUp(self):
+        self.admin = _make_user("project_admin", User.Role.ADMIN)
+        self.client.force_login(self.admin)
+        self.room = create_room(self.admin, name="Study")
+
+    def _project(self, **kwargs):
+        return create_room_item(
+            self.admin, self.room, title="Desk setup", plan_mode="project", **kwargs
+        )
+
+    def test_jobs_are_single_items_by_default(self):
+        item = create_room_item(self.admin, self.room, title="New sofa")
+        self.assertEqual(item.plan_mode, "single")
+        self.assertFalse(item.is_project)
+
+    def test_project_estimate_is_the_sum_of_its_parts(self):
+        item = self._project()
+        create_room_product(self.admin, item, title="Desk", unit_cost="400.00")
+        create_room_product(self.admin, item, title="Monitor", unit_cost="300.00")
+        create_room_product(self.admin, item, title="Chair", unit_cost="250.00")
+        item.refresh_from_db()
+        self.assertEqual(str(item.estimated_total), "950.00")
+
+    def test_part_quantity_multiplies_into_the_project_total(self):
+        item = self._project()
+        create_room_product(self.admin, item, title="Shelf", unit_cost="50.00", quantity="3.00")
+        item.refresh_from_db()
+        self.assertEqual(str(item.estimated_total), "150.00")
+
+    def test_single_item_estimate_ignores_the_sum_of_alternatives(self):
+        """Three sofas you are choosing between do not cost the price of all three."""
+        item = create_room_item(
+            self.admin, self.room, title="New sofa", quantity="1.00",
+            estimated_unit_cost="899.00",
+        )
+        create_room_product(self.admin, item, title="Corner sofa", unit_cost="899.00")
+        create_room_product(self.admin, item, title="Two seater", unit_cost="650.00")
+        item.refresh_from_db()
+        self.assertEqual(str(item.estimated_total), "899.00")
+
+    def test_choosing_a_part_does_not_rewrite_a_project_estimate(self):
+        item = self._project()
+        part = create_room_product(self.admin, item, title="Desk", unit_cost="400.00")
+        create_room_product(self.admin, item, title="Monitor", unit_cost="300.00")
+        self.client.patch(
+            reverse("homestead-room-product-detail", args=[self.room.id, item.id, part.id]),
+            {"is_chosen": True},
+            content_type="application/json",
+        )
+        item.refresh_from_db()
+        self.assertEqual(str(item.estimated_total), "700.00")
+
+    def test_progress_counts_and_splits_spent_from_remaining(self):
+        item = self._project()
+        create_room_product(
+            self.admin, item, title="Desk", unit_cost="400.00", is_purchased=True,
+            actual_cost="380.00",
+        )
+        create_room_product(self.admin, item, title="Monitor", unit_cost="300.00")
+        create_room_product(self.admin, item, title="Chair", unit_cost="250.00")
+        item.refresh_from_db()
+        self.assertEqual((item.parts_bought_count, item.parts_count), (1, 3))
+        self.assertEqual(str(item.spent_cost), "380.00")
+        self.assertEqual(str(item.remaining_cost), "550.00")
+        self.assertEqual(str(item.effective_cost), "930.00")
+
+    def test_bought_part_without_a_paid_price_falls_back_to_its_estimate(self):
+        item = self._project()
+        create_room_product(self.admin, item, title="Desk", unit_cost="400.00", is_purchased=True)
+        item.refresh_from_db()
+        self.assertEqual(str(item.spent_cost), "400.00")
+
+    def test_project_totals_reach_the_room_summary(self):
+        item = self._project()
+        create_room_product(self.admin, item, title="Desk", unit_cost="400.00")
+        create_room_product(self.admin, item, title="Monitor", unit_cost="300.00")
+        response = self.client.get(reverse("homestead-room-detail", args=[self.room.id]))
+        self.assertEqual(response.json()["summary"]["remaining_estimated_cost"], "700.00")
+
+    def test_api_exposes_mode_and_progress(self):
+        item = self._project()
+        create_room_product(self.admin, item, title="Desk", unit_cost="400.00", is_purchased=True)
+        body = self.client.get(
+            reverse("homestead-room-item-list", args=[self.room.id])
+        ).json()[0]
+        self.assertEqual(body["plan_mode"], "project")
+        self.assertEqual(body["parts_bought_count"], 1)
+        self.assertEqual(body["parts_count"], 1)
+        self.assertEqual(body["spent_cost"], "400.00")
+        self.assertEqual(body["remaining_cost"], "0.00")
+
+
 class HomesteadRoomPermissionTests(TestCase):
     def setUp(self):
         self.admin = _make_user("room_admin", User.Role.ADMIN)

@@ -177,8 +177,8 @@ class RoomPlanProductSerializer(serializers.ModelSerializer):
         model = RoomPlanProduct
         fields = [
             "id", "plan_item_id", "title", "url", "image_url", "retailer",
-            "quantity", "unit_cost", "total_cost", "is_chosen", "notes", "position",
-            "created_at", "updated_at",
+            "quantity", "unit_cost", "total_cost", "is_chosen", "is_purchased",
+            "actual_cost", "notes", "position", "created_at", "updated_at",
         ]
         read_only_fields = ["id", "plan_item_id", "total_cost", "created_at", "updated_at"]
 
@@ -196,18 +196,24 @@ class RoomPlanItemSerializer(AssigneeSerializerMixin, serializers.ModelSerialize
     room_id = serializers.IntegerField(read_only=True)
     estimated_total = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
     effective_cost = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    spent_cost = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    remaining_cost = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    parts_bought_count = serializers.IntegerField(read_only=True)
+    parts_count = serializers.IntegerField(read_only=True)
     products = RoomPlanProductSerializer(many=True, read_only=True)
 
     class Meta:
         model = RoomPlanItem
         fields = [
-            "id", "room_id", "assigned_to_person_ids", "title", "item_type", "status",
-            "priority", "description", "quantity", "estimated_unit_cost", "estimated_total",
-            "actual_cost", "effective_cost", "notes", "position",
+            "id", "room_id", "assigned_to_person_ids", "title", "plan_mode", "item_type",
+            "status", "priority", "description", "quantity", "estimated_unit_cost",
+            "estimated_total", "actual_cost", "effective_cost", "spent_cost",
+            "remaining_cost", "parts_bought_count", "parts_count", "notes", "position",
             "completed_at", "visibility", "products", "created_at", "updated_at",
         ]
         read_only_fields = [
-            "id", "room_id", "estimated_total", "effective_cost", "completed_at",
+            "id", "room_id", "estimated_total", "effective_cost", "spent_cost",
+            "remaining_cost", "parts_bought_count", "parts_count", "completed_at",
             "products", "created_at", "updated_at",
         ]
 

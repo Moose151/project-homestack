@@ -884,16 +884,25 @@ export interface RoomPlanProduct {
   quantity: string
   unit_cost: string
   total_cost: string
+  /** Single-item jobs: the alternative picked. */
   is_chosen: boolean
+  /** Project jobs: this part is already bought. */
+  is_purchased: boolean
+  /** What was actually paid for this part, if it differed from the estimate. */
+  actual_cost: string | null
   notes: string
   position: number
   created_at: string
   updated_at: string
 }
 
+export type RoomPlanMode = 'single' | 'project'
+
 export interface RoomPlanItem {
   id: number
   room_id: number
+  /** single: products are alternatives to choose between. project: parts that all sum. */
+  plan_mode: RoomPlanMode
   assigned_to_person_ids: number[]
   title: string
   item_type: RoomItemType
@@ -905,6 +914,10 @@ export interface RoomPlanItem {
   estimated_total: string
   actual_cost: string | null
   effective_cost: string
+  spent_cost: string
+  remaining_cost: string
+  parts_bought_count: number
+  parts_count: number
   notes: string
   position: number
   completed_at: string | null

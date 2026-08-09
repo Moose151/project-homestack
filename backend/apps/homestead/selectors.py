@@ -230,7 +230,7 @@ def summarize_room_items(items: list[RoomPlanItem]) -> dict:
 def room_summaries(user, rooms: list[RoomArea]) -> tuple[dict[int, dict], dict]:
     by_room = {room.id: [] for room in rooms}
     if rooms:
-        qs = RoomPlanItem.objects.filter(room_id__in=by_room)
+        qs = RoomPlanItem.objects.filter(room_id__in=by_room).prefetch_related("products")
         qs = apply_visibility(qs, user)
         for item in qs:
             by_room[item.room_id].append(item)

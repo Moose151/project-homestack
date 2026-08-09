@@ -353,7 +353,17 @@ class RoomArea(HouseholdBaseModel):
 
 
 class RoomPlanItem(HouseholdBaseModel):
-    """One wanted purchase, maintenance job, renovation or upgrade for a room."""
+    """One wanted purchase, maintenance job, renovation or upgrade for a room.
+
+    A job is either a **single item** — its products are alternatives you compare and pick
+    one of, and the chosen one's price is the estimate — or a **project**, where its products
+    are parts that are all required and their prices sum (owner, 2026-08-09). Same rows on
+    screen; the mode decides the arithmetic.
+    """
+
+    class PlanMode(models.TextChoices):
+        SINGLE = "single", "Single item"
+        PROJECT = "project", "Project"
 
     class ItemType(models.TextChoices):
         PURCHASE = "purchase", "Purchase"
@@ -373,6 +383,12 @@ class RoomPlanItem(HouseholdBaseModel):
         HIGH = "high", "High"
 
     room = models.ForeignKey(RoomArea, on_delete=models.PROTECT, related_name="plan_items")
+    plan_mode = models.CharField(
+        max_length=10,
+        choices=PlanMode.choices,
+        default=PlanMode.SINGLE,
+        help_text="single: products are alternatives. project: products are parts that sum.",
+    )
     assigned_to_people = models.ManyToManyField(
         "people.Person",
         blank=True,
@@ -429,11 +445,60 @@ class RoomPlanItem(HouseholdBaseModel):
         return self.title
 
     @property
+    def is_project(self) -> bool:
+        return self.plan_mode == self.PlanMode.PROJECT
+
+    @property
     def estimated_total(self) -> Decimal:
+        """What the job is expected to cost.
+
+        A project costs the sum of its parts — that number is always current, so a project
+        has no separately typed estimate to go stale. A single item costs its own quantity
+        times unit price, which the chosen option keeps up to date.
+        """
+        if self.is_project:
+            return sum(
+                (product.total_cost for product in self.products.all()),
+                Decimal("0.00"),
+            ).quantize(Decimal("0.01"))
         return (self.quantity * self.estimated_unit_cost).quantize(Decimal("0.01"))
 
     @property
+    def parts_bought_count(self) -> int:
+        return sum(1 for product in self.products.all() if product.is_purchased)
+
+    @property
+    def parts_count(self) -> int:
+        return len(self.products.all())
+
+    @property
+    def spent_cost(self) -> Decimal:
+        """Already paid: the actual price of each bought part, falling back to its estimate."""
+        if not self.is_project:
+            return self.actual_cost or Decimal("0.00")
+        return sum(
+            (
+                product.actual_cost if product.actual_cost is not None else product.total_cost
+                for product in self.products.all()
+                if product.is_purchased
+            ),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+
+    @property
+    def remaining_cost(self) -> Decimal:
+        """Still to buy — the estimate of every part not yet ticked off."""
+        if not self.is_project:
+            return Decimal("0.00") if self.status == self.Status.COMPLETED else self.estimated_total
+        return sum(
+            (product.total_cost for product in self.products.all() if not product.is_purchased),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+
+    @property
     def effective_cost(self) -> Decimal:
+        if self.is_project:
+            return (self.spent_cost + self.remaining_cost).quantize(Decimal("0.01"))
         if self.status == self.Status.COMPLETED and self.actual_cost is not None:
             return self.actual_cost
         return self.estimated_total
@@ -474,7 +539,21 @@ class RoomPlanProduct(HouseholdBaseModel):
         default=Decimal("0.00"),
         validators=[MinValueValidator(Decimal("0.00"))],
     )
-    is_chosen = models.BooleanField(default=False)
+    is_chosen = models.BooleanField(
+        default=False,
+        help_text="Single-item jobs only: the alternative picked, whose price is the estimate.",
+    )
+    is_purchased = models.BooleanField(
+        default=False, help_text="Project parts: already bought."
+    )
+    actual_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        help_text="Total actually paid for this part, if it differed from the estimate.",
+    )
     notes = models.TextField(blank=True, default="")
     position = models.PositiveSmallIntegerField(default=0)
 

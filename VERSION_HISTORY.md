@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.23.0**
+> **Current version: 0.23.1**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,23 @@
 ---
 
 ## 0.23 — Multi-person assignment
+
+### 0.23.1 — 2026-08-09
+- **A room job is now either a single item or a project.** Its products meant one thing —
+  alternatives you compare and pick one of — which could not represent "everything the desk
+  setup needs". A job now carries a mode: **Single item**, where products are alternatives and
+  the chosen one's price is the estimate, or **Project**, where products are parts that are all
+  required and their prices sum. Same rows and same add-form; only the arithmetic and the
+  wording change.
+- **A project's estimate is always the sum of its parts.** The manual quantity/unit-cost fields
+  are hidden for a project, so there is no separately typed figure to go stale, and room and
+  whole-house totals follow the parts automatically. Marking a part "chosen" no longer rewrites
+  a project's estimate — that would understate a job whose parts are all needed.
+- **Parts tick off as bought.** Marking one asks what it actually cost (blank keeps the
+  estimate), and the job reads "3 of 5 bought · $700 spent, $250 to go". A bought part shows the
+  price paid beside its name.
+- Existing jobs stay single items, which is what they already were. **667 backend tests green
+  (9 new, covering the two modes' maths); production build clean; no migration drift.**
 
 ### 0.23.0 — 2026-08-09
 - **Anything can be assigned to several people.** An assignment was a single
@@ -59,6 +76,23 @@
   green (10 new, permission-first); production build clean; no migration drift.**
 
 ## 0.23 — Multi-person assignment
+
+### 0.23.1 — 2026-08-09
+- **A room job is now either a single item or a project.** Its products meant one thing —
+  alternatives you compare and pick one of — which could not represent "everything the desk
+  setup needs". A job now carries a mode: **Single item**, where products are alternatives and
+  the chosen one's price is the estimate, or **Project**, where products are parts that are all
+  required and their prices sum. Same rows and same add-form; only the arithmetic and the
+  wording change.
+- **A project's estimate is always the sum of its parts.** The manual quantity/unit-cost fields
+  are hidden for a project, so there is no separately typed figure to go stale, and room and
+  whole-house totals follow the parts automatically. Marking a part "chosen" no longer rewrites
+  a project's estimate — that would understate a job whose parts are all needed.
+- **Parts tick off as bought.** Marking one asks what it actually cost (blank keeps the
+  estimate), and the job reads "3 of 5 bought · $700 spent, $250 to go". A bought part shows the
+  price paid beside its name.
+- Existing jobs stay single items, which is what they already were. **667 backend tests green
+  (9 new, covering the two modes' maths); production build clean; no migration drift.**
 
 ### 0.23.0 — 2026-08-09
 - **Anything can be assigned to several people.** An assignment was a single

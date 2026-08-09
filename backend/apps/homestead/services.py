@@ -410,7 +410,7 @@ _ROOM_FIELDS = {
 }
 _ROOM_ITEM_FIELDS = {
     "title", "item_type", "status", "priority", "description",
-    "quantity", "estimated_unit_cost", "actual_cost", "notes", "position",
+    "plan_mode", "quantity", "estimated_unit_cost", "actual_cost", "notes", "position",
     "visibility",
 }
 
@@ -494,7 +494,7 @@ def delete_room_item(acting_user: User, obj: RoomPlanItem) -> None:
 
 _ROOM_PRODUCT_FIELDS = {
     "title", "url", "image_url", "retailer", "quantity", "unit_cost",
-    "is_chosen", "notes", "position",
+    "is_chosen", "is_purchased", "actual_cost", "notes", "position",
 }
 
 
@@ -504,8 +504,13 @@ def _apply_chosen_product(acting_user: User, product: RoomPlanProduct) -> None:
     Choosing an option is how a household says "this is the one" — so the room and
     whole-house estimates should follow it rather than keeping a stale number typed in
     before the options were compared.
+
+    Projects have no chosen option: their parts are all required and their estimate is the
+    sum of them, so copying one part's price onto the job would understate it.
     """
     item = product.plan_item
+    if item.is_project:
+        return
     RoomPlanProduct.objects.filter(plan_item=item).exclude(pk=product.pk).filter(
         is_chosen=True
     ).update(is_chosen=False)

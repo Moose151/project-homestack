@@ -13,7 +13,7 @@ import type {
   WikiCategory, WikiPage,
   Pet, PetTreatment, PetAppointment,
   Property, ServiceProvider, Appliance, MaintenanceTask, Improvement, HomesteadSearchResults,
-  InsurancePolicy, HouseholdCost, RoomArea, RoomDetailResponse, RoomListResponse, RoomPlanItem, RoomPlanProduct,
+  InsurancePolicy, HouseholdCost, RoomArea, RoomDetailResponse, RoomListResponse, RoomPlanItem, RoomPlanMode, RoomPlanProduct,
   RoomAreaType, RoomItemPriority, RoomItemStatus, RoomItemType,
   SolaceBill, SolaceBillOccurrence, SolaceBillTimeline, SolacePayday, SolacePurchase, SolaceSchedule,
   SolaceBucket, SolaceSubscription,
@@ -129,7 +129,7 @@ type RoomWrite = Partial<{
 }>
 
 type RoomItemWrite = Partial<{
-  assigned_to_person_ids: number[]; title: string; item_type: RoomItemType
+  assigned_to_person_ids: number[]; title: string; plan_mode: RoomPlanMode; item_type: RoomItemType
   status: RoomItemStatus; priority: RoomItemPriority; description: string
   quantity: string; estimated_unit_cost: string; actual_cost: string | null
   notes: string; position: number; visibility: string
@@ -137,7 +137,8 @@ type RoomItemWrite = Partial<{
 
 type RoomProductWrite = Partial<{
   title: string; url: string; image_url: string; retailer: string
-  quantity: string; unit_cost: string; is_chosen: boolean; notes: string; position: number
+  quantity: string; unit_cost: string; is_chosen: boolean; is_purchased: boolean
+  actual_cost: string | null; notes: string; position: number
 }>
 
 type SolaceBillWrite = Partial<{
