@@ -140,6 +140,11 @@ PASSWORD_HASHERS = [
 ]
 
 # --- Django REST Framework ---
+# How long password re-authentication stays valid. The kiosk is a shared screen in a communal
+# room, so its elevation expires far sooner than a personal laptop's (D6 §6, Milestone 4).
+REAUTH_TTL_SECONDS = 5 * 60
+KIOSK_REAUTH_TTL_SECONDS = 60
+
 # Session auth for web/kiosk (D6); token auth added with native apps. Default permission
 # stays AllowAny until the central resolver lands (Phase 1.5, D10) — there are no
 # protected endpoints yet. JSON only for now (browsable API needs contrib.auth).

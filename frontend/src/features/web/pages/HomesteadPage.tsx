@@ -18,6 +18,7 @@ import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
 import { StatCard } from '../../../components/StatCard'
 import { RoomIconSelect } from '../../../components/RoomIconSelect'
+import { SensitiveGate } from '../../../components/SensitiveGate'
 import { useAuth } from '../../auth/AuthContext'
 import { useStacks } from '../../stacks/StacksContext'
 import { useUrlAction, useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
@@ -994,8 +995,6 @@ const EMPTY_COST = {
 function FinanceTab({ onError }: { onError: (m: string) => void }) {
   const [unlocked, setUnlocked] = useState(false)
   const [checking, setChecking] = useState(true)
-  const [password, setPassword] = useState('')
-  const [unlocking, setUnlocking] = useState(false)
   const [policies, setPolicies] = useState<InsurancePolicy[]>([])
   const [costs, setCosts] = useState<HouseholdCost[]>([])
   const [policyForm, setPolicyForm] = useState(EMPTY_POLICY)
@@ -1018,43 +1017,14 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
     load().catch(() => {}).finally(() => setChecking(false))
   }, [])
 
-  const unlock = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setUnlocking(true)
-    try {
-      await api.reauth(password)
-      await load()
-      setPassword('')
-    } catch (e) {
-      onError(errMsg(e))
-    } finally {
-      setUnlocking(false)
-    }
-  }
-
   if (checking) return <div className="h-40 rounded-2xl bg-sunken animate-pulse" />
   if (!unlocked) {
     return (
-      <Card>
-        <form onSubmit={unlock} className="mx-auto flex max-w-md flex-col gap-4 py-3">
-          <div>
-            <h2 className="text-lg font-bold text-ink">Unlock costs &amp; cover</h2>
-            <p className="mt-1 text-sm text-muted">
-              Policy numbers and household costs are financial data, so your password is required.
-            </p>
-          </div>
-          <Field label="Password">
-            <Input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              autoComplete="current-password"
-              autoFocus
-            />
-          </Field>
-          <Button type="submit" loading={unlocking} disabled={!password}>Unlock</Button>
-        </form>
-      </Card>
+      <SensitiveGate
+        nodeName="costs & cover"
+        hint="Policy numbers and household costs are financial data, so your password is required."
+        onUnlock={() => { void load() }}
+      />
     )
   }
 

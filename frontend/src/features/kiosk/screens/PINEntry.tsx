@@ -65,7 +65,7 @@ export function PINEntry({ kioskUser, onSuccess, onCancel }: Props) {
   const submit = async (pin: string) => {
     setLoading(true)
     try {
-      const user = await api.pinLogin(kioskUser.username, pin)
+      const user = await api.pinLogin(kioskUser.username, pin, 'kiosk')
       onSuccess(user)
     } catch {
       setError('Incorrect PIN. Please try again.')

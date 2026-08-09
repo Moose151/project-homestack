@@ -9,11 +9,15 @@ from apps.accounts.models import User
 class PinLoginSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=50)
     pin = serializers.CharField(max_length=10, write_only=True)
+    # Which screen this is. Only "web" earns the longer elevation window; see
+    # apps.accounts.services.reauth_ttl_seconds.
+    surface = serializers.CharField(max_length=20, required=False, allow_blank=True)
 
 
 class PasswordLoginSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=50)
     password = serializers.CharField(write_only=True)
+    surface = serializers.CharField(max_length=20, required=False, allow_blank=True)
 
 
 class ReauthSerializer(serializers.Serializer):

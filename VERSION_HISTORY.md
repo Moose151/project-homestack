@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.24.0**
+> **Current version: 0.24.1**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,20 @@
 ---
 
 ## 0.24 — Security maturation (Milestone 4)
+
+### 0.24.1 — 2026-08-09
+- **Elevation expires far sooner on the kiosk.** Five minutes is a reasonable convenience on a
+  personal laptop and an open door on a shared screen in a communal room, but the server had no
+  way to tell the two apart. Sign-in now declares its surface, and the kiosk's window is one
+  minute against the web's five. A client that does not declare itself gets the *cautious*
+  window, so a future client that forgets cannot quietly be handed the generous one.
+- **A locked node refuses in a way clients can act on.** Every surface used to read the prose
+  message and invent its own locked state. The refusal now carries `code: "reauth_required"` and
+  the node key, and one shared `SensitiveGate` replaces Money's bespoke unlock screen and
+  Homestead's separate copy — so a locked area looks and behaves the same wherever you meet it,
+  and "you lack permission" no longer reads like "you need to unlock".
+- Six kiosk-window tests and two locked-response contract tests. **706 backend tests green;
+  production build clean; no migration drift.**
 
 ### 0.24.0 — 2026-08-09
 - **One gate for every sensitive node.** Solace and Homestead each carried their own copy of
@@ -188,6 +202,20 @@
   green (10 new, permission-first); production build clean; no migration drift.**
 
 ## 0.24 — Security maturation (Milestone 4)
+
+### 0.24.1 — 2026-08-09
+- **Elevation expires far sooner on the kiosk.** Five minutes is a reasonable convenience on a
+  personal laptop and an open door on a shared screen in a communal room, but the server had no
+  way to tell the two apart. Sign-in now declares its surface, and the kiosk's window is one
+  minute against the web's five. A client that does not declare itself gets the *cautious*
+  window, so a future client that forgets cannot quietly be handed the generous one.
+- **A locked node refuses in a way clients can act on.** Every surface used to read the prose
+  message and invent its own locked state. The refusal now carries `code: "reauth_required"` and
+  the node key, and one shared `SensitiveGate` replaces Money's bespoke unlock screen and
+  Homestead's separate copy — so a locked area looks and behaves the same wherever you meet it,
+  and "you lack permission" no longer reads like "you need to unlock".
+- Six kiosk-window tests and two locked-response contract tests. **706 backend tests green;
+  production build clean; no migration drift.**
 
 ### 0.24.0 — 2026-08-09
 - **One gate for every sensitive node.** Solace and Homestead each carried their own copy of

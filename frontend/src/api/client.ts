@@ -26,6 +26,9 @@ import type {
   Book, BookClub, ClubBookEntry, ClubQueueItem, PersonalBookEntry, BookRating, BooksUser, BookShelfStatus,
 } from './types'
 
+/** Which screen is signing in. Only 'web' earns the longer re-authentication window. */
+export type LoginSurface = 'web' | 'kiosk'
+
 type CourseWrite = Partial<{
   name: string; code: string; institution_id: number | null; student_id: number | null
   teacher: string; start_date: string | null; end_date: string | null; colour: string
@@ -347,13 +350,16 @@ async function _fetchRaw<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  // --- Auth ---
+    // --- Auth ---
   getKioskUsers: (): Promise<KioskUser[]> => _fetch('/auth/kiosk-users/'),
-  pinLogin: (username: string, pin: string): Promise<AuthUser> =>
-    _fetch<AuthUser>('/auth/pin-login/', { method: 'POST', body: JSON.stringify({ username, pin }) })
+  // `surface` decides how long password elevation lasts: the kiosk is a shared screen, so it
+  // expires in a minute where the web gets five. A caller that says nothing is treated as the
+  // kiosk, so the web must declare itself rather than rely on the default.
+  pinLogin: (username: string, pin: string, surface: LoginSurface = 'web'): Promise<AuthUser> =>
+    _fetch<AuthUser>('/auth/pin-login/', { method: 'POST', body: JSON.stringify({ username, pin, surface }) })
       .then(value => { sharedGetCache.clear(); return value }),
-  passwordLogin: (username: string, password: string): Promise<AuthUser> =>
-    _fetch<AuthUser>('/auth/password-login/', { method: 'POST', body: JSON.stringify({ username, password }) })
+  passwordLogin: (username: string, password: string, surface: LoginSurface = 'web'): Promise<AuthUser> =>
+    _fetch<AuthUser>('/auth/password-login/', { method: 'POST', body: JSON.stringify({ username, password, surface }) })
       .then(value => { sharedGetCache.clear(); return value }),
   logout: (): Promise<void> =>
     _fetch<void>('/auth/logout/', { method: 'POST' })

@@ -17,6 +17,7 @@ import { EmptyState } from '../../../components/EmptyState'
 import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 import { UndoToast } from '../../../components/UndoToast'
 import { StatCard } from '../../../components/StatCard'
+import { SensitiveGate } from '../../../components/SensitiveGate'
 import { CloseoutTab, HealthPanel, ManagementTab } from './SolaceManagement'
 import { setSolaceCurrencySymbol, solaceMoney as money } from './solaceFormat'
 import { useStacks } from '../../stacks/StacksContext'
@@ -104,47 +105,6 @@ const subscriptionRecurrence = (cycle: string, fallback = '') => ({
   quarterly: 'FREQ=MONTHLY;INTERVAL=3',
   yearly: 'FREQ=YEARLY',
 } as Record<string, string>)[cycle] || fallback
-
-function ReauthGate({ onUnlock }: { onUnlock: () => void }) {
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
-  const submit = async () => {
-    setSaving(true); setError('')
-    try {
-      await api.reauth(password)
-      setPassword('')
-      onUnlock()
-    } catch (e) {
-      setError(errMsg(e))
-    } finally {
-      setSaving(false)
-    }
-  }
-  return (
-    <div className="max-w-lg mx-auto pt-8">
-      <Card contentClassName="p-5">
-        <div className="flex flex-col gap-4">
-          <div>
-            <h2 className="text-xl font-bold text-ink">Unlock Solace</h2>
-            <p className="mt-1 text-sm text-muted">Password re-authentication required.</p>
-          </div>
-          {error && <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
-          <Field label="Password">
-            <Input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && password) submit() }}
-              autoComplete="current-password"
-            />
-          </Field>
-          <Button onClick={submit} loading={saving} disabled={!password}>Unlock</Button>
-        </div>
-      </Card>
-    </div>
-  )
-}
 
 function DueBadge({ iso, paid }: { iso: string | null; paid?: boolean }) {
   if (paid) return <Badge tone="success">Paid</Badge>
@@ -1925,7 +1885,7 @@ export function SolacePage() {
     }
   }
 
-  if (requiresPasswordUnlock && !unlocked) return <ReauthGate onUnlock={() => setUnlocked(true)} />
+  if (requiresPasswordUnlock && !unlocked) return <SensitiveGate nodeName="Money" onUnlock={() => setUnlocked(true)} />
 
   return (
     <div className="flex flex-col gap-5">

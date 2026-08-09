@@ -98,3 +98,41 @@ class SensitiveNodeGateTests(TestCase):
             AuditLog.objects.filter(action="sensitive_node_accessed").exists(),
             "a refused request never reached the data, so it is not an access",
         )
+
+
+class LockedResponseContractTests(TestCase):
+    """A refusal must tell a client what to do, not just that it failed.
+
+    Each surface used to read the prose and invent its own locked state; the response now
+    carries a code and the node key so one shared component can handle every sensitive node.
+    """
+
+    def setUp(self):
+        self.admin = _admin("contractadmin")
+        enable_node(self.admin, "solace")
+        Node.objects.filter(key="solace").update(supports_sensitive_lock=True)
+        HouseholdNode.objects.filter(node__key="solace").update(requires_reauthentication=True)
+        self.client.force_login(self.admin)
+
+    def test_locked_response_is_machine_readable(self):
+        response = self.client.get(reverse("solace-bill-list"))
+        self.assertEqual(response.status_code, 403)
+        body = response.json()
+        self.assertEqual(body["code"], "reauth_required")
+        self.assertEqual(body["node"], "solace")
+        self.assertTrue(body["detail"])
+
+    def test_a_plain_permission_failure_is_not_marked_as_locked(self):
+        """Lacking permission is a different answer from being locked, and must read as one."""
+        member = User.objects.create_user(
+            username="plainmember", display_name="Member", role=User.Role.USER, password="pass123!"
+        )
+        member.set_pin("1234")
+        member.save()
+        self.client.force_login(member)
+        self.client.post(
+            reverse("auth-reauth"), {"password": "pass123!"}, content_type="application/json"
+        )
+        response = self.client.get(reverse("solace-bill-list"))
+        self.assertIn(response.status_code, [401, 403])
+        self.assertNotEqual(response.json().get("code"), "reauth_required")

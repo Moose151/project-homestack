@@ -362,12 +362,15 @@ date-only entries, a min/step mismatch rejecting whole numbers, and backdated bi
 pre-loaded with arrears). `docs/PARTNER_PILOT_READINESS.md` remains the acceptance list for
 inviting the partner in; the two-account/real-device pass is still outstanding.
 
-**Next local build step (no home server required):** the sensitive-node lock is now generic
-(`apps/nodes/access.py`) and the permission/user-change audit gaps are closed (v0.24.0). What
-remains of Milestone 4 is the **web/kiosk locked-state contract and the shorter kiosk timeout** —
-define what a locked node looks like on each surface rather than letting each page invent one,
-and give the kiosk a tighter re-auth window than the web's five minutes. Keep permission tests
-first.
+**Milestone 4 is functionally complete (v0.24.1).** The sensitive-node lock is generic
+(`apps/nodes/access.py`), account/permission changes are audited, the locked-state contract is
+machine-readable (`code: "reauth_required"` + node key, rendered by `components/SensitiveGate`),
+and the kiosk's elevation window is a minute against the web's five — a client that does not
+declare its surface gets the cautious one. What remains is the **pre-remote-access checklist in
+`docs/05_Security_Architecture_Document.md` §14**, and only if remote access is ever pursued.
+
+**Next local build step:** Milestone 5.5, the Home Assistant bridge — start with its 5.5.0
+contract/security gate, not a custom component. See `docs/26_Node_Home_Assistant.md`.
 
 **Next important feature after those gates:** Milestone 5.5, the dedicated Home Assistant node.
 Start with its 5.5.0 contract/security gate; do not begin with a custom component or generic

@@ -19,6 +19,22 @@ from apps.accounts.services import is_reauthed
 from apps.audit.helpers import log_audit
 
 
+class SensitiveNodeLocked(PermissionDenied):
+    """A locked node, refused in a way a client can act on rather than merely display.
+
+    Every surface used to read the prose message and decide for itself what a locked node looks
+    like. The response now carries `code` and `node`, so one shared locked state can offer the
+    right unlock prompt without string-matching an error sentence.
+    """
+
+    def __init__(self, node_key: str):
+        super().__init__({
+            "detail": "Password re-authentication required for this area.",
+            "code": "reauth_required",
+            "node": node_key,
+        })
+
+
 def node_requires_reauth(node_key: str) -> bool:
     """Whether this household must re-enter a password to open the node.
 
@@ -53,9 +69,7 @@ def sensitive_node_access(node_key: str, *, surface: str = ""):
             from apps.nodes.models import Node
 
             if node_requires_reauth(self.sensitive_node_key) and not is_reauthed(request._request):
-                raise PermissionDenied(
-                    "Password re-authentication required for this area."
-                )
+                raise SensitiveNodeLocked(self.sensitive_node_key)
             log_audit(
                 "sensitive_node_accessed",
                 user=request.user,

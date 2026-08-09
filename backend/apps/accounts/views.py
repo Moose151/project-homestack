@@ -41,6 +41,9 @@ class PinLoginView(APIView):
         )
         if user is None:
             return Response({"detail": "Invalid credentials."}, status=status.HTTP_401_UNAUTHORIZED)
+        services.mark_session_surface(
+            request._request, serializer.validated_data.get("surface", "")
+        )
         return Response(UserSerializer(user).data)
 
 
@@ -58,6 +61,9 @@ class PasswordLoginView(APIView):
         )
         if user is None:
             return Response({"detail": "Invalid credentials."}, status=status.HTTP_401_UNAUTHORIZED)
+        services.mark_session_surface(
+            request._request, serializer.validated_data.get("surface", "")
+        )
         return Response(UserSerializer(user).data)
 
 
