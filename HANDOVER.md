@@ -355,14 +355,12 @@ maturation and native Solace real-data comparison still follow. Kiosk work remai
 
 ## 6. Active tasks — household pilot, then continue M4 locally
 
-**Immediate product step:** deploy v0.21.0 to the home server and follow
-`docs/PARTNER_PILOT_READINESS.md`. Create the partner as a **Household manager**, link the existing
-Person, set both PIN and password, and deliberately choose Money access. Confirm the no-Money
-state hides the destination and finance widgets, then enable it if wanted and verify password
-unlock. Configure both phones' four bottom shortcuts, drag Hub widgets on desktop, and complete
-the documented Calendar, Lists, Homestead/Money and Meridian round trips. Record task/device
-friction before another broad visual pass; do not mark a node household-accepted from automated
-tests alone.
+**Current state (2026-08-09):** the owner has reset the production database and is running
+v0.23.x on the home server, reporting bugs from real use. Fix those first — they have found
+three genuine defects that tests did not (a `datetime-local` input silently discarding
+date-only entries, a min/step mismatch rejecting whole numbers, and backdated bills arriving
+pre-loaded with arrears). `docs/PARTNER_PILOT_READINESS.md` remains the acceptance list for
+inviting the partner in; the two-account/real-device pass is still outstanding.
 
 **Next local build step (no home server required):** finish the generic sensitive-node lock
 path instead of leaving it Solace-specific: move re-auth/sensitivity decisions consistently
@@ -374,10 +372,11 @@ Start with its 5.5.0 contract/security gate; do not begin with a custom componen
 integration framework. The exact sequence and acceptance gates are in the roadmap and
 `docs/26_Node_Home_Assistant.md`.
 
-**Production track (requires the home server):** rebuild both production images, deploy through
-v0.22.0, and run `migrate` through `attachments.0001`, `permissions.0020`, `solace.0007`,
-`homestead.0004`, `hub.0014_upcoming_widget_and_always_visible` and
-`scheduling.0002_rotatingschedule_rotatingscheduleexception`.
+**Production track (requires the home server):** rebuild both images and run `migrate`. Current
+heads: `atlas.0004`, `scheduling.0003`, `meridian.0013`, `education.0006` (all
+`_multi_person_assignment`), `homestead.0007_room_plan_project_mode`,
+`hub.0014_upcoming_widget_and_always_visible`, `solace.0007`, `permissions.0020`,
+`attachments.0001`.
 
 The Solace cutover sequence remains: rerun the importer
 dry-run/apply so settings, categories, bucket rules, historical occurrences, balances,
@@ -422,14 +421,6 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 ## 8. Open questions / decisions still pending
 
 *(Append here when something needs the owner's call. None blocking Milestone 1 currently.)*
-
-- **Multi-person assignment (owner request, 2026-08-09) — SCOPED, NOT STARTED.** RESOLVED shape:
-  select **any number of people**, rather than the "All adults" group first proposed the same day
-  — a multi-select covers all-adults as an ordinary case and needs no new group vocabulary. Full
-  file-by-file scope is in §6. Two decisions to make before starting: (1) whether
-  `assigned_to_person` stays as the single-assignee fast path or is migrated into the new M2M, and
-  (2) whether a person added to the household later should be picked up automatically — a
-  multi-select says no, a dynamic group would say yes.
 
 - Mobile/desktop client tech (React Native vs. Tauri vs. PWA) — deferred until after core
   product proves itself (D3). PWA is the likely first bridge.
