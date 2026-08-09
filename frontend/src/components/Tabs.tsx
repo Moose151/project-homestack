@@ -7,13 +7,23 @@ export interface TabDef<T extends string = string> {
   badge?: number | string
 }
 
-/** Shared segmented tab control used by every node's page (Atlas, Meridian, Education, …). */
+/**
+ * Shared tab control used by every node's page.
+ *
+ * `primary` (the default) is a full-width underlined bar. It was a floating pill group sized
+ * to its own content, so a three-tab page and a twelve-tab page had visibly different tab
+ * rows and neither looked attached to the content below it (owner, 2026-08-09).
+ *
+ * `secondary` keeps the pill treatment for a second level of tabs inside a page, so nesting
+ * reads as nesting instead of two identical rows.
+ */
 export function Tabs<T extends string>({
   tabs,
   active,
   onChange,
   className = '',
   mobileSelectLabel,
+  variant = 'primary',
 }: {
   tabs: TabDef<T>[]
   active: T
@@ -21,6 +31,7 @@ export function Tabs<T extends string>({
   className?: string
   /** Replace long scrolling tab rows with a labelled picker on narrow phones. */
   mobileSelectLabel?: string
+  variant?: 'primary' | 'secondary'
 }) {
   const buttons = useRef<Array<HTMLButtonElement | null>>([])
   useEffect(() => {
@@ -56,7 +67,14 @@ export function Tabs<T extends string>({
         </label>
       )}
       <div className={mobileSelectLabel ? 'hidden sm:block' : ''}>
-        <div className={`tabs-scroll inline-flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-line bg-sunken/70 p-1 ${className}`} role="tablist">
+        <div
+          className={
+            variant === 'primary'
+              ? `tabs-scroll flex w-full gap-1 overflow-x-auto border-b border-line ${className}`
+              : `tabs-scroll inline-flex max-w-full gap-1 overflow-x-auto rounded-xl border border-line bg-sunken/70 p-1 ${className}`
+          }
+          role="tablist"
+        >
           {tabs.map((t, index) => {
             const isActive = t.key === active
             return (
@@ -73,9 +91,17 @@ export function Tabs<T extends string>({
                 role="tab"
                 aria-selected={isActive}
                 tabIndex={isActive ? 0 : -1}
-                className={`flex min-h-[44px] items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold capitalize transition-colors sm:min-h-[40px] sm:px-3.5 ${
-                  isActive ? 'bg-raised text-ink shadow-soft ring-1 ring-line/60' : 'text-muted hover:bg-surface/50 hover:text-ink'
-                }`}
+                className={
+                  variant === 'primary'
+                    ? `flex min-h-[44px] items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold capitalize transition-colors sm:min-h-[42px] sm:px-3.5 ${
+                        isActive
+                          ? 'border-primary text-ink'
+                          : 'border-transparent text-muted hover:border-line-strong hover:text-ink'
+                      }`
+                    : `flex min-h-[40px] items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold capitalize transition-colors ${
+                        isActive ? 'bg-raised text-ink shadow-soft ring-1 ring-line/60' : 'text-muted hover:bg-surface/50 hover:text-ink'
+                      }`
+                }
               >
                 {t.label}
                 {t.badge !== undefined && t.badge !== 0 && (

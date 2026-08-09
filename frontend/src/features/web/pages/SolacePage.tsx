@@ -16,6 +16,7 @@ import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
 import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 import { UndoToast } from '../../../components/UndoToast'
+import { StatCard } from '../../../components/StatCard'
 import { CloseoutTab, HealthPanel, ManagementTab } from './SolaceManagement'
 import { setSolaceCurrencySymbol, solaceMoney as money } from './solaceFormat'
 import { useStacks } from '../../stacks/StacksContext'
@@ -1485,32 +1486,26 @@ function Overview({ bills, buckets, subscriptions, purchases, health, closeout, 
   const bucketTotal = useMemo(() => buckets.reduce((sum, b) => sum + Number(b.current_amount || 0), 0), [buckets])
   const subTotal = useMemo(() => subscriptions.filter(s => s.is_active).reduce((sum, s) => sum + Number(s.amount || 0), 0), [subscriptions])
   const openPurchases = purchases.filter(p => p.is_open)
-  const stat = (label: string, value: string, tab: Tab, tone: BadgeTone) => (
-    <button onClick={() => onTab(tab)} className="rounded-lg border border-line bg-surface p-4 text-left hover:bg-sunken/40">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-2xl font-extrabold text-ink">{value}</span>
-        <Badge tone={tone}>View</Badge>
-      </div>
-      <p className="mt-1 text-sm text-muted">{label}</p>
-    </button>
+  // The "View" pill carried a colour per tile with nothing to distinguish — the whole tile is
+  // the link, so it does not need a button inside it. Six tiles in one grid also tile exactly,
+  // where 4-then-2 left a gap on the second row.
+  const stat = (label: string, value: string, tab: Tab) => (
+    <StatCard key={label} label={label} value={value} onClick={() => onTab(tab)} />
   )
   return (
     <div className="space-y-4">
       <HealthPanel health={health} onManage={() => onTab('manage')} />
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {stat(
           `Available to withdraw (${forecast?.horizon_months || 12} mo)`,
           forecast?.safe_to_withdraw === null || forecast?.safe_to_withdraw === undefined ? 'Not set' : money(forecast.safe_to_withdraw),
           'forecast',
-          forecast?.is_covered === false ? 'danger' : forecast?.safe_to_withdraw && Number(forecast.safe_to_withdraw) > 0 ? 'success' : 'primary',
         )}
-        {stat('Unpaid this cycle', closeout ? money(closeout.summary.unpaid_total) : money(unpaidTotal), 'closeout', closeout?.summary.unpaid_count ? 'warning' : 'success')}
-        {stat('Set aside', money(bucketTotal), 'buckets', 'primary')}
-        {stat('Planned purchases', String(openPurchases.length), 'purchases', openPurchases.length ? 'warning' : 'success')}
-      </div>
-      <div className="grid gap-3 md:grid-cols-2">
-        {stat('Active subscriptions', money(subTotal), 'subscriptions', 'neutral')}
-        {stat('Pay-cycle status', closeout?.closeout?.status === 'closed' ? 'Closed' : 'Open', 'closeout', closeout?.closeout?.status === 'closed' ? 'success' : 'warning')}
+        {stat('Unpaid this cycle', closeout ? money(closeout.summary.unpaid_total) : money(unpaidTotal), 'closeout')}
+        {stat('Set aside', money(bucketTotal), 'buckets')}
+        {stat('Planned purchases', String(openPurchases.length), 'purchases')}
+        {stat('Active subscriptions', money(subTotal), 'subscriptions')}
+        {stat('Pay-cycle status', closeout?.closeout?.status === 'closed' ? 'Closed' : 'Open', 'closeout')}
       </div>
     </div>
   )

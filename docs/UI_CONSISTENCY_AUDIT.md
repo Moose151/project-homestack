@@ -4,7 +4,7 @@ Recorded from a desktop pass over Home, Calendar, Lists & notes, School & study,
 Pets, Our home, Tasks & rewards and Money before the partner pilot. Owner-reported items are
 marked **(owner)**.
 
-Status key: `[ ]` open · `[~]` partly done · `[x]` fixed in v0.22.0.
+Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
 
 ## 1. Structure and layout
 
@@ -21,11 +21,13 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed in v0.22.0.
   default to `medium` = `xl:col-span-2`, so the third column was structurally always empty.
   **Fixed:** a 4-column grid at xl with 1/2/4 spans, so 4 small, 2 medium or 1 large widget
   tiles a row exactly.
-- [ ] **(owner) Tab pills float.** Each page still builds its own tab row; heights, padding and
-  radius vary and the group has no rule binding it to the content. Needs a shared `Tabs`
-  treatment rolled across pages.
-- [ ] **Books is the only page with a right-hand rail** — a layout paradigm nothing else uses,
-  taking ~40% of the width.
+- [x] **(owner) Tab pills float.** The shared `Tabs` control was an `inline-flex` pill group
+  sized to its own content, so a three-tab page and a twelve-tab page had visibly different tab
+  rows and neither looked attached to the content. Now a full-width underlined bar (`primary`),
+  with the pill treatment kept as a `secondary` variant for a second level inside a page.
+- [x] **Books is the only page with a right-hand rail.** Removed. The shelf switcher inside it
+  duplicated the shelf tabs (which already carry the counts), and the remaining panels read fine
+  as full-width sections beneath the grid, matching every other destination.
 
 ## 2. Duplication
 
@@ -37,9 +39,9 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed in v0.22.0.
   page where the H1 is not a destination name. Recorded so it is not "fixed" by accident later.
 - [ ] **Two search boxes on every node page** (global top bar + in-node), styled differently.
   Money is the only node with explicit **Search** / **Refresh** buttons.
-- [ ] **Same fact twice on one screen:** Tasks & rewards shows the top balance in both
-  "TOP POINTS BALANCE" and "BALANCES"; Books shows shelf counts in the tabs and the rail;
-  Money's finance-health list and all-zero tiles both say "nothing is set up".
+- [~] **Same fact twice on one screen.** Books' duplicated shelf counts are gone with the rail.
+  Tasks & rewards still shows the top balance in both its tile and the Balances card, and
+  Money's finance-health list still restates what the all-zero tiles say.
 - [ ] **Duplicate quick-capture:** Home's "Quick add" (Reminder/Note) vs Lists' "What do you
   need to remember?" (To-do/Note/Reminder) — same feature, different options and styling.
 - [x] **Two copies of the node colour table and the source-link routing** (CalendarPage had its
@@ -66,20 +68,24 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed in v0.22.0.
 
 ## 4. Components
 
-- [ ] **Three stat-card layouts.** Tasks & rewards: LABEL / number / caption. Our home: number /
-  badge / label. Money: value / View pill / label.
+- [x] **Three stat-card layouts.** One `StatCard` (label, value, optional hint and badge) now
+  serves Tasks & rewards, Our home, the room detail page and Money. Money's coloured "View"
+  pills are gone — the tile itself is the link — and its 4-then-2 grid became one 3-across grid
+  that tiles exactly.
 - [ ] **Card titles split between ALL-CAPS and sentence case**, sometimes on the same page.
 - [ ] **Two identical levels of pills** in Books, plus a checkbox filter in the tab row.
 - [ ] **No shared empty state.** `EmptyState` exists but is not rolled out; compare "No task
   submissions waiting." + button, bare "No upcoming reminders", and Our home's settings form.
 - [ ] **Mixed radii/elevation:** pill search bars, `rounded-3xl` Hub widgets, `rounded-2xl`
   cards, borderless shaded Money tiles.
-- [ ] **Money's 12-tab row** uses the same pill component Pets uses for 3.
+- [~] **Money's 12-tab row** now sits in the full-width underlined bar rather than a pill group
+  sized to itself, so it no longer looks like a different component to Pets' three. Whether 12
+  tabs is the right information architecture for Money is a separate question.
 
 ## 5. Content and semantics
 
-- [ ] **The node-description formula holds for only 5 of 8.** "<Brand> brings/keeps … together"
-  for Meridian, Homestead, Atlas, Solace and Education; Pets, Books and Calendar drop it.
+- [x] **The node-description formula holds for only 5 of 8.** Pets, Books and Calendar now use
+  the same "<Brand> keeps … together" shape as the rest.
 - [x] **"Error" badge for incomplete Money setup** made a fresh install look broken. The badge
   now reads "Setup needed" / "Needs attention" / "Ready"; the backend status is unchanged.
 - [ ] **Settings live in different places:** Tasks & rewards "Settings", Money "Manage", Our
@@ -125,3 +131,16 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed in v0.22.0.
   switched off by migration and remain re-enablable.
   *Note: pay cycles come from Solace (Money), not Meridian, so the cycle horizon appears only
   when Money is permitted and unlocked.*
+
+## 8. Follow-up bugs found in use (2026-08-09)
+
+- [x] **A part's quantity rejected whole numbers.** The input paired `min="0.01"` with
+  `step="1"`, and a number input only accepts `min + n×step` — so 2 was invalid, the browser
+  snapped to 2.01, and the part was then priced at 2.01×. Now `step="any"`. Rows saved before
+  the fix keep their odd quantity until re-typed.
+- [x] **A blocked product image looked like a missing one.** A picture that failed to load fell
+  back to the job's type icon, which is exactly what "no picture set" shows, so a shop blocking
+  hotlinks read as the link not saving. The three states are now distinct, and a blocked image
+  offers to open its URL. *(A household that wants images from hotlink-protected shops would
+  need the server to fetch and cache them — deliberately not done: it turns the backend into a
+  fetcher of arbitrary URLs, which needs an SSRF allowlist first.)*

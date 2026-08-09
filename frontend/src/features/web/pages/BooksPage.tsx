@@ -575,7 +575,7 @@ export function BooksPage() {
       <PageHeader
         title="Books"
         icon="📚"
-        subtitle="Personal shelves and shared book clubs."
+        subtitle="Books keeps personal shelves, reading queues and shared clubs together."
         mobile="show"
         actions={<Button type="button" onClick={() => setShowAdd(v => !v)}>{showAdd ? 'Close' : '+ Add book'}</Button>}
       />
@@ -645,6 +645,7 @@ export function BooksPage() {
           active={activeShelf}
           onChange={setActiveShelf}
           mobileSelectLabel="Book shelf"
+          variant="secondary"
         />
         {surface === 'personal' && (
           <label className="inline-flex items-center gap-2 text-sm text-muted-strong">
@@ -663,7 +664,7 @@ export function BooksPage() {
       {loading ? (
         <p className="text-muted">Loading...</p>
       ) : surface === 'personal' ? (
-        <div className="grid xl:grid-cols-[minmax(0,1fr)_22rem] gap-5 items-start">
+        <div className="flex flex-col gap-5">
           <div className="space-y-3">
             {personalItems.length > 0 ? (
               <div className="grid lg:grid-cols-2 2xl:grid-cols-3 gap-3">
@@ -687,22 +688,7 @@ export function BooksPage() {
             )}
           </div>
 
-          <aside className="space-y-3 xl:sticky xl:top-20">
-            <Card title="My shelves">
-              <div className="grid grid-cols-3 xl:grid-cols-1 gap-2">
-                {personalCounts.map(row => (
-                  <button
-                    key={row.status}
-                    type="button"
-                    onClick={() => setActiveShelf(row.status)}
-                    className={`rounded-xl px-3 py-2 text-left ${activeShelf === row.status ? 'bg-primary-soft text-primary' : 'bg-sunken text-muted-strong'}`}
-                  >
-                    <span className="block text-xs font-semibold uppercase tracking-wide">{shelfLabels[row.status]}</span>
-                    <span className="text-lg font-bold">{row.count}</span>
-                  </button>
-                ))}
-              </div>
-            </Card>
+          <div className="space-y-3">
             {showClubItems && (
               <Card title="From book clubs">
                 {clubShelfItems.length === 0 ? (
@@ -722,10 +708,10 @@ export function BooksPage() {
                 )}
               </Card>
             )}
-          </aside>
+          </div>
         </div>
       ) : selectedClub ? (
-        <div className="grid xl:grid-cols-[minmax(0,1fr)_24rem] gap-5 items-start">
+        <div className="flex flex-col gap-5">
           <div className="space-y-3">
             {visibleClubBooks.length > 0 ? (
               <div className="grid lg:grid-cols-2 2xl:grid-cols-3 gap-3">
@@ -749,23 +735,7 @@ export function BooksPage() {
             )}
           </div>
 
-          <aside className="space-y-3 xl:sticky xl:top-20">
-            <Card title="Club shelves">
-              <div className="grid grid-cols-3 xl:grid-cols-1 gap-2">
-                {clubCounts.map(row => (
-                  <button
-                    key={row.status}
-                    type="button"
-                    onClick={() => setActiveShelf(row.status)}
-                    className="rounded-xl px-3 py-2 text-left text-muted-strong"
-                    style={activeShelf === row.status ? { background: `${selectedClub.colour}22`, color: selectedClub.colour } : undefined}
-                  >
-                    <span className="block text-xs font-semibold uppercase tracking-wide">{shelfLabels[row.status]}</span>
-                    <span className="text-lg font-bold">{row.count}</span>
-                  </button>
-                ))}
-              </div>
-            </Card>
+          <div className="space-y-3">
             <Card title="Up next">
               {queue.length === 0 ? (
                 <p className="text-sm text-muted">No upcoming order yet.</p>
@@ -806,7 +776,7 @@ export function BooksPage() {
                 </div>
               )}
             </Card>
-          </aside>
+          </div>
         </div>
       ) : (
         <Card><p className="text-muted">Create a book club to share a reading list.</p></Card>

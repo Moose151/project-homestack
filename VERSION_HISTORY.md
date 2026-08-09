@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.23.1**
+> **Current version: 0.23.2**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,31 @@
 ---
 
 ## 0.23 — Multi-person assignment
+
+### 0.23.2 — 2026-08-09
+- **Tabs are one control again.** The shared tab row was a pill group sized to its own content,
+  so a three-tab page and a twelve-tab page had visibly different tab bars and neither looked
+  attached to the content beneath. It is now a full-width underlined bar, with the pill
+  treatment kept as a second-level variant — so Books' shelf row finally reads as nested inside
+  its My books / Book clubs tabs instead of looking like a second copy of them.
+- **One stat card.** Tasks & rewards, Our home, the room detail page and Money had four
+  arrangements of the same "headline number with a label". A single `StatCard` now serves all
+  of them. Money's coloured "View" pills are gone — the tile itself is the link — and its
+  4-then-2 tile grid became one 3-across grid that tiles exactly instead of leaving a gap.
+- **Books drops its right-hand rail**, the only one in the app. Its shelf switcher duplicated
+  the shelf tabs, which already carry the counts; the remaining panels are now full-width
+  sections beneath the grid like every other destination.
+- **Every destination describes itself the same way** — Pets, Books and Calendar now use the
+  "<Brand> keeps … together" shape the other five already used.
+- **Fixed: a part's quantity rejected whole numbers.** The input paired `min="0.01"` with
+  `step="1"`, and a number input only accepts `min + n×step`, so 2 was invalid, the browser
+  snapped to 2.01, and the part was priced at 2.01×. Parts saved before this keep their odd
+  quantity until re-typed.
+- **Fixed: a blocked product image looked like a missing one.** A picture that failed to load
+  fell back to the job's type icon — exactly what "no picture" shows — so a shop refusing
+  hotlinks read as the link not saving. The three states are now distinct and a blocked image
+  offers to open its URL. **667 backend tests green; production build clean; no migration
+  drift.**
 
 ### 0.23.1 — 2026-08-09
 - **A room job is now either a single item or a project.** Its products meant one thing —
@@ -76,6 +101,31 @@
   green (10 new, permission-first); production build clean; no migration drift.**
 
 ## 0.23 — Multi-person assignment
+
+### 0.23.2 — 2026-08-09
+- **Tabs are one control again.** The shared tab row was a pill group sized to its own content,
+  so a three-tab page and a twelve-tab page had visibly different tab bars and neither looked
+  attached to the content beneath. It is now a full-width underlined bar, with the pill
+  treatment kept as a second-level variant — so Books' shelf row finally reads as nested inside
+  its My books / Book clubs tabs instead of looking like a second copy of them.
+- **One stat card.** Tasks & rewards, Our home, the room detail page and Money had four
+  arrangements of the same "headline number with a label". A single `StatCard` now serves all
+  of them. Money's coloured "View" pills are gone — the tile itself is the link — and its
+  4-then-2 tile grid became one 3-across grid that tiles exactly instead of leaving a gap.
+- **Books drops its right-hand rail**, the only one in the app. Its shelf switcher duplicated
+  the shelf tabs, which already carry the counts; the remaining panels are now full-width
+  sections beneath the grid like every other destination.
+- **Every destination describes itself the same way** — Pets, Books and Calendar now use the
+  "<Brand> keeps … together" shape the other five already used.
+- **Fixed: a part's quantity rejected whole numbers.** The input paired `min="0.01"` with
+  `step="1"`, and a number input only accepts `min + n×step`, so 2 was invalid, the browser
+  snapped to 2.01, and the part was priced at 2.01×. Parts saved before this keep their odd
+  quantity until re-typed.
+- **Fixed: a blocked product image looked like a missing one.** A picture that failed to load
+  fell back to the job's type icon — exactly what "no picture" shows — so a shop refusing
+  hotlinks read as the link not saving. The three states are now distinct and a blocked image
+  offers to open its URL. **667 backend tests green; production build clean; no migration
+  drift.**
 
 ### 0.23.1 — 2026-08-09
 - **A room job is now either a single item or a project.** Its products meant one thing —

@@ -14,6 +14,7 @@ import { EmptyState } from '../../../components/EmptyState'
 import { Field, Input, Select, Textarea, fieldClass } from '../../../components/Field'
 import { PageHeader } from '../../../components/PageHeader'
 import { DeleteAction, EditAction } from '../../../components/RowActions'
+import { StatCard } from '../../../components/StatCard'
 import { useAuth } from '../../auth/AuthContext'
 
 const ITEM_TYPES: RoomItemType[] = ['purchase', 'maintenance', 'renovation', 'upgrade']
@@ -189,16 +190,33 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
                         : 'border-line'
                     }`}
                   >
-                    <div className="grid h-16 w-16 flex-shrink-0 place-items-center overflow-hidden rounded-lg bg-sunken">
+                    {/* Three distinct states. A picture that fails to load used to fall back to
+                        the type icon, which looks exactly like "no picture set" — so a blocked
+                        image read as a lost one. A broken link now says so and offers to open
+                        the URL, since the usual cause is a shop that refuses hotlinking. */}
+                    <div className="grid h-20 w-20 flex-shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-sunken">
                       {product.image_url && !imageBroken ? (
-                        <img
-                          src={product.image_url}
-                          alt=""
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                          onError={() => setBrokenImages(current => [...current, product.id])}
-                          className="h-full w-full object-cover"
-                        />
+                        <a href={product.image_url} target="_blank" rel="noreferrer noopener" className="block h-full w-full">
+                          <img
+                            src={product.image_url}
+                            alt={product.title}
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                            onError={() => setBrokenImages(current => [...current, product.id])}
+                            className="h-full w-full object-cover"
+                          />
+                        </a>
+                      ) : product.image_url ? (
+                        <a
+                          href={product.image_url}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          title="This shop is blocking the picture. Open the image link to check it."
+                          className="flex h-full w-full flex-col items-center justify-center gap-0.5 px-1 text-center text-muted hover:text-ink"
+                        >
+                          <span className="text-base" aria-hidden>🚫</span>
+                          <span className="text-[9px] font-semibold leading-tight">Image blocked</span>
+                        </a>
                       ) : (
                         <span className="text-xl" aria-hidden>{TYPE_ICON[item.item_type]}</span>
                       )}
@@ -301,10 +319,13 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
                   />
                 </Field>
                 <Field label="Qty">
+                  {/* step="any" rather than a fixed step: with min="0.01" the browser only
+                      accepts min + n*step, so step="1" rejected 2 and snapped to 2.01, which
+                      then priced the part at 2.01×. */}
                   <Input
                     type="number"
                     min="0.01"
-                    step="1"
+                    step="any"
                     value={form.quantity}
                     onChange={event => setForm(f => ({ ...f, quantity: event.target.value }))}
                   />
@@ -526,9 +547,9 @@ export function HomesteadRoomPage() {
       {error && <div className="rounded-xl bg-danger-soft px-4 py-2.5 text-sm text-danger">{error}</div>}
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Card><p className="text-2xl font-extrabold text-ink">{money(data.summary.remaining_estimated_cost)}</p><p className="text-sm text-muted">Remaining estimate</p><p className="mt-1 text-xs text-muted">{data.summary.active_count} active</p></Card>
-        <Card><p className="text-2xl font-extrabold text-ink">{money(data.summary.completed_cost)}</p><p className="text-sm text-muted">Completed cost</p><p className="mt-1 text-xs text-muted">{data.summary.completed_count} completed</p></Card>
-        <Card><p className="text-2xl font-extrabold text-ink">{money(data.summary.overall_cost)}</p><p className="text-sm text-muted">Overall room cost</p><p className="mt-1 text-xs text-muted">Archived excluded</p></Card>
+        <StatCard label="Remaining estimate" value={money(data.summary.remaining_estimated_cost)} hint={`${data.summary.active_count} active`} />
+        <StatCard label="Completed cost" value={money(data.summary.completed_cost)} hint={`${data.summary.completed_count} completed`} />
+        <StatCard label="Overall room cost" value={money(data.summary.overall_cost)} hint="Archived excluded" />
       </div>
 
       {roomEditing ? (

@@ -9,6 +9,7 @@ import type {
 } from '../../../../api/types'
 import { Card } from '../../../../components/Card'
 import { Button } from '../../../../components/Button'
+import { StatCard } from '../../../../components/StatCard'
 
 interface Props {
   canManage: boolean
@@ -92,9 +93,9 @@ export function OverviewTab({ canManage, pointsLabel, onOpenTasks, onOpenShop }:
       )}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4">
-        <Metric className="col-span-2 md:col-span-1" label="Pending approvals" value={String(pendingCount)} detail={`${taskCompletions.length} tasks · ${rewardRequests.length} rewards`} />
-        <Metric label="Active earners" value={String(topBalances.length)} detail="People with Meridian activity" />
-        <Metric label={`Top ${pointsLabel} balance`} value={topBalances[0] ? `★ ${topBalances[0].balance}` : '★ 0'} detail={topBalances[0]?.display_name || 'No activity yet'} />
+        <StatCard className="col-span-2 md:col-span-1" label="Pending approvals" value={pendingCount} hint={`${taskCompletions.length} tasks · ${rewardRequests.length} rewards`} />
+        <StatCard label="Active earners" value={topBalances.length} hint="People with Meridian activity" />
+        <StatCard label={`Top ${pointsLabel} balance`} value={topBalances[0] ? `★ ${topBalances[0].balance}` : '★ 0'} hint={topBalances[0]?.display_name || 'No activity yet'} />
       </div>
 
       {canManage && (
@@ -184,16 +185,6 @@ export function OverviewTab({ canManage, pointsLabel, onOpenTasks, onOpenShop }:
           )}
         </Card>
       </div>
-    </div>
-  )
-}
-
-function Metric({ label, value, detail, className = '' }: { label: string; value: string; detail: string; className?: string }) {
-  return (
-    <div className={`rounded-2xl border border-line bg-surface p-3.5 shadow-soft sm:p-4 ${className}`}>
-      <p className="text-[10px] font-bold uppercase tracking-wide text-muted sm:text-xs">{label}</p>
-      <p className="mt-1 text-xl font-extrabold text-ink sm:text-2xl">{value}</p>
-      <p className="mt-1 text-xs leading-relaxed text-muted sm:text-sm">{detail}</p>
     </div>
   )
 }

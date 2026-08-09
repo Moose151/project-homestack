@@ -16,6 +16,7 @@ import { EmptyState } from '../../../components/EmptyState'
 import { Modal } from '../../../components/Modal'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
+import { StatCard } from '../../../components/StatCard'
 import { useAuth } from '../../auth/AuthContext'
 import { useStacks } from '../../stacks/StacksContext'
 import { useUrlAction, useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
@@ -174,15 +175,12 @@ function OverviewTab({ onError, onGoTab, canUseMoney }: {
   if (loading) return <div className="h-40 rounded-2xl bg-sunken animate-pulse" />
 
   const glance = (label: string, n: number, tab: Tab, tone: BadgeTone) => (
-    <button onClick={() => onGoTab(tab)} className="flex-1 rounded-2xl border border-line bg-surface p-4 text-left hover:bg-sunken/40">
-      <div className="flex items-center justify-between">
-        <span className="text-2xl font-extrabold text-ink">{n}</span>
-        {/* "clear" read as an instruction to clear the count rather than a status. Both
-            labels now describe state, and the tile itself is the thing you click. */}
-        <Badge tone={n > 0 ? tone : 'neutral'}>{n > 0 ? 'Needs attention' : 'All clear'}</Badge>
-      </div>
-      <p className="mt-1 text-sm text-muted">{label}</p>
-    </button>
+    <StatCard
+      label={label}
+      value={n}
+      badge={<Badge tone={n > 0 ? tone : 'neutral'}>{n > 0 ? 'Needs attention' : 'All clear'}</Badge>}
+      onClick={() => onGoTab(tab)}
+    />
   )
 
   const initial = property ? {
