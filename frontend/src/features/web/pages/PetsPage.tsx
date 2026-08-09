@@ -337,10 +337,14 @@ function PetCard({ pet, onChange, onDelete, onError, canDelete }: {
 // Pets tab (profiles)
 // ===========================================================================
 
-function PetsTab({ pets, reload, isAdmin, onError }: {
-  pets: Pet[]; reload: () => void; isAdmin: boolean; onError: (m: string) => void
+function PetsTab({ pets, reload, isAdmin, onError, open, setOpen }: {
+  pets: Pet[]
+  reload: () => void
+  isAdmin: boolean
+  onError: (m: string) => void
+  open: boolean
+  setOpen: (open: boolean) => void
 }) {
-  const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [species, setSpecies] = useState<PetSpecies>('dog')
   const [breed, setBreed] = useState('')
@@ -369,9 +373,7 @@ function PetsTab({ pets, reload, isAdmin, onError }: {
           </div>
           <div className="flex gap-2"><Button type="submit" loading={busy}>Add pet</Button><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button></div>
         </form>
-      ) : (
-        <Button onClick={() => setOpen(true)}>+ Add pet</Button>
-      )}
+      ) : null}
 
       {pets.length === 0 ? (
         <EmptyState icon="🐾" title="No pets yet" hint="Add a pet to track treatments, vet visits and care notes." />
@@ -486,10 +488,20 @@ export function PetsPage() {
 
   // Delete is admin/manager-gated in the UI; the backend enforces it regardless.
   const isAdmin = user?.role === 'admin' || user?.role === 'manager'
+  // Held here so the header can open the form the Pets tab renders, matching where Books and
+  // Calendar put their primary action.
+  const [addingPet, setAddingPet] = useState(false)
+  const canEdit = Boolean(user && user.role !== 'guest' && !user.is_child_account)
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Pets" icon="🐾" />
+      <PageHeader
+        title="Pets"
+        icon="🐾"
+        actions={canEdit && tab === 'pets'
+          ? <Button size="sm" onClick={() => setAddingPet(true)}>+ Add pet</Button>
+          : undefined}
+      />
 
       <SearchField
         value={query}
@@ -552,7 +564,7 @@ export function PetsPage() {
       ) : (
         <>
           <Tabs tabs={TABS} active={tab} onChange={setTab} />
-          {tab === 'pets' && <PetsTab pets={pets} reload={load} isAdmin={isAdmin} onError={setError} />}
+          {tab === 'pets' && <PetsTab pets={pets} reload={load} isAdmin={isAdmin} onError={setError} open={addingPet} setOpen={setAddingPet} />}
           {tab === 'reminders' && <RemindersTab onError={setError} />}
           {tab === 'appointments' && <AppointmentsTab onError={setError} />}
         </>

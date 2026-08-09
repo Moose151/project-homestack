@@ -362,10 +362,12 @@ date-only entries, a min/step mismatch rejecting whole numbers, and backdated bi
 pre-loaded with arrears). `docs/PARTNER_PILOT_READINESS.md` remains the acceptance list for
 inviting the partner in; the two-account/real-device pass is still outstanding.
 
-**Next local build step (no home server required):** finish the generic sensitive-node lock
-path instead of leaving it Solace-specific: move re-auth/sensitivity decisions consistently
-through the central resolver, define the web/kiosk locked-state contract and shorter kiosk
-timeout, then close the remaining permission/user-change audit gaps. Keep permission tests first.
+**Next local build step (no home server required):** the sensitive-node lock is now generic
+(`apps/nodes/access.py`) and the permission/user-change audit gaps are closed (v0.24.0). What
+remains of Milestone 4 is the **web/kiosk locked-state contract and the shorter kiosk timeout** —
+define what a locked node looks like on each surface rather than letting each page invent one,
+and give the kiosk a tighter re-auth window than the web's five minutes. Keep permission tests
+first.
 
 **Next important feature after those gates:** Milestone 5.5, the dedicated Home Assistant node.
 Start with its 5.5.0 contract/security gate; do not begin with a custom component or generic

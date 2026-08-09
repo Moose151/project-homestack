@@ -20,6 +20,24 @@ _CORE_FIELDS = {"display_name", "role", "email", "colour", "avatar", "is_child_a
 _SOLACE_PERMISSION_CODES = ("solace.view", "solace.create", "solace.edit", "solace.delete")
 
 
+def _log_account_change(action: str, acting_user: User, user: User, metadata: dict) -> None:
+    """Record a change to who can sign in and what they are.
+
+    Creating a login, changing an access level, replacing credentials and disabling an account
+    are the actions most worth being able to answer for months later (Security §11). Credential
+    *values* are never written here — only the fact that they changed.
+    """
+    from apps.audit.helpers import log_audit
+
+    log_audit(
+        action,
+        user=acting_user,
+        target_record_type="User",
+        target_record_id=user.id,
+        metadata={"username": user.username, **metadata},
+    )
+
+
 def _solace_access_needs_update(user: User, enabled: bool) -> bool:
     from apps.permissions.models import UserPermission
     from apps.permissions.resolver import resolve_permission
@@ -40,9 +58,9 @@ def _set_solace_access(acting_user: User, user: User, enabled: bool) -> None:
         raise UserAdminError("Set an account password before granting Money access.")
     for code in _SOLACE_PERMISSION_CODES:
         if enabled:
-            grant_user_permission(user, code)
+            grant_user_permission(user, code, acting_user=acting_user)
         else:
-            clear_user_permission(user, code)
+            clear_user_permission(user, code, acting_user=acting_user)
     log_audit(
         "user_money_access_updated",
         user=acting_user,
@@ -103,12 +121,20 @@ def create_user_account(acting_user: User, *, username: str, display_name: str, 
     _link_person(user, link_person_id=link_person_id, create_person=create_person, acting_user=acting_user)
     if solace_access and _solace_access_needs_update(user, True):
         _set_solace_access(acting_user, user, True)
+    _log_account_change(
+        "user_created",
+        acting_user,
+        user,
+        {"role": user.role, "is_child_account": user.is_child_account},
+    )
     return user
 
 
 @transaction.atomic
 def update_user_account(acting_user: User, user: User, *, pin: str | None = None,
                         password: str | None = None, solace_access: bool | None = None, **fields) -> User:
+    previous_role = user.role
+    previous_active = user.is_active
     next_is_child = fields.get("is_child_account", user.is_child_account)
     next_role = fields.get("role", user.role)
     if next_is_child and next_role != User.Role.USER:
@@ -146,12 +172,28 @@ def update_user_account(acting_user: User, user: User, *, pin: str | None = None
     requested_solace_access = False if user.is_child_account else solace_access
     if requested_solace_access is not None and _solace_access_needs_update(user, requested_solace_access):
         _set_solace_access(acting_user, user, requested_solace_access)
+
+    if user.role != previous_role:
+        _log_account_change(
+            "user_role_changed", acting_user, user, {"from": previous_role, "to": user.role}
+        )
+    # The values themselves are never recorded — only that they were replaced, and by whom.
+    changed_credentials = [name for name, given in (("pin", pin), ("password", password)) if given]
+    if changed_credentials:
+        _log_account_change(
+            "user_credentials_changed", acting_user, user, {"changed": changed_credentials}
+        )
+    if previous_active and not user.is_active:
+        _log_account_change("user_deactivated", acting_user, user, {})
     return user
 
 
 def deactivate_user(acting_user: User, user: User) -> User:
     """Disable login without deleting (preserves their ledger/history)."""
+    was_active = user.is_active
     user.is_active = False
     user.updated_by = acting_user
     user.save(update_fields=["is_active", "updated_by", "updated_at"])
+    if was_active:
+        _log_account_change("user_deactivated", acting_user, user, {})
     return user

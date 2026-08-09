@@ -65,10 +65,10 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
   nothing.
 - [x] **"clear" on Our home counters** read as an instruction rather than a status. Now
   "All clear" / "Needs attention".
-- [ ] **Primary action placement varies:** top-right (Books, Calendar), left below tabs (Pets,
-  Lists), absent (School & study, Our home, Money). Left open deliberately — moving the Pets and
-  Lists add buttons into the page header means lifting form state out of the tab components, and
-  that is a refactor worth doing on its own rather than at the end of a polish pass.
+- [x] **Primary action placement varies.** Pets and Lists now put their add button in the page
+  header alongside Books and Calendar, which meant lifting the form state out of their tab
+  components. School & study, Our home and Money create from within a tab, where the action
+  belongs to that tab rather than the destination.
 - ~~Home's quick-add "Add" button looks disabled.~~ **Withdrawn — not a defect.** It *is*
   disabled: the button is `disabled={!text.trim()}` and the screenshot was taken with an empty
   field. Correct behaviour.

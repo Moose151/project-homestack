@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.23.6**
+> **Current version: 0.24.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,32 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.24 — Security maturation (Milestone 4)
+
+### 0.24.0 — 2026-08-09
+- **One gate for every sensitive node.** Solace and Homestead each carried their own copy of
+  "is this locked, is the reader re-authenticated, record that they looked", and the copies had
+  already drifted: Solace honoured the household's re-auth setting so an admin could turn the
+  extra prompt off, while Homestead's finance surface ignored it and always asked. Both now use
+  `apps/nodes/access.sensitive_node_access`, which reads the lock from the household's node
+  configuration rather than from a hard-coded list of view classes.
+- **Homestead's lock is now stated rather than implied.** It always demanded a password through
+  hard-coded logic, so generalising the gate would have silently unlocked it; a migration marks
+  the node lockable and turns the lock on, preserving the behaviour that was already in force —
+  and making it something an admin can now turn off, exactly as for Money.
+- **A lockable node starts locked.** Creating a household's node row defaulted the password
+  prompt to off, so the first time a household enabled Money its prompt would have been disabled
+  until someone noticed. The row now inherits the catalogue's sensitivity.
+- **The account and permission trail is complete.** Granting Money access was recorded; creating
+  a login, changing an access level, resetting a PIN or password, deactivating an account, and
+  granting, denying or clearing a permission override were not — the most security-relevant
+  actions in the product were the least traceable. All are audited now, with the acting user
+  attributed. Credential *values* are never written: only that they changed, and by whom.
+- **Primary actions sit where you expect.** The Pets and Lists add buttons moved into the page
+  header alongside Books and Calendar, which needed lifting the form state out of their tab
+  components — the last open item from the UI audit. **698 backend tests green (18 new,
+  permission-first); production build clean; no migration drift.**
 
 ## 0.23 — Multi-person assignment
 
@@ -160,6 +186,32 @@
 - The existing `link_url` on each plan item is migrated into a chosen option so no saved link is
   lost, then removed — two places to store a link is how they drift apart. **652 backend tests
   green (10 new, permission-first); production build clean; no migration drift.**
+
+## 0.24 — Security maturation (Milestone 4)
+
+### 0.24.0 — 2026-08-09
+- **One gate for every sensitive node.** Solace and Homestead each carried their own copy of
+  "is this locked, is the reader re-authenticated, record that they looked", and the copies had
+  already drifted: Solace honoured the household's re-auth setting so an admin could turn the
+  extra prompt off, while Homestead's finance surface ignored it and always asked. Both now use
+  `apps/nodes/access.sensitive_node_access`, which reads the lock from the household's node
+  configuration rather than from a hard-coded list of view classes.
+- **Homestead's lock is now stated rather than implied.** It always demanded a password through
+  hard-coded logic, so generalising the gate would have silently unlocked it; a migration marks
+  the node lockable and turns the lock on, preserving the behaviour that was already in force —
+  and making it something an admin can now turn off, exactly as for Money.
+- **A lockable node starts locked.** Creating a household's node row defaulted the password
+  prompt to off, so the first time a household enabled Money its prompt would have been disabled
+  until someone noticed. The row now inherits the catalogue's sensitivity.
+- **The account and permission trail is complete.** Granting Money access was recorded; creating
+  a login, changing an access level, resetting a PIN or password, deactivating an account, and
+  granting, denying or clearing a permission override were not — the most security-relevant
+  actions in the product were the least traceable. All are audited now, with the acting user
+  attributed. Credential *values* are never written: only that they changed, and by whom.
+- **Primary actions sit where you expect.** The Pets and Lists add buttons moved into the page
+  header alongside Books and Calendar, which needed lifting the form state out of their tab
+  components — the last open item from the UI audit. **698 backend tests green (18 new,
+  permission-first); production build clean; no migration drift.**
 
 ## 0.23 — Multi-person assignment
 

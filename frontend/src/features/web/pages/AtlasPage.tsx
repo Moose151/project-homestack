@@ -768,7 +768,13 @@ export function AtlasPage() {
   return (
     <div className="flex flex-col gap-4 sm:gap-5">
       <div className="hidden sm:block">
-        <PageHeader title="Lists & notes" icon="🗒" />
+        <PageHeader
+          title="Lists & notes"
+          icon="🗒"
+          actions={tab === 'lists' && lists.length > 0 && !creatingList
+            ? <Button size="sm" onClick={() => setCreatingList(true)}>+ New list</Button>
+            : undefined}
+        />
       </div>
 
       <CaptureBar lists={lists} onCapture={capture} />
@@ -826,8 +832,6 @@ export function AtlasPage() {
                     </Button>
                   </div>
                 </form>
-              ) : lists.length > 0 ? (
-                <Button onClick={() => setCreatingList(true)} className="self-start">+ New list</Button>
               ) : null}
 
               {loading ? (

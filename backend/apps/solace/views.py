@@ -14,8 +14,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.services import is_reauthed
 from apps.audit.helpers import log_audit
+from apps.nodes.access import sensitive_node_access
 from apps.nodes.models import Node
 from apps.permissions.drf import HomeStackPermission
 from apps.solace import selectors, services
@@ -38,27 +38,10 @@ from apps.solace.serializers import (
 _Perm = HomeStackPermission.for_resource("solace")
 
 
-class SolaceAccessMixin:
+class SolaceAccessMixin(sensitive_node_access("solace")):
+    """Solace's lock, decided and audited by the shared gate (apps/nodes/access.py)."""
+
     permission_classes = [_Perm]
-
-    def initial(self, request: Request, *args, **kwargs) -> None:
-        super().initial(request, *args, **kwargs)
-        from apps.nodes.selectors import get_household_node
-
-        config = get_household_node("solace")
-        requires_reauthentication = (
-            config.requires_reauthentication if config is not None else True
-        )
-        if requires_reauthentication and not is_reauthed(request._request):
-            raise PermissionDenied("Password re-authentication required for Solace.")
-        node = Node.objects.filter(key="solace").first()
-        log_audit(
-            "sensitive_node_accessed",
-            user=request.user,
-            target_node=node,
-            request=request._request,
-            metadata={"node": "solace", "path": request.path, "method": request.method},
-        )
 
 
 class SolaceSearchView(SolaceAccessMixin, APIView):

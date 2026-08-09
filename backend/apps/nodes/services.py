@@ -9,8 +9,15 @@ def _get_or_404(node_key: str) -> tuple[Node, HouseholdNode]:
     """Return (Node, HouseholdNode) or raise Node.DoesNotExist."""
     household = get_active_household()
     node = Node.objects.get(key=node_key)
+    # A lockable node starts locked. Creating the row unlocked would mean the first time a
+    # household enabled, say, Money, its password prompt would be off until someone noticed.
     hn, _ = HouseholdNode.objects.get_or_create(
-        household=household, node=node, defaults={"is_enabled": False}
+        household=household,
+        node=node,
+        defaults={
+            "is_enabled": False,
+            "requires_reauthentication": node.supports_sensitive_lock,
+        },
     )
     return node, hn
 

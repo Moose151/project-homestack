@@ -7,8 +7,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.services import is_reauthed
-from apps.audit.helpers import log_audit
 from apps.homestead import selectors, services
 from apps.homestead.serializers import (
     ApplianceSerializer,
@@ -23,35 +21,24 @@ from apps.homestead.serializers import (
     RoomPlanProductSerializer,
     ServiceProviderSerializer,
 )
-from apps.nodes.models import Node
+from apps.nodes.access import sensitive_node_access
 from apps.permissions.drf import HomeStackPermission
 
 _Perm = HomeStackPermission.for_resource("homestead")
 _SolacePerm = HomeStackPermission.for_resource("solace")
 
 
-class HomesteadFinanceAccessMixin:
-    """Require both node permissions, password re-auth and an audit trail."""
+class HomesteadFinanceAccessMixin(
+    sensitive_node_access("homestead", surface="costs_cover")
+):
+    """Home costs and cover need Money permission as well as the shared sensitive gate.
+
+    Before this used the shared gate it always demanded a password, ignoring the household
+    setting that Solace honoured — so turning the prompt off left one finance surface still
+    asking for it.
+    """
 
     permission_classes = [_Perm, _SolacePerm]
-
-    def initial(self, request: Request, *args, **kwargs) -> None:
-        super().initial(request, *args, **kwargs)
-        if not is_reauthed(request._request):
-            raise PermissionDenied("Password re-authentication required for home costs.")
-        node = Node.objects.filter(key="homestead").first()
-        log_audit(
-            "sensitive_node_accessed",
-            user=request.user,
-            target_node=node,
-            request=request._request,
-            metadata={
-                "node": "homestead",
-                "surface": getattr(self, "finance_surface", "costs_cover"),
-                "path": request.path,
-                "method": request.method,
-            },
-        )
 
 
 # ---------------------------------------------------------------------------
