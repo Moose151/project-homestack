@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from apps.core.serializers import AssigneeSerializerMixin
+
 from apps.meridian.models import (
     MeridianCategory,
     MeridianGroupGoal,
@@ -46,7 +48,7 @@ class MeridianCategorySerializer(serializers.ModelSerializer):
         return value
 
 
-class MeridianTaskSerializer(serializers.ModelSerializer):
+class MeridianTaskSerializer(AssigneeSerializerMixin, serializers.ModelSerializer):
     is_complete = serializers.BooleanField(read_only=True)
     award_value = serializers.IntegerField(read_only=True)
 
@@ -54,7 +56,7 @@ class MeridianTaskSerializer(serializers.ModelSerializer):
         model = MeridianTask
         fields = [
             "id", "title", "description", "points",
-            "category_id", "assigned_to_person_id",
+            "category_id", "assigned_to_person_ids",
             "status", "is_hot", "is_complete", "award_value",
             "hot_bonus_points", "hot_label",
             "completion_behavior", "completion_scope", "availability_window",
@@ -72,12 +74,12 @@ class MeridianTaskSerializer(serializers.ModelSerializer):
         ]
 
 
-class MeridianTaskWriteSerializer(serializers.ModelSerializer):
+class MeridianTaskWriteSerializer(AssigneeSerializerMixin, serializers.ModelSerializer):
     class Meta:
         model = MeridianTask
         fields = [
             "title", "description", "points", "category_id",
-            "assigned_to_person_id", "is_hot", "hot_bonus_points", "hot_label",
+            "assigned_to_person_ids", "is_hot", "hot_bonus_points", "hot_label",
             "completion_behavior", "completion_scope", "availability_window",
             "is_active", "is_archived",
             "due_at", "recurrence_rule", "visibility",
@@ -108,7 +110,7 @@ class MeridianTaskCompletionSerializer(serializers.ModelSerializer):
         ]
 
 
-class MeridianRoutineSerializer(serializers.ModelSerializer):
+class MeridianRoutineSerializer(AssigneeSerializerMixin, serializers.ModelSerializer):
     # Per-person context, supplied by the view for the requesting person (optional).
     streak = serializers.IntegerField(read_only=True, required=False)
     done_today = serializers.BooleanField(read_only=True, required=False)
@@ -116,7 +118,7 @@ class MeridianRoutineSerializer(serializers.ModelSerializer):
     class Meta:
         model = MeridianRoutine
         fields = [
-            "id", "title", "description", "points", "assigned_to_person_id",
+            "id", "title", "description", "points", "assigned_to_person_ids",
             "is_active", "visibility", "streak", "done_today",
             "created_at", "updated_at",
         ]

@@ -4,6 +4,7 @@ import type { MeridianCategory, MeridianTask, MeridianTaskCompletion, Person } f
 import { Card } from '../../../../components/Card'
 import { Button } from '../../../../components/Button'
 import { fieldClass } from '../../../../components/ui'
+import { AssigneeSelect, assigneeLabel } from '../../../../components/AssigneeSelect'
 import { useUrlAction } from '../../../../hooks/useUrlTab'
 
 type TaskFilter = 'all' | 'active' | 'pending' | 'hidden' | 'hot'
@@ -95,7 +96,8 @@ export function TasksTab({ canManage, pointsLabel, searchQuery = '' }: {
   useEffect(() => { reload() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const catName = (id: number | null) => categories.find(c => c.id === id)?.name || ''
-  const personName = (id: number | null) => people.find(p => p.id === id)?.display_name || ''
+  // Assignment is a set: name one person, or say how many share it.
+  const peopleNames = (ids: number[]) => assigneeLabel(people, ids).replace('Whole family', '')
 
   const pendingByTask = useMemo(() => {
     const map = new Map<number, MeridianTaskCompletion[]>()
@@ -113,7 +115,7 @@ export function TasksTab({ canManage, pointsLabel, searchQuery = '' }: {
     if (filter === 'hidden' && t.is_active && !t.is_archived) return false
     if (filter === 'hot' && !t.is_hot) return false
     if (categoryId && t.category_id !== Number(categoryId)) return false
-    if (personId && t.assigned_to_person_id !== Number(personId)) return false
+    if (personId && !t.assigned_to_person_ids.includes(Number(personId))) return false
     return true
   }), [tasks, filter, categoryId, personId, pendingByTask, searchQuery])
 
@@ -221,7 +223,7 @@ export function TasksTab({ canManage, pointsLabel, searchQuery = '' }: {
                       pending={pendingByTask.get(task.id) || []}
                       pointsLabel={pointsLabel}
                       categoryName={catName(task.category_id)}
-                      personName={personName(task.assigned_to_person_id)}
+                      personName={peopleNames(task.assigned_to_person_ids)}
                       onEdit={() => setEditingId(task.id)}
                       onToggleActive={() => act(api.updateMeridianTask(task.id, { is_active: !task.is_active }))}
                       onArchive={() => act(api.updateMeridianTask(task.id, { is_archived: !task.is_archived }))}
@@ -262,7 +264,7 @@ export function TasksTab({ canManage, pointsLabel, searchQuery = '' }: {
                         pending={pendingByTask.get(task.id) || []}
                         pointsLabel={pointsLabel}
                         categoryName={catName(task.category_id)}
-                        personName={personName(task.assigned_to_person_id)}
+                        personName={peopleNames(task.assigned_to_person_ids)}
                         onEdit={() => setEditingId(task.id)}
                         onToggleActive={() => act(api.updateMeridianTask(task.id, { is_active: !task.is_active }))}
                         onArchive={() => act(api.updateMeridianTask(task.id, { is_archived: !task.is_archived }))}
@@ -291,7 +293,7 @@ export function TasksTab({ canManage, pointsLabel, searchQuery = '' }: {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-ink">{c.task_title}</p>
                       <p className="text-xs text-muted">
-                        {c.person_display_name || personName(c.person_id)} · {statusLabel(c.status)} · {formatWhen(c.reviewed_at || c.submitted_at)}
+                        {c.person_display_name || people.find(p => p.id === c.person_id)?.display_name || ''} · {statusLabel(c.status)} · {formatWhen(c.reviewed_at || c.submitted_at)}
                       </p>
                       {c.rejection_reason && <p className="mt-1 text-xs text-danger">{c.rejection_reason}</p>}
                     </div>
@@ -485,7 +487,7 @@ function TaskEditForm({ task, categories, people, onCancel, onSaved, onError }: 
     points: String(task.points),
     description: task.description,
     category_id: task.category_id ? String(task.category_id) : '',
-    assigned_to_person_id: task.assigned_to_person_id ? String(task.assigned_to_person_id) : '',
+    assigned_to_person_ids: task.assigned_to_person_ids,
     is_hot: task.is_hot,
     hot_bonus_points: String(task.hot_bonus_points),
     hot_label: task.hot_label,
@@ -505,7 +507,7 @@ function TaskEditForm({ task, categories, people, onCancel, onSaved, onError }: 
         points: Number(f.points) || 0,
         description: f.description,
         category_id: f.category_id ? Number(f.category_id) : null,
-        assigned_to_person_id: f.assigned_to_person_id ? Number(f.assigned_to_person_id) : null,
+        assigned_to_person_ids: f.assigned_to_person_ids,
         is_hot: f.is_hot,
         hot_bonus_points: Number(f.hot_bonus_points) || 0,
         hot_label: f.hot_label,
@@ -535,10 +537,11 @@ function TaskEditForm({ task, categories, people, onCancel, onSaved, onError }: 
               <input className={inputClass} type="number" min="0" value={f.points} onChange={e => set('points', e.target.value)} />
             </label>
             <label className="flex flex-col gap-1 text-xs font-semibold text-muted">Assigned to
-              <select className={inputClass} value={f.assigned_to_person_id} onChange={e => set('assigned_to_person_id', e.target.value)}>
-                <option value="">Anyone</option>
-                {people.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}
-              </select>
+              <AssigneeSelect
+                people={people}
+                value={f.assigned_to_person_ids}
+                onChange={ids => set('assigned_to_person_ids', ids)}
+              />
             </label>
             <label className="flex flex-col gap-1 text-xs font-semibold text-muted md:col-span-2">Description
               <textarea className={inputClass} value={f.description} onChange={e => set('description', e.target.value)} />
@@ -603,7 +606,7 @@ function NewTaskForm({ categories, people, onCreated, onError }: {
   onError: () => void
 }) {
   const [f, setF] = useState({
-    title: '', points: '5', description: '', category_id: '', assigned_to_person_id: '',
+    title: '', points: '5', description: '', category_id: '', assigned_to_person_ids: [] as number[],
     is_hot: false, hot_bonus_points: '0', hot_label: '',
     completion_behavior: 'stay_active' as MeridianTask['completion_behavior'],
     completion_scope: 'per_person' as MeridianTask['completion_scope'],
@@ -627,7 +630,7 @@ function NewTaskForm({ categories, people, onCreated, onError }: {
         completion_behavior: f.completion_behavior,
         completion_scope: f.completion_scope,
         category_id: f.category_id ? Number(f.category_id) : null,
-        assigned_to_person_id: f.assigned_to_person_id ? Number(f.assigned_to_person_id) : null,
+        assigned_to_person_ids: f.assigned_to_person_ids,
         recurrence_rule: buildRrule(recurDays),
       })
       onCreated()
@@ -649,10 +652,11 @@ function NewTaskForm({ categories, people, onCreated, onError }: {
             <input className={inputClass} type="number" min="0" value={f.points} onChange={e => set('points', e.target.value)} />
           </label>
           <label className="flex min-w-0 flex-col gap-1 text-xs font-semibold text-muted">Who can do it
-            <select className={inputClass} value={f.assigned_to_person_id} onChange={e => set('assigned_to_person_id', e.target.value)}>
-              <option value="">Anyone</option>
-              {people.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}
-            </select>
+            <AssigneeSelect
+              people={people}
+              value={f.assigned_to_person_ids}
+              onChange={ids => set('assigned_to_person_ids', ids)}
+            />
           </label>
         </div>
 
@@ -714,7 +718,8 @@ function SelfServiceTasks({ tasks, people, pointsLabel, reload }: {
   pointsLabel: string
   reload: () => void
 }) {
-  const personName = (id: number | null) => people.find(p => p.id === id)?.display_name || ''
+  // Assignment is a set: name one person, or say how many share it.
+  const peopleNames = (ids: number[]) => assigneeLabel(people, ids).replace('Whole family', '')
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
       {tasks.map(task => (
@@ -724,7 +729,7 @@ function SelfServiceTasks({ tasks, people, pointsLabel, reload }: {
               <h3 className="font-bold text-ink">{task.title}</h3>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {task.is_hot && <Badge className="bg-danger-soft text-danger">Hot</Badge>}
-                {task.assigned_to_person_id && <Badge>For {personName(task.assigned_to_person_id)}</Badge>}
+                {task.assigned_to_person_ids.length > 0 && <Badge>For {peopleNames(task.assigned_to_person_ids)}</Badge>}
                 {task.status === 'pending' && <Badge className="bg-warning-soft text-warning">Awaiting approval</Badge>}
               </div>
             </div>
@@ -755,8 +760,9 @@ function CompleteControls({ task, people, onDone }: {
     setBusy(true)
     try { await api.completeMeridianTask(task.id, personId) } finally { setBusy(false); onDone() }
   }
-  const candidates = task.assigned_to_person_id
-    ? people.filter(p => p.id === task.assigned_to_person_id)
+  // An unassigned task is open to anyone; an assigned one only to the people named on it.
+  const candidates = task.assigned_to_person_ids.length > 0
+    ? people.filter(p => task.assigned_to_person_ids.includes(p.id))
     : people.filter(p => p.linked_user_id || p.profile_type === 'child')
 
   if (candidates.length > 1) {

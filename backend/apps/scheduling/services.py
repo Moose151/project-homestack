@@ -6,11 +6,13 @@ helpers.delete_event_for — never through these functions.
 from __future__ import annotations
 
 from apps.accounts.models import User
+from apps.core.assignment import apply_assignees, pop_assignees
 from apps.core.models import get_active_household
 from apps.scheduling.models import CalendarEvent, RotatingSchedule, RotatingScheduleException
 
 
 def create_event(acting_user: User, **data) -> CalendarEvent:
+    people = pop_assignees(data)
     household = get_active_household()
     event = CalendarEvent(
         household=household,
@@ -19,15 +21,17 @@ def create_event(acting_user: User, **data) -> CalendarEvent:
         **data,
     )
     event.save()
+    apply_assignees(event, people)
     return event
 
 
 def update_event(acting_user: User, event: CalendarEvent, **data) -> CalendarEvent:
+    people = pop_assignees(data)
     if event.is_synced:
         raise ValueError("Synced events cannot be updated via the API.")
     allowed = {
         "title", "description", "start_at", "end_at", "is_all_day",
-        "timezone", "recurrence_rule", "assigned_to_person_id",
+        "timezone", "recurrence_rule",
         "colour", "location", "visibility", "sensitivity",
     }
     for key, val in data.items():
@@ -35,6 +39,7 @@ def update_event(acting_user: User, event: CalendarEvent, **data) -> CalendarEve
             setattr(event, key, val)
     event.updated_by = acting_user
     event.save()
+    apply_assignees(event, people)
     return event
 
 

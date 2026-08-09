@@ -260,7 +260,11 @@ def _meridian_widget_content(key: str, user) -> list:
     if key == "meridian_my_tasks":
         tasks = m.list_tasks(user, status="available")
         if person_id:
-            tasks = [t for t in tasks if t.assigned_to_person_id in (None, person_id)]
+            tasks = [
+                t for t in tasks
+                if not t.assigned_to_people.exists()
+                or t.assigned_to_people.filter(id=person_id).exists()
+            ]
         return MeridianTaskSerializer(tasks[:20], many=True).data
 
     if key == "meridian_hot_tasks":

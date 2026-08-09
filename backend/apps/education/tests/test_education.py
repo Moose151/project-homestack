@@ -464,7 +464,7 @@ class EducationEventTests(TestCase):
         )
         create_event(
             self.admin, title="Excursion", event_type="excursion",
-            start_at=_future(), assigned_to_person_id=person.id,
+            start_at=_future(), assigned_to_people=[person],
         )
         self.assertTrue(
             Notification.objects.filter(recipient_user=student_user, source_node="education").exists()

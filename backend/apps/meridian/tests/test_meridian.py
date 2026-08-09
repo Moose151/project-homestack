@@ -119,7 +119,7 @@ class ChildSafeActionTests(TestCase):
 
     def test_child_can_complete_own_task(self):
         task = services.create_task(
-            self.admin, title="Tidy room", points=10, assigned_to_person_id=self.child_person.id
+            self.admin, title="Tidy room", points=10, assigned_to_people=[self.child_person]
         )
         _login(self.client, "kid")
         resp = self.client.post(reverse("meridian-task-complete", args=[task.id]))
@@ -130,7 +130,7 @@ class ChildSafeActionTests(TestCase):
 
     def test_child_complete_awards_no_points_until_approved(self):
         task = services.create_task(
-            self.admin, title="Tidy room", points=10, assigned_to_person_id=self.child_person.id
+            self.admin, title="Tidy room", points=10, assigned_to_people=[self.child_person]
         )
         _login(self.client, "kid")
         self.client.post(reverse("meridian-task-complete", args=[task.id]))
@@ -170,7 +170,7 @@ class TaskLifecycleTests(TestCase):
 
     def test_complete_then_approve_awards_points(self):
         task = services.create_task(
-            self.admin, title="Dishes", points=15, assigned_to_person_id=self.person.id
+            self.admin, title="Dishes", points=15, assigned_to_people=[self.person]
         )
         services.complete_task(self.admin, task, person_id=self.person.id)
         self.assertEqual(task.status, MeridianTask.Status.PENDING)
@@ -186,7 +186,7 @@ class TaskLifecycleTests(TestCase):
 
     def test_reject_returns_task_available_and_no_points(self):
         task = services.create_task(
-            self.admin, title="Dishes", points=15, assigned_to_person_id=self.person.id
+            self.admin, title="Dishes", points=15, assigned_to_people=[self.person]
         )
         services.complete_task(self.admin, task, person_id=self.person.id)
         services.reject_task(self.admin, task, reason="Not actually done")
@@ -202,7 +202,7 @@ class TaskLifecycleTests(TestCase):
 
     def test_double_approve_does_not_double_award(self):
         task = services.create_task(
-            self.admin, title="Dishes", points=15, assigned_to_person_id=self.person.id
+            self.admin, title="Dishes", points=15, assigned_to_people=[self.person]
         )
         services.complete_task(self.admin, task, person_id=self.person.id)
         services.approve_task(self.admin, task)
@@ -213,7 +213,7 @@ class TaskLifecycleTests(TestCase):
     def test_hot_task_awards_bonus_points(self):
         task = services.create_task(
             self.admin, title="Big clean", points=10, is_hot=True, hot_bonus_points=5,
-            assigned_to_person_id=self.person.id,
+            assigned_to_people=[self.person],
         )
         self.assertEqual(task.award_value, 15)
         services.complete_task(self.admin, task, person_id=self.person.id)
@@ -224,7 +224,7 @@ class TaskLifecycleTests(TestCase):
         task = services.create_task(
             self.admin, title="One-off", points=5,
             completion_behavior=MeridianTask.CompletionBehavior.HIDE_AFTER_APPROVAL,
-            assigned_to_person_id=self.person.id,
+            assigned_to_people=[self.person],
         )
         services.complete_task(self.admin, task, person_id=self.person.id)
         services.approve_task(self.admin, task)
@@ -241,7 +241,7 @@ class TaskLifecycleTests(TestCase):
 
     def test_approve_via_api(self):
         task = services.create_task(
-            self.admin, title="Dishes", points=8, assigned_to_person_id=self.person.id
+            self.admin, title="Dishes", points=8, assigned_to_people=[self.person]
         )
         services.complete_task(self.admin, task, person_id=self.person.id)
         _login(self.client, "admin")
@@ -855,7 +855,7 @@ class PointsAndKioskTests(TestCase):
 
     def test_kiosk_endpoint_returns_my_tasks_and_balance(self):
         services.create_task(
-            self.admin, title="Tidy", points=5, assigned_to_person_id=self.child_person.id
+            self.admin, title="Tidy", points=5, assigned_to_people=[self.child_person]
         )
         services.adjust_points(self.admin, person_id=self.child_person.id, points=12)
         _login(self.client, "kid")

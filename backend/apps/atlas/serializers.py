@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from apps.core.serializers import AssigneeSerializerMixin
+
 from apps.atlas.models import AtlasList, AtlasListItem, AtlasNote, AtlasReminder
 
 
@@ -21,14 +23,14 @@ class AtlasNoteSerializer(serializers.ModelSerializer):
         return value
 
 
-class AtlasListItemSerializer(serializers.ModelSerializer):
+class AtlasListItemSerializer(AssigneeSerializerMixin, serializers.ModelSerializer):
     is_complete = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = AtlasListItem
         fields = [
             "id", "atlas_list_id", "title", "notes", "quantity", "position", "due_at",
-            "assigned_to_person_id",
+            "assigned_to_person_ids",
             "completed_at", "completed_by_id", "is_complete",
             "created_at", "updated_at",
         ]
@@ -63,10 +65,10 @@ class AtlasListWriteSerializer(serializers.ModelSerializer):
         return value
 
 
-class AtlasListItemWriteSerializer(serializers.ModelSerializer):
+class AtlasListItemWriteSerializer(AssigneeSerializerMixin, serializers.ModelSerializer):
     class Meta:
         model = AtlasListItem
-        fields = ["title", "notes", "quantity", "position", "due_at", "assigned_to_person_id"]
+        fields = ["title", "notes", "quantity", "position", "due_at", "assigned_to_person_ids"]
 
     def validate_title(self, value: str) -> str:
         if not value.strip():

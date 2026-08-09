@@ -141,12 +141,14 @@ class EducationAssessment(CalendarSyncMixin, HouseholdBaseModel):
         on_delete=models.SET_NULL,
         related_name="assessments",
     )
-    assigned_to_person = models.ForeignKey(
+    assigned_to_people = models.ManyToManyField(
         "people.Person",
-        null=True,
         blank=True,
-        on_delete=models.SET_NULL,
-        related_name="education_assessments",
+        related_name="assigned_education_assessments",
+        help_text=(
+            "Who this is for. Empty means the whole household — a household job with no "
+            "particular owner. Several people means each of them, not one of them."
+        ),
     )
     due_at = models.DateTimeField(null=True, blank=True)
     is_all_day = models.BooleanField(default=False)  # due on a date, no specific time
@@ -194,7 +196,7 @@ class EducationAssessment(CalendarSyncMixin, HouseholdBaseModel):
             "visibility": self.visibility,
             "sensitivity": self.sensitivity,
             "colour": self.course.colour if self.course else "",
-            "assigned_to_person_id": self.assigned_to_person_id,
+            "assigned_to_person_ids": list(self.assigned_to_people.values_list("id", flat=True)),
         }
 
     def get_calendar_node_key(self) -> str:
@@ -309,7 +311,7 @@ class EducationClassSession(CalendarSyncMixin, HouseholdBaseModel):
             "recurrence_rule": self.recurrence_rule,
             "visibility": self.visibility,
             "colour": self.course.colour if self.course else "",
-            "assigned_to_person_id": self.student_id,
+            "assigned_to_person_ids": [self.student_id] if self.student_id else [],
         }
 
     def get_calendar_node_key(self) -> str:
@@ -353,12 +355,14 @@ class EducationEvent(CalendarSyncMixin, HouseholdBaseModel):
         on_delete=models.SET_NULL,
         related_name="events",
     )
-    assigned_to_person = models.ForeignKey(
+    assigned_to_people = models.ManyToManyField(
         "people.Person",
-        null=True,
         blank=True,
-        on_delete=models.SET_NULL,
-        related_name="education_events",
+        related_name="assigned_education_events",
+        help_text=(
+            "Who this is for. Empty means the whole household — a household job with no "
+            "particular owner. Several people means each of them, not one of them."
+        ),
     )
     start_at = models.DateTimeField()
     end_at = models.DateTimeField(null=True, blank=True)
@@ -396,7 +400,7 @@ class EducationEvent(CalendarSyncMixin, HouseholdBaseModel):
             "recurrence_rule": self.recurrence_rule,
             "visibility": self.visibility,
             "colour": self.course.colour if self.course else "",
-            "assigned_to_person_id": self.assigned_to_person_id,
+            "assigned_to_person_ids": list(self.assigned_to_people.values_list("id", flat=True)),
         }
 
     def get_calendar_node_key(self) -> str:

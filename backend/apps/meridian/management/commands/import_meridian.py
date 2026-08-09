@@ -159,11 +159,14 @@ class Command(BaseCommand):
                     "description": t.get("description", ""),
                     "points": t.get("points", 0),
                     "category": category,
-                    "assigned_to_person": assignee,
                     "is_hot": t.get("is_hot", False),
                     "status": t.get("status", MeridianTask.Status.AVAILABLE),
                 },
             )
+            # Legacy Meridian had a single assignee; assignment is now a set, so an imported
+            # task starts with that one person in it.
+            if created and assignee:
+                task.assigned_to_people.set([assignee])
             tasks_by_title[t["title"]] = task
             stats["tasks"] += int(created)
 
@@ -237,10 +240,12 @@ class Command(BaseCommand):
                 defaults={
                     "description": r.get("description", ""),
                     "points": r.get("points", 1),
-                    "assigned_to_person": people_by_mid.get(r.get("assigned_user_meridian_id")),
                     "is_active": r.get("is_active", True),
                 },
             )
+            routine_assignee = people_by_mid.get(r.get("assigned_user_meridian_id"))
+            if created and routine_assignee:
+                routine.assigned_to_people.set([routine_assignee])
             routines_by_title[r["title"]] = routine
             stats["routines"] += int(created)
 

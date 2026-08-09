@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.22.1**
+> **Current version: 0.23.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,34 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.23 — Multi-person assignment
+
+### 0.23.0 — 2026-08-09
+- **Anything can be assigned to several people.** An assignment was a single
+  `assigned_to_person` where null meant "the whole household", so "both of us" could not be
+  said at all. Every assignable record now carries an `assigned_to_people` set: empty means the
+  whole household, one or more people means each of them. Applied in one pass across all nine
+  assignable models — Lists items, Calendar events, Meridian tasks and routines, Education
+  assessments and events, and Homestead maintenance, improvements and room plan items — so a
+  picker never accepts several people on one screen and silently keeps one on another.
+- **The picker is a multi-select.** "Whole family" remains the one-tap default; individual
+  people are checkboxes. A chosen set reads as a name, "Ana + Bo", or "3 people".
+- **Filters match any assignee.** Asking the Calendar for one person's events returns anything
+  they share, exactly once. Meridian task availability, the Hub's "my tasks", and Education's
+  per-student lists all treat assignment as membership rather than equality; an unassigned
+  Meridian task remains open to anyone.
+- **Calendar sync carries the set (D7).** `get_calendar_data()` now returns
+  `assigned_to_person_ids`, and the scheduling helper applies them after the row exists. Services
+  set assignees before syncing, so the mirrored event never lags its source record.
+- Existing single assignees are copied into the new relation by migration before the old column
+  is dropped, so nothing loses its owner. Reverse restores a sole assignee; a record shared by
+  several people cannot round-trip, which is recorded in the migration.
+- **The duplicated page header is gone on desktop.** The shell's top bar names and describes the
+  destination, and each page repeated the same words directly beneath it. A page whose title
+  just restates the destination now renders its actions only; pages with genuinely different
+  context — a room name, Home's greeting — keep their heading. **658 backend tests green (6 new,
+  permission-first); production build clean; no migration drift.**
 
 ## 0.22 — Attention-driven Hub and shell consistency
 
@@ -29,6 +57,34 @@
 - The existing `link_url` on each plan item is migrated into a chosen option so no saved link is
   lost, then removed — two places to store a link is how they drift apart. **652 backend tests
   green (10 new, permission-first); production build clean; no migration drift.**
+
+## 0.23 — Multi-person assignment
+
+### 0.23.0 — 2026-08-09
+- **Anything can be assigned to several people.** An assignment was a single
+  `assigned_to_person` where null meant "the whole household", so "both of us" could not be
+  said at all. Every assignable record now carries an `assigned_to_people` set: empty means the
+  whole household, one or more people means each of them. Applied in one pass across all nine
+  assignable models — Lists items, Calendar events, Meridian tasks and routines, Education
+  assessments and events, and Homestead maintenance, improvements and room plan items — so a
+  picker never accepts several people on one screen and silently keeps one on another.
+- **The picker is a multi-select.** "Whole family" remains the one-tap default; individual
+  people are checkboxes. A chosen set reads as a name, "Ana + Bo", or "3 people".
+- **Filters match any assignee.** Asking the Calendar for one person's events returns anything
+  they share, exactly once. Meridian task availability, the Hub's "my tasks", and Education's
+  per-student lists all treat assignment as membership rather than equality; an unassigned
+  Meridian task remains open to anyone.
+- **Calendar sync carries the set (D7).** `get_calendar_data()` now returns
+  `assigned_to_person_ids`, and the scheduling helper applies them after the row exists. Services
+  set assignees before syncing, so the mirrored event never lags its source record.
+- Existing single assignees are copied into the new relation by migration before the old column
+  is dropped, so nothing loses its owner. Reverse restores a sole assignee; a record shared by
+  several people cannot round-trip, which is recorded in the migration.
+- **The duplicated page header is gone on desktop.** The shell's top bar names and describes the
+  destination, and each page repeated the same words directly beneath it. A page whose title
+  just restates the destination now renders its actions only; pages with genuinely different
+  context — a room name, Home's greeting — keep their heading. **658 backend tests green (6 new,
+  permission-first); production build clean; no migration drift.**
 
 ## 0.22 — Attention-driven Hub and shell consistency
 

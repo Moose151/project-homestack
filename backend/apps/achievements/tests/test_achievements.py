@@ -42,7 +42,7 @@ class BadgeAwardingTests(TestCase):
 
     def test_first_approved_task_awards_first_task_badge(self):
         task = meridian.create_task(
-            self.admin, title="Tidy", points=5, assigned_to_person_id=self.person.id
+            self.admin, title="Tidy", points=5, assigned_to_people=[self.person]
         )
         meridian.complete_task(self.admin, task, person_id=self.person.id)
         meridian.approve_task(self.admin, task)
@@ -53,7 +53,7 @@ class BadgeAwardingTests(TestCase):
     def test_task_milestones_via_event_bus(self):
         for i in range(5):
             t = meridian.create_task(self.admin, title=f"T{i}", points=1,
-                                     assigned_to_person_id=self.person.id)
+                                     assigned_to_people=[self.person])
             meridian.complete_task(self.admin, t, person_id=self.person.id)
             meridian.approve_task(self.admin, t)
         codes = set(PersonBadge.objects.filter(person=self.person).values_list("badge__code", flat=True))

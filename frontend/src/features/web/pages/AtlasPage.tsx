@@ -56,9 +56,11 @@ function ItemRow({
 }) {
   const [busy, setBusy] = useState(false)
   const due = dueLabel(item.due_at)
-  const assignee = item.assigned_to_person_id
-    ? people.find(p => p.id === item.assigned_to_person_id)
-    : null
+  // Several people can share an item; show the first as a colour dot and name the rest.
+  const assignees = item.assigned_to_person_ids
+    .map(id => people.find(p => p.id === id))
+    .filter((p): p is Person => Boolean(p))
+  const assignee = assignees[0] ?? null
 
   const toggle = async () => {
     setBusy(true)
@@ -107,7 +109,10 @@ function ItemRow({
               {assignee && (
                 <span className="flex min-w-0 items-center gap-1">
                   <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: assignee.colour || 'var(--hs-muted)' }} />
-                  <span className="truncate">{assignee.preferred_name || assignee.display_name}</span>
+                  <span className="truncate">
+                    {assignee.preferred_name || assignee.display_name}
+                    {assignees.length > 1 && ` +${assignees.length - 1}`}
+                  </span>
                 </span>
               )}
               {due && <span className={`rounded-full px-1.5 py-0.5 font-semibold ${due.tone}`}>{due.text}</span>}
@@ -133,14 +138,14 @@ function ItemRow({
 function ListCard({ list, people, defaultAssignee, onDeleted, onError }: {
   list: AtlasList
   people: Person[]
-  defaultAssignee: number | null
+  defaultAssignee: number[]
   onDeleted: (id: number) => void
   onError: (m: string) => void
 }) {
   const [items, setItems] = useState<AtlasListItem[]>(list.items ?? [])
   const [newTitle, setNewTitle] = useState('')
   const [qty, setQty] = useState('')
-  const [assignee, setAssignee] = useState<number | null>(defaultAssignee)
+  const [assignee, setAssignee] = useState<number[]>(defaultAssignee)
   const [adding, setAdding] = useState(false)
   const [showDone, setShowDone] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -154,7 +159,7 @@ function ListCard({ list, people, defaultAssignee, onDeleted, onError }: {
     try {
       const item = await api.createItem(list.id, {
         title: newTitle.trim(), quantity: qty.trim() || undefined,
-        assigned_to_person_id: assignee,
+        assigned_to_person_ids: assignee,
       })
       setItems(prev => [...prev, item])
       setNewTitle(''); setQty(''); setAssignee(defaultAssignee)
@@ -748,7 +753,7 @@ export function AtlasPage() {
         setCaptureTick(t => t + 1)
         setTab('reminders')
       } else if (kind === 'todo' && listId != null) {
-        await api.createItem(listId, { title: text, assigned_to_person_id: defaultAssignee })
+        await api.createItem(listId, { title: text, assigned_to_person_ids: defaultAssignee })
         const full = await api.getList(listId)
         setLists(prev => prev.map(l => l.id === listId ? full : l))
         setCardRefresh(prev => ({ ...prev, [listId]: (prev[listId] ?? 0) + 1 }))

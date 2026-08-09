@@ -54,7 +54,7 @@ export interface AtlasListItem {
   quantity: string
   position: number
   due_at: string | null
-  assigned_to_person_id: number | null
+  assigned_to_person_ids: number[]
   completed_at: string | null
   completed_by_id: number | null
   is_complete: boolean
@@ -115,7 +115,7 @@ export interface CalendarEvent {
   source_node: string | null
   source_record_type: string
   source_record_id: number | null
-  assigned_to_person_id: number | null
+  assigned_to_person_ids: number[]
   colour: string
   location: string
   visibility: string
@@ -132,7 +132,7 @@ export interface CalendarEventWrite {
   end_at?: string | null
   is_all_day?: boolean
   recurrence_rule?: string
-  assigned_to_person_id?: number | null
+  assigned_to_person_ids?: number[]
   colour?: string
   location?: string
   visibility?: string
@@ -200,7 +200,7 @@ export interface MeridianTask {
   description: string
   points: number
   category_id: number | null
-  assigned_to_person_id: number | null
+  assigned_to_person_ids: number[]
   status: MeridianTaskStatus
   is_hot: boolean
   is_complete: boolean
@@ -278,7 +278,7 @@ export interface MeridianRoutine {
   title: string
   description: string
   points: number
-  assigned_to_person_id: number | null
+  assigned_to_person_ids: number[]
   is_active: boolean
   visibility: string
   streak?: number
@@ -529,7 +529,7 @@ export interface EducationAssessment {
   course_id: number | null
   course_name: string
   course_code: string
-  assigned_to_person_id: number | null
+  assigned_to_person_ids: number[]
   due_at: string | null
   is_all_day: boolean
   status: AssessmentStatus
@@ -575,7 +575,7 @@ export interface EducationEvent {
   course_code: string
   institution_id: number | null
   institution_name: string
-  assigned_to_person_id: number | null
+  assigned_to_person_ids: number[]
   start_at: string
   end_at: string | null
   is_all_day: boolean
@@ -805,7 +805,7 @@ export interface MaintenanceTask {
   id: number
   appliance_id: number | null
   provider_id: number | null
-  assigned_to_person_id: number | null
+  assigned_to_person_ids: number[]
   title: string
   category: MaintenanceCategory
   next_due_at: string | null
@@ -827,7 +827,7 @@ export type ImprovementPriority = 'low' | 'medium' | 'high'
 
 export interface Improvement {
   id: number
-  assigned_to_person_id: number | null
+  assigned_to_person_ids: number[]
   title: string
   description: string
   status: ImprovementStatus
@@ -894,7 +894,7 @@ export interface RoomPlanProduct {
 export interface RoomPlanItem {
   id: number
   room_id: number
-  assigned_to_person_id: number | null
+  assigned_to_person_ids: number[]
   title: string
   item_type: RoomItemType
   status: RoomItemStatus

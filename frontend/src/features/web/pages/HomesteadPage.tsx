@@ -379,7 +379,7 @@ function RoomsTab({ onError, canEdit }: { onError: (m: string) => void; canEdit:
 
 function MaintenanceTab({ people, defaultAssignee, onError, canUseMoney }: {
   people: Person[]
-  defaultAssignee: number | null
+  defaultAssignee: number[]
   onError: (m: string) => void
   canUseMoney: boolean
 }) {
@@ -392,7 +392,7 @@ function MaintenanceTab({ people, defaultAssignee, onError, canUseMoney }: {
   const [editId, setEditId] = useState<number | null>(null)
   const blank = {
     title: '', category: 'general', next_due_at: null as string | null, is_all_day: true,
-    recurrence_rule: '', appliance_id: 0, provider_id: 0, assigned_to_person_id: defaultAssignee ?? 0, notes: '',
+    recurrence_rule: '', appliance_id: 0, provider_id: 0, assigned_to_person_ids: defaultAssignee, notes: '',
   }
   const [f, setF] = useState(blank)
   const [saving, setSaving] = useState(false)
@@ -411,13 +411,13 @@ function MaintenanceTab({ people, defaultAssignee, onError, canUseMoney }: {
     api.getProviders().then(setProviders).catch(() => {})
   }, [])
 
-  const startAdd = () => { setEditId(null); setF({ ...blank, assigned_to_person_id: defaultAssignee ?? 0 }); setOpen(true) }
+  const startAdd = () => { setEditId(null); setF({ ...blank, assigned_to_person_ids: defaultAssignee }); setOpen(true) }
   const startEdit = (t: MaintenanceTask) => {
     setEditId(t.id)
     setF({
       title: t.title, category: t.category, next_due_at: t.next_due_at, is_all_day: t.is_all_day,
       recurrence_rule: t.recurrence_rule, appliance_id: t.appliance_id ?? 0, provider_id: t.provider_id ?? 0,
-      assigned_to_person_id: t.assigned_to_person_id ?? 0, notes: t.notes,
+      assigned_to_person_ids: t.assigned_to_person_ids, notes: t.notes,
     })
     setOpen(true)
   }
@@ -430,7 +430,7 @@ function MaintenanceTab({ people, defaultAssignee, onError, canUseMoney }: {
       title: f.title.trim(), category: f.category, next_due_at: f.next_due_at, is_all_day: f.is_all_day,
       recurrence_rule: f.recurrence_rule, notes: f.notes,
       appliance_id: f.appliance_id || null, provider_id: f.provider_id || null,
-      assigned_to_person_id: f.assigned_to_person_id || null,
+      assigned_to_person_ids: f.assigned_to_person_ids,
     }
     try {
       if (editId) await api.updateMaintenance(editId, payload)
@@ -519,8 +519,8 @@ function MaintenanceTab({ people, defaultAssignee, onError, canUseMoney }: {
               </Field>
             </div>
             <Field label="Assigned to">
-              <AssigneeSelect people={people} value={f.assigned_to_person_id || null}
-                onChange={v => set('assigned_to_person_id', v ?? 0)} className={fieldClass} />
+              <AssigneeSelect people={people} value={f.assigned_to_person_ids}
+                onChange={v => set('assigned_to_person_ids', v)} className={fieldClass} />
             </Field>
             <Field label="Notes"><Textarea rows={2} value={f.notes} onChange={e => set('notes', e.target.value)} /></Field>
             <div className="flex justify-end gap-2">
@@ -539,7 +539,7 @@ function MaintenanceTab({ people, defaultAssignee, onError, canUseMoney }: {
         <div className="flex flex-col gap-2">
           {tasks.map(t => {
             const due = dueLabel(t.next_due_at)
-            const assignee = t.assigned_to_person_id ? people.find(p => p.id === t.assigned_to_person_id) : null
+            const assignee = people.find(p => t.assigned_to_person_ids.includes(p.id)) ?? null
             return (
               <div key={t.id} className="group flex flex-col gap-3 rounded-xl border border-line p-3 sm:flex-row sm:items-center">
                 <div className="min-w-0 flex-1">
@@ -734,7 +734,7 @@ function AppliancesTab({ onError }: { onError: (m: string) => void }) {
 // ---------------------------------------------------------------------------
 
 function ImprovementsTab({ people, defaultAssignee, onError }: {
-  people: Person[]; defaultAssignee: number | null; onError: (m: string) => void
+  people: Person[]; defaultAssignee: number[]; onError: (m: string) => void
 }) {
   const [items, setItems] = useState<Improvement[]>([])
   const [loading, setLoading] = useState(true)
@@ -742,7 +742,7 @@ function ImprovementsTab({ people, defaultAssignee, onError }: {
   const [editId, setEditId] = useState<number | null>(null)
   const blank = {
     title: '', description: '', status: 'idea', priority: 'medium', room: '',
-    target_date: null as string | null, is_all_day: true, assigned_to_person_id: defaultAssignee ?? 0,
+    target_date: null as string | null, is_all_day: true, assigned_to_person_ids: defaultAssignee,
   }
   const [f, setF] = useState(blank)
   const [saving, setSaving] = useState(false)
@@ -751,12 +751,12 @@ function ImprovementsTab({ people, defaultAssignee, onError }: {
   const load = () => { api.getImprovements().then(setItems).catch(e => onError(errMsg(e))).finally(() => setLoading(false)) }
   useEffect(load, [])
 
-  const startAdd = () => { setEditId(null); setF({ ...blank, assigned_to_person_id: defaultAssignee ?? 0 }); setOpen(true) }
+  const startAdd = () => { setEditId(null); setF({ ...blank, assigned_to_person_ids: defaultAssignee }); setOpen(true) }
   const startEdit = (i: Improvement) => {
     setEditId(i.id)
     setF({
       title: i.title, description: i.description, status: i.status, priority: i.priority, room: i.room,
-      target_date: i.target_date, is_all_day: i.is_all_day, assigned_to_person_id: i.assigned_to_person_id ?? 0,
+      target_date: i.target_date, is_all_day: i.is_all_day, assigned_to_person_ids: i.assigned_to_person_ids,
     })
     setOpen(true)
   }
@@ -768,7 +768,7 @@ function ImprovementsTab({ people, defaultAssignee, onError }: {
     const payload = {
       title: f.title.trim(), description: f.description, status: f.status, priority: f.priority,
       room: f.room, target_date: f.target_date, is_all_day: f.is_all_day,
-      assigned_to_person_id: f.assigned_to_person_id || null,
+      assigned_to_person_ids: f.assigned_to_person_ids,
     }
     try {
       if (editId) await api.updateImprovement(editId, payload)
@@ -839,8 +839,8 @@ function ImprovementsTab({ people, defaultAssignee, onError }: {
                 onChange={({ value, allDay }) => setF(prev => ({ ...prev, target_date: value, is_all_day: allDay }))} />
             </Field>
             <Field label="Assigned to">
-              <AssigneeSelect people={people} value={f.assigned_to_person_id || null}
-                onChange={v => set('assigned_to_person_id', v ?? 0)} className={fieldClass} />
+              <AssigneeSelect people={people} value={f.assigned_to_person_ids}
+                onChange={v => set('assigned_to_person_ids', v)} className={fieldClass} />
             </Field>
             <Field label="Details"><Textarea rows={3} value={f.description} onChange={e => set('description', e.target.value)} /></Field>
             <div className="flex justify-end gap-2">

@@ -4,6 +4,8 @@ from __future__ import annotations
 from django.urls import reverse
 from rest_framework import serializers
 
+from apps.core.serializers import AssigneeSerializerMixin
+
 from apps.education.models import (
     EducationAcademicProfile,
     EducationAssessment,
@@ -58,9 +60,8 @@ class EducationCourseSerializer(serializers.ModelSerializer):
         return _non_blank(value)
 
 
-class EducationAssessmentSerializer(serializers.ModelSerializer):
+class EducationAssessmentSerializer(AssigneeSerializerMixin, serializers.ModelSerializer):
     course_id = serializers.IntegerField(required=False, allow_null=True)
-    assigned_to_person_id = serializers.IntegerField(required=False, allow_null=True)
     course_name = serializers.CharField(source="course.name", read_only=True, default="")
     course_code = serializers.CharField(source="course.code", read_only=True, default="")
     is_complete = serializers.BooleanField(read_only=True)
@@ -69,7 +70,7 @@ class EducationAssessmentSerializer(serializers.ModelSerializer):
         model = EducationAssessment
         fields = [
             "id", "title", "assessment_type", "course_id", "course_name", "course_code",
-            "assigned_to_person_id", "due_at", "is_all_day", "status", "priority", "weight",
+            "assigned_to_person_ids", "due_at", "is_all_day", "status", "priority", "weight",
             "description", "is_complete", "calendar_event_id", "visibility", "sensitivity",
             "created_at", "updated_at",
         ]
@@ -107,10 +108,9 @@ class EducationClassSessionSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class EducationEventSerializer(serializers.ModelSerializer):
+class EducationEventSerializer(AssigneeSerializerMixin, serializers.ModelSerializer):
     course_id = serializers.IntegerField(required=False, allow_null=True)
     institution_id = serializers.IntegerField(required=False, allow_null=True)
-    assigned_to_person_id = serializers.IntegerField(required=False, allow_null=True)
     course_name = serializers.CharField(source="course.name", read_only=True, default="")
     course_code = serializers.CharField(source="course.code", read_only=True, default="")
     institution_name = serializers.CharField(source="institution.name", read_only=True, default="")
@@ -119,7 +119,7 @@ class EducationEventSerializer(serializers.ModelSerializer):
         model = EducationEvent
         fields = [
             "id", "title", "event_type", "course_id", "course_name", "course_code",
-            "institution_id", "institution_name", "assigned_to_person_id",
+            "institution_id", "institution_name", "assigned_to_person_ids",
             "start_at", "end_at", "is_all_day", "location", "description",
             "recurrence_rule", "calendar_event_id", "visibility",
             "created_at", "updated_at",

@@ -16,6 +16,8 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.scheduling.models import CalendarEvent, RotatingSchedule, RotatingScheduleException
+from apps.people.services import create_person
+from apps.scheduling.selectors import list_events
 from apps.scheduling.services import create_event
 
 
@@ -255,8 +257,8 @@ class CalendarEventCRUDTests(TestCase):
         from apps.people.services import create_person
         p1 = create_person(self.admin, display_name="Ana")
         p2 = create_person(self.admin, display_name="Bo")
-        create_event(self.admin, title="Ana event", start_at=timezone.now(), assigned_to_person_id=p1.id)
-        create_event(self.admin, title="Bo event", start_at=timezone.now(), assigned_to_person_id=p2.id)
+        create_event(self.admin, title="Ana event", start_at=timezone.now(), assigned_to_people=[p1])
+        create_event(self.admin, title="Bo event", start_at=timezone.now(), assigned_to_people=[p2])
         resp = self.client.get(f"{self.list_url}?person={p1.id}")
         titles = [e["title"] for e in resp.json()]
         self.assertEqual(titles, ["Ana event"])
@@ -483,3 +485,84 @@ class RotatingScheduleTests(TestCase):
             ).json(),
             [],
         )
+
+
+class MultiPersonAssignmentTests(TestCase):
+    """Assignment is a set, not one person (owner request, 2026-08-09).
+
+    Empty means the whole household; one or more people means each of them. The filter must
+    match an event if the person is *any* of its assignees, and must not return it twice.
+    """
+
+    def setUp(self):
+        self.admin = _make_user("assign_admin", User.Role.ADMIN)
+        self.client.force_login(self.admin)
+        self.ana = create_person(self.admin, display_name="Ana")
+        self.bo = create_person(self.admin, display_name="Bo")
+
+    def test_event_can_be_assigned_to_several_people(self):
+        event = create_event(
+            self.admin, title="School run", start_at=timezone.now(),
+            assigned_to_people=[self.ana, self.bo],
+        )
+        self.assertEqual(
+            set(event.assigned_to_people.values_list("id", flat=True)),
+            {self.ana.id, self.bo.id},
+        )
+
+    def test_filter_matches_any_assignee_exactly_once(self):
+        create_event(
+            self.admin, title="School run", start_at=timezone.now(),
+            assigned_to_people=[self.ana, self.bo],
+        )
+        for person in (self.ana, self.bo):
+            events = list_events(self.admin, person=person.id)
+            self.assertEqual([e.title for e in events], ["School run"], person.display_name)
+
+    def test_no_assignees_means_the_whole_household(self):
+        create_event(self.admin, title="Bin day", start_at=timezone.now())
+        self.assertEqual(list_events(self.admin, person=self.ana.id), [])
+        self.assertIn("Bin day", [e.title for e in list_events(self.admin)])
+
+    def test_api_round_trips_the_assignee_list(self):
+        response = self.client.post(
+            reverse("calendar-event-list"),
+            {
+                "title": "Dentist",
+                "start_at": timezone.now().isoformat(),
+                "assigned_to_person_ids": [self.ana.id, self.bo.id],
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            sorted(response.json()["assigned_to_person_ids"]),
+            sorted([self.ana.id, self.bo.id]),
+        )
+
+    def test_partial_update_without_assignees_leaves_them_alone(self):
+        event = create_event(
+            self.admin, title="School run", start_at=timezone.now(),
+            assigned_to_people=[self.ana],
+        )
+        self.client.patch(
+            reverse("calendar-event-detail", args=[event.id]),
+            {"title": "School pickup"},
+            content_type="application/json",
+        )
+        event.refresh_from_db()
+        self.assertEqual(event.title, "School pickup")
+        self.assertEqual(list(event.assigned_to_people.values_list("id", flat=True)), [self.ana.id])
+
+    def test_assignees_can_be_cleared_back_to_the_household(self):
+        event = create_event(
+            self.admin, title="School run", start_at=timezone.now(),
+            assigned_to_people=[self.ana, self.bo],
+        )
+        self.client.patch(
+            reverse("calendar-event-detail", args=[event.id]),
+            {"assigned_to_person_ids": []},
+            content_type="application/json",
+        )
+        event.refresh_from_db()
+        self.assertEqual(event.assigned_to_people.count(), 0)

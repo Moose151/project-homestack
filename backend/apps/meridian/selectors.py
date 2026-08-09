@@ -40,7 +40,7 @@ def list_tasks(
     if status and status != MeridianTask.Status.AVAILABLE:
         qs = qs.filter(status=status)
     if assigned_to_person_id is not None:
-        qs = qs.filter(assigned_to_person_id=assigned_to_person_id)
+        qs = qs.filter(assigned_to_people__id=assigned_to_person_id).distinct()
     if hot_only:
         qs = qs.filter(is_hot=True)
     if user is not None:
@@ -72,7 +72,9 @@ def is_task_available_for(task: MeridianTask, person_id: int | None = None) -> b
     """Return whether a task can be submitted in the current completion cycle."""
     if task.is_archived or not task.is_active:
         return False
-    if task.assigned_to_person_id and person_id and task.assigned_to_person_id != person_id:
+    # An empty assignee set means anyone may do it; otherwise the person must be one of them.
+    assignee_ids = set(task.assigned_to_people.values_list("id", flat=True))
+    if assignee_ids and person_id and person_id not in assignee_ids:
         return False
     from apps.meridian import services
     active = services._active_task_completions(task)
@@ -141,7 +143,9 @@ def list_routines(
     if active_only:
         qs = qs.filter(is_active=True)
     if person_id is not None:
-        qs = qs.filter(Q(assigned_to_person_id=person_id) | Q(assigned_to_person__isnull=True))
+        qs = qs.filter(
+            Q(assigned_to_people__id=person_id) | Q(assigned_to_people__isnull=True)
+        ).distinct()
     if user is not None:
         qs = apply_visibility(qs, user)
     routines = list(qs)

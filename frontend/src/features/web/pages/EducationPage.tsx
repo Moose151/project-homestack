@@ -261,7 +261,7 @@ function AssessmentDetail({ assessment, onError }: {
 function AssignmentForm({ courses, people, defaultAssignee, onCreated, onError }: {
   courses: EducationCourse[]
   people: Person[]
-  defaultAssignee: number | null
+  defaultAssignee: number[]
   onCreated: (a: EducationAssessment) => void
   onError: (m: string) => void
 }) {
@@ -272,7 +272,7 @@ function AssignmentForm({ courses, people, defaultAssignee, onCreated, onError }
   const [due, setDue] = useState<string | null>(null)
   const [dueAllDay, setDueAllDay] = useState(true)
   const [priority, setPriority] = useState<AssessmentPriority>('medium')
-  const [assignee, setAssignee] = useState<number | null>(defaultAssignee)
+  const [assignee, setAssignee] = useState<number[]>(defaultAssignee)
   const [busy, setBusy] = useState(false)
 
   // Sync assignee when people finish loading and defaultAssignee becomes available
@@ -288,7 +288,7 @@ function AssignmentForm({ courses, people, defaultAssignee, onCreated, onError }
       const a = await api.createAssessment({
         title: title.trim(), assessment_type: type, priority,
         course_id: courseId ? Number(courseId) : null,
-        due_at: due, is_all_day: dueAllDay, assigned_to_person_id: assignee,
+        due_at: due, is_all_day: dueAllDay, assigned_to_person_ids: assignee,
       })
       onCreated(a)
       setTitle(''); setDue(null); setDueAllDay(true); setCourseId(''); setType('assignment')
@@ -420,7 +420,7 @@ function AssignmentRow({ a, onChange, onDelete, onError }: {
 function AssignmentsTab({ courses, people, defaultAssignee, onError }: {
   courses: EducationCourse[]
   people: Person[]
-  defaultAssignee: number | null
+  defaultAssignee: number[]
   onError: (m: string) => void
 }) {
   const [assessments, setAssessments] = useState<EducationAssessment[]>([])
@@ -479,7 +479,7 @@ function CoursesTab({ courses, reload, people, onError }: {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [creditValue, setCreditValue] = useState('6')
-  const [studentId, setStudentId] = useState<number | null>(null)
+  const [studentId, setStudentId] = useState<number[]>([])
   const [busy, setBusy] = useState(false)
 
   const submit = async (e: React.FormEvent) => {
@@ -491,10 +491,10 @@ function CoursesTab({ courses, reload, people, onError }: {
         name: name.trim(), code: code.trim(), teacher: teacher.trim(),
         start_date: startDate || null, end_date: endDate || null,
         credit_value: Number(creditValue) || 0,
-        student_id: studentId,
+        student_id: studentId[0] ?? null,
       })
       setName(''); setCode(''); setTeacher(''); setStartDate(''); setEndDate('')
-      setCreditValue('6'); setStudentId(null); setOpen(false); reload()
+      setCreditValue('6'); setStudentId([]); setOpen(false); reload()
     } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
   const remove = async (c: EducationCourse) => {
@@ -698,7 +698,7 @@ function EventsTab({ courses, people, institutions, defaultAssignee, onError }: 
   courses: EducationCourse[]
   people: Person[]
   institutions: EducationInstitution[]
-  defaultAssignee: number | null
+  defaultAssignee: number[]
   onError: (m: string) => void
 }) {
   const [events, setEvents] = useState<EducationEvent[]>([])
@@ -712,7 +712,7 @@ function EventsTab({ courses, people, institutions, defaultAssignee, onError }: 
   const [start, setStart] = useState<string | null>(null)
   const [allDay, setAllDay] = useState(true)
   const [location, setLocation] = useState('')
-  const [assignee, setAssignee] = useState<number | null>(defaultAssignee)
+  const [assignee, setAssignee] = useState<number[]>(defaultAssignee)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => { setAssignee(prev => prev ?? defaultAssignee) }, [defaultAssignee])
@@ -732,7 +732,7 @@ function EventsTab({ courses, people, institutions, defaultAssignee, onError }: 
         title: title.trim(), event_type: type,
         course_id: courseId ? Number(courseId) : null,
         institution_id: institutionId ? Number(institutionId) : null,
-        assigned_to_person_id: assignee,
+        assigned_to_person_ids: assignee,
         start_at: start, is_all_day: allDay, location: location.trim(),
       })
       setEvents(prev => [...prev, ev].sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime()))
@@ -1252,7 +1252,7 @@ export function EducationPage() {
         <>
           <Tabs tabs={TABS} active={tab} onChange={setTab} mobileSelectLabel="Education section" />
 
-          {tab === 'profile' && <ProfileTab people={people} institutions={institutions} onInstitutionCreated={i => setInstitutions(prev => [...prev, i])} defaultPersonId={defaultAssignee} onError={setError} />}
+          {tab === 'profile' && <ProfileTab people={people} institutions={institutions} onInstitutionCreated={i => setInstitutions(prev => [...prev, i])} defaultPersonId={defaultAssignee[0] ?? null} onError={setError} />}
           {tab === 'assignments' && <AssignmentsTab courses={courses} people={people} defaultAssignee={defaultAssignee} onError={setError} />}
           {tab === 'courses' && <CoursesTab courses={courses} reload={loadCourses} people={people} onError={setError} />}
           {tab === 'timetable' && <TimetableTab courses={courses} onError={setError} />}

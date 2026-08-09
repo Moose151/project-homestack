@@ -6,7 +6,7 @@ import type {
   Person, RoomAreaType, RoomDetailResponse, RoomItemPriority, RoomItemStatus,
   RoomItemType, RoomPlanItem,
 } from '../../../api/types'
-import { AssigneeSelect } from '../../../components/AssigneeSelect'
+import { AssigneeSelect, assigneeLabel } from '../../../components/AssigneeSelect'
 import { Badge, type BadgeTone } from '../../../components/Badge'
 import { Button } from '../../../components/Button'
 import { Card } from '../../../components/Card'
@@ -315,7 +315,7 @@ const EMPTY_ITEM = {
   title: '', item_type: 'purchase' as RoomItemType, status: 'planned' as RoomItemStatus,
   priority: 'medium' as RoomItemPriority, description: '', quantity: '1',
   estimated_unit_cost: '', actual_cost: '', notes: '',
-  assigned_to_person_id: null as number | null,
+  assigned_to_person_ids: [] as number[],
 }
 
 export function HomesteadRoomPage() {
@@ -393,7 +393,7 @@ export function HomesteadRoomPage() {
       priority: item.priority, description: item.description, quantity: item.quantity,
       estimated_unit_cost: item.estimated_unit_cost, actual_cost: item.actual_cost ?? '',
       notes: item.notes,
-      assigned_to_person_id: item.assigned_to_person_id,
+      assigned_to_person_ids: item.assigned_to_person_ids,
     })
     setItemOpen(true)
   }
@@ -435,7 +435,7 @@ export function HomesteadRoomPage() {
   const canDelete = user?.role === 'admin' || user?.role === 'manager'
 
   const itemCard = (item: RoomPlanItem) => {
-    const person = people.find(row => row.id === item.assigned_to_person_id)
+    const assigneeName = assigneeLabel(people, item.assigned_to_person_ids)
     return (
       <div key={item.id} className="group rounded-xl border border-line bg-surface p-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
@@ -449,7 +449,7 @@ export function HomesteadRoomPage() {
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
               <span>{Number(item.quantity).toLocaleString()} × {money(item.estimated_unit_cost)} = <strong className="text-ink">{money(item.estimated_total)}</strong></span>
               {item.actual_cost !== null && <span>Actual <strong className="text-ink">{money(item.actual_cost)}</strong></span>}
-              {person && <span>👤 {person.preferred_name || person.display_name}</span>}
+              {item.assigned_to_person_ids.length > 0 && <span>👤 {assigneeName}</span>}
             </div>
             {item.notes && <p className="mt-2 whitespace-pre-wrap text-xs text-muted">{item.notes}</p>}
             <ProductList
@@ -533,7 +533,7 @@ export function HomesteadRoomPage() {
               <Field label="Estimated unit cost"><Input type="number" min="0" step="0.01" value={itemForm.estimated_unit_cost} onChange={e => setItemForm(f => ({ ...f, estimated_unit_cost: e.target.value }))} placeholder="0.00" /></Field>
               <Field label="Actual total cost"><Input type="number" min="0" step="0.01" value={itemForm.actual_cost} onChange={e => setItemForm(f => ({ ...f, actual_cost: e.target.value }))} placeholder="Optional" /></Field>
             </div>
-            <Field label="Assigned to"><AssigneeSelect people={people} value={itemForm.assigned_to_person_id} onChange={value => setItemForm(f => ({ ...f, assigned_to_person_id: value }))} className={fieldClass} /></Field>
+            <Field label="Assigned to"><AssigneeSelect people={people} value={itemForm.assigned_to_person_ids} onChange={value => setItemForm(f => ({ ...f, assigned_to_person_ids: value }))} className={fieldClass} /></Field>
             <Field label="Notes"><Textarea rows={2} value={itemForm.notes} onChange={e => setItemForm(f => ({ ...f, notes: e.target.value }))} /></Field>
             <div className="flex justify-end gap-2"><Button type="button" variant="ghost" size="sm" onClick={() => setItemOpen(false)}>Cancel</Button><Button type="submit" size="sm" loading={itemSaving} disabled={!itemForm.title.trim()}>Save item</Button></div>
           </form>

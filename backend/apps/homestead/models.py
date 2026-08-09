@@ -186,8 +186,14 @@ class MaintenanceTask(CalendarSyncMixin, HouseholdBaseModel):
     provider = models.ForeignKey(
         ServiceProvider, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
     )
-    assigned_to_person = models.ForeignKey(
-        "people.Person", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    assigned_to_people = models.ManyToManyField(
+        "people.Person",
+        blank=True,
+        related_name="assigned_maintenance_tasks",
+        help_text=(
+            "Who this is for. Empty means the whole household — a household job with no "
+            "particular owner. Several people means each of them, not one of them."
+        ),
     )
     title = models.CharField(max_length=255)
     category = models.CharField(max_length=20, choices=Category.choices, default=Category.GENERAL)
@@ -255,8 +261,14 @@ class Improvement(CalendarSyncMixin, HouseholdBaseModel):
         MEDIUM = "medium", "Medium"
         HIGH = "high", "High"
 
-    assigned_to_person = models.ForeignKey(
-        "people.Person", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    assigned_to_people = models.ManyToManyField(
+        "people.Person",
+        blank=True,
+        related_name="assigned_improvements",
+        help_text=(
+            "Who this is for. Empty means the whole household — a household job with no "
+            "particular owner. Several people means each of them, not one of them."
+        ),
     )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
@@ -361,8 +373,14 @@ class RoomPlanItem(HouseholdBaseModel):
         HIGH = "high", "High"
 
     room = models.ForeignKey(RoomArea, on_delete=models.PROTECT, related_name="plan_items")
-    assigned_to_person = models.ForeignKey(
-        "people.Person", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    assigned_to_people = models.ManyToManyField(
+        "people.Person",
+        blank=True,
+        related_name="assigned_room_plan_items",
+        help_text=(
+            "Who this is for. Empty means the whole household — a household job with no "
+            "particular owner. Several people means each of them, not one of them."
+        ),
     )
     title = models.CharField(max_length=255)
     item_type = models.CharField(

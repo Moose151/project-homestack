@@ -55,12 +55,14 @@ class CalendarEvent(HouseholdBaseModel):
     source_record_type = models.CharField(max_length=100, blank=True, default="")
     source_record_id = models.PositiveBigIntegerField(null=True, blank=True)
 
-    assigned_to_person = models.ForeignKey(
+    assigned_to_people = models.ManyToManyField(
         "people.Person",
-        null=True,
         blank=True,
-        on_delete=models.SET_NULL,
-        related_name="calendar_events",
+        related_name="assigned_calendar_events",
+        help_text=(
+            "Who this is for. Empty means the whole household — a household job with no "
+            "particular owner. Several people means each of them, not one of them."
+        ),
     )
     colour = models.CharField(max_length=7, blank=True, default="")
     location = models.CharField(max_length=255, blank=True, default="")

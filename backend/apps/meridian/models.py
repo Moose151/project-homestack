@@ -92,12 +92,14 @@ class MeridianTask(CalendarSyncMixin, HouseholdBaseModel):
         on_delete=models.SET_NULL,
         related_name="tasks",
     )
-    assigned_to_person = models.ForeignKey(
+    assigned_to_people = models.ManyToManyField(
         "people.Person",
-        null=True,
         blank=True,
-        on_delete=models.SET_NULL,
         related_name="assigned_meridian_tasks",
+        help_text=(
+            "Who this is for. Empty means anyone in the household may do it. Several "
+            "people means each of them, not one of them."
+        ),
     )
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.AVAILABLE
@@ -180,7 +182,7 @@ class MeridianTask(CalendarSyncMixin, HouseholdBaseModel):
             "description": self.description,
             "recurrence_rule": self.recurrence_rule,
             "visibility": self.visibility,
-            "assigned_to_person_id": self.assigned_to_person_id,
+            "assigned_to_person_ids": list(self.assigned_to_people.values_list("id", flat=True)),
         }
 
     def get_calendar_node_key(self) -> str:
@@ -324,13 +326,13 @@ class MeridianRoutine(HouseholdBaseModel):
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     points = models.PositiveIntegerField(default=1)
-    assigned_to_person = models.ForeignKey(
+    assigned_to_people = models.ManyToManyField(
         "people.Person",
-        null=True,
         blank=True,
-        on_delete=models.SET_NULL,
         related_name="assigned_meridian_routines",
-        help_text="If set, only this person sees/completes the routine; null = everyone.",
+        help_text=(
+            "If set, only these people see/complete the routine; empty = everyone."
+        ),
     )
     is_active = models.BooleanField(default=True)
     visibility = models.CharField(

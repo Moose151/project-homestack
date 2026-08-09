@@ -64,7 +64,7 @@ class NotificationWiringTests(TestCase):
 
     def test_task_approval_notifies_child(self):
         task = meridian.create_task(self.admin, title="Tidy", points=5,
-                                    assigned_to_person_id=self.person.id)
+                                    assigned_to_people=[self.person])
         meridian.complete_task(self.admin, task, person_id=self.person.id)
         meridian.approve_task(self.admin, task)
         notes = selectors.list_for_user(self.child_user)
@@ -73,7 +73,7 @@ class NotificationWiringTests(TestCase):
     def test_badge_earned_notifies_child(self):
         # First approved task earns the "first_task" badge → a badge notification too.
         task = meridian.create_task(self.admin, title="Tidy", points=5,
-                                    assigned_to_person_id=self.person.id)
+                                    assigned_to_people=[self.person])
         meridian.complete_task(self.admin, task, person_id=self.person.id)
         meridian.approve_task(self.admin, task)
         self.assertTrue(

@@ -16,6 +16,7 @@ from django.db.models import Sum
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.core.assignment import apply_assignees, pop_assignees
 from apps.core.models import get_active_household
 from apps.meridian import events
 from apps.notifications import services as notifications
@@ -136,18 +137,21 @@ def delete_category(acting_user: User, category: MeridianCategory) -> None:
 # ---------------------------------------------------------------------------
 
 def create_task(acting_user: User, **data) -> MeridianTask:
+    people = pop_assignees(data)
     task = MeridianTask(
         household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
     )
     task.save()
+    apply_assignees(task, people)
     sync_event_for(task)
     events.task_created(task.id, task.household_id)
     return task
 
 
 def update_task(acting_user: User, task: MeridianTask, **data) -> MeridianTask:
+    people = pop_assignees(data)
     allowed = {
-        "title", "description", "points", "category_id", "assigned_to_person_id",
+        "title", "description", "points", "category_id",
         "is_hot", "hot_bonus_points", "hot_label", "due_at", "recurrence_rule", "visibility",
         "completion_behavior", "completion_scope", "availability_window",
         "is_active", "is_archived",
@@ -157,6 +161,7 @@ def update_task(acting_user: User, task: MeridianTask, **data) -> MeridianTask:
             setattr(task, key, val)
     task.updated_by = acting_user
     task.save()
+    apply_assignees(task, people)
     sync_event_for(task)
     return task
 
@@ -250,7 +255,11 @@ def submit_task_completion(
     """
     if not task.is_active or task.is_archived:
         raise MeridianError("This task is not active.")
-    person_id = person_id or task.assigned_to_person_id
+    if person_id is None:
+        # Only a sole assignee is an unambiguous "on behalf of"; with several, the caller
+        # must say which of them completed it.
+        assignees = list(task.assigned_to_people.values_list("id", flat=True))
+        person_id = assignees[0] if len(assignees) == 1 else None
     if person_id is None:
         raise MeridianError("No person to complete on behalf of.")
 
@@ -385,20 +394,24 @@ def reject_task(acting_user: User, task: MeridianTask, *, reason: str = "") -> M
 # ---------------------------------------------------------------------------
 
 def create_routine(acting_user: User, **data) -> MeridianRoutine:
+    people = pop_assignees(data)
     routine = MeridianRoutine(
         household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
     )
     routine.save()
+    apply_assignees(routine, people)
     return routine
 
 
 def update_routine(acting_user: User, routine: MeridianRoutine, **data) -> MeridianRoutine:
-    allowed = {"title", "description", "points", "assigned_to_person_id", "is_active", "visibility"}
+    people = pop_assignees(data)
+    allowed = {"title", "description", "points", "is_active", "visibility"}
     for key, val in data.items():
         if key in allowed:
             setattr(routine, key, val)
     routine.updated_by = acting_user
     routine.save()
+    apply_assignees(routine, people)
     return routine
 
 

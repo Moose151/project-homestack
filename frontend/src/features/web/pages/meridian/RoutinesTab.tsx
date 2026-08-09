@@ -3,7 +3,8 @@ import { api } from '../../../../api/client'
 import type { MeridianRoutine, Person } from '../../../../api/types'
 import { Card } from '../../../../components/Card'
 import { Button } from '../../../../components/Button'
-import { Field, Input, Select, Textarea } from '../../../../components/ui'
+import { Field, Input, Textarea } from '../../../../components/ui'
+import { AssigneeSelect, assigneeLabel } from '../../../../components/AssigneeSelect'
 import { useAuth } from '../../../auth/AuthContext'
 
 // Mirrors the legacy routines.html: daily-habit cards with done-today + streak badges and a
@@ -36,7 +37,7 @@ export function RoutinesTab({ canManage, pointsLabel }: { canManage: boolean; po
   }
   useEffect(() => { reload() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const personName = (id: number | null) => people.find(p => p.id === id)?.display_name
+  const peopleNames = (ids: number[]) => assigneeLabel(people, ids).replace('Whole family', '')
 
   if (loading) return <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
 
@@ -61,7 +62,7 @@ export function RoutinesTab({ canManage, pointsLabel }: { canManage: boolean; po
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {routines.map(r => (
             <RoutineCard key={r.id} routine={r} canManage={canManage} pointsLabel={pointsLabel}
-              canComplete={!!myPersonId} assignedName={personName(r.assigned_to_person_id)}
+              canComplete={!!myPersonId} assignedName={peopleNames(r.assigned_to_person_ids)}
               onChanged={reload} onError={setError} />
           ))}
         </div>
@@ -133,10 +134,12 @@ function RoutineCard({ routine, canManage, pointsLabel, canComplete, assignedNam
 }
 
 function NewRoutineForm({ people, onCreated }: { people: Person[]; onCreated: () => void }) {
-  const [f, setF] = useState({ title: '', points: '1', description: '', assigned_to_person_id: '' })
+  const [f, setF] = useState<{ title: string; points: string; description: string; assigned_to_person_ids: number[] }>(
+    { title: '', points: '1', description: '', assigned_to_person_ids: [] },
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const set = (k: string, v: string) => setF(prev => ({ ...prev, [k]: v }))
+  const set = (k: string, v: string | number[]) => setF(prev => ({ ...prev, [k]: v }))
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -145,7 +148,7 @@ function NewRoutineForm({ people, onCreated }: { people: Person[]; onCreated: ()
     try {
       await api.createMeridianRoutine({
         title: f.title.trim(), points: Number(f.points) || 1, description: f.description,
-        assigned_to_person_id: f.assigned_to_person_id ? Number(f.assigned_to_person_id) : null,
+        assigned_to_person_ids: f.assigned_to_person_ids,
       })
       onCreated()
     } catch (e2) {
@@ -160,10 +163,11 @@ function NewRoutineForm({ people, onCreated }: { people: Person[]; onCreated: ()
         <Field label="Routine name"><Input autoFocus placeholder="e.g. Brush teeth" value={f.title} onChange={e => set('title', e.target.value)} /></Field>
         <Field label="Points"><Input type="number" min="0" inputMode="numeric" value={f.points} onChange={e => set('points', e.target.value)} /></Field>
         <Field label="Who is it for?">
-          <Select value={f.assigned_to_person_id} onChange={e => set('assigned_to_person_id', e.target.value)}>
-            <option value="">Everyone</option>
-            {people.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}
-          </Select>
+          <AssigneeSelect
+            people={people}
+            value={f.assigned_to_person_ids}
+            onChange={ids => set('assigned_to_person_ids', ids)}
+          />
         </Field>
         <Field label="Instructions"><Textarea placeholder="Optional details that make the routine clear." value={f.description} onChange={e => set('description', e.target.value)} /></Field>
         <div className="sm:col-span-2"><Button type="submit" loading={saving} disabled={!f.title.trim()}>Create routine</Button></div>

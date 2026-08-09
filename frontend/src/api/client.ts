@@ -34,7 +34,7 @@ type CourseWrite = Partial<{
 
 type AssessmentWrite = Partial<{
   title: string; assessment_type: string; course_id: number | null
-  assigned_to_person_id: number | null; due_at: string | null; is_all_day: boolean; status: string
+  assigned_to_person_ids: number[]; due_at: string | null; is_all_day: boolean; status: string
   priority: string; weight: string; description: string; visibility: string
 }>
 
@@ -45,7 +45,7 @@ type ClassSessionWrite = Partial<{
 
 type EventWrite = Partial<{
   title: string; event_type: string; course_id: number | null; institution_id: number | null
-  assigned_to_person_id: number | null; start_at: string; end_at: string | null
+  assigned_to_person_ids: number[]; start_at: string; end_at: string | null
   is_all_day: boolean; location: string; description: string; recurrence_rule: string
   visibility: string
 }>
@@ -98,13 +98,13 @@ type ApplianceWrite = Partial<{
 }>
 
 type MaintenanceWrite = Partial<{
-  appliance_id: number | null; provider_id: number | null; assigned_to_person_id: number | null
+  appliance_id: number | null; provider_id: number | null; assigned_to_person_ids: number[]
   title: string; category: string; next_due_at: string | null; is_all_day: boolean
   recurrence_rule: string; notes: string; visibility: string
 }>
 
 type ImprovementWrite = Partial<{
-  assigned_to_person_id: number | null; title: string; description: string; status: string
+  assigned_to_person_ids: number[]; title: string; description: string; status: string
   priority: string; room: string; target_date: string | null; is_all_day: boolean
   project_ref: number | null; notes: string; visibility: string
 }>
@@ -129,7 +129,7 @@ type RoomWrite = Partial<{
 }>
 
 type RoomItemWrite = Partial<{
-  assigned_to_person_id: number | null; title: string; item_type: RoomItemType
+  assigned_to_person_ids: number[]; title: string; item_type: RoomItemType
   status: RoomItemStatus; priority: RoomItemPriority; description: string
   quantity: string; estimated_unit_cost: string; actual_cost: string | null
   notes: string; position: number; visibility: string
@@ -202,7 +202,7 @@ type InstitutionWrite = Partial<{
 
 type ItemWrite = Partial<{
   title: string; notes: string; quantity: string; position: number
-  due_at: string | null; assigned_to_person_id: number | null
+  due_at: string | null; assigned_to_person_ids: number[]
 }>
 
 type UserWrite = Partial<{
@@ -506,7 +506,7 @@ export const api = {
   },
   createMeridianTask: (data: {
     title: string; points: number; description?: string
-    assigned_to_person_id?: number | null; is_hot?: boolean; due_at?: string
+    assigned_to_person_ids?: number[]; is_hot?: boolean; due_at?: string
     hot_bonus_points?: number; hot_label?: string; category_id?: number | null
     completion_behavior?: string; completion_scope?: string; availability_window?: string
     recurrence_rule?: string
@@ -576,7 +576,7 @@ export const api = {
 
   updateMeridianTask: (id: number, data: Partial<{
     title: string; description: string; points: number; category_id: number | null
-    assigned_to_person_id: number | null; is_hot: boolean; hot_bonus_points: number
+    assigned_to_person_ids: number[]; is_hot: boolean; hot_bonus_points: number
     hot_label: string; completion_behavior: string; due_at: string | null
     completion_scope: string; recurrence_rule: string; visibility: string
     is_active: boolean; is_archived: boolean
@@ -587,7 +587,7 @@ export const api = {
   getMeridianRoutines: (personId?: number): Promise<MeridianRoutine[]> =>
     _fetch(`/meridian/routines/${personId ? `?person_id=${personId}` : ''}`),
   createMeridianRoutine: (data: {
-    title: string; points: number; description?: string; assigned_to_person_id?: number | null
+    title: string; points: number; description?: string; assigned_to_person_ids?: number[]
   }): Promise<MeridianRoutine> =>
     _fetch('/meridian/routines/', { method: 'POST', body: JSON.stringify(data) }),
   deleteMeridianRoutine: (id: number): Promise<void> =>

@@ -176,7 +176,9 @@ def get_room(pk: int, user=None) -> RoomArea | None:
 
 
 def list_room_items(user, room: RoomArea) -> list[RoomPlanItem]:
-    qs = RoomPlanItem.objects.filter(room=room).select_related("assigned_to_person")
+    qs = RoomPlanItem.objects.filter(room=room).prefetch_related(
+        "assigned_to_people", "products"
+    )
     if user is not None:
         qs = apply_visibility(qs, user)
     return list(qs.order_by("position", "-updated_at", "id"))

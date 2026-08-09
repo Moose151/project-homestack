@@ -8,6 +8,7 @@ from __future__ import annotations
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.core.assignment import apply_assignees, pop_assignees
 from apps.core.models import get_active_household
 from apps.homestead import events
 from apps.homestead.models import (
@@ -133,7 +134,7 @@ def delete_appliance(acting_user: User, obj: Appliance) -> None:
 # ---------------------------------------------------------------------------
 
 _TASK_FIELDS = {
-    "appliance_id", "provider_id", "assigned_to_person_id", "title", "category",
+    "appliance_id", "provider_id", "title", "category",
     "next_due_at", "is_all_day", "recurrence_rule", "last_done_at", "notes", "visibility",
     "solace_bill_ref",
 }
@@ -149,21 +150,25 @@ def _sync_maintenance_calendar(obj: MaintenanceTask) -> None:
 
 
 def create_maintenance(acting_user: User, **data) -> MaintenanceTask:
+    people = pop_assignees(data)
     obj = MaintenanceTask(
         household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
     )
     obj.save()
+    apply_assignees(obj, people)
     _sync_maintenance_calendar(obj)
     events.maintenance_saved(obj, acting_user.id)
     return obj
 
 
 def update_maintenance(acting_user: User, obj: MaintenanceTask, **data) -> MaintenanceTask:
+    people = pop_assignees(data)
     for key, val in data.items():
         if key in _TASK_FIELDS:
             setattr(obj, key, val)
     obj.updated_by = acting_user
     obj.save()
+    apply_assignees(obj, people)
     _sync_maintenance_calendar(obj)
     events.maintenance_saved(obj, acting_user.id)
     return obj
@@ -356,28 +361,32 @@ def organise_solace_bill(acting_user: User, *, destination: str, bill: dict):
 # ---------------------------------------------------------------------------
 
 _IMPROVEMENT_FIELDS = {
-    "assigned_to_person_id", "title", "description", "status", "priority",
+    "title", "description", "status", "priority",
     "room", "target_date", "is_all_day", "project_ref", "notes", "visibility",
 }
 
 
 def create_improvement(acting_user: User, **data) -> Improvement:
+    people = pop_assignees(data)
     obj = Improvement(
         household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
     )
     obj.save()
+    apply_assignees(obj, people)
     sync_event_for(obj)
     events.improvement_created(obj.id, obj.household_id)
     return obj
 
 
 def update_improvement(acting_user: User, obj: Improvement, **data) -> Improvement:
+    people = pop_assignees(data)
     was_open = obj.is_open
     for key, val in data.items():
         if key in _IMPROVEMENT_FIELDS:
             setattr(obj, key, val)
     obj.updated_by = acting_user
     obj.save()
+    apply_assignees(obj, people)
     sync_event_for(obj)
     if was_open and not obj.is_open:
         events.improvement_completed(obj.id, obj.household_id)
@@ -400,7 +409,7 @@ _ROOM_FIELDS = {
     "floorplan_data", "visibility",
 }
 _ROOM_ITEM_FIELDS = {
-    "assigned_to_person_id", "title", "item_type", "status", "priority", "description",
+    "title", "item_type", "status", "priority", "description",
     "quantity", "estimated_unit_cost", "actual_cost", "notes", "position",
     "visibility",
 }
@@ -437,6 +446,7 @@ def delete_room(acting_user: User, obj: RoomArea) -> None:
 def create_room_item(
     acting_user: User, room: RoomArea, **data
 ) -> RoomPlanItem:
+    people = pop_assignees(data)
     obj = RoomPlanItem(
         household=get_active_household(),
         room=room,
@@ -447,6 +457,7 @@ def create_room_item(
     if obj.status == RoomPlanItem.Status.COMPLETED:
         obj.completed_at = timezone.now()
     obj.save()
+    apply_assignees(obj, people)
     events.room_item_created(obj.id, room.id, obj.household_id)
     return obj
 
@@ -454,6 +465,7 @@ def create_room_item(
 def update_room_item(
     acting_user: User, obj: RoomPlanItem, **data
 ) -> RoomPlanItem:
+    people = pop_assignees(data)
     previous_status = obj.status
     for key, value in data.items():
         if key in _ROOM_ITEM_FIELDS:
@@ -464,6 +476,7 @@ def update_room_item(
         obj.completed_at = None
     obj.updated_by = acting_user
     obj.save()
+    apply_assignees(obj, people)
     if previous_status != RoomPlanItem.Status.COMPLETED and obj.status == RoomPlanItem.Status.COMPLETED:
         events.room_item_completed(obj.id, obj.room_id, obj.household_id)
     return obj

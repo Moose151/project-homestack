@@ -6,6 +6,7 @@ calendar via the scheduling helper only (D7) — never CalendarEvent.objects dir
 from __future__ import annotations
 
 from apps.accounts.models import User
+from apps.core.assignment import apply_assignees, pop_assignees
 from apps.core.models import get_active_household
 from apps.education import events
 from apps.education.models import (
@@ -22,16 +23,16 @@ from apps.notifications import services as notifications
 from apps.scheduling.helpers import delete_event_for, sync_event_for
 
 
-def _notify_assigned(acting_user: User, person_id, *, title: str, message: str, action_url: str = "") -> None:
-    """Notify the person an item is assigned to, unless they are the acting user (D12)."""
-    if not person_id:
-        return
+def _notify_assigned(acting_user: User, person_ids, *, title: str, message: str, action_url: str = "") -> None:
+    """Notify everyone an item is assigned to, skipping the acting user (D12)."""
     linked = getattr(acting_user, "person_profile", None)
-    if linked is not None and linked.id == person_id:
-        return  # don't notify yourself about your own item
-    notifications.notify_person_id(
-        person_id, title=title, message=message, source_node="education", action_url=action_url,
-    )
+    for person_id in person_ids or []:
+        if linked is not None and linked.id == person_id:
+            continue  # don't notify yourself about your own item
+        notifications.notify_person_id(
+            person_id, title=title, message=message, source_node="education",
+            action_url=action_url,
+        )
 
 # ---------------------------------------------------------------------------
 # Institutions
@@ -101,20 +102,22 @@ def delete_course(acting_user: User, obj: EducationCourse) -> None:
 # ---------------------------------------------------------------------------
 
 _ASSESSMENT_FIELDS = {
-    "title", "assessment_type", "course_id", "assigned_to_person_id", "due_at", "is_all_day",
+    "title", "assessment_type", "course_id", "due_at", "is_all_day",
     "status", "priority", "weight", "description", "visibility", "sensitivity",
 }
 
 
 def create_assessment(acting_user: User, **data) -> EducationAssessment:
+    people = pop_assignees(data)
     obj = EducationAssessment(
         household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
     )
     obj.save()
+    apply_assignees(obj, people)
     sync_event_for(obj)
     events.assessment_created(obj.id, obj.household_id)
     _notify_assigned(
-        acting_user, obj.assigned_to_person_id,
+        acting_user, list(obj.assigned_to_people.values_list("id", flat=True)),
         title="New assignment",
         message=f"{obj.get_assessment_type_display()}: {obj.title}",
         action_url="/education",
@@ -123,12 +126,14 @@ def create_assessment(acting_user: User, **data) -> EducationAssessment:
 
 
 def update_assessment(acting_user: User, obj: EducationAssessment, **data) -> EducationAssessment:
+    people = pop_assignees(data)
     was_complete = obj.is_complete
     for key, val in data.items():
         if key in _ASSESSMENT_FIELDS:
             setattr(obj, key, val)
     obj.updated_by = acting_user
     obj.save()
+    apply_assignees(obj, people)
     sync_event_for(obj)
     if obj.is_complete and not was_complete:
         events.assessment_completed(obj.id, obj.household_id)
@@ -247,20 +252,22 @@ def delete_class_session(acting_user: User, obj: EducationClassSession) -> None:
 # ---------------------------------------------------------------------------
 
 _EVENT_FIELDS = {
-    "title", "event_type", "course_id", "institution_id", "assigned_to_person_id",
+    "title", "event_type", "course_id", "institution_id",
     "start_at", "end_at", "is_all_day", "location", "description", "recurrence_rule", "visibility",
 }
 
 
 def create_event(acting_user: User, **data) -> EducationEvent:
+    people = pop_assignees(data)
     obj = EducationEvent(
         household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
     )
     obj.save()
+    apply_assignees(obj, people)
     sync_event_for(obj)
     events.school_event_created(obj.id, obj.household_id)
     _notify_assigned(
-        acting_user, obj.assigned_to_person_id,
+        acting_user, list(obj.assigned_to_people.values_list("id", flat=True)),
         title="New education event",
         message=f"{obj.get_event_type_display()}: {obj.title}",
         action_url="/education",
@@ -269,11 +276,13 @@ def create_event(acting_user: User, **data) -> EducationEvent:
 
 
 def update_event(acting_user: User, obj: EducationEvent, **data) -> EducationEvent:
+    people = pop_assignees(data)
     for key, val in data.items():
         if key in _EVENT_FIELDS:
             setattr(obj, key, val)
     obj.updated_by = acting_user
     obj.save()
+    apply_assignees(obj, people)
     sync_event_for(obj)
     return obj
 

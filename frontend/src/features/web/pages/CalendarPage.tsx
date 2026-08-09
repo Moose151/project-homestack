@@ -75,7 +75,7 @@ function EventModal({
   event: CalendarEvent | null
   defaultDate: Date | null
   people: Person[]
-  defaultAssignee: number | null
+  defaultAssignee: number[]
   onClose: () => void
   onSaved: () => void
   onError: (m: string) => void
@@ -89,12 +89,12 @@ function EventModal({
     is_all_day: event?.is_all_day ?? false,
     location: event?.location ?? '',
     colour: event?.colour ?? '',
-    assigned_to_person_id: event ? (event.assigned_to_person_id ?? 0) : (defaultAssignee ?? 0),
+    assigned_to_person_ids: event ? event.assigned_to_person_ids : defaultAssignee,
     visibility: event?.visibility ?? 'household',
   })
   // Reveal advanced fields automatically when editing an event that already uses them.
   const [showMore, setShowMore] = useState(
-    !!(event && (event.end_at || event.location || event.assigned_to_person_id || event.colour || event.visibility === 'private')),
+    !!(event && (event.end_at || event.location || event.assigned_to_person_ids.length > 0 || event.colour || event.visibility === 'private')),
   )
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: unknown) => setF(prev => ({ ...prev, [k]: v }))
@@ -110,7 +110,7 @@ function EventModal({
         is_all_day: f.is_all_day,
         location: f.location,
         colour: f.colour,
-        assigned_to_person_id: f.assigned_to_person_id || null,
+        assigned_to_person_ids: f.assigned_to_person_ids,
         visibility: f.visibility,
       }
       if (event) await api.updateEvent(event.id, payload)
@@ -201,8 +201,8 @@ function EventModal({
             <div className="grid grid-cols-2 gap-2">
               <Field label="Assigned to">
                 <AssigneeSelect people={people}
-                  value={f.assigned_to_person_id || null}
-                  onChange={v => set('assigned_to_person_id', v ?? 0)} />
+                  value={f.assigned_to_person_ids || null}
+                  onChange={v => set('assigned_to_person_ids', v ?? 0)} />
               </Field>
               <Field label="Visibility">
                 <Select value={f.visibility} onChange={e => set('visibility', e.target.value)}>
@@ -726,7 +726,7 @@ export function CalendarPage() {
   const visibleEvents = useMemo(
     () => events.filter(e => {
       if (hiddenSources.has(e.source_node || '__direct__')) return false
-      if (myOnly && defaultAssignee && e.assigned_to_person_id !== defaultAssignee) return false
+      if (myOnly && defaultAssignee && e.assigned_to_person_ids !== defaultAssignee) return false
       return true
     }),
     [events, hiddenSources, myOnly, defaultAssignee],
@@ -736,8 +736,8 @@ export function CalendarPage() {
   // whole-family (unassigned) uses the household family colour.
   const colourFor = (e: CalendarEvent) => {
     if (e.colour) return e.colour
-    if (e.assigned_to_person_id)
-      return personColour[e.assigned_to_person_id]
+    if (e.assigned_to_person_ids.length > 0)
+      return personColour[e.assigned_to_person_ids[0]]
         || (e.source_node ? sourceColour(e.source_node) : '') || DEFAULT_COLOUR
     return familyColour
   }
@@ -757,7 +757,7 @@ export function CalendarPage() {
     () => rotations.filter(occurrence => {
       if (hiddenSources.has('__rotation__')) return false
       if (personFilter && occurrence.person_ids.length > 0 && !occurrence.person_ids.includes(personFilter)) return false
-      if (myOnly && defaultAssignee && !occurrence.person_ids.includes(defaultAssignee)) return false
+      if (myOnly && defaultAssignee.length > 0 && !defaultAssignee.some(id => occurrence.person_ids.includes(id))) return false
       return true
     }),
     [rotations, hiddenSources, personFilter, myOnly, defaultAssignee],
@@ -847,7 +847,7 @@ export function CalendarPage() {
         title: p.title,
         start_at: p.startISO,
         is_all_day: p.allDay,
-        assigned_to_person_id: defaultAssignee || undefined,
+        assigned_to_person_ids: defaultAssignee || undefined,
       })
       reload()
     } catch (e) { setError(errMsg(e)) }

@@ -3,11 +3,13 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from apps.core.serializers import AssigneeSerializerMixin
+
 from apps.people.models import Person
 from apps.scheduling.models import CalendarEvent, RotatingSchedule, RotatingScheduleException
 
 
-class CalendarEventSerializer(serializers.ModelSerializer):
+class CalendarEventSerializer(AssigneeSerializerMixin, serializers.ModelSerializer):
     is_synced = serializers.BooleanField(read_only=True)
     source_node = serializers.SerializerMethodField()
 
@@ -26,7 +28,7 @@ class CalendarEventSerializer(serializers.ModelSerializer):
             "source_node_id",
             "source_record_type",
             "source_record_id",
-            "assigned_to_person_id",
+            "assigned_to_person_ids",
             "colour",
             "location",
             "visibility",
@@ -51,7 +53,7 @@ class CalendarEventSerializer(serializers.ModelSerializer):
         return obj.source_node.key if obj.source_node_id else None
 
 
-class CalendarEventWriteSerializer(serializers.ModelSerializer):
+class CalendarEventWriteSerializer(AssigneeSerializerMixin, serializers.ModelSerializer):
     """Accepts writes for standalone events only. Synced events are immutable via API."""
 
     class Meta:
@@ -64,7 +66,7 @@ class CalendarEventWriteSerializer(serializers.ModelSerializer):
             "is_all_day",
             "timezone",
             "recurrence_rule",
-            "assigned_to_person_id",
+            "assigned_to_person_ids",
             "colour",
             "location",
             "visibility",

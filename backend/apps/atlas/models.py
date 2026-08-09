@@ -93,12 +93,14 @@ class AtlasListItem(HouseholdBaseModel):
     quantity = models.CharField(max_length=50, blank=True, default="")  # grocery/shopping (e.g. "2", "500g")
     position = models.PositiveIntegerField(default=0)
     due_at = models.DateTimeField(null=True, blank=True)
-    assigned_to_person = models.ForeignKey(
+    assigned_to_people = models.ManyToManyField(
         "people.Person",
-        null=True,
         blank=True,
-        on_delete=models.SET_NULL,
         related_name="assigned_list_items",
+        help_text=(
+            "Who this is for. Empty means the whole household — a household job with no "
+            "particular owner. Several people means each of them, not one of them."
+        ),
     )
     completed_at = models.DateTimeField(null=True, blank=True)
     completed_by = models.ForeignKey(

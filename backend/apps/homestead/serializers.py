@@ -5,6 +5,8 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
+from apps.core.serializers import AssigneeSerializerMixin
+
 from apps.homestead.models import (
     Appliance,
     HouseholdCost,
@@ -83,17 +85,16 @@ class ApplianceSerializer(serializers.ModelSerializer):
         return _non_blank(value)
 
 
-class MaintenanceTaskSerializer(serializers.ModelSerializer):
+class MaintenanceTaskSerializer(AssigneeSerializerMixin, serializers.ModelSerializer):
     # DRF treats a bare `<fk>_id` in `fields` as read-only; declare it so writes land.
     appliance_id = serializers.IntegerField(required=False, allow_null=True)
     provider_id = serializers.IntegerField(required=False, allow_null=True)
-    assigned_to_person_id = serializers.IntegerField(required=False, allow_null=True)
     is_overdue = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = MaintenanceTask
         fields = [
-            "id", "appliance_id", "provider_id", "assigned_to_person_id",
+            "id", "appliance_id", "provider_id", "assigned_to_person_ids",
             "title", "category", "next_due_at", "is_all_day", "recurrence_rule",
             "last_done_at", "notes", "solace_bill_ref", "is_overdue", "calendar_event_id", "visibility",
             "created_at", "updated_at",
@@ -114,14 +115,13 @@ class MaintenanceCostRequestSerializer(serializers.Serializer):
         return _non_blank(value)
 
 
-class ImprovementSerializer(serializers.ModelSerializer):
-    assigned_to_person_id = serializers.IntegerField(required=False, allow_null=True)
+class ImprovementSerializer(AssigneeSerializerMixin, serializers.ModelSerializer):
     is_open = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Improvement
         fields = [
-            "id", "assigned_to_person_id", "title", "description", "status",
+            "id", "assigned_to_person_ids", "title", "description", "status",
             "priority", "room", "target_date", "is_all_day", "project_ref", "notes",
             "is_open", "calendar_event_id", "visibility", "created_at", "updated_at",
         ]
@@ -192,9 +192,8 @@ class RoomPlanProductSerializer(serializers.ModelSerializer):
         return _web_url(value)
 
 
-class RoomPlanItemSerializer(serializers.ModelSerializer):
+class RoomPlanItemSerializer(AssigneeSerializerMixin, serializers.ModelSerializer):
     room_id = serializers.IntegerField(read_only=True)
-    assigned_to_person_id = serializers.IntegerField(required=False, allow_null=True)
     estimated_total = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
     effective_cost = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
     products = RoomPlanProductSerializer(many=True, read_only=True)
@@ -202,7 +201,7 @@ class RoomPlanItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoomPlanItem
         fields = [
-            "id", "room_id", "assigned_to_person_id", "title", "item_type", "status",
+            "id", "room_id", "assigned_to_person_ids", "title", "item_type", "status",
             "priority", "description", "quantity", "estimated_unit_cost", "estimated_total",
             "actual_cost", "effective_cost", "notes", "position",
             "completed_at", "visibility", "products", "created_at", "updated_at",

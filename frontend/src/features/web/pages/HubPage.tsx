@@ -32,7 +32,6 @@ import { Button } from '../../../components/Button'
 import { HubConfig } from './HubConfig'
 import { useAuth } from '../../auth/AuthContext'
 import { STACK_BY_KEY, softColour } from '../../../config/stacks'
-import { PageHeader } from '../../../components/PageHeader'
 import { InlineAlert, PageSkeleton } from '../../../components/PageState'
 
 // Spans are chosen so a board of same-size widgets tiles a row exactly and leaves no dead
@@ -813,13 +812,16 @@ export function HubPage() {
     now.getHours() < 12 ? 'Good morning' : now.getHours() < 18 ? 'Good afternoon' : 'Good evening'
   return (
     <div className="flex flex-col gap-5 sm:gap-6">
-      <PageHeader
-        title={`${greeting}${user ? `, ${user.display_name}` : ''}`}
-        subtitle={now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
-        icon="🏡"
-        mobile="show"
-        actions={<Button variant="secondary" size="sm" onClick={() => setConfiguring(c => !c)}>{configuring ? 'Done tuning' : 'Tune this page'}</Button>}
-      />
+      {/* The top bar already says "Home", so this is a greeting line rather than a second
+          page header repeating the destination name. */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-muted-strong">
+          {greeting}{user ? `, ${user.display_name}` : ''} · {now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+        </p>
+        <Button variant="secondary" size="sm" onClick={() => setConfiguring(c => !c)}>
+          {configuring ? 'Done tuning' : 'Tune this page'}
+        </Button>
+      </div>
 
       {error && <InlineAlert message={error} onRetry={loadHub} onDismiss={() => setError(null)} />}
 

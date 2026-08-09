@@ -79,7 +79,7 @@ def list_assessments(
     if course_id is not None:
         qs = qs.filter(course_id=course_id)
     if person_id is not None:
-        qs = qs.filter(assigned_to_person_id=person_id)
+        qs = qs.filter(assigned_to_people__id=person_id).distinct()
     if user is not None:
         qs = apply_visibility(qs, user)
     if limit is not None:
@@ -165,7 +165,7 @@ def list_events(
     if course_id is not None:
         qs = qs.filter(course_id=course_id)
     if person_id is not None:
-        qs = qs.filter(assigned_to_person_id=person_id)
+        qs = qs.filter(assigned_to_people__id=person_id).distinct()
     if user is not None:
         qs = apply_visibility(qs, user)
     if limit is not None:

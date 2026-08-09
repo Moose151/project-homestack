@@ -18,7 +18,9 @@ class AtlasListAdmin(admin.ModelAdmin):
 
 @admin.register(AtlasListItem)
 class AtlasListItemAdmin(admin.ModelAdmin):
-    list_display = ["title", "atlas_list", "is_complete", "assigned_to_person", "position"]
+    # A M2M cannot appear in list_display; assignees are edited on the detail page.
+    list_display = ["title", "atlas_list", "is_complete", "position"]
+    filter_horizontal = ["assigned_to_people"]
     list_filter = ["atlas_list"]
     search_fields = ["title"]
 

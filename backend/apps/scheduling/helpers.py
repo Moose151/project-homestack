@@ -57,8 +57,10 @@ def sync_event_for(record) -> None:
         "source_record_id": record.pk,
         "updated_by": getattr(record, "updated_by", None),
     }
-    if "assigned_to_person_id" in data:
-        event_fields["assigned_to_person_id"] = data["assigned_to_person_id"]
+    # Assignees are a many-to-many, so they cannot go in the field dict — they are applied
+    # after the row exists. `None` means "the record did not say", which leaves whatever the
+    # event already had; an empty list means "assigned to nobody in particular".
+    person_ids = data.get("assigned_to_person_ids") if "assigned_to_person_ids" in data else None
 
     existing_id = getattr(record, "calendar_event_id", None)
     if existing_id:
@@ -68,12 +70,16 @@ def sync_event_for(record) -> None:
                 if key != "household":
                     setattr(event, key, val)
             event.save()
+            if person_ids is not None:
+                event.assigned_to_people.set(person_ids)
             return
         except CalendarEvent.DoesNotExist:
             pass  # create a fresh event below
 
     event_fields["created_by"] = getattr(record, "created_by", None)
     event = CalendarEvent.objects.create(**event_fields)
+    if person_ids:
+        event.assigned_to_people.set(person_ids)
 
     # Write calendar_event_id back without triggering service-layer save hooks.
     type(record).objects.filter(pk=record.pk).update(calendar_event_id=event.pk)

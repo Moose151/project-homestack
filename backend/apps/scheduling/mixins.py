@@ -23,7 +23,7 @@ class CalendarSyncMixin:
     ------------------------------
     Required:  title (str), start_at (datetime)
     Optional:  end_at, is_all_day, description, recurrence_rule,
-               visibility, sensitivity, colour, assigned_to_person_id
+               visibility, sensitivity, colour, assigned_to_person_ids (list)
     """
 
     def get_calendar_data(self) -> dict | None:

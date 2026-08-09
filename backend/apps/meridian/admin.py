@@ -16,7 +16,9 @@ class MeridianCategoryAdmin(admin.ModelAdmin):
 
 @admin.register(MeridianTask)
 class MeridianTaskAdmin(admin.ModelAdmin):
-    list_display = ("title", "status", "points", "is_hot", "assigned_to_person", "due_at")
+    # A M2M cannot appear in list_display; assignees are edited on the detail page.
+    list_display = ("title", "status", "points", "is_hot", "due_at")
+    filter_horizontal = ("assigned_to_people",)
     list_filter = ("status", "is_hot")
     search_fields = ("title", "description")
 

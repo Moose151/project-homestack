@@ -21,7 +21,8 @@ def list_events(
     """Events the user may see, optionally windowed and filtered (D10).
 
     start/end: datetime window over ``start_at`` ([start, end)). node: source node key.
-    person: ``assigned_to_person_id``. Permission filter is applied last.
+    person: matches an event assigned to that person among any of its assignees.
+    Permission filter is applied last.
     """
     qs = CalendarEvent.objects.order_by("start_at")
     if upcoming_only:
@@ -34,7 +35,7 @@ def list_events(
     if node:
         qs = qs.filter(source_node__key=node)
     if person:
-        qs = qs.filter(assigned_to_person_id=person)
+        qs = qs.filter(assigned_to_people__id=person).distinct()
     if user is not None:
         qs = apply_visibility(qs, user)
     if not sensitive_unlocked:

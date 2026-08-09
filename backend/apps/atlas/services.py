@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.atlas.models import AtlasList, AtlasListItem, AtlasNote, AtlasReminder
+from apps.core.assignment import apply_assignees, pop_assignees
 from apps.core.models import get_active_household
 from apps.scheduling.helpers import delete_event_for, sync_event_for
 
@@ -72,6 +73,7 @@ def delete_atlas_list(acting_user: User, atlas_list: AtlasList) -> None:
 # ---------------------------------------------------------------------------
 
 def create_list_item(acting_user: User, atlas_list: AtlasList, **data) -> AtlasListItem:
+    people = pop_assignees(data)
     household = get_active_household()
     item = AtlasListItem(
         household=household,
@@ -81,16 +83,19 @@ def create_list_item(acting_user: User, atlas_list: AtlasList, **data) -> AtlasL
         **data,
     )
     item.save()
+    apply_assignees(item, people)
     return item
 
 
 def update_list_item(acting_user: User, item: AtlasListItem, **data) -> AtlasListItem:
-    allowed = {"title", "notes", "quantity", "position", "due_at", "assigned_to_person_id"}
+    people = pop_assignees(data)
+    allowed = {"title", "notes", "quantity", "position", "due_at"}
     for key, val in data.items():
         if key in allowed:
             setattr(item, key, val)
     item.updated_by = acting_user
     item.save()
+    apply_assignees(item, people)
     return item
 
 
