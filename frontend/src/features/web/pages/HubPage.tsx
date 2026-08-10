@@ -25,6 +25,7 @@ import type {
   SolacePurchase,
   SolaceSubscription,
   UpcomingHorizon,
+  FitnessSession,
 } from '../../../api/types'
 import { sourceColour, sourceLabel, sourcePath } from '../../../lib/sourceLinks'
 import { Card } from '../../../components/Card'
@@ -53,6 +54,7 @@ function widgetAccent(key: string): { colour: string; icon: string } {
   if (key.startsWith('pets')) return pick('pets')
   if (key.startsWith('homestead')) return pick('homestead')
   if (key.startsWith('solace')) return pick('solace')
+  if (key.startsWith('fitness')) return pick('fitness')
   if (key === 'calendar_upcoming' || key === 'upcoming') return pick('calendar')
   return { colour: STACK_BY_KEY.hub.colour, icon: '' } // clock, greeting, other core widgets
 }
@@ -617,6 +619,24 @@ function SolacePurchasesWidget({ items }: { items: SolacePurchase[] }) {
   )
 }
 
+function FitnessRecentWidget({ items }: { items: FitnessSession[] }) {
+  return (
+    <ul className="space-y-2.5">
+      {items.slice(0, 6).map(session => (
+        <li key={session.id} className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-ink">{session.person_name} · {session.name}</p>
+            <p className="text-xs text-muted">{Math.round((session.duration_seconds || 0) / 60)} min · {session.total_reps} reps</p>
+          </div>
+          <Link to="/fitness?tab=history" className="shrink-0 text-xs font-semibold text-primary hover:underline">
+            {session.personal_records.length ? `🏆 ${session.personal_records.length}` : 'View'}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function moneyLabel(value: string | number) {
   return Number(value || 0).toLocaleString(undefined, { style: 'currency', currency: 'AUD' })
 }
@@ -786,6 +806,8 @@ function renderWidget(w: HubWidget, onChanged: () => void) {
       return <SolaceSubscriptionsWidget items={w.items as SolaceSubscription[]} />
     case 'solace_planned_purchases':
       return <SolacePurchasesWidget items={w.items as SolacePurchase[]} />
+    case 'fitness_recent':
+      return <FitnessRecentWidget items={w.items as FitnessSession[]} />
     default:
       return <p className="text-sm text-muted">Nothing to show</p>
   }

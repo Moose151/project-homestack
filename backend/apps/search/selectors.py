@@ -117,6 +117,15 @@ def search_all(request, query: str, *, per_node_limit: int = 8) -> dict:
             *[_result("homestead", "room_item", row, row.title, row.room.name, f"/homestead/rooms/{row.room_id}") for row in found["room_items"]],
         ])
 
+    if allowed("fitness"):
+        from apps.fitness import selectors
+        found = selectors.search_fitness(user, query)
+        add_node([
+            *[_result("fitness", "exercise", row, row.name, row.muscle_group or row.get_exercise_type_display(), f"/fitness?tab=exercises&q={encoded}") for row in found["exercises"]],
+            *[_result("fitness", "program", row, row.name, "Training program", "/fitness?tab=programs") for row in found["programs"]],
+            *[_result("fitness", "session", row, row.name, row.person.name, "/fitness?tab=history") for row in found["sessions"]],
+        ])
+
     if allowed("solace"):
         if not unlocked:
             locked_nodes.append("solace")

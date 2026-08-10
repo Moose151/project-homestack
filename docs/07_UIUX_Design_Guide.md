@@ -51,7 +51,7 @@ Each person has a colour used across Calendar and Hub. Each node may have an ico
 colour, but the global HomeStack design language stays consistent. Suggested node accents:
 Atlas blue · Home Wiki warm neutral · Pets green · Education purple · Inventory teal · Assets
 slate · Hearth orange/red · Travel sky blue · Projects amber · Health red/pink · Meridian gold
-· Solace teal/green · Homestead warm terracotta · Home Assistant blue.
+· Solace teal/green · Homestead warm terracotta · Home Assistant blue · Fitness coral/red.
 
 ## 7. Layouts
 

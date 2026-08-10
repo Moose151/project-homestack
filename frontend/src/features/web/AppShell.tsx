@@ -42,6 +42,7 @@ const MOBILE_PRIMARY_SLOTS = 4
 const MOBILE_DEFAULT_PRIORITY = [
   'hub', 'calendar', 'atlas', 'homestead', 'pets', 'home_wiki',
   'education', 'books', 'meridian', 'solace',
+  'fitness',
 ]
 
 const EMOJI_OPTS = ['🐱','🐶','🦊','🐼','🐻','🦋','🦄','🐸','🐳','🌻','🌙','⭐','🎸','🎮','🏄','🍕','🎩','🔮','🌈','🦅']

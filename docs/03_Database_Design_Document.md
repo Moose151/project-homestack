@@ -75,7 +75,7 @@ Per-user overrides consumed by the central resolver (Architecture §7).
 `id`, `key`, `name`, `description`, `icon`, `is_core`, `is_enabled_by_default`,
 `requires_setup`, `supports_kiosk`, `supports_sensitive_lock`, timestamps.
 Keys: atlas, home_wiki, pets, education, inventory, assets, hearth, travel, projects, health,
-meridian, solace.
+fitness, meridian, solace.
 
 ### household_nodes
 `id`, `household_id`, `node_id`, `is_enabled`, `is_hidden`, `requires_reauthentication`,

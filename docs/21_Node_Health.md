@@ -16,8 +16,7 @@ manage?"* **Security outranks convenience here.** All records are sensitive by d
 immunisation records, prescription renewals, test-result documents, provider details, medical
 notes.
 **Not:** pet health → Pets; general reminders → Atlas; school events → Education; (documents may
-live in Documents/Attachments but link to Health); fitness goals → future, kept out of Health
-V1.
+live in Documents/Attachments but link to Health); workouts and fitness goals → Fitness (D24).
 
 ## 3. Primary users
 

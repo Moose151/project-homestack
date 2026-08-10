@@ -25,7 +25,8 @@ Security maturation
 includes the shared permission-checked attachment service, audited sensitive downloads, non-public
 file storage and five-minute password elevation.
 Production Solace import/comparison remains pending until the home-server environment is available.
-Home Assistant is now an important planned dedicated bridge (Roadmap M5.5/D22), sequenced after
+Fitness & Training now supports shared programs, live editable workouts and personal records while
+remaining separate from sensitive medical Health (D24). Home Assistant is now an important planned dedicated bridge (Roadmap M5.5/D22), sequenced after
 the household pilot, remaining security maturation and Solace cutover validation.
 See [`HANDOVER.md`](HANDOVER.md).
 

@@ -16,6 +16,7 @@ const PetsPage = lazy(() => import('./features/web/pages/PetsPage').then(m => ({
 const HomesteadPage = lazy(() => import('./features/web/pages/HomesteadPage').then(m => ({ default: m.HomesteadPage })))
 const HomesteadRoomPage = lazy(() => import('./features/web/pages/HomesteadRoomPage').then(m => ({ default: m.HomesteadRoomPage })))
 const SolacePage = lazy(() => import('./features/web/pages/SolacePage').then(m => ({ default: m.SolacePage })))
+const FitnessPage = lazy(() => import('./features/web/pages/FitnessPage').then(m => ({ default: m.FitnessPage })))
 const UsersPage = lazy(() => import('./features/web/pages/UsersPage').then(m => ({ default: m.UsersPage })))
 const SettingsPage = lazy(() => import('./features/web/pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
 const KioskApp = lazy(() => import('./features/kiosk/KioskApp').then(m => ({ default: m.KioskApp })))
@@ -55,6 +56,7 @@ function WebRoutes({ isAdmin }: { isAdmin: boolean }) {
         <Route path="/homestead" element={<NodeRoute nodeKey="homestead"><Deferred><HomesteadPage /></Deferred></NodeRoute>} />
         <Route path="/homestead/rooms/:roomId" element={<NodeRoute nodeKey="homestead"><Deferred><HomesteadRoomPage /></Deferred></NodeRoute>} />
         <Route path="/solace" element={<NodeRoute nodeKey="solace"><Deferred><SolacePage /></Deferred></NodeRoute>} />
+        <Route path="/fitness" element={<NodeRoute nodeKey="fitness"><Deferred><FitnessPage /></Deferred></NodeRoute>} />
         {isAdmin && <Route path="/users" element={<Deferred><UsersPage /></Deferred>} />}
         {isAdmin && <Route path="/settings" element={<Deferred><SettingsPage /></Deferred>} />}
         <Route path="*" element={<Navigate to="/hub" replace />} />

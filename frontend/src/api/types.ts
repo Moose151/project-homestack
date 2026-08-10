@@ -442,7 +442,7 @@ export interface HubWidget {
   name: string
   size: string
   supports_kiosk: boolean
-  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | PetTreatment[] | PetAppointment[] | MaintenanceTask[] | Appliance[] | Improvement[] | SolaceBill[] | SolaceSubscription[] | SolacePurchase[] | AppNotification[]
+  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | PetTreatment[] | PetAppointment[] | MaintenanceTask[] | Appliance[] | Improvement[] | SolaceBill[] | SolaceSubscription[] | SolacePurchase[] | FitnessSession[] | AppNotification[]
   meta?: {
     unread_count?: number
     title?: string
@@ -1491,6 +1491,73 @@ export interface Household {
   calendar_time_format: '12h' | '24h'
   created_at: string
   updated_at: string
+}
+
+// ---------------------------------------------------------------------------
+// Fitness & training
+// ---------------------------------------------------------------------------
+
+export type FitnessMeasurement = 'reps_weight' | 'reps_only' | 'duration' | 'distance_time'
+export type FitnessExerciseType = 'strength' | 'running' | 'swimming' | 'cycling' | 'cardio' | 'mobility' | 'sport'
+
+export interface FitnessExercise {
+  id: number; name: string; exercise_type: FitnessExerciseType; muscle_group: string
+  measurement: FitnessMeasurement; weight_unit: string; distance_unit: string
+  is_system: boolean; is_archived: boolean; notes: string; created_at: string; updated_at: string
+}
+
+export interface FitnessWorkoutExercise {
+  id: number; exercise: FitnessExercise; position: number; target_sets: number
+  target_reps: number | null; target_weight: string | null; target_duration_seconds: number | null
+  target_distance: string | null; rest_seconds: number | null; notes: string
+}
+
+export interface FitnessProgramWorkout {
+  id: number; name: string; position: number; notes: string; exercises: FitnessWorkoutExercise[]
+}
+
+export interface FitnessProgram {
+  id: number; name: string; description: string; visibility: 'private' | 'household'; is_archived: boolean
+  workouts: FitnessProgramWorkout[]
+  assignments: Array<{ id: number; person_id: number; person_name: string; is_active: boolean }>
+  created_at: string; updated_at: string
+}
+
+export interface FitnessSessionSet {
+  id: number; position: number; reps: number | null; weight: string | null
+  duration_seconds: number | null; distance: string; is_completed: boolean; completed_at: string | null
+}
+
+export interface FitnessLastPerformanceSet {
+  reps: number | null; weight: string | null; duration_seconds: number | null; distance: string
+}
+
+export interface FitnessLastPerformance {
+  session_name: string; performed_at: string; sets: FitnessLastPerformanceSet[]
+}
+
+export interface FitnessSessionExercise {
+  id: number; exercise: FitnessExercise; position: number; status: 'active' | 'dropped'
+  notes: string; sets: FitnessSessionSet[]
+  /** What this person last completed for the exercise; the sets are prefilled from it. */
+  last_performance: FitnessLastPerformance | null
+}
+
+export interface FitnessRecord {
+  id: number; person_id: number; person_name: string; exercise_id: number; exercise_name: string
+  exercise_type: FitnessExerciseType
+  kind: 'max_weight' | 'estimated_1rm' | 'max_reps' | 'fastest_time' | 'longest_distance'
+  value: string; distance: string; weight_unit: string; distance_unit: string
+  session_id: number; achieved_at: string
+}
+
+export interface FitnessSession {
+  id: number; person_id: number; person_name: string; program_id: number | null; program_name: string
+  source_workout_id: number | null; name: string; status: 'active' | 'completed' | 'abandoned'
+  started_at: string; finished_at: string | null; duration_seconds: number | null
+  total_reps: number; total_volume: string; notes: string; visibility: 'private' | 'household'
+  exercises: FitnessSessionExercise[]; personal_records: FitnessRecord[]
+  created_at: string; updated_at: string
 }
 
 // ---------------------------------------------------------------------------

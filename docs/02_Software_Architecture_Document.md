@@ -87,7 +87,7 @@ backend/
     core/  accounts/  people/  permissions/  nodes/  hub/  scheduling/
     notifications/  attachments/  audit/  search/  backups/  events/
     atlas/  home_wiki/  pets/  education/  inventory/  assets/  hearth/
-    travel/  projects/  health/  meridian/  solace/  homestead/  home_assistant/
+    travel/  projects/  health/  fitness/  meridian/  solace/  homestead/  home_assistant/
 ```
 
 ## 6. The base model (D1, D12, D17)

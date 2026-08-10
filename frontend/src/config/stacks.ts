@@ -25,6 +25,7 @@ export const STACKS: StackDef[] = [
   { key: 'pets', label: 'Pets', navLabel: 'Pets', shortLabel: 'Pets', description: 'Care, treatments and appointments', navGroup: 'household', route: '/pets', icon: '🐾', colour: '#d9642c', isNode: true },
   { key: 'homestead', label: 'Homestead', navLabel: 'Our home', shortLabel: 'Our home', description: 'Rooms, upkeep and services', navGroup: 'household', route: '/homestead', icon: '🏠', colour: '#b0563c', isNode: true },
   { key: 'meridian', label: 'Meridian', navLabel: 'Tasks & rewards', shortLabel: 'Tasks', description: 'Family jobs, points and goals', navGroup: 'household', route: '/meridian', icon: '⭐', colour: '#d98324', isNode: true },
+  { key: 'fitness', label: 'Fitness', navLabel: 'Fitness & training', shortLabel: 'Fitness', description: 'Programs, workouts and personal bests', navGroup: 'household', route: '/fitness', icon: '🏋️', colour: '#e0564a', isNode: true },
   { key: 'solace', label: 'Solace', navLabel: 'Money', shortLabel: 'Money', description: 'Bills, pay cycles and plans', navGroup: 'money', route: '/solace', icon: '💸', colour: '#8f4e38', isNode: true },
 ]
 

@@ -239,6 +239,25 @@ Inventory, Assets, Hearth, Travel, Projects, Health endpoints follow the same pa
 their node specs (CRUD + node-specific actions), each behind the central permission layer.
 Health is fully sensitive and re-auth-gated.
 
+## 18.1 Fitness & training (D24)
+```
+GET/POST/PATCH/DELETE /api/v1/fitness/exercises/[{exercise_id}/]
+GET/POST/PATCH/DELETE /api/v1/fitness/programs/[{program_id}/]
+GET                       /api/v1/fitness/sessions/
+POST                      /api/v1/fitness/sessions/start/
+POST                      /api/v1/fitness/sessions/{session_id}/exercises/
+PATCH                     /api/v1/fitness/session-sets/{set_id}/
+POST                      /api/v1/fitness/session-exercises/{entry_id}/sets/
+POST                      /api/v1/fitness/session-exercises/{entry_id}/drop/
+POST                      /api/v1/fitness/sessions/{session_id}/{finish|abandon}/
+GET                       /api/v1/fitness/records/
+```
+Fitness is social by default but supports private programs/sessions; it is not medical Health.
+Session responses prefill each set's weight from the person's last completed training of that
+exercise, and every session exercise carries a read-only `last_performance`
+(`session_name`, `performed_at`, `sets`) naming where those defaults came from — `null` until the
+exercise has visible history.
+
 ## 19. Standard error & response shape
 
 Consistent envelope: list endpoints paginate; errors return a code + message + field errors.

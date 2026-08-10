@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.24.1**
+> **Current version: 0.25.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,27 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.25 — Fitness & Training
+
+### 0.25.0 — 2026-08-10
+- Added the first-class Fitness node, deliberately separate from password-gated medical Health.
+- Seeded 45 common strength, running, swimming, cycling, cardio and mobility exercises, with a
+  searchable extensible library and measurement/unit metadata.
+- Added multi-day training programs assigned to People, immutable session snapshots, live elapsed
+  timing, set completion and editable reps/weight/time/distance, plus add/drop exercises and sets
+  during a workout.
+- Finishing records duration, reps and strength volume; calculates heaviest weight, estimated 1RM,
+  max reps, longest distance and fastest exact-distance times; publishes events and notifies other
+  permitted users only for household-visible sessions.
+- Added responsive Train, Programs, History, Records and Exercises screens plus a permission-aware
+  recent-training Hub widget.
+- Every set now opens at the weight the person actually lifted the previous time they trained that
+  exercise, matched set for set and falling back to the program target only until there is history.
+  Adding an exercise mid-workout prefills the same way, an extra set repeats the set just done, and
+  the live screen names the session each default came from. Visibility is respected, so someone
+  else's private training never prefills or appears on your screen.
+- **718 backend tests green; production build clean; migration drift clean.**
 
 ## 0.24 — Security maturation (Milestone 4)
 

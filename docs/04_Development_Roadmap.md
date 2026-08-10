@@ -308,6 +308,9 @@ is no duplicated ownership. Phases 5.5.4–5.5.5 remain evidence-driven extensio
 
 ## Milestone 6 — Remaining nodes (as appetite allows)
 
+**Fitness & Training shipped as an owner-requested vertical slice (2026-08-10, D24).** It is
+separate from medical Health and includes the exercise/program/live-session/records/social loop.
+
 Each built end-to-end, one at a time, in roughly this order:
 **Inventory → Assets → Hearth → Travel → Projects → Health.**
 

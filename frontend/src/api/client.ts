@@ -24,6 +24,7 @@ import type {
   Attachment, AttachmentSensitivity, AttachmentVisibility,
   NodeInfo, Household,
   Book, BookClub, ClubBookEntry, ClubQueueItem, PersonalBookEntry, BookRating, BooksUser, BookShelfStatus,
+  FitnessExercise, FitnessProgram, FitnessRecord, FitnessSession, FitnessSessionExercise, FitnessSessionSet,
 } from './types'
 
 /** Which screen is signing in. Only 'web' earns the longer re-authentication window. */
@@ -80,6 +81,19 @@ type TreatmentWrite = Partial<{
 type AppointmentWrite = Partial<{
   pet_id: number; title: string; provider: string; location: string
   start_at: string; end_at: string | null; notes: string; visibility: string
+}>
+
+export type FitnessProgramWrite = Partial<{
+  name: string; description: string; visibility: 'private' | 'household'; is_archived: boolean
+  person_ids: number[]
+  workouts: Array<{
+    name: string; position: number; notes?: string
+    exercises: Array<{
+      exercise_id: number; position: number; target_sets: number; target_reps?: number | null
+      target_weight?: string | null; target_duration_seconds?: number | null
+      target_distance?: string | null; rest_seconds?: number | null; notes?: string
+    }>
+  }>
 }>
 
 type PropertyWrite = Partial<{
@@ -1085,6 +1099,50 @@ export const api = {
     _fetch('/solace/import/bills/confirm/', { method: 'POST' }),
   cancelSolaceBillImport: (): Promise<void> =>
     _fetch('/solace/import/bills/cancel/', { method: 'POST' }),
+
+  // --- Fitness & training ---
+  getFitnessExercises: (query = '', type = '', muscleGroup = ''): Promise<FitnessExercise[]> => {
+    const params = new URLSearchParams()
+    if (query) params.set('q', query)
+    if (type) params.set('type', type)
+    if (muscleGroup) params.set('muscle_group', muscleGroup)
+    return _fetch(`/fitness/exercises/${params.size ? `?${params}` : ''}`)
+  },
+  createFitnessExercise: (data: Partial<FitnessExercise>): Promise<FitnessExercise> =>
+    _fetch('/fitness/exercises/', { method: 'POST', body: JSON.stringify(data) }),
+  updateFitnessExercise: (id: number, data: Partial<FitnessExercise>): Promise<FitnessExercise> =>
+    _fetch(`/fitness/exercises/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteFitnessExercise: (id: number): Promise<void> =>
+    _fetch(`/fitness/exercises/${id}/`, { method: 'DELETE' }),
+  getFitnessPrograms: (): Promise<FitnessProgram[]> => _fetch('/fitness/programs/'),
+  createFitnessProgram: (data: FitnessProgramWrite): Promise<FitnessProgram> =>
+    _fetch('/fitness/programs/', { method: 'POST', body: JSON.stringify(data) }),
+  updateFitnessProgram: (id: number, data: FitnessProgramWrite): Promise<FitnessProgram> =>
+    _fetch(`/fitness/programs/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteFitnessProgram: (id: number): Promise<void> =>
+    _fetch(`/fitness/programs/${id}/`, { method: 'DELETE' }),
+  getFitnessSessions: (personId?: number, status?: string): Promise<FitnessSession[]> => {
+    const params = new URLSearchParams()
+    if (personId) params.set('person', String(personId))
+    if (status) params.set('status', status)
+    return _fetch(`/fitness/sessions/${params.size ? `?${params}` : ''}`)
+  },
+  startFitnessSession: (data: { person_id: number; workout_id?: number; name?: string; visibility?: 'private' | 'household' }): Promise<FitnessSession> =>
+    _fetch('/fitness/sessions/start/', { method: 'POST', body: JSON.stringify(data) }),
+  addFitnessSessionExercise: (sessionId: number, data: { exercise_id: number; target_sets: number; notes?: string }): Promise<FitnessSessionExercise> =>
+    _fetch(`/fitness/sessions/${sessionId}/exercises/`, { method: 'POST', body: JSON.stringify(data) }),
+  dropFitnessSessionExercise: (entryId: number): Promise<FitnessSessionExercise> =>
+    _fetch(`/fitness/session-exercises/${entryId}/drop/`, { method: 'POST' }),
+  addFitnessSessionSet: (entryId: number): Promise<FitnessSessionSet> =>
+    _fetch(`/fitness/session-exercises/${entryId}/sets/`, { method: 'POST' }),
+  updateFitnessSessionSet: (setId: number, data: Partial<FitnessSessionSet>): Promise<FitnessSessionSet> =>
+    _fetch(`/fitness/session-sets/${setId}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  finishFitnessSession: (sessionId: number, notes = ''): Promise<FitnessSession> =>
+    _fetch(`/fitness/sessions/${sessionId}/finish/`, { method: 'POST', body: JSON.stringify({ notes }) }),
+  abandonFitnessSession: (sessionId: number): Promise<FitnessSession> =>
+    _fetch(`/fitness/sessions/${sessionId}/abandon/`, { method: 'POST' }),
+  getFitnessRecords: (personId?: number): Promise<FitnessRecord[]> =>
+    _fetch(`/fitness/records/${personId ? `?person=${personId}` : ''}`),
 
   // --- Books ---
   getBooksUsers: (): Promise<BooksUser[]> => _fetch('/books/users/'),

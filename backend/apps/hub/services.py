@@ -145,6 +145,9 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False, sensitive_unlocked: bool 
         elif key.startswith("solace_"):
             content = _solace_widget_content(key, user) if sensitive_unlocked else []
 
+        elif key.startswith("fitness_"):
+            content = _fitness_widget_content(key, user)
+
         # An empty card is noise on a dashboard: it takes a grid slot to say "nothing here".
         # Drop it unless the widget is ambient (clock/quick add/countdown), which has no
         # content by design and is still worth showing.
@@ -341,6 +344,17 @@ def _pets_widget_content(key: str, user) -> list:
         appointments = p.list_appointments(user, upcoming_only=True, limit=8)
         return PetAppointmentSerializer(appointments, many=True).data
 
+    return []
+
+
+def _fitness_widget_content(key: str, user) -> list:
+    """Recent household training, filtered through session visibility."""
+    from apps.fitness import selectors as fitness
+    from apps.fitness.serializers import WorkoutSessionSerializer
+
+    if key == "fitness_recent":
+        sessions = fitness.list_sessions(user, status="completed", limit=6)
+        return WorkoutSessionSerializer(sessions, many=True).data
     return []
 
 
