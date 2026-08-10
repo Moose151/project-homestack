@@ -374,6 +374,10 @@ def update_purchase(acting_user: User, obj: PlannedPurchase, **data) -> PlannedP
     for key, val in data.items():
         if key in _PURCHASE_FIELDS:
             setattr(obj, key, val)
+    # Marking something bought means it was paid for in full, so a purchase that reached the shop
+    # on a part-saved balance would otherwise be left reading as still short of its target.
+    if data.get("status") == PlannedPurchase.Status.BOUGHT:
+        obj.saved_amount = max(Decimal(obj.saved_amount), Decimal(obj.target_amount))
     obj.updated_by = acting_user
     obj.save()
     sync_event_for(obj)

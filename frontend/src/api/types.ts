@@ -1391,6 +1391,40 @@ export interface SolacePayCyclePlan {
   }
 }
 
+/** One past pay cycle and how its bills actually went. */
+export interface SolaceCycleHistoryRow {
+  id: number
+  cycle_start: string
+  cycle_end: string
+  status: 'open' | 'closed'
+  closed_at: string | null
+  notes: string
+  paid_total: string
+  skipped_total: string
+  unpaid_total: string
+  paid_count: number
+  unpaid_count: number
+  skipped_count: number
+}
+
+export interface SolaceAnnualSummary {
+  year_type: 'calendar' | 'financial'
+  period_label: string
+  period_start: string
+  period_end: string
+  categories: {
+    name: string
+    total: string
+    paid: string
+    unpaid: string
+    skipped: string
+    bills: { name: string; total: string }[]
+  }[]
+  grand_total: string
+  grand_paid: string
+  grand_outstanding: string
+}
+
 export interface SolaceSettings {
   id: number
   currency_symbol: string

@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.28.0**
+> **Current version: 0.28.1**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,20 @@
 ---
 
 ## 0.28 — Income the way the standalone app does it
+
+### 0.28.1 — 2026-08-10 — the last three parity gaps
+- **Cycle history.** Every closed-out pay cycle, newest first, with what was paid, skipped and
+  left outstanding in each. HomeStack had been recording closeouts and then only ever reading the
+  current or next cycle, so past ones were unreachable. The figures are recomputed from the
+  occurrences in each window rather than stored, so correcting a bill later corrects the history.
+- **Annual summary.** A calendar or financial year (1 July – 30 June) of bills grouped by category
+  and then by the bills inside it, both ordered by cost, with paid and outstanding totals. Tapping
+  a category opens its bills, which is the question that follows "why is this one so big".
+- **Purchase completion.** Marking a purchase bought now raises its saved amount to the target, so
+  something bought while part-saved stops reading as short of its goal. A balance already above
+  the target is kept.
+- Both new views sit under Insights, and links using the standalone page names land in them.
+- **766 backend tests green (11 new); typecheck and production build clean; no migration.**
 
 ### 0.28.0 — 2026-08-10
 - Re-read the standalone app's source line by line rather than trusting the parity checklist, and

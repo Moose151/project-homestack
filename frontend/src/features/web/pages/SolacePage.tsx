@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type {
-  SolaceBalanceForecast, SolaceBalanceSnapshot, SolaceBill, SolaceBillOccurrence,
-  SolaceBillTimeline, SolaceBucket, SolaceBucketEntry, SolaceBucketPurpose, SolaceCategory,
-  SolaceCategoryReport, SolaceChecklistItem, SolaceChecklistPreference, SolaceCloseoutResponse,
-  SolaceHealth, SolaceNow, SolacePayCyclePlan, SolacePayday, SolacePurchase, SolaceSchedule,
-  SolaceSettings, SolaceSubscription
+  SolaceAnnualSummary, SolaceBalanceForecast, SolaceBalanceSnapshot, SolaceBill,
+  SolaceBillOccurrence, SolaceBillTimeline, SolaceBucket, SolaceBucketEntry,
+  SolaceBucketPurpose, SolaceCategory, SolaceCategoryReport, SolaceChecklistItem,
+  SolaceChecklistPreference, SolaceCloseoutResponse, SolaceCycleHistoryRow, SolaceHealth,
+  SolaceNow, SolacePayCyclePlan, SolacePayday, SolacePurchase, SolaceSchedule, SolaceSettings,
+  SolaceSubscription
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
@@ -75,7 +76,7 @@ const dayAfter = (dateValue: string) => {
 type Tab = 'now' | 'bills' | 'plan' | 'insights' | 'manage'
 type BillsSection = 'bills' | 'subscriptions' | 'schedule'
 type PlanSection = 'payplan' | 'buckets' | 'paydays' | 'purchases'
-type InsightsSection = 'forecast' | 'closeout'
+type InsightsSection = 'forecast' | 'closeout' | 'history' | 'annual'
 
 const SOLACE_TABS = [
   { key: 'now' as const, label: 'Now' },
@@ -98,6 +99,8 @@ const PLAN_SECTIONS = [
 const INSIGHTS_SECTIONS = [
   { key: 'forecast' as const, label: 'Forecast' },
   { key: 'closeout' as const, label: 'Cycle closeout' },
+  { key: 'history' as const, label: 'Cycle history' },
+  { key: 'annual' as const, label: 'Year' },
 ]
 
 /** Links and bookmarks made before the regrouping still land in the right place. */
@@ -107,6 +110,7 @@ const LEGACY_TABS: Record<string, [Tab, string | null]> = {
   plan: ['plan', 'payplan'], buckets: ['plan', 'buckets'], paydays: ['plan', 'paydays'],
   purchases: ['plan', 'purchases'],
   forecast: ['insights', 'forecast'], closeout: ['insights', 'closeout'],
+  'cycle-history': ['insights', 'history'], 'annual-summary': ['insights', 'annual'],
   manage: ['manage', null],
 }
 
@@ -2232,6 +2236,160 @@ function NowTab({ now, health, checklist, onAction, onTab, onSection }: {
   )
 }
 
+/** Past pay cycles. These were being recorded at closeout and then never shown again. */
+function CycleHistoryTab({ onError }: { onError: (message: string) => void }) {
+  const [rows, setRows] = useState<SolaceCycleHistoryRow[] | null>(null)
+  useEffect(() => {
+    api.getSolaceCycleHistory().then(setRows).catch(e => { onError(errMsg(e)); setRows([]) })
+  }, [])
+
+  if (!rows) return <div className="h-40 animate-pulse rounded-2xl bg-sunken" />
+  if (rows.length === 0) {
+    return (
+      <EmptyState
+        icon="🗂"
+        title="No closed cycles yet"
+        hint="Closing a pay cycle records what was paid, skipped and left outstanding. They collect here."
+      />
+    )
+  }
+  return (
+    <div className="space-y-2">
+      {rows.map(row => (
+        <Card key={row.id} contentClassName="p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-bold text-ink">{dateOnly(row.cycle_start)} – {dateOnly(row.cycle_end)}</p>
+                <Badge tone={row.status === 'closed' ? 'success' : 'warning'}>
+                  {row.status === 'closed' ? 'Closed' : 'Still open'}
+                </Badge>
+              </div>
+              {row.notes && <p className="mt-1 text-sm text-muted">{row.notes}</p>}
+            </div>
+            <p className="text-xl font-black text-ink">{money(row.paid_total)}<span className="ml-1 text-xs font-medium text-muted">paid</span></p>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2 border-t border-line pt-3 text-center">
+            {([
+              ['Paid', row.paid_count, row.paid_total],
+              ['Outstanding', row.unpaid_count, row.unpaid_total],
+              ['Skipped', row.skipped_count, row.skipped_total],
+            ] as const).map(([label, count, total]) => (
+              <div key={label}>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</p>
+                <p className="text-sm font-bold text-ink">{money(total)}</p>
+                <p className="text-[11px] text-muted">{count} {count === 1 ? 'bill' : 'bills'}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ))}
+    </div>
+  )
+}
+
+/** A year of bills, grouped by category and then by the bills inside it. */
+function AnnualSummaryTab({ onError }: { onError: (message: string) => void }) {
+  const [yearType, setYearType] = useState<'calendar' | 'financial'>('calendar')
+  const [summary, setSummary] = useState<SolaceAnnualSummary | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [expanded, setExpanded] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    api.getSolaceAnnualSummary(yearType)
+      .then(setSummary)
+      .catch(e => onError(errMsg(e)))
+      .finally(() => setLoading(false))
+  }, [yearType])
+
+  return (
+    <div className="space-y-4">
+      <Card contentClassName="p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-muted">Year</p>
+            <p className="mt-0.5 text-lg font-black text-ink">{summary?.period_label || '—'}</p>
+            {summary && (
+              <p className="text-xs text-muted">{dateOnly(summary.period_start)} – {dateOnly(summary.period_end)}</p>
+            )}
+          </div>
+          <Field label="Counting">
+            <Select value={yearType} onChange={event => setYearType(event.target.value as 'calendar' | 'financial')}>
+              <option value="calendar">Calendar year</option>
+              <option value="financial">Financial year (Jul–Jun)</option>
+            </Select>
+          </Field>
+        </div>
+        {summary && (
+          <div className="mt-4 grid grid-cols-3 gap-2 border-t border-line pt-3 text-center">
+            {([
+              ['Total', summary.grand_total],
+              ['Paid', summary.grand_paid],
+              ['Outstanding', summary.grand_outstanding],
+            ] as const).map(([label, value]) => (
+              <div key={label}>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</p>
+                <p className="text-base font-black text-ink">{money(value)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {loading ? (
+        <div className="h-40 animate-pulse rounded-2xl bg-sunken" />
+      ) : !summary || summary.categories.length === 0 ? (
+        <EmptyState
+          icon="📅"
+          title="Nothing billed in this year"
+          hint="Add recurring bills and their occurrences will total up here."
+        />
+      ) : (
+        <div className="space-y-2">
+          {summary.categories.map(category => {
+            const open = expanded === category.name
+            return (
+              <Card key={category.name} contentClassName="p-0">
+                {/* Tapping a category shows the bills inside it, which is the question that
+                    follows "why is this category so big". */}
+                <button
+                  type="button"
+                  onClick={() => setExpanded(open ? null : category.name)}
+                  className="flex w-full items-center justify-between gap-3 p-4 text-left"
+                  aria-expanded={open}
+                >
+                  <div className="min-w-0">
+                    <p className="font-semibold text-ink">{cap(category.name)}</p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      {money(category.paid)} paid · {money(category.unpaid)} outstanding
+                      {Number(category.skipped) > 0 ? ` · ${money(category.skipped)} skipped` : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-black text-ink">{money(category.total)}</span>
+                    <span className="text-muted" aria-hidden>{open ? '▾' : '▸'}</span>
+                  </div>
+                </button>
+                {open && (
+                  <ul className="divide-y divide-line/70 border-t border-line px-4">
+                    {category.bills.map(bill => (
+                      <li key={bill.name} className="flex justify-between gap-3 py-2.5 text-sm">
+                        <span className="text-muted-strong">{bill.name}</span>
+                        <span className="font-semibold text-ink">{money(bill.total)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function SolacePage() {
   const [unlocked, setUnlocked] = useState(false)
   const { nodes } = useStacks()
@@ -2483,6 +2641,8 @@ export function SolacePage() {
           <Tabs tabs={INSIGHTS_SECTIONS} active={insightsSection} onChange={setInsightsSection} variant="secondary" />
           {insightsSection === 'forecast' && <ForecastTab initial={forecast} onManage={() => setTab('manage')} onError={setError} />}
           {insightsSection === 'closeout' && <CloseoutTab closeout={closeout} reload={load} onOccurrence={updateOccurrence} onError={setError} />}
+          {insightsSection === 'history' && <CycleHistoryTab onError={setError} />}
+          {insightsSection === 'annual' && <AnnualSummaryTab onError={setError} />}
         </div>
       )}
 

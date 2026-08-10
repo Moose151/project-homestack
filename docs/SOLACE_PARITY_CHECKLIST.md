@@ -87,14 +87,19 @@
 
 ## Found missing on re-reading the standalone source (2026-08-10)
 
-- [x] Individual vs shared income, allocation modes and the per-person breakdown — done, above.
-- [ ] **Cycle history.** Standalone has `/cycle-history` listing past closed cycles. HomeStack
-  stores `CycleCloseout` rows but only ever reads the current or next cycle, so previous cycles
-  are recorded and then unreachable.
-- [ ] **Annual summary.** Standalone has `/annual-summary`. HomeStack has per-bill annual cost and
-  a category report but no yearly view.
-- [~] **Purchase completion.** Standalone's mark-purchased also raises the saved amount to the
-  target so a completed purchase reads as fully funded; HomeStack sets the status only.
+- [x] Individual vs shared income, allocation modes and the per-person breakdown (v0.28.0).
+- [x] **Cycle history (v0.28.1).** Every closed-out cycle, newest first, with what was paid,
+  skipped and left outstanding in each. The per-cycle figures are recomputed from the occurrences
+  in that window rather than stored, so correcting a bill later corrects the history too.
+- [x] **Annual summary (v0.28.1).** A calendar or financial year (1 July – 30 June) of bill
+  occurrences grouped by category and then by bill, both ordered by cost, with paid and
+  outstanding totals. Uncategorised bills are still counted.
+- [x] **Purchase completion (v0.28.1).** Marking a purchase bought now raises its saved amount to
+  the target, so a purchase that reached the shop part-saved stops reading as short. A balance
+  already above the target is left alone.
+
+With these, no behavioural gap against the standalone app is known. Anything found from here
+should be added to this list rather than assumed absent by omission.
 
 ## Cutover gate
 

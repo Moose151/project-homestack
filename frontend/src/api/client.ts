@@ -15,13 +15,14 @@ import type {
   PoolWrite, Property, RoomArea, RoomAreaType, RoomDetailResponse, RoomItemPriority,
   RoomItemStatus, RoomItemType, RoomListResponse, RoomPlanItem, RoomPlanMode, RoomPlanProduct,
   RotatingSchedule, RotatingScheduleOccurrence, RotatingScheduleWrite, ServiceProvider,
-  SolaceBalanceForecast, SolaceBalanceSnapshot, SolaceBill, SolaceBillImportPreview,
-  SolaceBillOccurrence, SolaceBillTimeline, SolaceBootstrap, SolaceBucket, SolaceBucketEntry,
-  SolaceBucketEntryWrite, SolaceBucketPurpose, SolaceCategory, SolaceCategoryReport,
-  SolaceChecklistItem, SolaceChecklistPreference, SolaceCloseoutResponse, SolaceCycleCloseout,
-  SolaceHealth, SolaceIncomeAllocation, SolaceIncomeAllocationWrite, SolaceNow,
-  SolacePayCyclePlan, SolacePayday, SolacePurchase, SolaceSchedule, SolaceSearchResults,
-  SolaceSettings, SolaceSubscription, WaterTest, WaterTestWrite, WikiCategory, WikiPage
+  SolaceAnnualSummary, SolaceBalanceForecast, SolaceBalanceSnapshot, SolaceBill,
+  SolaceBillImportPreview, SolaceBillOccurrence, SolaceBillTimeline, SolaceBootstrap,
+  SolaceBucket, SolaceBucketEntry, SolaceBucketEntryWrite, SolaceBucketPurpose, SolaceCategory,
+  SolaceCategoryReport, SolaceChecklistItem, SolaceChecklistPreference, SolaceCloseoutResponse,
+  SolaceCycleCloseout, SolaceCycleHistoryRow, SolaceHealth, SolaceIncomeAllocation,
+  SolaceIncomeAllocationWrite, SolaceNow, SolacePayCyclePlan, SolacePayday, SolacePurchase,
+  SolaceSchedule, SolaceSearchResults, SolaceSettings, SolaceSubscription, WaterTest,
+  WaterTestWrite, WikiCategory, WikiPage
 } from './types'
 
 /** Which screen is signing in. Only 'web' earns the longer re-authentication window. */
@@ -1035,6 +1036,10 @@ export const api = {
     _fetch(`/solace/paydays/${paydayId}/allocations/`),
   setSolaceIncomeAllocations: (paydayId: number, lines: SolaceIncomeAllocationWrite[]): Promise<SolaceIncomeAllocation[]> =>
     _fetch(`/solace/paydays/${paydayId}/allocations/`, { method: 'PUT', body: JSON.stringify(lines) }),
+
+  getSolaceCycleHistory: (): Promise<SolaceCycleHistoryRow[]> => _fetch('/solace/cycle-history/'),
+  getSolaceAnnualSummary: (yearType: 'calendar' | 'financial' = 'calendar'): Promise<SolaceAnnualSummary> =>
+    _fetch(`/solace/annual-summary/?year_type=${yearType}`),
 
   getSolaceNow: (): Promise<SolaceNow> => _fetch('/solace/now/'),
   getSolaceBucketEntries: (bucketId: number): Promise<SolaceBucketEntry[]> =>

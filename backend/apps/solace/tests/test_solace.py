@@ -1581,3 +1581,141 @@ class SharedIncomeAllocationTests(TestCase):
         self.client.put(url, [{"bucket_id": self.savings.id, "percentage": "25.00"}], content_type="application/json")
         rows = self.client.get(url).json()
         self.assertEqual([row["bucket_name"] for row in rows], ["Savings"])
+
+
+class CycleHistoryTests(TestCase):
+    """Closed cycles were being recorded and then never read back."""
+
+    def setUp(self):
+        self.admin = _make_user("historian", User.Role.ADMIN)
+        _login(self.client, "historian")
+        _reauth(self.client)
+
+    def _closeout(self, start: date, status="closed"):
+        return CycleCloseout.objects.create(
+            household=get_active_household(), created_by=self.admin, updated_by=self.admin,
+            cycle_start=start, cycle_end=start + timedelta(days=13), status=status,
+            notes=f"Cycle from {start}",
+        )
+
+    def test_history_lists_every_cycle_newest_first(self):
+        self._closeout(date(2026, 6, 1))
+        self._closeout(date(2026, 7, 1))
+        rows = self.client.get(reverse("solace-cycle-history")).json()
+        self.assertEqual([row["cycle_start"] for row in rows], ["2026-07-01", "2026-06-01"])
+        self.assertEqual(rows[0]["notes"], "Cycle from 2026-07-01")
+
+    def test_each_cycle_reports_how_its_bills_went(self):
+        bill = create_bill(
+            self.admin, name="Power", amount="100.00",
+            due_at=timezone.make_aware(datetime(2026, 6, 5, 9)),
+        )
+        occurrence = BillOccurrence.objects.filter(bill=bill).order_by("due_at").first()
+        occurrence.status = BillOccurrence.Status.PAID
+        occurrence.save(update_fields=["status"])
+        self._closeout(date(2026, 6, 1))
+        row = self.client.get(reverse("solace-cycle-history")).json()[0]
+        self.assertEqual(row["paid_count"], 1)
+        self.assertEqual(row["paid_total"], "100.00")
+
+    def test_children_cannot_read_cycle_history(self):
+        _make_user("historychild", User.Role.USER, is_child=True)
+        _login(self.client, "historychild")
+        self.assertEqual(self.client.get(reverse("solace-cycle-history")).status_code, 403)
+
+
+class AnnualSummaryTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("annualist", User.Role.ADMIN)
+        _login(self.client, "annualist")
+        _reauth(self.client)
+
+    def _summary(self, year_type="calendar"):
+        response = self.client.get(reverse("solace-annual-summary"), {"year_type": year_type})
+        self.assertEqual(response.status_code, 200, response.json())
+        return response.json()
+
+    def test_bills_group_by_category_ordered_by_cost(self):
+        create_bill(
+            self.admin, name="Rates", category="council", amount="500.00",
+            due_at=timezone.now() + timedelta(days=10), recurrence_rule="",
+        )
+        create_bill(
+            self.admin, name="Internet", category="utilities", amount="80.00",
+            due_at=timezone.now() + timedelta(days=12), recurrence_rule="",
+        )
+        data = self._summary()
+        self.assertEqual([row["name"] for row in data["categories"]], ["council", "utilities"])
+        self.assertEqual(data["grand_total"], "580.00")
+
+    def test_each_category_breaks_down_by_bill(self):
+        create_bill(
+            self.admin, name="Water", category="utilities", amount="60.00",
+            due_at=timezone.now() + timedelta(days=5), recurrence_rule="",
+        )
+        create_bill(
+            self.admin, name="Internet", category="utilities", amount="90.00",
+            due_at=timezone.now() + timedelta(days=6), recurrence_rule="",
+        )
+        category = self._summary()["categories"][0]
+        self.assertEqual([bill["name"] for bill in category["bills"]], ["Internet", "Water"])
+
+    def test_paid_and_outstanding_are_reported_separately(self):
+        bill = create_bill(
+            self.admin, name="Power", category="utilities", amount="120.00",
+            due_at=timezone.now() + timedelta(days=4), recurrence_rule="",
+        )
+        occurrence = BillOccurrence.objects.get(bill=bill)
+        occurrence.status = BillOccurrence.Status.PAID
+        occurrence.save(update_fields=["status"])
+        data = self._summary()
+        self.assertEqual(data["grand_paid"], "120.00")
+        self.assertEqual(data["grand_outstanding"], "0.00")
+
+    def test_a_bill_with_no_category_is_still_counted(self):
+        create_bill(
+            self.admin, name="Odd one", category="", amount="10.00",
+            due_at=timezone.now() + timedelta(days=3), recurrence_rule="",
+        )
+        self.assertEqual(self._summary()["categories"][0]["name"], "Uncategorised")
+
+    def test_the_financial_year_runs_july_to_june(self):
+        data = self._summary("financial")
+        self.assertTrue(data["period_start"].endswith("-07-01"))
+        self.assertTrue(data["period_end"].endswith("-06-30"))
+        self.assertTrue(data["period_label"].startswith("FY "))
+
+    def test_an_unknown_year_type_is_rejected(self):
+        self.assertEqual(
+            self.client.get(reverse("solace-annual-summary"), {"year_type": "lunar"}).status_code,
+            400,
+        )
+
+
+class PurchaseCompletionTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("shopper", User.Role.ADMIN)
+        _login(self.client, "shopper")
+        _reauth(self.client)
+
+    def test_marking_a_purchase_bought_shows_it_fully_funded(self):
+        purchase = create_purchase(
+            self.admin, name="Mower", target_amount="800.00", saved_amount="500.00",
+        )
+        response = self.client.patch(
+            reverse("solace-purchase-detail", args=[purchase.id]),
+            {"status": "bought"}, content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.json())
+        self.assertEqual(response.json()["saved_amount"], "800.00")
+
+    def test_a_purchase_saved_beyond_its_target_keeps_the_larger_figure(self):
+        purchase = create_purchase(
+            self.admin, name="Bike", target_amount="400.00", saved_amount="450.00",
+        )
+        self.client.patch(
+            reverse("solace-purchase-detail", args=[purchase.id]),
+            {"status": "bought"}, content_type="application/json",
+        )
+        purchase.refresh_from_db()
+        self.assertEqual(purchase.saved_amount, Decimal("450.00"))

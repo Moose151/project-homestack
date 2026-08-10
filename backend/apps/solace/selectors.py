@@ -417,3 +417,100 @@ def search_solace(user, query: str) -> dict:
         "subscriptions": list(subscriptions.order_by("next_renewal_at", "name")),
         "checklist": list(checklist.order_by("is_complete", "position", "title")),
     }
+
+
+def list_cycle_history(user) -> list[dict]:
+    """Every closed-out pay cycle, newest first, with how its bills actually went.
+
+    Closeouts were being recorded and then never read back: only the current and next cycle were
+    reachable. The per-cycle figures are recomputed from the occurrences in each window rather
+    than stored, so a later correction to a bill is reflected in the history too.
+    """
+    rows = []
+    for closeout in CycleCloseout.objects.order_by("-cycle_start"):
+        occurrences = list_bill_occurrences(user, start=closeout.cycle_start, end=closeout.cycle_end)
+        total = lambda status: f"{sum((Decimal(row.amount) for row in occurrences if row.status == status), Decimal('0.00')):.2f}"
+        rows.append({
+            "id": closeout.id,
+            "cycle_start": closeout.cycle_start.isoformat(),
+            "cycle_end": closeout.cycle_end.isoformat(),
+            "status": closeout.status,
+            "closed_at": closeout.closed_at,
+            "notes": closeout.notes,
+            "paid_total": total(BillOccurrence.Status.PAID),
+            "skipped_total": total(BillOccurrence.Status.SKIPPED),
+            "unpaid_total": total(BillOccurrence.Status.UPCOMING),
+            "paid_count": sum(1 for row in occurrences if row.status == BillOccurrence.Status.PAID),
+            "unpaid_count": sum(1 for row in occurrences if row.status == BillOccurrence.Status.UPCOMING),
+            "skipped_count": sum(1 for row in occurrences if row.status == BillOccurrence.Status.SKIPPED),
+        })
+    return rows
+
+
+def get_annual_summary(user, *, year_type: str = "calendar", as_of: date | None = None) -> dict:
+    """A year of bills grouped by category, then by bill within each category.
+
+    `financial` runs 1 July to 30 June — the year a household is asked about at tax time — and
+    `calendar` runs January to December. Categories and the bills inside them are ordered by
+    what they cost, because the question this answers is "where does the money go".
+    """
+    today = as_of or timezone.localdate()
+    if year_type == "financial":
+        start_year = today.year if today.month >= 7 else today.year - 1
+        period_start = date(start_year, 7, 1)
+        period_end = date(start_year + 1, 6, 30)
+        label = f"FY {start_year}/{str(start_year + 1)[-2:]}"
+    else:
+        period_start = date(today.year, 1, 1)
+        period_end = date(today.year, 12, 31)
+        label = str(today.year)
+
+    occurrences = list_bill_occurrences(user, start=period_start, end=period_end)
+    grouped: dict[str, dict] = {}
+    for row in occurrences:
+        name = (row.bill.category or "").strip() or "Uncategorised"
+        entry = grouped.setdefault(name, {
+            "total": Decimal("0.00"), "paid": Decimal("0.00"),
+            "unpaid": Decimal("0.00"), "skipped": Decimal("0.00"), "bills": {},
+        })
+        amount = Decimal(row.amount)
+        entry["total"] += amount
+        if row.status == BillOccurrence.Status.PAID:
+            entry["paid"] += amount
+        elif row.status == BillOccurrence.Status.SKIPPED:
+            entry["skipped"] += amount
+        else:
+            entry["unpaid"] += amount
+        entry["bills"][row.bill.name] = entry["bills"].get(row.bill.name, Decimal("0.00")) + amount
+
+    categories = sorted(
+        (
+            {
+                "name": name,
+                "total": f"{data['total']:.2f}",
+                "paid": f"{data['paid']:.2f}",
+                "unpaid": f"{data['unpaid']:.2f}",
+                "skipped": f"{data['skipped']:.2f}",
+                "bills": [
+                    {"name": bill_name, "total": f"{bill_total:.2f}"}
+                    for bill_name, bill_total in sorted(
+                        data["bills"].items(), key=lambda item: -item[1]
+                    )
+                ],
+            }
+            for name, data in grouped.items()
+        ),
+        key=lambda row: -Decimal(row["total"]),
+    )
+    grand_total = sum((Decimal(row["total"]) for row in categories), Decimal("0.00"))
+    grand_paid = sum((Decimal(row["paid"]) for row in categories), Decimal("0.00"))
+    return {
+        "year_type": year_type,
+        "period_label": label,
+        "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(),
+        "categories": categories,
+        "grand_total": f"{grand_total:.2f}",
+        "grand_paid": f"{grand_paid:.2f}",
+        "grand_outstanding": f"{grand_total - grand_paid:.2f}",
+    }

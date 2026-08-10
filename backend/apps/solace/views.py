@@ -20,6 +20,8 @@ from apps.nodes.models import Node
 from apps.permissions.drf import HomeStackPermission
 from apps.solace import selectors, services
 from apps.solace.serializers import (
+    AnnualSummarySerializer,
+    CycleHistoryRowSerializer,
     IncomeAllocationSerializer,
     BucketEntrySerializer,
     SolaceNowSerializer,
@@ -810,6 +812,36 @@ class BucketListView(SolaceAccessMixin, APIView):
         serializer = BudgetBucketSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         return Response(BudgetBucketSerializer(services.create_bucket(request.user, **serializer.validated_data)).data, status=201)
+
+
+class CycleHistoryView(SolaceAccessMixin, APIView):
+    """Past pay cycles. Closeouts were recorded and then unreachable before this."""
+
+    def get(self, request: Request) -> Response:
+        rows = selectors.list_cycle_history(request.user)
+        return Response(CycleHistoryRowSerializer(rows, many=True).data)
+
+
+class AnnualSummaryView(SolaceAccessMixin, APIView):
+    """A calendar or financial year of bills, grouped by category and then by bill."""
+
+    def get(self, request: Request) -> Response:
+        year_type = request.query_params.get("year_type", "calendar")
+        if year_type not in ("calendar", "financial"):
+            raise ValidationError({"year_type": "Choose calendar or financial."})
+        # Bills are materialised lazily, so make sure the year exists before totalling it.
+        from apps.solace.bill_schedule import ensure_bill_occurrences
+
+        summary = selectors.get_annual_summary(request.user, year_type=year_type)
+        start = date.fromisoformat(summary["period_start"])
+        end = date.fromisoformat(summary["period_end"])
+        for bill in selectors.list_bills(request.user, active_only=True):
+            ensure_bill_occurrences(bill, start, end)
+        return Response(
+            AnnualSummarySerializer(
+                selectors.get_annual_summary(request.user, year_type=year_type)
+            ).data
+        )
 
 
 class SolaceNowView(SolaceAccessMixin, APIView):

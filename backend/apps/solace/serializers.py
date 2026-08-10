@@ -382,3 +382,45 @@ class SolaceNowSerializer(serializers.Serializer):
     paid_this_cycle_total = serializers.CharField()
     bucket_total = serializers.CharField()
     buckets = BudgetBucketSerializer(many=True)
+
+
+class CycleHistoryRowSerializer(serializers.Serializer):
+    """One past pay cycle and how its bills actually went."""
+
+    id = serializers.IntegerField()
+    cycle_start = serializers.CharField()
+    cycle_end = serializers.CharField()
+    status = serializers.CharField()
+    closed_at = serializers.DateTimeField(allow_null=True)
+    notes = serializers.CharField(allow_blank=True)
+    paid_total = serializers.CharField()
+    skipped_total = serializers.CharField()
+    unpaid_total = serializers.CharField()
+    paid_count = serializers.IntegerField()
+    unpaid_count = serializers.IntegerField()
+    skipped_count = serializers.IntegerField()
+
+
+class AnnualSummaryBillSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    total = serializers.CharField()
+
+
+class AnnualSummaryCategorySerializer(serializers.Serializer):
+    name = serializers.CharField()
+    total = serializers.CharField()
+    paid = serializers.CharField()
+    unpaid = serializers.CharField()
+    skipped = serializers.CharField()
+    bills = AnnualSummaryBillSerializer(many=True)
+
+
+class AnnualSummarySerializer(serializers.Serializer):
+    year_type = serializers.CharField()
+    period_label = serializers.CharField()
+    period_start = serializers.CharField()
+    period_end = serializers.CharField()
+    categories = AnnualSummaryCategorySerializer(many=True)
+    grand_total = serializers.CharField()
+    grand_paid = serializers.CharField()
+    grand_outstanding = serializers.CharField()

@@ -20,7 +20,9 @@ from apps.solace.views import (
     ChecklistDetailView,
     ChecklistListView,
     ChecklistPreferenceView,
+    AnnualSummaryView,
     CycleCloseoutView,
+    CycleHistoryView,
     FinanceCategoryDetailView,
     FinanceCategoryListView,
     PayCycleChecklistView,
@@ -56,6 +58,8 @@ urlpatterns = [
     path("reports/categories/", CategoryReportView.as_view(), name="solace-category-report"),
     path("forecast/", BalanceForecastView.as_view(), name="solace-forecast"),
     path("closeout/", CycleCloseoutView.as_view(), name="solace-closeout"),
+    path("cycle-history/", CycleHistoryView.as_view(), name="solace-cycle-history"),
+    path("annual-summary/", AnnualSummaryView.as_view(), name="solace-annual-summary"),
     path("schedule/", SolaceScheduleView.as_view(), name="solace-schedule"),
     path(
         "occurrences/<int:occurrence_id>/<str:action>/",
