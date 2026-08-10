@@ -1317,3 +1317,142 @@ class SolaceImportTests(TestCase):
                 "--verify",
                 stdout=io.StringIO(),
             )
+
+
+class BucketEntryTests(TestCase):
+    """A bucket balance is a running total with history, not a number you overwrite."""
+
+    def setUp(self):
+        self.admin = _make_user("bucketkeeper", User.Role.ADMIN)
+        _login(self.client, "bucketkeeper")
+        _reauth(self.client)
+        self.bucket = create_bucket(
+            self.admin, name="Car fund", target_amount="2000.00", current_amount="500.00",
+        )
+
+    def _entry(self, **payload):
+        return self.client.post(
+            reverse("solace-bucket-entry-list", args=[self.bucket.id]),
+            payload, content_type="application/json",
+        )
+
+    def test_money_in_raises_the_balance_and_records_it(self):
+        response = self._entry(kind="deposit", amount="150.00", note="Payday transfer")
+        self.assertEqual(response.status_code, 201, response.json())
+        self.assertEqual(response.json()["balance_after"], "650.00")
+        self.bucket.refresh_from_db()
+        self.assertEqual(self.bucket.current_amount, Decimal("650.00"))
+
+    def test_money_out_lowers_the_balance(self):
+        self._entry(kind="withdrawal", amount="200.00", note="New tyres")
+        self.bucket.refresh_from_db()
+        self.assertEqual(self.bucket.current_amount, Decimal("300.00"))
+
+    def test_history_is_returned_newest_first_with_running_balances(self):
+        self._entry(kind="deposit", amount="100.00")
+        self._entry(kind="withdrawal", amount="50.00")
+        rows = self.client.get(reverse("solace-bucket-entry-list", args=[self.bucket.id])).json()
+        self.assertEqual([row["balance_after"] for row in rows], ["550.00", "600.00"])
+
+    def test_deleting_an_entry_takes_its_effect_back_out(self):
+        entry = self._entry(kind="deposit", amount="100.00").json()
+        self.client.delete(
+            reverse("solace-bucket-entry-detail", args=[self.bucket.id, entry["id"]])
+        )
+        self.bucket.refresh_from_db()
+        self.assertEqual(self.bucket.current_amount, Decimal("500.00"))
+
+    def test_a_zero_or_negative_amount_is_rejected(self):
+        self.assertEqual(self._entry(kind="deposit", amount="0").status_code, 400)
+        self.assertEqual(self._entry(kind="deposit", amount="-5.00").status_code, 400)
+
+    def test_correcting_the_balance_by_hand_still_leaves_a_trace(self):
+        self.client.patch(
+            reverse("solace-bucket-detail", args=[self.bucket.id]),
+            {"current_amount": "800.00"}, content_type="application/json",
+        )
+        rows = self.client.get(reverse("solace-bucket-entry-list", args=[self.bucket.id])).json()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["kind"], "adjustment")
+        self.assertEqual(rows[0]["amount"], "300.00")
+        self.assertEqual(rows[0]["balance_after"], "800.00")
+
+    def test_child_accounts_cannot_move_bucket_money(self):
+        _make_user("bucketchild", User.Role.USER, is_child=True)
+        _login(self.client, "bucketchild")
+        self.assertEqual(self._entry(kind="deposit", amount="10.00").status_code, 403)
+
+
+class SolaceNowTests(TestCase):
+    """The landing answer: what is owed before the next payday, with its running total."""
+
+    def setUp(self):
+        self.admin = _make_user("nowuser", User.Role.ADMIN)
+        _login(self.client, "nowuser")
+        _reauth(self.client)
+        create_payday(
+            self.admin, title="Pay", expected_amount="2000.00",
+            pay_at=timezone.now() - timedelta(days=2),
+            recurrence_rule="FREQ=WEEKLY;INTERVAL=2",
+        )
+
+    def _now(self):
+        response = self.client.get(reverse("solace-now"))
+        self.assertEqual(response.status_code, 200, response.json())
+        return response.json()
+
+    def test_an_unpaid_bill_due_this_cycle_is_listed_with_its_total(self):
+        create_bill(
+            self.admin, name="Electricity", amount="120.50",
+            due_at=timezone.now() + timedelta(days=3),
+        )
+        data = self._now()
+        self.assertEqual([row["bill_name"] for row in data["due"]], ["Electricity"])
+        self.assertEqual(data["due_total"], "120.50")
+
+    def test_an_overdue_bill_is_still_owed_and_is_counted_separately(self):
+        # A bill entered with a past due date is settled as paid on entry by design, so the way
+        # an occurrence becomes genuinely overdue is time passing without it being marked off.
+        create_bill(
+            self.admin, name="Water", amount="80.00",
+            due_at=timezone.now() + timedelta(days=3),
+        )
+        occurrence = BillOccurrence.objects.get(bill__name="Water", status="upcoming")
+        occurrence.due_at = timezone.now() - timedelta(days=6)
+        occurrence.save(update_fields=["due_at"])
+        data = self._now()
+        self.assertEqual(data["overdue_count"], 1)
+        self.assertEqual(data["overdue_total"], "80.00")
+        self.assertIn("Water", [row["bill_name"] for row in data["due"]])
+
+    def test_marking_one_paid_moves_it_out_of_what_is_owed(self):
+        create_bill(
+            self.admin, name="Internet", amount="99.00",
+            due_at=timezone.now() + timedelta(days=2),
+        )
+        occurrence_id = self._now()["due"][0]["id"]
+        response = self.client.post(
+            reverse("solace-occurrence-action", args=[occurrence_id, "paid"]),
+            {}, content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.json())
+        data = self._now()
+        self.assertEqual(data["due"], [])
+        self.assertEqual(data["due_total"], "0.00")
+        self.assertEqual(data["paid_this_cycle_count"], 1)
+        self.assertEqual(data["paid_this_cycle_total"], "99.00")
+
+    def test_bucket_balances_are_summarised(self):
+        create_bucket(self.admin, name="Bills", current_amount="400.00")
+        create_bucket(self.admin, name="Car", current_amount="250.50")
+        self.assertEqual(self._now()["bucket_total"], "650.50")
+
+    def test_the_cycle_window_is_reported(self):
+        data = self._now()
+        self.assertTrue(data["cycle_start"] < data["cycle_end"])
+        self.assertGreaterEqual(data["days_until_cycle_end"], 0)
+
+    def test_children_cannot_read_the_money_landing(self):
+        _make_user("nowchild", User.Role.USER, is_child=True)
+        _login(self.client, "nowchild")
+        self.assertEqual(self.client.get(reverse("solace-now")).status_code, 403)

@@ -20,6 +20,8 @@ from apps.nodes.models import Node
 from apps.permissions.drf import HomeStackPermission
 from apps.solace import selectors, services
 from apps.solace.serializers import (
+    BucketEntrySerializer,
+    SolaceNowSerializer,
     AccountBalanceSnapshotSerializer,
     BillOccurrenceSerializer,
     BillSerializer,
@@ -783,6 +785,60 @@ class BucketListView(SolaceAccessMixin, APIView):
         serializer = BudgetBucketSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         return Response(BudgetBucketSerializer(services.create_bucket(request.user, **serializer.validated_data)).data, status=201)
+
+
+class SolaceNowView(SolaceAccessMixin, APIView):
+    """One call for the landing screen: what is owed before the next payday."""
+
+    def get(self, request: Request) -> Response:
+        from apps.solace.bill_schedule import ensure_bill_occurrences
+
+        summary = selectors.get_now_summary(request.user)
+        # Occurrences are materialised lazily, so make sure this cycle exists before reading it —
+        # otherwise a bill that has never been viewed on the Schedule tab is silently missing.
+        # Look back beyond the cycle as well: an occurrence that fell due before this cycle and
+        # was never paid is exactly what belongs at the top of this screen.
+        start = date.fromisoformat(summary["cycle_start"]) - timedelta(days=90)
+        end = date.fromisoformat(summary["cycle_end"])
+        for bill in selectors.list_bills(request.user, active_only=True):
+            ensure_bill_occurrences(bill, start, end)
+        return Response(SolaceNowSerializer(selectors.get_now_summary(request.user)).data)
+
+
+class BucketEntryListView(SolaceAccessMixin, APIView):
+    """Money in and out of one bucket, with its history."""
+
+    def _bucket(self, bucket_id: int):
+        obj = selectors.get_bucket(bucket_id)
+        if obj is None:
+            raise NotFound()
+        return obj
+
+    def get(self, request: Request, bucket_id: int) -> Response:
+        entries = selectors.list_bucket_entries(self._bucket(bucket_id))
+        return Response(BucketEntrySerializer(entries, many=True).data)
+
+    def post(self, request: Request, bucket_id: int) -> Response:
+        bucket = self._bucket(bucket_id)
+        serializer = BucketEntrySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            entry = services.add_bucket_entry(request.user, bucket, **serializer.validated_data)
+        except ValueError as exc:
+            raise ValidationError({"amount": str(exc)}) from exc
+        return Response(BucketEntrySerializer(entry).data, status=201)
+
+
+class BucketEntryDetailView(SolaceAccessMixin, APIView):
+    def delete(self, request: Request, bucket_id: int, entry_id: int) -> Response:
+        bucket = selectors.get_bucket(bucket_id)
+        if bucket is None:
+            raise NotFound()
+        entry = selectors.get_bucket_entry(entry_id, bucket)
+        if entry is None:
+            raise NotFound()
+        services.delete_bucket_entry(request.user, entry)
+        return Response(status=204)
 
 
 class BucketDetailView(SolaceAccessMixin, APIView):

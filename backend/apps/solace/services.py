@@ -16,6 +16,7 @@ from apps.solace.models import (
     AccountBalanceSnapshot,
     Bill,
     BillOccurrence,
+    BucketEntry,
     BudgetBucket,
     CycleCloseout,
     FinanceCategory,
@@ -43,7 +44,7 @@ _PURCHASE_FIELDS = {
     "status", "priority", "notes", "visibility", "sensitivity",
 }
 _BUCKET_FIELDS = {
-    "name", "category", "target_amount", "current_amount", "allocation_method",
+    "name", "purpose", "category", "target_amount", "current_amount", "allocation_method",
     "allocation_value", "rounding_increment", "cap_to_remaining", "is_active", "position",
     "notes", "visibility", "sensitivity",
 }
@@ -416,11 +417,23 @@ def create_bucket(acting_user: User, **data) -> BudgetBucket:
 
 @transaction.atomic
 def update_bucket(acting_user: User, obj: BudgetBucket, **data) -> BudgetBucket:
+    previous_balance = Decimal(obj.current_amount)
     for key, val in data.items():
         if key in _BUCKET_FIELDS:
             setattr(obj, key, val)
     obj.updated_by = acting_user
     obj.save()
+    # Setting the balance by hand is still allowed, but it is recorded as a correction so the
+    # entry history continues to explain the running total rather than quietly diverging.
+    difference = Decimal(obj.current_amount) - previous_balance
+    if difference != 0:
+        BucketEntry(
+            bucket=obj, household=get_active_household(),
+            created_by=acting_user, updated_by=acting_user,
+            kind=BucketEntry.Kind.ADJUSTMENT, amount=abs(difference),
+            occurred_at=timezone.now(), note="Balance corrected",
+            balance_after=Decimal(obj.current_amount),
+        ).save()
     if obj.cap_to_remaining:
         BudgetBucket.objects.exclude(pk=obj.pk).filter(cap_to_remaining=True).update(
             cap_to_remaining=False,
@@ -433,6 +446,44 @@ def delete_bucket(acting_user: User, obj: BudgetBucket) -> None:
     obj.updated_by = acting_user
     obj.save(update_fields=["updated_by", "updated_at"])
     obj.soft_delete()
+
+
+@transaction.atomic
+def add_bucket_entry(
+    acting_user: User, bucket: BudgetBucket, *, kind: str, amount, occurred_at=None, note: str = "",
+) -> BucketEntry:
+    """Move money into or out of a bucket, keeping the running balance and its history together."""
+    amount = Decimal(amount)
+    if amount <= 0:
+        raise ValueError("Enter an amount above zero.")
+    delta = -amount if kind == BucketEntry.Kind.WITHDRAWAL else amount
+    # Locked so two people adding at once cannot both read the same starting balance.
+    locked = BudgetBucket.objects.select_for_update().get(pk=bucket.pk)
+    balance = Decimal(locked.current_amount) + delta
+    locked.current_amount = balance
+    locked.updated_by = acting_user
+    locked.save(update_fields=["current_amount", "updated_by", "updated_at"])
+    entry = BucketEntry(
+        bucket=locked, household=get_active_household(),
+        created_by=acting_user, updated_by=acting_user,
+        kind=kind, amount=amount, occurred_at=occurred_at or timezone.now(),
+        note=note, balance_after=balance,
+    )
+    entry.save()
+    bucket.current_amount = balance
+    return entry
+
+
+@transaction.atomic
+def delete_bucket_entry(acting_user: User, entry: BucketEntry) -> None:
+    """Remove an entry and take its effect back out of the balance."""
+    locked = BudgetBucket.objects.select_for_update().get(pk=entry.bucket_id)
+    locked.current_amount = Decimal(locked.current_amount) - entry.signed_amount
+    locked.updated_by = acting_user
+    locked.save(update_fields=["current_amount", "updated_by", "updated_at"])
+    entry.updated_by = acting_user
+    entry.save(update_fields=["updated_by", "updated_at"])
+    entry.soft_delete()
 
 
 def create_subscription(acting_user: User, **data) -> Subscription:

@@ -10,6 +10,7 @@ from apps.solace.models import (
     AccountBalanceSnapshot,
     Bill,
     BillOccurrence,
+    BucketEntry,
     BudgetBucket,
     CycleCloseout,
     FinanceCategory,
@@ -202,7 +203,7 @@ class BudgetBucketSerializer(serializers.ModelSerializer):
     class Meta:
         model = BudgetBucket
         fields = [
-            "id", "name", "category", "target_amount", "current_amount",
+            "id", "name", "purpose", "category", "target_amount", "current_amount",
             "remaining_amount", "progress_percent", "allocation_method", "allocation_value",
             "rounding_increment", "cap_to_remaining", "is_active", "position",
             "notes", "visibility", "sensitivity", "created_at", "updated_at",
@@ -331,3 +332,39 @@ class CycleCloseoutSerializer(serializers.ModelSerializer):
             "visibility", "sensitivity", "created_at", "updated_at",
         ]
         read_only_fields = fields
+
+
+class BucketEntrySerializer(serializers.ModelSerializer):
+    # Defaults to now in the service: moving money is nearly always "just happened".
+    occurred_at = serializers.DateTimeField(required=False)
+
+    class Meta:
+        model = BucketEntry
+        fields = [
+            "id", "bucket_id", "kind", "amount", "occurred_at", "note", "balance_after",
+            "created_at",
+        ]
+        read_only_fields = ["id", "bucket_id", "balance_after", "created_at"]
+
+    def validate_amount(self, value):
+        if value is None or value <= 0:
+            raise serializers.ValidationError("Enter an amount above zero.")
+        return value
+
+
+class SolaceNowSerializer(serializers.Serializer):
+    """The landing answer: what is owed before the next payday, and what is already handled."""
+
+    cycle_start = serializers.CharField()
+    cycle_end = serializers.CharField()
+    days_until_cycle_end = serializers.IntegerField()
+    income_total = serializers.CharField()
+    set_aside = serializers.DictField(allow_null=True)
+    due = BillOccurrenceSerializer(many=True)
+    due_total = serializers.CharField()
+    overdue_count = serializers.IntegerField()
+    overdue_total = serializers.CharField()
+    paid_this_cycle_count = serializers.IntegerField()
+    paid_this_cycle_total = serializers.CharField()
+    bucket_total = serializers.CharField()
+    buckets = BudgetBucketSerializer(many=True)

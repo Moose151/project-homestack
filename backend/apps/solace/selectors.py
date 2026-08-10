@@ -13,6 +13,7 @@ from apps.solace.models import (
     AccountBalanceSnapshot,
     Bill,
     BillOccurrence,
+    BucketEntry,
     BudgetBucket,
     CycleCloseout,
     FinanceCategory,
@@ -338,6 +339,60 @@ def get_pay_cycle_plan(user, *, as_of=None) -> dict:
         "is_covered": shortfall == 0,
     }
     return plan
+
+
+def list_bucket_entries(bucket: BudgetBucket, *, limit: int | None = 25):
+    qs = BucketEntry.objects.filter(bucket=bucket).order_by("-occurred_at", "-id")
+    return list(qs[:limit] if limit else qs)
+
+
+def get_bucket_entry(pk: int, bucket: BudgetBucket) -> BucketEntry | None:
+    return BucketEntry.objects.filter(pk=pk, bucket=bucket).first()
+
+
+def get_now_summary(user, *, as_of=None) -> dict:
+    """Everything the landing screen needs to answer "what do I owe before next payday?".
+
+    This is the question the household actually opens Money to ask, and answering it used to mean
+    guessing which of twelve tabs held the answer. One call so the answer, its running total and
+    the actions on it arrive together.
+    """
+    plan = get_pay_cycle_plan(user, as_of=as_of)
+    cycle_start = date.fromisoformat(plan["cycle_start"])
+    cycle_end = date.fromisoformat(plan["cycle_end"])
+    today = timezone.localdate(as_of) if as_of else timezone.localdate()
+
+    # Anything still unpaid up to the end of the cycle, including what fell due earlier and was
+    # never marked off — an overdue bill belongs on this list more than anything else does.
+    due = [
+        occurrence
+        for occurrence in list_bill_occurrences(user, start=date.min, end=cycle_end)
+        if occurrence.status == BillOccurrence.Status.UPCOMING
+    ]
+    paid_this_cycle = [
+        occurrence
+        for occurrence in list_bill_occurrences(user, start=cycle_start, end=cycle_end)
+        if occurrence.status == BillOccurrence.Status.PAID
+    ]
+    overdue = [occurrence for occurrence in due if timezone.localdate(occurrence.due_at) < today]
+    total = lambda rows: f"{sum((Decimal(row.amount) for row in rows), Decimal('0.00')):.2f}"
+
+    buckets = list_buckets(user, active_only=True)
+    return {
+        "cycle_start": plan["cycle_start"],
+        "cycle_end": plan["cycle_end"],
+        "days_until_cycle_end": (cycle_end - today).days,
+        "income_total": plan["income_total"],
+        "set_aside": plan.get("set_aside"),
+        "due": due,
+        "due_total": total(due),
+        "overdue_count": len(overdue),
+        "overdue_total": total(overdue),
+        "paid_this_cycle_count": len(paid_this_cycle),
+        "paid_this_cycle_total": total(paid_this_cycle),
+        "bucket_total": f"{sum((Decimal(b.current_amount) for b in buckets), Decimal('0.00')):.2f}",
+        "buckets": buckets,
+    }
 
 
 def search_solace(user, query: str) -> dict:

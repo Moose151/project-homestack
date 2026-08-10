@@ -1200,9 +1200,48 @@ export interface SolacePurchase {
   updated_at: string
 }
 
+export type SolaceBucketPurpose = 'bills' | 'savings' | 'spending' | 'purchases' | 'other'
+export type SolaceBucketEntryKind = 'deposit' | 'withdrawal' | 'adjustment'
+
+export interface SolaceBucketEntry {
+  id: number
+  bucket_id: number
+  kind: SolaceBucketEntryKind
+  amount: string
+  occurred_at: string
+  note: string
+  balance_after: string
+  created_at: string
+}
+
+export interface SolaceBucketEntryWrite {
+  kind: SolaceBucketEntryKind
+  amount: string
+  note?: string
+  occurred_at?: string
+}
+
+/** One call behind the Money landing screen: what is owed before the next payday. */
+export interface SolaceNow {
+  cycle_start: string
+  cycle_end: string
+  days_until_cycle_end: number
+  income_total: string
+  set_aside: SolacePayCyclePlan['set_aside'] | null
+  due: SolaceBillOccurrence[]
+  due_total: string
+  overdue_count: number
+  overdue_total: string
+  paid_this_cycle_count: number
+  paid_this_cycle_total: string
+  bucket_total: string
+  buckets: SolaceBucket[]
+}
+
 export interface SolaceBucket {
   id: number
   name: string
+  purpose: SolaceBucketPurpose
   category: string
   target_amount: string
   current_amount: string

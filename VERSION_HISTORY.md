@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.26.0**
+> **Current version: 0.27.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,31 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.27 — Money you can actually run the household on
+
+### 0.27.0 — 2026-08-10
+- **Twelve tabs became five.** Money had a tab each for overview, forecast, schedule, closeout,
+  pay plan, bills, buckets, subscriptions, purchases, paydays, checklist and manage — a row nobody
+  could scan, where the common actions were as buried as the rare ones. They now group by the
+  question being asked: **Now** (what do I owe), **Bills** (what goes out: bills, subscriptions,
+  calendar), **Plan** (how pay is divided: pay plan, buckets, income, purchases), **Insights**
+  (forecast, cycle closeout) and **Manage**. Links and bookmarks using the old tab names still land
+  in the right place.
+- **Money opens on what you owe.** It used to open on six stat tiles that only linked elsewhere,
+  so marking a bill paid meant guessing which tab held it. The Now screen leads with "Due before
+  next payday" — a running total, overdue flagged, and **Paid** and **Skip** on the row itself,
+  matching the standalone app's dashboard that this replaces. Set-aside status, the payday
+  checklist and the cycle position sit beneath it. One `/solace/now/` call backs the whole screen.
+- **Buckets hold money instead of a number you overwrite.** Every change now goes through a
+  `BucketEntry` — Add and Spend are the bucket's primary actions, each records what it was for,
+  and the history shows the running balance. Correcting a balance by hand still works and is
+  recorded as a correction, so the history keeps explaining the total. Buckets also carry a
+  purpose (bills, savings, spending, planned purchases, other).
+- `import_solace` now defaults to the standalone database's real location on this machine; the
+  path it carried had not existed since the project moved.
+- **747 backend tests green (13 new); typecheck and production build clean; migration
+  `solace.0008`.**
 
 ## 0.26 — Pools & spas
 

@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type {
-  SolaceBalanceForecast, SolaceBalanceSnapshot, SolaceBill, SolaceBillOccurrence, SolaceBillTimeline, SolaceBucket, SolaceCategory,
+  SolaceBalanceForecast, SolaceBalanceSnapshot, SolaceBill, SolaceBillOccurrence,
+  SolaceBillTimeline, SolaceBucket, SolaceBucketEntry, SolaceBucketPurpose, SolaceCategory,
   SolaceCategoryReport, SolaceChecklistItem, SolaceChecklistPreference, SolaceCloseoutResponse,
-  SolaceHealth, SolacePayday, SolacePayCyclePlan, SolacePurchase, SolaceSchedule,
-  SolaceSettings, SolaceSubscription,
+  SolaceHealth, SolaceNow, SolacePayCyclePlan, SolacePayday, SolacePurchase, SolaceSchedule,
+  SolaceSettings, SolaceSubscription
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
@@ -63,22 +64,51 @@ const dayAfter = (dateValue: string) => {
   return dateKey(value.toISOString())
 }
 
-type Tab = 'overview' | 'forecast' | 'schedule' | 'closeout' | 'plan' | 'bills' | 'buckets' | 'subscriptions' | 'purchases' | 'paydays' | 'checklist' | 'manage'
-const TAB_KEYS: Tab[] = ['overview', 'forecast', 'schedule', 'closeout', 'plan', 'bills', 'buckets', 'subscriptions', 'purchases', 'paydays', 'checklist', 'manage']
-const SOLACE_TABS: Array<{ key: Tab; label: string }> = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'forecast', label: 'Forecast' },
-  { key: 'schedule', label: 'Schedule' },
-  { key: 'closeout', label: 'Closeout' },
-  { key: 'plan', label: 'Pay plan' },
-  { key: 'bills', label: 'Bills' },
-  { key: 'buckets', label: 'Buckets' },
-  { key: 'subscriptions', label: 'Subscriptions' },
-  { key: 'purchases', label: 'Purchases' },
-  { key: 'paydays', label: 'Paydays' },
-  { key: 'checklist', label: 'Checklist' },
-  { key: 'manage', label: 'Manage' },
+/**
+ * Five destinations, not twelve.
+ *
+ * Money had a tab each for overview, forecast, schedule, closeout, pay plan, bills, buckets,
+ * subscriptions, purchases, paydays, checklist and manage — a row nobody could scan, where the
+ * common actions were as buried as the rare ones. They now group by the question being asked:
+ * what do I owe now, what goes out, how is pay divided, how are we tracking, and setup.
+ */
+type Tab = 'now' | 'bills' | 'plan' | 'insights' | 'manage'
+type BillsSection = 'bills' | 'subscriptions' | 'schedule'
+type PlanSection = 'payplan' | 'buckets' | 'paydays' | 'purchases'
+type InsightsSection = 'forecast' | 'closeout'
+
+const SOLACE_TABS = [
+  { key: 'now' as const, label: 'Now' },
+  { key: 'bills' as const, label: 'Bills' },
+  { key: 'plan' as const, label: 'Plan' },
+  { key: 'insights' as const, label: 'Insights' },
+  { key: 'manage' as const, label: 'Manage' },
 ]
+const BILLS_SECTIONS = [
+  { key: 'bills' as const, label: 'Bills' },
+  { key: 'subscriptions' as const, label: 'Subscriptions' },
+  { key: 'schedule' as const, label: 'Calendar' },
+]
+const PLAN_SECTIONS = [
+  { key: 'payplan' as const, label: 'Pay plan' },
+  { key: 'buckets' as const, label: 'Buckets' },
+  { key: 'paydays' as const, label: 'Income' },
+  { key: 'purchases' as const, label: 'Purchases' },
+]
+const INSIGHTS_SECTIONS = [
+  { key: 'forecast' as const, label: 'Forecast' },
+  { key: 'closeout' as const, label: 'Cycle closeout' },
+]
+
+/** Links and bookmarks made before the regrouping still land in the right place. */
+const LEGACY_TABS: Record<string, [Tab, string | null]> = {
+  overview: ['now', null], checklist: ['now', null],
+  bills: ['bills', 'bills'], subscriptions: ['bills', 'subscriptions'], schedule: ['bills', 'schedule'],
+  plan: ['plan', 'payplan'], buckets: ['plan', 'buckets'], paydays: ['plan', 'paydays'],
+  purchases: ['plan', 'purchases'],
+  forecast: ['insights', 'forecast'], closeout: ['insights', 'closeout'],
+  manage: ['manage', null],
+}
 
 const BILL_CATS = ['mortgage', 'utilities', 'insurance', 'council', 'debt', 'subscription', 'childcare', 'other']
 type HomeDestination = '' | 'insurance_policy' | 'household_cost' | 'maintenance'
@@ -545,7 +575,7 @@ function BucketForm({ onCreated, onError }: {
   onCreated: () => void; onError: (message: string) => void
 }) {
   const [f, setF] = useState({
-    name: '', category: '', target_amount: '', current_amount: '',
+    name: '', purpose: 'savings', category: '', target_amount: '', current_amount: '',
     allocation_method: 'percentage' as 'percentage' | 'fixed',
     allocation_value: '', rounding_increment: '1.00', cap_to_remaining: true,
   })
@@ -561,7 +591,7 @@ function BucketForm({ onCreated, onError }: {
         allocation_value: f.allocation_value || '0.00',
       })
       setF({
-        name: '', category: '', target_amount: '', current_amount: '',
+        name: '', purpose: 'savings', category: '', target_amount: '', current_amount: '',
         allocation_method: 'percentage', allocation_value: '',
         rounding_increment: '1.00', cap_to_remaining: true,
       })
@@ -575,6 +605,11 @@ function BucketForm({ onCreated, onError }: {
       <h3 className="mb-3 font-semibold text-ink">New bucket and pay rule</h3>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[1.3fr_1fr_0.9fr_0.8fr_0.8fr_0.8fr_auto]">
         <Field label="Bucket"><Input value={f.name} onChange={e => set('name', e.target.value)} placeholder="Emergency fund" /></Field>
+        <Field label="What for">
+          <Select value={f.purpose} onChange={e => set('purpose', e.target.value)}>
+            {BUCKET_PURPOSES.map(row => <option key={row.value} value={row.value}>{row.label}</option>)}
+          </Select>
+        </Field>
         <Field label="Category"><Input value={f.category} onChange={e => set('category', e.target.value)} /></Field>
         <Field label="Pay rule">
           <Select value={f.allocation_method} onChange={e => set('allocation_method', e.target.value)}>
@@ -599,6 +634,121 @@ function BucketForm({ onCreated, onError }: {
         Never allocate more than the remaining pay
       </label>
     </Card>
+  )
+}
+
+const BUCKET_PURPOSES: { value: SolaceBucketPurpose; label: string }[] = [
+  { value: 'bills', label: 'Bills' },
+  { value: 'savings', label: 'Savings' },
+  { value: 'spending', label: 'Spending' },
+  { value: 'purchases', label: 'Planned purchases' },
+  { value: 'other', label: 'Other' },
+]
+
+/**
+ * Money in and out of one bucket.
+ *
+ * The balance used to be a number you overwrote in an edit form, so "what is in the car fund"
+ * had no history and no explanation. Adding and spending are now the bucket's primary actions
+ * and each one is recorded.
+ */
+function BucketMoney({ bucket, reload, onError }: {
+  bucket: SolaceBucket; reload: () => void; onError: (message: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [entries, setEntries] = useState<SolaceBucketEntry[]>([])
+  const [kind, setKind] = useState<'deposit' | 'withdrawal'>('deposit')
+  const [amount, setAmount] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const loadEntries = async () => {
+    try { setEntries(await api.getSolaceBucketEntries(bucket.id)) } catch (e) { onError(errMsg(e)) }
+  }
+  useEffect(() => { if (open) void loadEntries() }, [open, bucket.id])
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!amount) return
+    setBusy(true)
+    try {
+      await api.addSolaceBucketEntry(bucket.id, { kind, amount, note })
+      setAmount(''); setNote('')
+      await loadEntries()
+      reload()
+    } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="mt-3 border-t border-line pt-3">
+      <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+        <Field label="Amount" className="sm:w-32">
+          <Input
+            type="number" min="0" step="0.01" inputMode="decimal" value={amount}
+            onChange={e => setAmount(e.target.value)} placeholder="0.00"
+          />
+        </Field>
+        <Field label="What for" className="flex-1">
+          <Input value={note} onChange={e => setNote(e.target.value)} placeholder="Optional note" />
+        </Field>
+        <div className="flex gap-2">
+          <Button
+            type="submit" size="sm" className="flex-1 sm:flex-none" loading={busy && kind === 'deposit'}
+            disabled={!amount || busy} onClick={() => setKind('deposit')}
+          >Add</Button>
+          <Button
+            type="submit" size="sm" variant="secondary" className="flex-1 sm:flex-none"
+            loading={busy && kind === 'withdrawal'} disabled={!amount || busy}
+            onClick={() => setKind('withdrawal')}
+          >Spend</Button>
+        </div>
+      </form>
+      <button
+        type="button" onClick={() => setOpen(value => !value)}
+        className="mt-2 min-h-10 text-xs font-semibold text-primary"
+        aria-expanded={open}
+      >
+        {open ? 'Hide history' : 'History'}
+      </button>
+      {open && (
+        entries.length === 0 ? (
+          <p className="text-xs text-muted">Nothing recorded yet.</p>
+        ) : (
+          <ul className="divide-y divide-line/70">
+            {entries.map(entry => (
+              <li key={entry.id} className="flex items-center justify-between gap-2 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm text-ink">
+                    {entry.kind === 'withdrawal' ? '−' : '+'}{money(entry.amount)}
+                    {entry.note ? <span className="text-muted"> · {entry.note}</span> : ''}
+                  </p>
+                  <p className="text-[11px] text-muted">
+                    {new Date(entry.occurred_at).toLocaleDateString()} · balance {money(entry.balance_after)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!(await confirmDialog({
+                      title: 'Remove this entry?',
+                      message: 'The bucket balance goes back to what it was before it.',
+                      confirmLabel: 'Remove',
+                    }))) return
+                    try {
+                      await api.deleteSolaceBucketEntry(bucket.id, entry.id)
+                      await loadEntries()
+                      reload()
+                    } catch (e) { onError(errMsg(e)) }
+                  }}
+                  className="grid min-h-10 min-w-10 place-items-center rounded-lg text-muted hover:text-danger"
+                  aria-label="Remove entry"
+                >×</button>
+              </li>
+            ))}
+          </ul>
+        )
+      )}
+    </div>
   )
 }
 
@@ -719,6 +869,7 @@ function BucketsTab({ buckets, reload, onError }: {
                     : `${Number(b.allocation_value)}% of each pay`
                   : 'Excluded from pay plan'}
               </p>
+              <BucketMoney bucket={b} reload={reload} onError={onError} />
               <BucketRuleEditor bucket={b} reload={reload} onError={onError} />
             </Card>
           ))}
@@ -1460,41 +1611,6 @@ function ScheduleTab({ schedule, month, loading, onMonth, onAction }: {
   )
 }
 
-function Overview({ bills, buckets, subscriptions, purchases, health, closeout, forecast, onTab }: {
-  bills: SolaceBill[]; buckets: SolaceBucket[]; subscriptions: SolaceSubscription[]
-  purchases: SolacePurchase[]; health: SolaceHealth | null; closeout: SolaceCloseoutResponse | null
-  forecast: SolaceBalanceForecast | null
-  onTab: (t: Tab) => void
-}) {
-  const unpaidTotal = useMemo(() => bills.filter(b => !b.is_paid).reduce((sum, b) => sum + Number(b.amount || 0), 0), [bills])
-  const bucketTotal = useMemo(() => buckets.reduce((sum, b) => sum + Number(b.current_amount || 0), 0), [buckets])
-  const subTotal = useMemo(() => subscriptions.filter(s => s.is_active).reduce((sum, s) => sum + Number(s.amount || 0), 0), [subscriptions])
-  const openPurchases = purchases.filter(p => p.is_open)
-  // The "View" pill carried a colour per tile with nothing to distinguish — the whole tile is
-  // the link, so it does not need a button inside it. Six tiles in one grid also tile exactly,
-  // where 4-then-2 left a gap on the second row.
-  const stat = (label: string, value: string, tab: Tab) => (
-    <StatCard key={label} label={label} value={value} onClick={() => onTab(tab)} />
-  )
-  return (
-    <div className="space-y-4">
-      <HealthPanel health={health} onManage={() => onTab('manage')} />
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {stat(
-          `Available to withdraw (${forecast?.horizon_months || 12} mo)`,
-          forecast?.safe_to_withdraw === null || forecast?.safe_to_withdraw === undefined ? 'Not set' : money(forecast.safe_to_withdraw),
-          'forecast',
-        )}
-        {stat('Unpaid this cycle', closeout ? money(closeout.summary.unpaid_total) : money(unpaidTotal), 'closeout')}
-        {stat('Set aside', money(bucketTotal), 'buckets')}
-        {stat('Planned purchases', String(openPurchases.length), 'purchases')}
-        {stat('Active subscriptions', money(subTotal), 'subscriptions')}
-        {stat('Pay-cycle status', closeout?.closeout?.status === 'closed' ? 'Closed' : 'Open', 'closeout')}
-      </div>
-    </div>
-  )
-}
-
 function ForecastTab({ initial, onManage, onError }: {
   initial: SolaceBalanceForecast | null
   onManage: () => void
@@ -1647,11 +1763,11 @@ function ForecastTab({ initial, onManage, onError }: {
   )
 }
 
-function PayPlan({ plan, generating, onGenerate, onTab, onError }: {
+function PayPlan({ plan, generating, onGenerate, onSection, onError }: {
   plan: SolacePayCyclePlan | null
   generating: boolean
   onGenerate: (date?: string) => void
-  onTab: (tab: Tab) => void
+  onSection: (tab: Tab, section: string) => void
   onError: (message: string) => void
 }) {
   const [viewed, setViewed] = useState(plan)
@@ -1698,7 +1814,7 @@ function PayPlan({ plan, generating, onGenerate, onTab, onError }: {
           icon="🧮"
           title="No income in this pay cycle"
           hint="The set-aside requirement is still shown below. Add an income source to calculate the transfer split."
-          action={<Button onClick={() => onTab('paydays')}>Add payday</Button>}
+          action={<Button onClick={() => onSection('plan', 'paydays')}>Add payday</Button>}
         />
       )}
       <div className="grid gap-3 sm:grid-cols-3">
@@ -1738,7 +1854,7 @@ function PayPlan({ plan, generating, onGenerate, onTab, onError }: {
           icon="🪣"
           title="No active allocation rules"
           hint="Set a percentage or fixed pay-cycle amount on at least one bucket."
-          action={<Button onClick={() => onTab('buckets')}>Configure buckets</Button>}
+          action={<Button onClick={() => onSection('plan', 'buckets')}>Configure buckets</Button>}
         />
       ) : (
         <Card className="divide-y divide-line">
@@ -1784,11 +1900,208 @@ function PayPlan({ plan, generating, onGenerate, onTab, onError }: {
   )
 }
 
+/**
+ * The Money landing screen.
+ *
+ * Money used to open on six stat tiles that only linked elsewhere, so the question the household
+ * actually opens it to ask — what do I still owe before the next payday, and can I tick it off —
+ * meant guessing which of twelve tabs held the answer. This screen answers it directly and puts
+ * Paid and Skip on the row itself.
+ */
+function CycleStrip({ now }: { now: SolaceNow }) {
+  const dateLabel = (iso: string) =>
+    new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+  const days = now.days_until_cycle_end
+  return (
+    <Card contentClassName="p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-muted">This pay cycle</p>
+          <p className="mt-0.5 text-lg font-black text-ink">
+            {dateLabel(now.cycle_start)} – {dateLabel(now.cycle_end)}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-lg font-black text-ink">
+            {days <= 0 ? 'Payday' : `${days} ${days === 1 ? 'day' : 'days'}`}
+          </p>
+          <p className="text-xs text-muted">{days <= 0 ? 'Cycle ends today' : 'until next payday'}</p>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function DueRow({ occurrence, onAction }: {
+  occurrence: SolaceBillOccurrence
+  onAction: (id: number, action: 'paid' | 'unpaid' | 'skip') => Promise<SolaceBillOccurrence>
+}) {
+  const [saving, setSaving] = useState<'paid' | 'skip' | null>(null)
+  const act = async (action: 'paid' | 'skip') => {
+    setSaving(action)
+    try { await onAction(occurrence.id, action) } finally { setSaving(null) }
+  }
+  return (
+    <li className={`rounded-xl border p-3 ${occurrence.is_overdue ? 'border-danger/40 bg-danger-soft/40' : 'border-line bg-sunken/50'}`}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-semibold text-ink">{occurrence.bill_name}</p>
+          <p className="mt-0.5 text-xs text-muted">
+            {occurrence.is_overdue ? 'Overdue — ' : ''}due {new Date(occurrence.due_at).toLocaleDateString()}
+            {occurrence.bill_category ? ` · ${occurrence.bill_category}` : ''}
+          </p>
+        </div>
+        <p className="text-lg font-black text-ink">{money(occurrence.amount)}</p>
+      </div>
+      {/* Full-width on a phone: this is the action the screen exists for. */}
+      <div className="mt-3 flex gap-2">
+        <Button size="sm" className="flex-1" loading={saving === 'paid'} disabled={saving !== null} onClick={() => act('paid')}>
+          Paid
+        </Button>
+        <Button size="sm" variant="ghost" className="flex-1 sm:flex-none" disabled={saving !== null} onClick={() => act('skip')}>
+          Skip
+        </Button>
+      </div>
+    </li>
+  )
+}
+
+function NowTab({ now, health, checklist, onAction, onTab, onSection }: {
+  now: SolaceNow | null
+  health: SolaceHealth | null
+  checklist: ReactNode
+  onAction: (id: number, action: 'paid' | 'unpaid' | 'skip') => Promise<SolaceBillOccurrence>
+  onTab: (tab: Tab) => void
+  onSection: (tab: Tab, section: string) => void
+}) {
+  if (!now) return <div className="h-64 animate-pulse rounded-2xl bg-sunken" />
+
+  const setAside = now.set_aside
+  return (
+    <div className="space-y-4">
+      {/* Only while something is still unconfigured — a healthy setup needs no banner. */}
+      {health && health.status !== 'healthy' && <HealthPanel health={health} onManage={() => onTab('manage')} />}
+      <CycleStrip now={now} />
+
+      <Card contentClassName="p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-black text-ink">Due before next payday</h2>
+            <p className="mt-0.5 text-xs text-muted">
+              {now.due.length === 0
+                ? 'Nothing left to pay this cycle'
+                : `${now.due.length} ${now.due.length === 1 ? 'bill' : 'bills'} still to pay`}
+              {now.overdue_count > 0 ? ` · ${now.overdue_count} overdue` : ''}
+            </p>
+          </div>
+          <p className="text-2xl font-black text-ink">{money(now.due_total)}</p>
+        </div>
+
+        {now.due.length === 0 ? (
+          <p className="mt-4 rounded-xl bg-success-soft px-3 py-2.5 text-sm text-success">
+            All clear. {now.paid_this_cycle_count > 0
+              ? `${money(now.paid_this_cycle_total)} paid so far this cycle.`
+              : 'Nothing is due before the next payday.'}
+          </p>
+        ) : (
+          <ul className="mt-4 space-y-2">
+            {now.due.map(occurrence => (
+              <DueRow key={occurrence.id} occurrence={occurrence} onAction={onAction} />
+            ))}
+          </ul>
+        )}
+
+        {now.paid_this_cycle_count > 0 && now.due.length > 0 && (
+          <p className="mt-3 text-xs text-muted">
+            {money(now.paid_this_cycle_total)} already paid this cycle across{' '}
+            {now.paid_this_cycle_count} {now.paid_this_cycle_count === 1 ? 'bill' : 'bills'}.
+          </p>
+        )}
+      </Card>
+
+      {setAside && (
+        <Card contentClassName="p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-black text-ink">Set aside</h2>
+              <p className="mt-0.5 text-xs text-muted">
+                {setAside.is_covered
+                  ? 'Your bills buckets cover what is coming'
+                  : `${money(setAside.shortfall)} short of what upcoming bills need`}
+              </p>
+            </div>
+            <p className="text-xl font-black text-ink">{money(now.bucket_total)}</p>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {([
+              ['Recurring bills', setAside.recurring_bills],
+              ['Planned purchases', setAside.planned_purchases],
+              ['Buffer', setAside.buffer],
+              ['Needed each pay', setAside.required_total],
+            ] as const).map(([label, value]) => (
+              <div key={label} className="rounded-xl bg-sunken px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</p>
+                <p className="text-sm font-bold text-ink">{money(value)}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={() => onSection('plan', 'buckets')}>
+              Open buckets
+            </Button>
+            <Button size="sm" variant="ghost" className="w-full sm:w-auto" onClick={() => onSection('plan', 'payplan')}>
+              Pay plan
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {checklist}
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatCard label="Income this cycle" value={money(now.income_total)} onClick={() => onSection('plan', 'paydays')} />
+        <StatCard label="Set aside" value={money(now.bucket_total)} onClick={() => onSection('plan', 'buckets')} />
+        <StatCard label="Paid this cycle" value={money(now.paid_this_cycle_total)} onClick={() => onSection('bills', 'schedule')} />
+        <StatCard label="Forecast" value="Open" onClick={() => onTab('insights')} />
+      </div>
+    </div>
+  )
+}
+
 export function SolacePage() {
   const [unlocked, setUnlocked] = useState(false)
   const { nodes } = useStacks()
   const requiresPasswordUnlock = nodes.find(node => node.key === 'solace')?.requires_reauthentication ?? true
-  const [tab, setTab] = useUrlTab<Tab>('overview', TAB_KEYS)
+  const [tab, setTab] = useUrlTab<Tab>('now', SOLACE_TABS.map(row => row.key))
+  const [billsSection, setBillsSection] = useUrlTab<BillsSection>('bills', BILLS_SECTIONS.map(row => row.key), 'section')
+  const [planSection, setPlanSection] = useUrlTab<PlanSection>('payplan', PLAN_SECTIONS.map(row => row.key), 'section')
+  const [insightsSection, setInsightsSection] = useUrlTab<InsightsSection>('forecast', INSIGHTS_SECTIONS.map(row => row.key), 'section')
+  const [now, setNow] = useState<SolaceNow | null>(null)
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  // A link written before the regrouping still knows where it meant to go.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const requested = params.get('tab')
+    const mapped = requested ? LEGACY_TABS[requested] : undefined
+    if (!mapped || SOLACE_TABS.some(row => row.key === requested)) return
+    const [nextTab, section] = mapped
+    if (nextTab === 'now') params.delete('tab')
+    else params.set('tab', nextTab)
+    if (section) params.set('section', section)
+    const search = params.toString()
+    navigate({ pathname: location.pathname, search: search ? `?${search}` : '' }, { replace: true })
+  }, [location.search, location.pathname, navigate])
+
+  const goSection = (nextTab: Tab, section: string) => {
+    const params = new URLSearchParams(location.search)
+    if (nextTab === 'now') params.delete('tab')
+    else params.set('tab', nextTab)
+    params.set('section', section)
+    const search = params.toString()
+    navigate({ pathname: location.pathname, search: search ? `?${search}` : '' })
+  }
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [bills, setBills] = useState<SolaceBill[]>([])
@@ -1811,6 +2124,14 @@ export function SolacePage() {
   const [scheduleMonth, setScheduleMonth] = useState(currentMonthKey)
   const [scheduleLoading, setScheduleLoading] = useState(false)
   const [q, setQ] = useUrlQueryState()
+
+  const billCategoryNames = useMemo(() => {
+    const names = categories
+      .filter(category => category.is_active && ['bill', 'both'].includes(category.category_type))
+      .map(category => category.name)
+    return names.length ? names : BILL_CATS
+  }, [categories])
+
 
   useEffect(() => {
     if (!requiresPasswordUnlock) setUnlocked(true)
@@ -1841,6 +2162,7 @@ export function SolacePage() {
       setChecklistPreferences(data.checklist_preferences)
       setUnlocked(true)
       void loadSchedule()
+      void api.getSolaceNow().then(setNow).catch(() => {})
     } catch (e) {
       setError(errMsg(e))
       if (String(errMsg(e)).includes('re-authentication')) setUnlocked(false)
@@ -1880,7 +2202,7 @@ export function SolacePage() {
       ])
       setChecklist(items)
       setPlan(selectedPlan)
-      setTab('checklist')
+      setTab('now')
     } catch (e) {
       setError(errMsg(e))
     } finally {
@@ -1898,6 +2220,7 @@ export function SolacePage() {
       } : previous)
       setBills(await api.getSolaceBills())
       setForecast(await api.getSolaceForecast())
+      setNow(await api.getSolaceNow())
       void loadSchedule()
       return updated
     } catch (e) {
@@ -1927,25 +2250,78 @@ export function SolacePage() {
         onChange={setTab}
         mobileSelectLabel="Solace section"
       />
-      {tab === 'overview' && <Overview bills={bills} buckets={buckets} subscriptions={subscriptions} purchases={purchases} health={health} closeout={closeout} forecast={forecast} onTab={setTab} />}
-      {tab === 'forecast' && <ForecastTab initial={forecast} onManage={() => setTab('manage')} onError={setError} />}
-      {tab === 'schedule' && (
-        <ScheduleTab
-          schedule={schedule}
-          month={scheduleMonth}
-          loading={scheduleLoading}
-          onMonth={setScheduleMonth}
+      {tab === 'now' && (
+        <NowTab
+          now={now}
+          health={health}
           onAction={updateOccurrence}
+          onTab={setTab}
+          onSection={goSection}
+          checklist={
+            <ChecklistTab
+              items={checklist}
+              preferences={checklistPreferences}
+              plan={plan}
+              generating={generatingChecklist}
+              reload={load}
+              onGenerate={generateChecklist}
+              onChange={setChecklist}
+              onError={setError}
+            />
+          }
         />
       )}
-      {tab === 'closeout' && <CloseoutTab closeout={closeout} reload={load} onOccurrence={updateOccurrence} onError={setError} />}
-      {tab === 'plan' && <PayPlan plan={plan} generating={generatingChecklist} onGenerate={generateChecklist} onTab={setTab} onError={setError} />}
-      {tab === 'bills' && <BillsTab bills={bills} categories={(categories.filter(category => category.is_active && ['bill', 'both'].includes(category.category_type)).map(category => category.name).length ? categories.filter(category => category.is_active && ['bill', 'both'].includes(category.category_type)).map(category => category.name) : BILL_CATS)} reload={load} onOccurrence={updateOccurrence} onError={setError} />}
-      {tab === 'buckets' && <BucketsTab buckets={buckets} reload={load} onError={setError} />}
-      {tab === 'subscriptions' && <SubscriptionsTab subscriptions={subscriptions} reload={load} onError={setError} />}
-      {tab === 'purchases' && <PurchasesTab purchases={purchases} categories={categories.filter(category => category.is_active && ['purchase', 'both'].includes(category.category_type)).map(category => category.name)} reload={load} onError={setError} />}
-      {tab === 'paydays' && <PaydaysTab paydays={paydays} reload={load} onError={setError} />}
-      {tab === 'checklist' && <ChecklistTab items={checklist} preferences={checklistPreferences} plan={plan} generating={generatingChecklist} reload={load} onGenerate={generateChecklist} onChange={setChecklist} onError={setError} />}
+
+      {tab === 'bills' && (
+        <div className="flex flex-col gap-4">
+          <Tabs tabs={BILLS_SECTIONS} active={billsSection} onChange={setBillsSection} variant="secondary" />
+          {billsSection === 'bills' && (
+            <BillsTab
+              bills={bills}
+              categories={billCategoryNames}
+              reload={load}
+              onOccurrence={updateOccurrence}
+              onError={setError}
+            />
+          )}
+          {billsSection === 'subscriptions' && <SubscriptionsTab subscriptions={subscriptions} reload={load} onError={setError} />}
+          {billsSection === 'schedule' && (
+            <ScheduleTab
+              schedule={schedule}
+              month={scheduleMonth}
+              loading={scheduleLoading}
+              onMonth={setScheduleMonth}
+              onAction={updateOccurrence}
+            />
+          )}
+        </div>
+      )}
+
+      {tab === 'plan' && (
+        <div className="flex flex-col gap-4">
+          <Tabs tabs={PLAN_SECTIONS} active={planSection} onChange={setPlanSection} variant="secondary" />
+          {planSection === 'payplan' && <PayPlan plan={plan} generating={generatingChecklist} onGenerate={generateChecklist} onSection={goSection} onError={setError} />}
+          {planSection === 'buckets' && <BucketsTab buckets={buckets} reload={load} onError={setError} />}
+          {planSection === 'paydays' && <PaydaysTab paydays={paydays} reload={load} onError={setError} />}
+          {planSection === 'purchases' && (
+            <PurchasesTab
+              purchases={purchases}
+              categories={categories.filter(category => category.is_active && ['purchase', 'both'].includes(category.category_type)).map(category => category.name)}
+              reload={load}
+              onError={setError}
+            />
+          )}
+        </div>
+      )}
+
+      {tab === 'insights' && (
+        <div className="flex flex-col gap-4">
+          <Tabs tabs={INSIGHTS_SECTIONS} active={insightsSection} onChange={setInsightsSection} variant="secondary" />
+          {insightsSection === 'forecast' && <ForecastTab initial={forecast} onManage={() => setTab('manage')} onError={setError} />}
+          {insightsSection === 'closeout' && <CloseoutTab closeout={closeout} reload={load} onOccurrence={updateOccurrence} onError={setError} />}
+        </div>
+      )}
+
       {tab === 'manage' && (
         <ManagementTab
           settings={settings}

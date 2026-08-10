@@ -16,11 +16,12 @@ import type {
   RoomItemStatus, RoomItemType, RoomListResponse, RoomPlanItem, RoomPlanMode, RoomPlanProduct,
   RotatingSchedule, RotatingScheduleOccurrence, RotatingScheduleWrite, ServiceProvider,
   SolaceBalanceForecast, SolaceBalanceSnapshot, SolaceBill, SolaceBillImportPreview,
-  SolaceBillOccurrence, SolaceBillTimeline, SolaceBootstrap, SolaceBucket, SolaceCategory,
-  SolaceCategoryReport, SolaceChecklistItem, SolaceChecklistPreference, SolaceCloseoutResponse,
-  SolaceCycleCloseout, SolaceHealth, SolacePayCyclePlan, SolacePayday, SolacePurchase,
-  SolaceSchedule, SolaceSearchResults, SolaceSettings, SolaceSubscription, WaterTest,
-  WaterTestWrite, WikiCategory, WikiPage
+  SolaceBillOccurrence, SolaceBillTimeline, SolaceBootstrap, SolaceBucket, SolaceBucketEntry,
+  SolaceBucketEntryWrite, SolaceCategory, SolaceCategoryReport, SolaceChecklistItem,
+  SolaceChecklistPreference, SolaceCloseoutResponse, SolaceCycleCloseout, SolaceHealth,
+  SolaceNow, SolacePayCyclePlan, SolacePayday, SolacePurchase, SolaceSchedule,
+  SolaceSearchResults, SolaceSettings, SolaceSubscription, WaterTest, WaterTestWrite,
+  WikiCategory, WikiPage
 } from './types'
 
 /** Which screen is signing in. Only 'web' earns the longer re-authentication window. */
@@ -1026,6 +1027,14 @@ export const api = {
     }),
   deleteSolacePurchase: (id: number): Promise<void> =>
     _fetch(`/solace/purchases/${id}/`, { method: 'DELETE' }),
+  getSolaceNow: (): Promise<SolaceNow> => _fetch('/solace/now/'),
+  getSolaceBucketEntries: (bucketId: number): Promise<SolaceBucketEntry[]> =>
+    _fetch(`/solace/buckets/${bucketId}/entries/`),
+  addSolaceBucketEntry: (bucketId: number, data: SolaceBucketEntryWrite): Promise<SolaceBucketEntry> =>
+    _fetch(`/solace/buckets/${bucketId}/entries/`, { method: 'POST', body: JSON.stringify(data) }),
+  deleteSolaceBucketEntry: (bucketId: number, entryId: number): Promise<void> =>
+    _fetch(`/solace/buckets/${bucketId}/entries/${entryId}/`, { method: 'DELETE' }),
+
   getSolaceBuckets: (): Promise<SolaceBucket[]> => _fetch('/solace/buckets/'),
   createSolaceBucket: (data: SolaceBucketWrite): Promise<SolaceBucket> =>
     _fetch('/solace/buckets/', { method: 'POST', body: JSON.stringify(data) }),

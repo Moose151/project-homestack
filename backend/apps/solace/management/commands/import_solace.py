@@ -5,9 +5,9 @@ The command is idempotent by natural keys and dry-runnable.
 
 Usage
 -----
-    python manage.py import_solace --sqlite-db /home/moose/Documents/project-solace/instance/solace.db --dry-run
-    python manage.py import_solace --sqlite-db /home/moose/Documents/project-solace/instance/solace.db
-    python manage.py import_solace --sqlite-db /home/moose/Documents/project-solace/instance/solace.db --verify
+    python manage.py import_solace --sqlite-db /home/instructor/Documents/new/project-solace/instance/solace.db --dry-run
+    python manage.py import_solace --sqlite-db /home/instructor/Documents/new/project-solace/instance/solace.db
+    python manage.py import_solace --sqlite-db /home/instructor/Documents/new/project-solace/instance/solace.db --verify
 """
 from __future__ import annotations
 
@@ -44,7 +44,9 @@ from apps.solace.services import (
     create_purchase,
 )
 
-DEFAULT_DB = "/home/moose/Documents/project-solace/instance/solace.db"
+# Where the standalone app keeps its database on this machine. Overridable with --sqlite-db,
+# which is what any other install will need.
+DEFAULT_DB = "/home/instructor/Documents/new/project-solace/instance/solace.db"
 
 
 @dataclass

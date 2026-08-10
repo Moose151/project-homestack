@@ -263,7 +263,17 @@ class BudgetBucket(HouseholdBaseModel):
         PERCENTAGE = "percentage", "Percentage of pay"
         FIXED = "fixed", "Fixed household amount"
 
+    class Purpose(models.TextChoices):
+        """What the bucket is for, which is how a household reads its list of them."""
+
+        BILLS = "bills", "Bills"
+        SAVINGS = "savings", "Savings"
+        SPENDING = "spending", "Spending"
+        PURCHASES = "purchases", "Planned purchases"
+        OTHER = "other", "Other"
+
     name = models.CharField(max_length=200)
+    purpose = models.CharField(max_length=20, choices=Purpose.choices, default=Purpose.OTHER)
     category = models.CharField(max_length=100, blank=True, default="")
     target_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     current_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
@@ -302,6 +312,48 @@ class BudgetBucket(HouseholdBaseModel):
         if target <= 0:
             return 0
         return min(100, int((current / target) * 100))
+
+
+class BucketEntry(HouseholdBaseModel):
+    """One movement of money into or out of a bucket.
+
+    A bucket balance used to be a number you overwrote, so "what is in the car fund" had no
+    history and no explanation. Every change now goes through an entry — the balance on
+    `BudgetBucket.current_amount` stays as the running total the pay planner already reads, and
+    these rows are the audit of how it got there.
+    """
+
+    class Kind(models.TextChoices):
+        DEPOSIT = "deposit", "Money in"
+        WITHDRAWAL = "withdrawal", "Money out"
+        ADJUSTMENT = "adjustment", "Correction"
+
+    bucket = models.ForeignKey(BudgetBucket, on_delete=models.CASCADE, related_name="entries")
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.DEPOSIT)
+    # Always positive; `kind` carries the direction so a total never depends on a sign convention.
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    occurred_at = models.DateTimeField()
+    note = models.CharField(max_length=255, blank=True, default="")
+    # The balance immediately after this entry, so history reads correctly without replaying it.
+    balance_after = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    visibility = models.CharField(max_length=20, choices=Visibility.choices, default=Visibility.SENSITIVE)
+    sensitivity = models.CharField(max_length=20, choices=Sensitivity.choices, default=Sensitivity.FINANCIAL)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        ordering = ["-occurred_at", "-id"]
+        verbose_name = "bucket entry"
+        verbose_name_plural = "bucket entries"
+
+    def __str__(self) -> str:
+        return f"{self.bucket.name} {self.kind} {self.amount}"
+
+    @property
+    def signed_amount(self) -> Decimal:
+        amount = Decimal(self.amount)
+        return -amount if self.kind == self.Kind.WITHDRAWAL else amount
 
 
 class Subscription(CalendarSyncMixin, HouseholdBaseModel):
