@@ -208,6 +208,20 @@ def pool_deleted(obj, acting_user_id: int) -> None:
     })
 
 
+def utility_bill_logged(obj, acting_user_id: int) -> None:
+    publish("homestead.utility_bill_logged", payload={
+        "utility_bill_id": obj.id,
+        "utility_type": obj.utility_type,
+        "period_start": obj.period_start.isoformat(),
+        "period_end": obj.period_end.isoformat(),
+        "usage_amount": str(obj.usage_amount),
+        "usage_unit": obj.usage_unit,
+        "amount": str(obj.amount),
+        "household_id": obj.household_id,
+        "acting_user_id": acting_user_id,
+    })
+
+
 def water_test_logged(obj, acting_user_id: int) -> None:
     publish("homestead.water_test_logged", payload={
         "water_test_id": obj.id,

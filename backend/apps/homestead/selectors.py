@@ -21,6 +21,7 @@ from apps.homestead.models import (
     RoomPlanItem,
     RoomPlanProduct,
     ServiceProvider,
+    UtilityBill,
     WaterTest,
 )
 from apps.permissions.visibility import apply_visibility
@@ -292,6 +293,143 @@ def get_household_cost(pk: int, user=None) -> HouseholdCost | None:
     if user is not None:
         qs = apply_visibility(qs, user)
     return qs.first()
+
+
+# ---------------------------------------------------------------------------
+# Utility usage
+# ---------------------------------------------------------------------------
+
+def list_utility_bills(user=None, *, utility_type: str | None = None,
+                       limit: int | None = None):
+    qs = UtilityBill.objects.order_by("-period_end", "-id")
+    if utility_type:
+        qs = qs.filter(utility_type=utility_type)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    if limit is not None:
+        qs = qs[:limit]
+    return list(qs)
+
+
+def get_utility_bill(pk: int, user=None) -> UtilityBill | None:
+    qs = UtilityBill.objects.filter(pk=pk)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return qs.first()
+
+
+def _period_point(bill: UtilityBill) -> dict:
+    return {
+        "id": bill.id,
+        "label": _period_label(bill),
+        "period_start": bill.period_start,
+        "period_end": bill.period_end,
+        "days": bill.days,
+        "usage_amount": bill.usage_amount,
+        "daily_usage": bill.daily_usage,
+        "amount": bill.amount,
+        "daily_cost": bill.daily_cost,
+        "unit_cost": bill.unit_cost,
+        "is_estimated": bill.is_estimated,
+    }
+
+
+def _period_label(bill: UtilityBill) -> str:
+    """A short axis label. One month reads as "Jun 25"; a quarter as "Apr–Jun 25"."""
+    end = bill.period_end.strftime("%b %y")
+    if (bill.period_start.year, bill.period_start.month) == (
+        bill.period_end.year, bill.period_end.month
+    ):
+        return end
+    return f"{bill.period_start.strftime('%b')}–{end}"
+
+
+def _percent_change(current, previous) -> Decimal | None:
+    """Change from `previous` to `current`, or None when there is nothing to divide by."""
+    if previous in (None, 0) or current is None:
+        return None
+    return (
+        (Decimal(current) - Decimal(previous)) / Decimal(previous) * 100
+    ).quantize(Decimal("0.1"))
+
+
+def _change_row(label: str, latest: UtilityBill, other: UtilityBill | None) -> dict | None:
+    """Compare two periods per day, because bills are not the same length.
+
+    A 92-day summer quarter next to an 88-day autumn one would otherwise look 5% worse before
+    anyone turned anything on.
+    """
+    if other is None:
+        return None
+    return {
+        "label": label,
+        "usage_percent": _percent_change(latest.daily_usage, other.daily_usage),
+        "cost_percent": _percent_change(latest.daily_cost, other.daily_cost),
+    }
+
+
+def _year_ago_bill(latest: UtilityBill, bills: list[UtilityBill]) -> UtilityBill | None:
+    """The bill covering roughly this time last year — the comparison that means something.
+
+    Utilities are seasonal, so the previous period is the wrong yardstick on its own. Billing
+    dates drift, so match the closest period start within six weeks of a year earlier rather
+    than demanding an exact date.
+    """
+    target = latest.period_start - timedelta(days=365)
+    candidates = [
+        bill for bill in bills
+        if bill.id != latest.id and abs((bill.period_start - target).days) <= 45
+    ]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda bill: abs((bill.period_start - target).days))
+
+
+def utility_usage(user=None, *, utility_type: str | None = None) -> list[dict]:
+    """One series per utility the household has bills for, oldest period first.
+
+    The screen is a set of charts, so every number a chart needs is computed here — averages
+    are per day for the same reason the comparisons are.
+    """
+    bills = list_utility_bills(user, utility_type=utility_type)
+    by_type: dict[str, list[UtilityBill]] = {}
+    for bill in bills:
+        by_type.setdefault(bill.utility_type, []).append(bill)
+
+    series = []
+    for type_key, rows in by_type.items():
+        rows = sorted(rows, key=lambda bill: (bill.period_end, bill.id))
+        latest = rows[-1]
+        total_usage = sum((bill.usage_amount for bill in rows), Decimal("0"))
+        total_cost = sum((bill.amount for bill in rows), Decimal("0.00"))
+        total_days = sum(bill.days for bill in rows)
+        changes = [
+            row for row in (
+                _change_row("vs previous bill", latest, rows[-2] if len(rows) > 1 else None),
+                _change_row("vs a year ago", latest, _year_ago_bill(latest, rows)),
+            ) if row is not None
+        ]
+        series.append({
+            "utility_type": type_key,
+            "label": UtilityBill.UtilityType(type_key).label,
+            # Mixed units in one series would silently add kL to litres, so the newest bill's
+            # unit names the series and the chart stays one measure.
+            "unit_label": latest.unit_label,
+            "bill_count": len(rows),
+            "total_usage": total_usage,
+            "total_cost": total_cost,
+            "average_daily_usage": (total_usage / total_days).quantize(Decimal("0.001")),
+            "average_daily_cost": (total_cost / total_days).quantize(Decimal("0.01")),
+            "average_unit_cost": (
+                (total_cost / total_usage).quantize(Decimal("0.0001"))
+                if total_usage else None
+            ),
+            "latest": _period_point(latest),
+            "changes": changes,
+            "periods": [_period_point(bill) for bill in rows],
+        })
+    series.sort(key=lambda row: row["label"])
+    return series
 
 
 # ---------------------------------------------------------------------------

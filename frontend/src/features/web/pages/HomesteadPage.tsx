@@ -6,13 +6,15 @@ import type {
   Appliance, Improvement, ImprovementStatus, MaintenanceTask, Person, Property,
   ServiceProvider, HomesteadSearchResults, InsurancePolicy, HouseholdCost,
   RoomAreaType, RoomListResponse, Pool, PoolReadingKey, PoolSanitiser, PoolStatus,
-  PoolSurface, WaterTest, WaterTestWrite,
+  PoolSurface, UtilityBill, UtilityPeriodPoint, UtilitySeries, UtilityType, UtilityUnit,
+  WaterTest, WaterTestWrite,
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { Field, Input, SearchField, Textarea, Select, fieldClass } from '../../../components/Field'
 import { Tabs } from '../../../components/Tabs'
 import { Badge, type BadgeTone } from '../../../components/Badge'
+import { BarChart, type BarChartPoint } from '../../../components/BarChart'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
 import { Modal } from '../../../components/Modal'
@@ -1419,6 +1421,360 @@ function ContactsTab({ onError }: { onError: (m: string) => void }) {
 }
 
 // ---------------------------------------------------------------------------
+// Usage — metered water/electricity/gas bills and what they plot
+// ---------------------------------------------------------------------------
+
+const UTILITY_TYPES: { value: UtilityType; label: string; icon: string }[] = [
+  { value: 'electricity', label: 'Electricity', icon: '⚡' },
+  { value: 'water', label: 'Water', icon: '💧' },
+  { value: 'gas', label: 'Gas', icon: '🔥' },
+  { value: 'other', label: 'Other', icon: '📊' },
+]
+const UTILITY_UNITS: { value: UtilityUnit; label: string }[] = [
+  { value: 'kwh', label: 'kWh' }, { value: 'kl', label: 'kL' }, { value: 'litres', label: 'L' },
+  { value: 'm3', label: 'm³' }, { value: 'mj', label: 'MJ' }, { value: 'therms', label: 'therms' },
+  { value: 'other', label: 'units' },
+]
+// What a bill of each kind is normally measured in. Changing the type re-picks the unit unless
+// the household has already chosen one for this bill.
+const DEFAULT_UNIT: Record<UtilityType, UtilityUnit> = {
+  electricity: 'kwh', water: 'kl', gas: 'mj', other: 'other',
+}
+const utilityIcon = (type: UtilityType) =>
+  UTILITY_TYPES.find(row => row.value === type)?.icon ?? '📊'
+
+const EMPTY_UTILITY_BILL = {
+  utility_type: 'electricity' as UtilityType,
+  usage_unit: 'kwh' as UtilityUnit,
+  provider: '',
+  period_start: '',
+  period_end: '',
+  usage_amount: '',
+  amount: '',
+  is_estimated: false,
+  notes: '',
+}
+
+const num = (value: string | number, digits = 1) =>
+  Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: digits })
+const rate = (value: string) =>
+  Number(value).toLocaleString(undefined, {
+    style: 'currency', currency: 'AUD', minimumFractionDigits: 2, maximumFractionDigits: 4,
+  })
+const periodRange = (start: string, end: string) =>
+  `${new Date(`${start}T00:00:00`).toLocaleDateString()} – ${new Date(`${end}T00:00:00`).toLocaleDateString()}`
+
+/** Using more is the bad direction here, which is the opposite of most deltas in the app. */
+function ChangeChip({ label, percent, measure }: { label: string; percent: string | null; measure: string }) {
+  if (percent === null) return null
+  const value = Number(percent)
+  const flat = Math.abs(value) < 0.5
+  const tone: BadgeTone = flat ? 'neutral' : value > 0 ? 'warning' : 'success'
+  const arrow = flat ? '→' : value > 0 ? '↑' : '↓'
+  return (
+    <Badge tone={tone}>
+      {measure} {arrow} {flat ? 'about the same' : `${Math.abs(value).toFixed(1)}%`} {label}
+    </Badge>
+  )
+}
+
+function UtilitySeriesCard({ series, onEdit, onDelete, canEdit }: {
+  series: UtilitySeries
+  onEdit: (id: number) => void
+  onDelete: (point: UtilityPeriodPoint) => void
+  canEdit: boolean
+}) {
+  const unit = series.unit_label
+  const latest = series.latest
+  const usagePoints: BarChartPoint[] = series.periods.map(point => ({
+    key: point.id,
+    label: point.label,
+    value: Number(point.daily_usage),
+    display: `${num(point.daily_usage, 2)} ${unit}`,
+    detail: [
+      periodRange(point.period_start, point.period_end),
+      `${num(point.usage_amount)} ${unit} over ${point.days} days`,
+    ],
+    hatched: point.is_estimated,
+  }))
+  const costPoints: BarChartPoint[] = series.periods.map(point => ({
+    key: point.id,
+    label: point.label,
+    value: Number(point.daily_cost),
+    display: money(point.daily_cost),
+    detail: [
+      periodRange(point.period_start, point.period_end),
+      `${money(point.amount)} over ${point.days} days`,
+      ...(point.unit_cost ? [`${rate(point.unit_cost)} per ${unit}`] : []),
+    ],
+    hatched: point.is_estimated,
+  }))
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-bold text-ink">
+          {utilityIcon(series.utility_type)} {series.label}
+        </h2>
+        <span className="text-xs text-muted">
+          {series.bill_count} {series.bill_count === 1 ? 'bill' : 'bills'} logged
+        </span>
+      </div>
+
+      {latest && (
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <StatCard
+            label="Latest bill"
+            value={money(latest.amount)}
+            hint={`${latest.label} · ${latest.days} days`}
+          />
+          <StatCard
+            label="Used per day"
+            value={`${num(latest.daily_usage, 2)} ${unit}`}
+            hint={`${num(series.average_daily_usage, 2)} ${unit} average across every bill`}
+          />
+          <StatCard
+            label="Effective rate"
+            value={latest.unit_cost ? `${rate(latest.unit_cost)} / ${unit}` : '—'}
+            hint="Total charged divided by what was used, supply charges included"
+          />
+        </div>
+      )}
+
+      {series.changes.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {series.changes.map(change => (
+            <div key={change.label} className="flex flex-wrap gap-2">
+              <ChangeChip label={change.label} percent={change.usage_percent} measure="Usage" />
+              <ChangeChip label={change.label} percent={change.cost_percent} measure="Cost" />
+            </div>
+          ))}
+        </div>
+      )}
+      {series.bill_count > 1 && (
+        <p className="mt-2 text-xs text-muted">
+          Every figure is per day, so a long bill is not mistaken for a heavy one.
+        </p>
+      )}
+
+      <div className="mt-4 grid gap-5 lg:grid-cols-2">
+        <div>
+          <p className="text-sm font-semibold text-ink">Used per day ({unit})</p>
+          <BarChart
+            className="mt-3"
+            points={usagePoints}
+            ariaLabel={`${series.label} used per day, by billing period`}
+            hatchLabel="Estimated meter read"
+          />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-ink">Cost per day</p>
+          <BarChart
+            className="mt-3"
+            points={costPoints}
+            ariaLabel={`${series.label} cost per day, by billing period`}
+            hatchLabel="Estimated meter read"
+          />
+        </div>
+      </div>
+
+      <details className="mt-4 border-t border-line pt-3">
+        <summary className="cursor-pointer text-sm font-semibold text-muted">
+          Every bill ({series.bill_count})
+        </summary>
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[34rem] text-left text-sm tabular-nums">
+            <thead className="text-xs uppercase tracking-wide text-muted">
+              <tr>
+                <th scope="col" className="py-1.5 pr-3 font-bold">Period</th>
+                <th scope="col" className="py-1.5 pr-3 font-bold">Days</th>
+                <th scope="col" className="py-1.5 pr-3 font-bold">Used ({unit})</th>
+                <th scope="col" className="py-1.5 pr-3 font-bold">Cost</th>
+                <th scope="col" className="py-1.5 pr-3 font-bold">Rate</th>
+                {canEdit && <th scope="col" className="py-1.5 text-right font-bold">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {[...series.periods].reverse().map(point => (
+                <tr key={point.id} className="border-t border-line">
+                  <td className="py-2 pr-3 text-ink">
+                    {periodRange(point.period_start, point.period_end)}
+                    {point.is_estimated && <span className="ml-2 text-xs text-muted">estimated</span>}
+                  </td>
+                  <td className="py-2 pr-3 text-muted">{point.days}</td>
+                  <td className="py-2 pr-3 text-muted-strong">{num(point.usage_amount)}</td>
+                  <td className="py-2 pr-3 text-muted-strong">{money(point.amount)}</td>
+                  <td className="py-2 pr-3 text-muted">{point.unit_cost ? rate(point.unit_cost) : '—'}</td>
+                  {canEdit && (
+                    <td className="py-2">
+                      <div className="flex justify-end gap-1">
+                        <EditAction onClick={() => onEdit(point.id)} label={point.label} />
+                        <DeleteAction onClick={() => onDelete(point)} label={point.label} />
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </Card>
+  )
+}
+
+function UtilitiesTab({ onError, canEdit }: { onError: (m: string) => void; canEdit: boolean }) {
+  const [series, setSeries] = useState<UtilitySeries[]>([])
+  const [bills, setBills] = useState<UtilityBill[]>([])
+  const [loading, setLoading] = useState(true)
+  const [open, setOpen] = useState(false)
+  const [editId, setEditId] = useState<number | null>(null)
+  const [f, setF] = useState(EMPTY_UTILITY_BILL)
+  const [saving, setSaving] = useState(false)
+  const set = (key: string, value: unknown) => setF(prev => ({ ...prev, [key]: value }))
+
+  const load = async () => {
+    try {
+      const [usage, rows] = await Promise.all([api.getUtilityUsage(), api.getUtilityBills()])
+      setSeries(usage.series)
+      setBills(rows)
+    } catch (e) { onError(errMsg(e)) } finally { setLoading(false) }
+  }
+  useEffect(() => { void load() }, [])
+
+  const startAdd = () => {
+    setEditId(null)
+    // Most households log the same utility repeatedly, so start where they left off.
+    const previous = bills[0]
+    setF(previous
+      ? { ...EMPTY_UTILITY_BILL, utility_type: previous.utility_type, usage_unit: previous.usage_unit, provider: previous.provider }
+      : EMPTY_UTILITY_BILL)
+    setOpen(true)
+  }
+
+  const startEdit = (id: number) => {
+    const bill = bills.find(row => row.id === id)
+    if (!bill) return
+    setEditId(bill.id)
+    setF({
+      utility_type: bill.utility_type, usage_unit: bill.usage_unit, provider: bill.provider,
+      period_start: bill.period_start, period_end: bill.period_end,
+      usage_amount: bill.usage_amount, amount: bill.amount,
+      is_estimated: bill.is_estimated, notes: bill.notes,
+    })
+    setOpen(true)
+  }
+
+  const changeType = (value: UtilityType) =>
+    setF(prev => ({
+      ...prev,
+      utility_type: value,
+      // Only re-pick the unit while it is still the previous type's default.
+      usage_unit: prev.usage_unit === DEFAULT_UNIT[prev.utility_type] ? DEFAULT_UNIT[value] : prev.usage_unit,
+    }))
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!f.period_start || !f.period_end || f.usage_amount === '') return
+    setSaving(true)
+    const payload = { ...f, amount: f.amount || '0.00' }
+    try {
+      if (editId) await api.updateUtilityBill(editId, payload)
+      else await api.createUtilityBill(payload)
+      setOpen(false)
+      await load()
+    } catch (e) { onError(errMsg(e)) } finally { setSaving(false) }
+  }
+
+  const remove = async (point: UtilityPeriodPoint) => {
+    if (!(await confirmDialog({
+      title: `Delete the bill for ${point.label}?`,
+      message: 'It disappears from the graphs and the comparisons.',
+      confirmLabel: 'Delete',
+    }))) return
+    try { await api.deleteUtilityBill(point.id); await load() } catch (e) { onError(errMsg(e)) }
+  }
+
+  if (loading) return <div className="h-40 animate-pulse rounded-2xl bg-sunken" />
+
+  const unitLabel = UTILITY_UNITS.find(row => row.value === f.usage_unit)?.label ?? 'units'
+
+  return (
+    <div className="flex flex-col gap-4">
+      {open ? (
+        <Card title={editId ? 'Edit bill' : 'New bill'}>
+          <form onSubmit={save} className="flex flex-col gap-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Utility">
+                <Select value={f.utility_type} onChange={e => changeType(e.target.value as UtilityType)}>
+                  {UTILITY_TYPES.map(row => <option key={row.value} value={row.value}>{row.label}</option>)}
+                </Select>
+              </Field>
+              <Field label="Period from">
+                <input type="date" className={fieldClass} value={f.period_start}
+                  onChange={e => set('period_start', e.target.value)} />
+              </Field>
+              <Field label="Period to">
+                <input type="date" className={fieldClass} value={f.period_end}
+                  onChange={e => set('period_end', e.target.value)} />
+              </Field>
+              <Field label={`Amount used (${unitLabel})`}>
+                <Input type="number" min="0" step="0.001" inputMode="decimal" value={f.usage_amount}
+                  onChange={e => set('usage_amount', e.target.value)} placeholder="e.g. 912" />
+              </Field>
+              <Field label="Measured in">
+                <Select value={f.usage_unit} onChange={e => set('usage_unit', e.target.value as UtilityUnit)}>
+                  {UTILITY_UNITS.map(row => <option key={row.value} value={row.value}>{row.label}</option>)}
+                </Select>
+              </Field>
+              <Field label="Total cost" hint="Everything charged, supply charges included.">
+                <Input type="number" min="0" step="0.01" inputMode="decimal" value={f.amount}
+                  onChange={e => set('amount', e.target.value)} placeholder="e.g. 420.50" />
+              </Field>
+              <Field label="Provider" className="sm:col-span-2">
+                <Input value={f.provider} onChange={e => set('provider', e.target.value)} />
+              </Field>
+            </div>
+            <label className="flex min-h-[44px] items-center gap-2 text-sm text-ink">
+              <input type="checkbox" checked={f.is_estimated}
+                onChange={e => set('is_estimated', e.target.checked)} />
+              The meter was estimated, not read
+            </label>
+            <Field label="Notes"><Textarea rows={2} value={f.notes} onChange={e => set('notes', e.target.value)} /></Field>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="submit" size="sm" loading={saving}
+                disabled={!f.period_start || !f.period_end || f.usage_amount === ''}>Save</Button>
+            </div>
+          </form>
+        </Card>
+      ) : (
+        canEdit && <Button size="sm" onClick={startAdd} className="self-start">+ Add a bill</Button>
+      )}
+
+      {series.length === 0 ? (
+        <EmptyState
+          icon="⚡"
+          title="No usage logged yet"
+          hint="Add a water or electricity bill — the period, how much was used and what it cost — and the graphs build themselves from there."
+          action={canEdit && !open ? <Button onClick={startAdd}>Add a bill</Button> : undefined}
+        />
+      ) : (
+        series.map(row => (
+          <UtilitySeriesCard
+            key={row.utility_type}
+            series={row}
+            canEdit={canEdit}
+            onEdit={startEdit}
+            onDelete={remove}
+          />
+        ))
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Costs & cover — password protected, mirrored to Solace through backend events
 // ---------------------------------------------------------------------------
 
@@ -1815,8 +2171,12 @@ function SearchResults({ results }: { results: HomesteadSearchResults }) {
 // Homestead page
 // ---------------------------------------------------------------------------
 
-type Tab = 'overview' | 'rooms' | 'maintenance' | 'appliances' | 'pool' | 'improvements' | 'contacts' | 'finances'
-const TAB_KEYS: Tab[] = ['overview', 'rooms', 'maintenance', 'appliances', 'improvements', 'contacts', 'finances']
+type Tab = 'overview' | 'rooms' | 'maintenance' | 'appliances' | 'pool' | 'usage' | 'improvements' | 'contacts' | 'finances'
+// Every tab belongs here — a key left out is silently rewritten to overview when it is linked to.
+const TAB_KEYS: Tab[] = [
+  'overview', 'rooms', 'maintenance', 'appliances', 'pool', 'usage', 'improvements',
+  'contacts', 'finances',
+]
 
 export function HomesteadPage() {
   const { user } = useAuth()
@@ -1874,6 +2234,7 @@ export function HomesteadPage() {
               { key: 'maintenance', label: 'maintenance' },
               { key: 'appliances', label: 'appliances' },
               { key: 'pool', label: 'pool & spa' },
+              { key: 'usage', label: 'power & water' },
               { key: 'improvements', label: 'improvements' },
               { key: 'contacts', label: 'contacts' },
               ...(canUseMoney ? [{ key: 'finances' as const, label: 'costs & cover' }] : []),
@@ -1889,6 +2250,7 @@ export function HomesteadPage() {
           {tab === 'maintenance' && <MaintenanceTab people={people} defaultAssignee={defaultAssignee} onError={setError} canUseMoney={canUseMoney} />}
           {tab === 'appliances' && <AppliancesTab onError={setError} />}
           {tab === 'pool' && <PoolTab onError={setError} canEdit={Boolean(user && user.role !== 'guest' && !user.is_child_account)} />}
+          {tab === 'usage' && <UtilitiesTab onError={setError} canEdit={Boolean(user && user.role !== 'guest' && !user.is_child_account)} />}
           {tab === 'improvements' && <ImprovementsTab people={people} defaultAssignee={defaultAssignee} onError={setError} />}
           {tab === 'contacts' && <ContactsTab onError={setError} />}
           {tab === 'finances' && canUseMoney && <FinanceTab onError={setError} />}

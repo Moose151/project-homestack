@@ -1215,3 +1215,190 @@ class PoolTests(TestCase):
         task.save()
         status_data = self.client.get(f"/api/v1/homestead/pools/{pool['id']}/status/").data
         self.assertEqual(status_data["overdue_task_count"], 1)
+
+
+# ---------------------------------------------------------------------------
+# Utility usage (water / electricity meters)
+# ---------------------------------------------------------------------------
+
+class UtilityBillPermissionTests(TestCase):
+    """Usage is ordinary Homestead data (owner, 2026-08-10) — no finance gate, same spine."""
+
+    def setUp(self):
+        self.admin = _make_user("utiladmin")
+        self.guest = _make_user("utilguest", role=User.Role.GUEST)
+        self.child = _make_user("utilchild", role=User.Role.USER, is_child=True)
+        self.url = reverse("homestead-utility-bill-list")
+
+    def _payload(self, **overrides):
+        payload = {
+            "utility_type": "water", "period_start": "2026-01-01",
+            "period_end": "2026-03-31", "usage_amount": "42.5", "amount": "180.00",
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_anonymous_is_rejected(self):
+        self.assertIn(self.client.get(self.url).status_code, [401, 403])
+
+    def test_guest_can_view_but_cannot_log_a_bill(self):
+        _login(self.client, "utilguest")
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+        response = self.client.post(self.url, self._payload(), content_type="application/json")
+        self.assertIn(response.status_code, [401, 403])
+
+    def test_child_cannot_log_a_bill(self):
+        _login(self.client, "utilchild")
+        response = self.client.post(self.url, self._payload(), content_type="application/json")
+        self.assertIn(response.status_code, [401, 403])
+
+    def test_no_password_reauth_is_required(self):
+        # The costs & cover surface next door does demand one; usage deliberately does not.
+        _login(self.client, "utiladmin")
+        self.assertEqual(self.client.get(reverse("homestead-utility-usage")).status_code, 200)
+        response = self.client.post(self.url, self._payload(), content_type="application/json")
+        self.assertEqual(response.status_code, 201, response.data)
+
+
+class UtilityBillTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("meterowner")
+        _login(self.client, "meterowner")
+
+    def _log(self, **overrides):
+        payload = {
+            "utility_type": "electricity", "period_start": "2026-01-01",
+            "period_end": "2026-03-31", "usage_amount": "900", "amount": "450.00",
+        }
+        payload.update(overrides)
+        response = self.client.post(
+            reverse("homestead-utility-bill-list"), payload, content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        return response.data
+
+    def _usage(self, **params):
+        query = "".join(f"?{key}={value}" for key, value in params.items())
+        response = self.client.get(reverse("homestead-utility-usage") + query)
+        self.assertEqual(response.status_code, 200, response.data)
+        return response.data["series"]
+
+    def test_a_bill_is_stored_with_its_per_day_figures(self):
+        bill = self._log()
+        self.assertEqual(bill["days"], 90)  # inclusive of both end dates
+        self.assertEqual(bill["daily_usage"], "10.000")
+        self.assertEqual(bill["daily_cost"], "5.00")
+        self.assertEqual(bill["unit_cost"], "0.5000")
+        self.assertEqual(bill["unit_label"], "kWh")
+
+    def test_each_utility_defaults_to_its_own_unit(self):
+        self.assertEqual(self._log()["usage_unit"], "kwh")
+        water = self._log(utility_type="water", usage_amount="40")
+        self.assertEqual(water["usage_unit"], "kl")
+        self.assertEqual(water["unit_label"], "kL")
+
+    def test_a_backwards_period_is_rejected(self):
+        response = self.client.post(
+            reverse("homestead-utility-bill-list"),
+            {
+                "utility_type": "water", "period_start": "2026-03-31",
+                "period_end": "2026-01-01", "usage_amount": "10", "amount": "50.00",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("period_end", response.data)
+
+    def test_moving_one_end_of_the_period_is_still_checked(self):
+        bill = self._log()
+        response = self.client.patch(
+            reverse("homestead-utility-bill-detail", args=[bill["id"]]),
+            {"period_end": "2025-12-01"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_usage_groups_by_utility_and_runs_oldest_first(self):
+        self._log(period_start="2026-01-01", period_end="2026-03-31")
+        self._log(period_start="2026-04-01", period_end="2026-06-30")
+        self._log(utility_type="water", usage_amount="40", amount="120.00")
+        series = self._usage()
+        self.assertEqual([row["utility_type"] for row in series], ["electricity", "water"])
+        electricity = series[0]
+        self.assertEqual(electricity["bill_count"], 2)
+        self.assertEqual(
+            [point["period_start"] for point in electricity["periods"]],
+            ["2026-01-01", "2026-04-01"],
+        )
+        self.assertEqual(electricity["latest"]["period_start"], "2026-04-01")
+        self.assertEqual(electricity["unit_label"], "kWh")
+
+    def test_periods_are_compared_per_day_not_per_bill(self):
+        # 90 days at 10/day, then 91 days at 10/day: a longer bill, identical usage.
+        self._log(period_start="2026-01-01", period_end="2026-03-31", usage_amount="900", amount="450.00")
+        self._log(period_start="2026-04-01", period_end="2026-06-30", usage_amount="910", amount="455.00")
+        change = self._usage()[0]["changes"][0]
+        self.assertEqual(change["label"], "vs previous bill")
+        self.assertEqual(change["usage_percent"], "0.0")
+        self.assertEqual(change["cost_percent"], "0.0")
+
+    def test_the_same_quarter_last_year_is_matched_despite_date_drift(self):
+        self._log(period_start="2025-01-05", period_end="2025-04-04", usage_amount="900", amount="450.00")
+        self._log(period_start="2025-04-05", period_end="2025-07-04", usage_amount="600", amount="300.00")
+        self._log(period_start="2026-01-01", period_end="2026-03-31", usage_amount="450", amount="450.00")
+        changes = {row["label"]: row for row in self._usage()[0]["changes"]}
+        year_ago = changes["vs a year ago"]
+        # Half the daily usage of the matched quarter, at the same daily cost.
+        self.assertEqual(year_ago["usage_percent"], "-50.0")
+        self.assertEqual(year_ago["cost_percent"], "0.0")
+
+    def test_a_first_bill_has_nothing_to_compare_with(self):
+        self._log()
+        self.assertEqual(self._usage()[0]["changes"], [])
+
+    def test_averages_are_per_day_across_every_period(self):
+        self._log(period_start="2026-01-01", period_end="2026-03-31", usage_amount="900", amount="450.00")
+        self._log(period_start="2026-04-01", period_end="2026-06-30", usage_amount="1820", amount="910.00")
+        electricity = self._usage()[0]
+        self.assertEqual(electricity["total_usage"], "2720.000")
+        self.assertEqual(electricity["total_cost"], "1360.00")
+        self.assertEqual(electricity["average_daily_usage"], "15.028")  # 2720 over 181 days
+        self.assertEqual(electricity["average_unit_cost"], "0.5000")
+
+    def test_a_zero_usage_bill_does_not_divide_by_zero(self):
+        bill = self._log(usage_amount="0", amount="95.00")
+        self.assertIsNone(bill["unit_cost"])
+        self.assertIsNone(self._usage()[0]["average_unit_cost"])
+
+    def test_usage_can_be_filtered_to_one_utility(self):
+        self._log()
+        self._log(utility_type="water", usage_amount="40", amount="120.00")
+        series = self._usage(type="water")
+        self.assertEqual([row["utility_type"] for row in series], ["water"])
+
+    def test_a_deleted_bill_leaves_the_charts(self):
+        bill = self._log()
+        self.assertEqual(
+            self.client.delete(reverse("homestead-utility-bill-detail", args=[bill["id"]])).status_code,
+            204,
+        )
+        self.assertEqual(self._usage(), [])
+
+
+class UtilityBillVisibilityTests(TestCase):
+    def test_a_private_bill_is_hidden_from_another_user(self):
+        owner = _make_user("meter_owner_a", role=User.Role.USER)
+        other = _make_user("meter_owner_b", role=User.Role.USER)
+        from apps.homestead.services import log_utility_bill
+        from datetime import date
+
+        log_utility_bill(
+            owner, utility_type="water", period_start=date(2026, 1, 1),
+            period_end=date(2026, 3, 31), usage_amount="40", amount="120.00",
+            visibility="private",
+        )
+        _login(self.client, "meter_owner_b")
+        response = self.client.get(reverse("homestead-utility-bill-list"))
+        self.assertEqual(response.data, [])
+        _login(self.client, "meter_owner_a")
+        self.assertEqual(len(self.client.get(reverse("homestead-utility-bill-list")).data), 1)

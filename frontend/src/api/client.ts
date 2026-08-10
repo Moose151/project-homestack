@@ -21,7 +21,8 @@ import type {
   SolaceCategoryReport, SolaceChecklistItem, SolaceChecklistPreference, SolaceCloseoutResponse,
   SolaceCycleCloseout, SolaceCycleHistoryRow, SolaceHealth, SolaceIncomeAllocation,
   SolaceIncomeAllocationWrite, SolaceNow, SolacePayCyclePlan, SolacePayday, SolacePurchase,
-  SolaceSchedule, SolaceSearchResults, SolaceSettings, SolaceSubscription, WaterTest,
+  SolaceSchedule, SolaceSearchResults, SolaceSettings, SolaceSubscription, UtilityBill,
+  UtilityBillWrite, UtilityType, UtilityUsageResponse, WaterTest,
   WaterTestWrite, WikiCategory, WikiPage
 } from './types'
 
@@ -967,6 +968,17 @@ export const api = {
     _fetch(`/homestead/insurance/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteInsurancePolicy: (id: number): Promise<void> =>
     _fetch(`/homestead/insurance/${id}/`, { method: 'DELETE' }),
+
+  getUtilityBills: (type?: UtilityType): Promise<UtilityBill[]> =>
+    _fetch(`/homestead/utility-bills/${type ? `?type=${type}` : ''}`),
+  createUtilityBill: (data: UtilityBillWrite): Promise<UtilityBill> =>
+    _fetch('/homestead/utility-bills/', { method: 'POST', body: JSON.stringify(data) }),
+  updateUtilityBill: (id: number, data: UtilityBillWrite): Promise<UtilityBill> =>
+    _fetch(`/homestead/utility-bills/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteUtilityBill: (id: number): Promise<void> =>
+    _fetch(`/homestead/utility-bills/${id}/`, { method: 'DELETE' }),
+  getUtilityUsage: (type?: UtilityType): Promise<UtilityUsageResponse> =>
+    _fetch(`/homestead/utility-usage/${type ? `?type=${type}` : ''}`),
 
   getHouseholdCosts: (active = false): Promise<HouseholdCost[]> =>
     _fetch(`/homestead/costs/${active ? '?active=1' : ''}`),

@@ -695,6 +695,110 @@ class HouseholdCost(HouseholdBaseModel):
         return self.name
 
 
+class UtilityBill(HouseholdBaseModel):
+    """One metered bill: what a utility charged, for which period, and how much was used.
+
+    `HouseholdCost` answers "what do we pay for water and when is it due?" — the recurring
+    account. This answers "what did we actually use?", one bill at a time, so the household can
+    see whether usage is drifting rather than only whether the bill was paid.
+
+    Billing periods are not equal lengths — a 92-day quarter against an 88-day one is not a
+    like-for-like comparison — so every derived figure here is per day. Nothing is stored that
+    can be calculated, which keeps a corrected period or amount honest everywhere at once.
+
+    Household-visible by default (owner, 2026-08-10): usage is something the whole house should
+    be able to look at. The recurring account and its policy/reference numbers stay behind the
+    costs & cover gate.
+    """
+
+    class UtilityType(models.TextChoices):
+        ELECTRICITY = "electricity", "Electricity"
+        WATER = "water", "Water"
+        GAS = "gas", "Gas"
+        OTHER = "other", "Other"
+
+    class Unit(models.TextChoices):
+        KWH = "kwh", "kWh"
+        KL = "kl", "kL"
+        LITRES = "litres", "L"
+        CUBIC_M = "m3", "m³"
+        MJ = "mj", "MJ"
+        THERMS = "therms", "therms"
+        OTHER = "other", "units"
+
+    # What a new bill of each type is measured in unless the household says otherwise. Metric
+    # defaults; the unit is stored per bill so a household on m³ or therms is not fighting it.
+    DEFAULT_UNITS = {
+        UtilityType.ELECTRICITY: Unit.KWH,
+        UtilityType.WATER: Unit.KL,
+        UtilityType.GAS: Unit.MJ,
+        UtilityType.OTHER: Unit.OTHER,
+    }
+
+    utility_type = models.CharField(
+        max_length=20, choices=UtilityType.choices, default=UtilityType.ELECTRICITY
+    )
+    provider = models.CharField(max_length=200, blank=True, default="")
+    period_start = models.DateField()
+    period_end = models.DateField()
+    usage_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        validators=[MinValueValidator(Decimal("0"))],
+        help_text="How much was used over the period, in `usage_unit`.",
+    )
+    usage_unit = models.CharField(max_length=10, choices=Unit.choices, default=Unit.KWH)
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        help_text="Total charged for the period, including supply charges.",
+    )
+    is_estimated = models.BooleanField(
+        default=False, help_text="The meter was estimated rather than read."
+    )
+    notes = models.TextField(blank=True, default="")
+    visibility = models.CharField(
+        max_length=20, choices=Visibility.choices, default=Visibility.HOUSEHOLD
+    )
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "utility bill"
+        ordering = ["-period_end", "-id"]
+        indexes = [models.Index(fields=["utility_type", "period_end"])]
+
+    def __str__(self) -> str:
+        return f"{self.get_utility_type_display()} {self.period_start:%Y-%m-%d}–{self.period_end:%Y-%m-%d}"
+
+    @property
+    def unit_label(self) -> str:
+        return self.Unit(self.usage_unit).label
+
+    @property
+    def days(self) -> int:
+        """Days billed, counting both end dates — a 1st-to-31st bill is 31 days, not 30."""
+        return (self.period_end - self.period_start).days + 1
+
+    @property
+    def daily_usage(self) -> Decimal:
+        return (self.usage_amount / self.days).quantize(Decimal("0.001"))
+
+    @property
+    def daily_cost(self) -> Decimal:
+        return (self.amount / self.days).quantize(Decimal("0.01"))
+
+    @property
+    def unit_cost(self) -> Decimal | None:
+        """What each unit effectively cost, supply charges included. None if nothing was used."""
+        if not self.usage_amount:
+            return None
+        return (self.amount / self.usage_amount).quantize(Decimal("0.0001"))
+
+
 class Pool(HouseholdBaseModel):
     """A pool or spa on the property, its equipment, and how it is sanitised.
 

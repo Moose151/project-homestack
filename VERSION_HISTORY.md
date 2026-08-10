@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.28.3**
+> **Current version: 0.29.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,34 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.29 — What the house actually uses
+
+### 0.29.0 — 2026-08-10 — metered water & electricity usage
+- **Enter a bill, get the graphs.** A new **Power & water** tab in Our home takes a water,
+  electricity, gas or other bill: the period it covers, how much was used (kWh/kL/L/m³/MJ/therms),
+  what it cost in total, the provider, and whether the meter was read or estimated. Everything
+  else is calculated.
+- **Comparisons are per day, so they are honest.** Billing periods are not equal lengths; a
+  92-day quarter beside an 88-day one would read 5% worse before anyone turned anything on. Days
+  billed, usage per day, cost per day and the effective rate per unit are all derived at read
+  time, so correcting a bill corrects every figure and every chart at once.
+- **The two comparisons that mean something:** against the previous bill, and against a year ago —
+  matched to the closest period start within 45 days of a year earlier, because utilities are
+  seasonal and billing dates drift. An increase reads as a warning, a decrease as a win, with an
+  arrow and words as well as colour.
+- **Charts without a chart library.** One column chart per measure (never two scales in one
+  frame), the latest period emphasised and directly labelled, older periods as context, estimated
+  reads striped and named. Every column is focusable and announces its full figures, and each
+  utility's bills are also a plain table under the charts, where they can be edited or deleted.
+- **No password gate here** (owner's call): usage is household-visible like maintenance and the
+  pool, while Costs & cover keeps the account and policy numbers behind re-auth. Nothing reaches
+  the Calendar — a bill that has arrived is not an appointment, and its recurring account already
+  owns the due date.
+- Also fixed: `?tab=pool` on Our home silently fell back to Overview, because `pool` was missing
+  from the page's list of valid tab keys.
+- **783 backend tests green (17 new); typecheck and production build clean. New migration:
+  `homestead.0009_utility_bills` — run `migrate` after deploying.**
 
 ## 0.28 — Income the way the standalone app does it
 

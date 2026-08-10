@@ -26,6 +26,7 @@ from apps.homestead.models import (
     RoomPlanItem,
     RoomPlanProduct,
     ServiceProvider,
+    UtilityBill,
     WaterTest,
 )
 from apps.scheduling.helpers import delete_event_for, sync_event_for
@@ -643,6 +644,46 @@ def delete_household_cost(acting_user: User, obj: HouseholdCost) -> None:
     events.home_finance_record_deleted(
         "household_cost", obj.id, obj.household_id, acting_user.id
     )
+    obj.updated_by = acting_user
+    obj.save(update_fields=["updated_by", "updated_at"])
+    obj.soft_delete()
+
+
+# ---------------------------------------------------------------------------
+# Utility bills (metered usage)
+# ---------------------------------------------------------------------------
+
+_UTILITY_BILL_FIELDS = {
+    "utility_type", "provider", "period_start", "period_end", "usage_amount",
+    "usage_unit", "amount", "is_estimated", "notes", "visibility",
+}
+
+
+def log_utility_bill(acting_user: User, **data) -> UtilityBill:
+    """Record a bill that has arrived. No calendar event: this is what already happened,
+    while the recurring `HouseholdCost` owns when the next one is due (D7)."""
+    if not data.get("usage_unit"):
+        data["usage_unit"] = UtilityBill.DEFAULT_UNITS[
+            data.get("utility_type", UtilityBill.UtilityType.ELECTRICITY)
+        ]
+    obj = UtilityBill(
+        household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
+    )
+    obj.save()
+    events.utility_bill_logged(obj, acting_user.id)
+    return obj
+
+
+def update_utility_bill(acting_user: User, obj: UtilityBill, **data) -> UtilityBill:
+    for key, val in data.items():
+        if key in _UTILITY_BILL_FIELDS:
+            setattr(obj, key, val)
+    obj.updated_by = acting_user
+    obj.save()
+    return obj
+
+
+def delete_utility_bill(acting_user: User, obj: UtilityBill) -> None:
     obj.updated_by = acting_user
     obj.save(update_fields=["updated_by", "updated_at"])
     obj.soft_delete()

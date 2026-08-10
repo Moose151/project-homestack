@@ -23,6 +23,8 @@ from apps.homestead.serializers import (
     RoomPlanItemSerializer,
     RoomPlanProductSerializer,
     ServiceProviderSerializer,
+    UtilityBillSerializer,
+    UtilitySeriesSerializer,
     WaterTestSerializer,
 )
 from apps.nodes.access import sensitive_node_access
@@ -558,6 +560,59 @@ class HouseholdCostDetailView(HomesteadFinanceAccessMixin, APIView):
     def delete(self, request: Request, cost_id: int) -> Response:
         services.delete_household_cost(request.user, self._get(cost_id, request.user))
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Utility usage
+# ---------------------------------------------------------------------------
+
+class UtilityBillListView(APIView):
+    permission_classes = [_Perm]
+
+    def get(self, request: Request) -> Response:
+        bills = selectors.list_utility_bills(
+            request.user, utility_type=request.query_params.get("type") or None
+        )
+        return Response(UtilityBillSerializer(bills, many=True).data)
+
+    def post(self, request: Request) -> Response:
+        serializer = UtilityBillSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        obj = services.log_utility_bill(request.user, **serializer.validated_data)
+        return Response(UtilityBillSerializer(obj).data, status=status.HTTP_201_CREATED)
+
+
+class UtilityBillDetailView(APIView):
+    permission_classes = [_Perm]
+
+    def _get(self, pk: int, user):
+        obj = selectors.get_utility_bill(pk, user)
+        if obj is None:
+            raise NotFound()
+        return obj
+
+    def patch(self, request: Request, bill_id: int) -> Response:
+        obj = self._get(bill_id, request.user)
+        serializer = UtilityBillSerializer(obj, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        obj = services.update_utility_bill(request.user, obj, **serializer.validated_data)
+        return Response(UtilityBillSerializer(obj).data)
+
+    def delete(self, request: Request, bill_id: int) -> Response:
+        services.delete_utility_bill(request.user, self._get(bill_id, request.user))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class UtilityUsageView(APIView):
+    """The charts: one series per utility, with per-day figures and comparisons."""
+
+    permission_classes = [_Perm]
+
+    def get(self, request: Request) -> Response:
+        series = selectors.utility_usage(
+            request.user, utility_type=request.query_params.get("type") or None
+        )
+        return Response({"series": UtilitySeriesSerializer(series, many=True).data})
 
 
 # ---------------------------------------------------------------------------

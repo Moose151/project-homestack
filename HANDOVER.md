@@ -106,13 +106,14 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: v0.28.3 is code-complete locally and awaiting production deployment plus household
+**Phase: v0.29.0 is code-complete locally and awaiting production deployment plus household
 acceptance (2026-08-10).** Since the original v0.21 pilot gate, HomeStack has completed the
 generic sensitive-node lock and audit work (M4), shipped Fitness & Training (v0.25), Pools & spas
 inside Homestead (v0.26), rebuilt Money around daily use and a bucket ledger (v0.27), and closed
 the known behavioural gaps against standalone Solace including income allocation, cycle history
 and annual summaries (v0.28.0–0.28.1). The phone interaction and UI consistency passes are also
-complete through v0.28.2. **The next step is not another broad build:** rebuild/migrate the home
+complete through v0.28.2, and v0.29.0 adds metered water/electricity usage inside Homestead.
+**The next step is not another broad build:** rebuild/migrate the home
 server, import and verify the real Solace database, complete a real Fitness workout and pool-care
 check, then run the two-account/real-device acceptance pass. Home Assistant M5.5 follows those
 gates. Kiosk refinement remains deferred.**
@@ -355,7 +356,7 @@ gates. Kiosk refinement remains deferred.**
   schedule, accept the phone/laptop workflow, then
   retire standalone Solace.
 - [~] **Homestead node — SHIPPED (2026-07-21; costs & cover v0.11.2; room planning v0.18.0;
-  Pools & spas v0.26.0; decision D21).** The household's home/property hub (maintenance,
+  Pools & spas v0.26.0; utility usage v0.29.0; decision D21).** The household's home/property hub (maintenance,
   appliances/warranties,
   service contacts, improvements + property record). Rooms/areas now link to dedicated pages
   with unified purchase/maintenance/renovation/upgrade plans, active/completed/archived lifecycle,
@@ -364,6 +365,12 @@ gates. Kiosk refinement remains deferred.**
   Protected insurance + rates/water/gas/utility cost tracking mirrors linked Solace bills through
   events (D4). Pools/spas add water testing, sanitiser/surface-aware target bands and idempotent
   care jobs implemented as normal recurring Homestead maintenance (not a parallel scheduler).
+  Utility usage (v0.29.0) records one `UtilityBill` per arrived water/electricity/gas bill —
+  period, amount used, unit, total cost, estimated-or-read — and derives days, per-day usage/cost
+  and the effective unit rate at read time. The usage endpoint returns one series per utility with
+  per-day averages and two comparisons (previous bill, a year ago matched within 45 days). It is
+  household-visible with **no re-auth gate** (owner, 2026-08-10) while Costs & cover stays gated,
+  and it writes nothing to the Calendar.
   Real pool-shop guidance still needs to be compared with the defaults; pool-specific FTS remains
   a small follow-up. Full Projects integration remains future. See spec `25_Node_Homestead.md`.
 - [~] **Fitness & Training — SHIPPED LOCALLY (v0.25.0, D24); production acceptance pending.**
@@ -382,7 +389,7 @@ gates. Kiosk refinement remains deferred.**
 
 ## 6. Active tasks — deploy, cut over and validate before the next major build
 
-**Current state (2026-08-10):** `main` is clean at v0.28.3 with 766 backend tests green, a clean
+**Current state (2026-08-10):** `main` is clean at v0.29.0 with 783 backend tests green, a clean
 frontend production build and no migration drift. The production/home-server deployment and its
 database may still be behind this code. The real-use defects found on v0.23.x have been fixed;
 the remaining work is deployment and acceptance, not another speculative UI pass.
@@ -413,7 +420,7 @@ declare its surface gets the cautious one. What remains is the **pre-remote-acce
 
 **Production track (requires the home server):** rebuild both images and run `migrate`. Current
 heads that matter for this deployment are: `atlas.0004`, `scheduling.0003`, `meridian.0013`,
-`education.0006`, `homestead.0008_pool_and_water_tests`, `fitness.0002_seed_common_exercises`,
+`education.0006`, `homestead.0009_utility_bills`, `fitness.0002_seed_common_exercises`,
 `hub.0015_seed_fitness_widget`, `nodes.0008_seed_fitness_node`,
 `permissions.0021_seed_fitness_permissions`, `solace.0009_income_scope_and_allocations` and
 `attachments.0001`. Verify rather than assuming with:
@@ -607,6 +614,7 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-08-10 | Assistant | UI consistency | **Worked the open items in `docs/UI_CONSISTENCY_AUDIT.md` (v0.28.2); one item now remains.** **School & study's dead end is reproduced and fixed** — `personIdForUser` returns nothing when the signed-in account has no linked Person, and the Profile tab it opens on hid its student picker unless the household had 2+ people, so there was no way to recover; it now falls back to the first person, always shows the picker, and gives a people-less household a real empty state instead of a permanent "Loading profile…". **Settings vocabulary unified** — Meridian's tab is labelled Manage like Money's (key stays `settings` so links work); Homestead's property record is recorded as `[decided]` reference content, not settings. **Approve/reject** had three treatments across two Meridian screens and is now primary/ghost everywhere. **Homestead's six hand-rolled Edit/Delete pairs use `RowActions`**, removing the app's last bare `✕` deletes. Tasks & rewards' duplicate top-balance tile removed. The two-search-boxes question is settled as `[decided]` with a rule: an in-node box must name its scope, never a bare "Search…". **766 backend tests green; build clean; no migration.** | Only `[~] Emoji as the icon system` is left, and it is a deferred design decision rather than a defect — a proper icon set is its own piece of work. Any new UI finding should be appended to that audit rather than fixed silently. |
 
 | 2026-08-10 | Assistant | Handover | **Forward-looking handover corrected and released as v0.28.3.** Updated the canonical-doc index through D24/doc 27, replaced the stale v0.21 phase summary, marked M4 functionally complete, brought Fitness, Pools & spas and Solace v0.28 parity into the status section, corrected the standalone Solace path and production migration heads, and replaced duplicate Home Assistant guidance with an ordered deploy → Solace cutover → real Fitness/pool checks → partner acceptance → Home Assistant 5.5.0 sequence. Historical progress entries were preserved. | Rebuild/migrate the home server, execute the real Solace import/verify and acceptance gates, then update the household-acceptance results before starting Home Assistant. |
+| 2026-08-10 | Assistant | Homestead | **Metered water/electricity usage shipped as v0.29.0.** New `UtilityBill` (`homestead.0009_utility_bills`): utility type, period start/end, amount used + unit (kWh/kL/L/m³/MJ/therms, defaulted per type), total cost, provider, estimated-or-read, notes, `visibility` defaulting to household. Nothing derived is stored — `days` (inclusive), `daily_usage`, `daily_cost` and `unit_cost` are model properties, so a corrected bill corrects every figure. `GET/POST /homestead/utility-bills/`, `PATCH/DELETE /homestead/utility-bills/<id>/` and `GET /homestead/utility-usage/` (one series per utility, oldest first, per-day averages, `vs previous bill` + `vs a year ago` matched within 45 days of a year earlier). All comparisons are per day because billing periods differ in length. Publishes `homestead.utility_bill_logged` (D4); no Calendar row (D7 — an arrived bill is not an appointment; its `HouseholdCost` owns the due date). **Owner decision (asked, 2026-08-10): usage is household-visible with no password gate**, unlike Costs & cover — so it uses `_Perm` only, not `HomesteadFinanceAccessMixin`, and works with the Money node disabled. Frontend: new **Power & water** tab, entry form, per-utility card (3 stat tiles, change chips, two column charts, and a full table with edit/delete), plus a dependency-free `components/BarChart.tsx` (single series, ≤24px bars, latest emphasised + directly labelled, striped estimated reads, focusable columns announcing their figures, light/dark checked by screenshot). Also fixed `?tab=pool` falling back to Overview — `pool` was missing from `TAB_KEYS`. **783 backend tests green (17 new); tsc + production build clean; no migration drift.** | Deploy: rebuild + `docker exec homestack-backend python manage.py migrate`, then log two real bills per utility and check the year-ago match against the paper bills. Follow-ups left open: utility bills are not in `search_homestead`, there is no Hub widget, and a bill is not linked to its `HouseholdCost` account (deliberate — that surface is Solace-gated). |
 
 ### Session notes (free-form, optional)
 

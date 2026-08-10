@@ -28,6 +28,9 @@ from apps.homestead.views import (
     RoomListView,
     RoomProductDetailView,
     RoomProductListView,
+    UtilityBillDetailView,
+    UtilityBillListView,
+    UtilityUsageView,
     WaterTestDetailView,
     WaterTestListView,
 )
@@ -58,6 +61,10 @@ urlpatterns = [
     path("rooms/<int:room_id>/items/<int:item_id>/", RoomItemDetailView.as_view(), name="homestead-room-item-detail"),
     path("rooms/<int:room_id>/items/<int:item_id>/products/", RoomProductListView.as_view(), name="homestead-room-product-list"),
     path("rooms/<int:room_id>/items/<int:item_id>/products/<int:product_id>/", RoomProductDetailView.as_view(), name="homestead-room-product-detail"),
+
+    path("utility-bills/", UtilityBillListView.as_view(), name="homestead-utility-bill-list"),
+    path("utility-bills/<int:bill_id>/", UtilityBillDetailView.as_view(), name="homestead-utility-bill-detail"),
+    path("utility-usage/", UtilityUsageView.as_view(), name="homestead-utility-usage"),
 
     path("pools/", PoolListView.as_view(), name="homestead-pool-list"),
     path("pools/<int:pool_id>/", PoolDetailView.as_view(), name="homestead-pool-detail"),

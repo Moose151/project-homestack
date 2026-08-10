@@ -19,6 +19,7 @@ from apps.homestead.models import (
     RoomPlanItem,
     RoomPlanProduct,
     ServiceProvider,
+    UtilityBill,
     WaterTest,
 )
 
@@ -252,6 +253,89 @@ class HouseholdCostSerializer(serializers.ModelSerializer):
 
     def validate_name(self, value: str) -> str:
         return _non_blank(value)
+
+
+class UtilityBillSerializer(serializers.ModelSerializer):
+    """A metered bill, plus the per-day figures that make two periods comparable."""
+
+    unit_label = serializers.CharField(read_only=True)
+    days = serializers.IntegerField(read_only=True)
+    daily_usage = serializers.DecimalField(max_digits=14, decimal_places=3, read_only=True)
+    daily_cost = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    unit_cost = serializers.DecimalField(
+        max_digits=12, decimal_places=4, read_only=True, allow_null=True
+    )
+
+    class Meta:
+        model = UtilityBill
+        fields = [
+            "id", "utility_type", "provider", "period_start", "period_end",
+            "usage_amount", "usage_unit", "unit_label", "amount", "is_estimated",
+            "notes", "days", "daily_usage", "daily_cost", "unit_cost", "visibility",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "id", "unit_label", "days", "daily_usage", "daily_cost", "unit_cost",
+            "created_at", "updated_at",
+        ]
+
+    def validate(self, attrs: dict) -> dict:
+        # On a PATCH only the changed dates arrive, so fall back to what is already stored —
+        # otherwise moving one end of the period would skip the check entirely.
+        start = attrs.get("period_start") or getattr(self.instance, "period_start", None)
+        end = attrs.get("period_end") or getattr(self.instance, "period_end", None)
+        if start and end and end < start:
+            raise serializers.ValidationError(
+                {"period_end": "The period must end on or after it starts."}
+            )
+        return attrs
+
+
+class UtilityChangeSerializer(serializers.Serializer):
+    """How the latest period compares with another one — the reason to look at all."""
+
+    label = serializers.CharField()
+    usage_percent = serializers.DecimalField(
+        max_digits=8, decimal_places=1, allow_null=True
+    )
+    cost_percent = serializers.DecimalField(max_digits=8, decimal_places=1, allow_null=True)
+
+
+class UtilityPeriodSerializer(serializers.Serializer):
+    """One plotted point: a billing period reduced to what a chart needs."""
+
+    id = serializers.IntegerField()
+    label = serializers.CharField()
+    period_start = serializers.DateField()
+    period_end = serializers.DateField()
+    days = serializers.IntegerField()
+    usage_amount = serializers.DecimalField(max_digits=14, decimal_places=3)
+    daily_usage = serializers.DecimalField(max_digits=14, decimal_places=3)
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    daily_cost = serializers.DecimalField(max_digits=12, decimal_places=2)
+    unit_cost = serializers.DecimalField(
+        max_digits=12, decimal_places=4, allow_null=True
+    )
+    is_estimated = serializers.BooleanField()
+
+
+class UtilitySeriesSerializer(serializers.Serializer):
+    """Everything the usage screen shows for one utility."""
+
+    utility_type = serializers.CharField()
+    label = serializers.CharField()
+    unit_label = serializers.CharField()
+    bill_count = serializers.IntegerField()
+    total_usage = serializers.DecimalField(max_digits=16, decimal_places=3)
+    total_cost = serializers.DecimalField(max_digits=14, decimal_places=2)
+    average_daily_usage = serializers.DecimalField(max_digits=14, decimal_places=3)
+    average_daily_cost = serializers.DecimalField(max_digits=12, decimal_places=2)
+    average_unit_cost = serializers.DecimalField(
+        max_digits=12, decimal_places=4, allow_null=True
+    )
+    latest = UtilityPeriodSerializer(allow_null=True)
+    changes = UtilityChangeSerializer(many=True)
+    periods = UtilityPeriodSerializer(many=True)
 
 
 class PoolSerializer(serializers.ModelSerializer):

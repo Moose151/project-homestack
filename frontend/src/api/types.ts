@@ -1073,6 +1073,80 @@ export interface HouseholdCost {
   updated_at: string
 }
 
+// --- Utility usage (metered water / electricity / gas bills) ---------------
+export type UtilityType = 'electricity' | 'water' | 'gas' | 'other'
+export type UtilityUnit = 'kwh' | 'kl' | 'litres' | 'm3' | 'mj' | 'therms' | 'other'
+
+export interface UtilityBill {
+  id: number
+  utility_type: UtilityType
+  provider: string
+  period_start: string
+  period_end: string
+  usage_amount: string
+  usage_unit: UtilityUnit
+  /** How the unit is written for people: kWh, kL, m³… */
+  unit_label: string
+  amount: string
+  is_estimated: boolean
+  notes: string
+  /** Days billed, both end dates included — bills are not equal lengths. */
+  days: number
+  daily_usage: string
+  daily_cost: string
+  unit_cost: string | null
+  visibility: string
+  created_at: string
+  updated_at: string
+}
+
+export type UtilityBillWrite = Partial<Omit<
+  UtilityBill,
+  'id' | 'unit_label' | 'days' | 'daily_usage' | 'daily_cost' | 'unit_cost' | 'created_at' | 'updated_at'
+>>
+
+/** One billing period, reduced to what a chart needs. */
+export interface UtilityPeriodPoint {
+  id: number
+  label: string
+  period_start: string
+  period_end: string
+  days: number
+  usage_amount: string
+  daily_usage: string
+  amount: string
+  daily_cost: string
+  unit_cost: string | null
+  is_estimated: boolean
+}
+
+/** The latest period against an earlier one, compared per day. */
+export interface UtilityChange {
+  label: string
+  usage_percent: string | null
+  cost_percent: string | null
+}
+
+export interface UtilitySeries {
+  utility_type: UtilityType
+  label: string
+  unit_label: string
+  bill_count: number
+  total_usage: string
+  total_cost: string
+  average_daily_usage: string
+  average_daily_cost: string
+  average_unit_cost: string | null
+  latest: UtilityPeriodPoint | null
+  changes: UtilityChange[]
+  /** Oldest period first, ready to plot. */
+  periods: UtilityPeriodPoint[]
+}
+
+export interface UtilityUsageResponse {
+  series: UtilitySeries[]
+}
+
 export interface HomesteadSearchResults {
   appliances: Appliance[]
   maintenance: MaintenanceTask[]
