@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.28.2**
+> **Current version: 0.28.3**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,15 @@
 ---
 
 ## 0.28 — Income the way the standalone app does it
+
+### 0.28.3 — 2026-08-10 — handover alignment
+- Corrected the handover's forward-looking status from the obsolete v0.21/M4 workstream to the
+  shipped v0.28 codebase: Fitness, Pools & spas, completed security maturation, current Solace
+  parity and the actual migration heads are now represented.
+- Replaced duplicate “build Home Assistant next” guidance with the operational dependency order:
+  deploy/migrate, real-data Solace cutover, Fitness/pool checks, partner acceptance, then Home
+  Assistant 5.5.0. Historical progress entries remain unchanged.
+- Documentation/version metadata only; no runtime or database migration change.
 
 ### 0.28.2 — 2026-08-10 — closing the UI consistency audit
 - **School & study no longer opens on a dead end.** Reproduced at last: the Profile tab it opens

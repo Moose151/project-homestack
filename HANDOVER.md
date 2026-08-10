@@ -24,7 +24,7 @@ current scope.
 Read these in `docs/`. **If anything conflicts, this doc set wins.** Older `.docx` files are
 archived/superseded — ignore them.
 
-- `00_README_and_Changelog.md` — **all key decisions (D1–D23) with reasoning. Read this.**
+- `00_README_and_Changelog.md` — **all key decisions (D1–D24) with reasoning. Read this.**
 - `01_Master_Software_Specification.md` — vision, node model, V1 scope.
 - `02_Software_Architecture_Document.md` — architecture, base model, resolver, helpers.
 - `03_Database_Design_Document.md` — schema and conventions.
@@ -43,8 +43,9 @@ archived/superseded — ignore them.
   every-page access, configurable views, look & feel).
 - `25_Node_Homestead.md` — home/property source of truth and Solace handoff (D21).
 - `26_Node_Home_Assistant.md` — important dedicated Home Assistant bridge contract (D22/M5.5).
+- `27_Node_Fitness.md` — social training programs, live workouts and personal records (D24).
 - `MILESTONE_1_Checklist.md` / `MILESTONE_2_Checklist.md` / `MILESTONE_2.5_Checklist.md` — the
-  per-milestone build checklists. **M4 is active; Homestead room planning shipped alongside it.**
+  per-milestone build checklists. **M4 is functionally complete; production acceptance is active.**
 
 ## 3. Hard rules (do NOT violate these)
 
@@ -105,15 +106,16 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: Controlled partner-pilot gate shipped locally (2026-08-09, v0.21.0). The implemented
-destinations now share a consistent phone/desktop hierarchy, partner onboarding supports an
-explicit audited Money grant without making the partner an administrator, and node navigation,
-Hub contributions plus Homestead's finance controls are permission-aware. Meridian reward and
-allowance/goal/wishlist/routine management and Books, Pets and Household guide workflows now use
-responsive, labelled and failure-aware controls. Pet treatments and appointments have complete
-create/edit/delete UI from the pet profile. `docs/PARTNER_PILOT_READINESS.md` is the acceptance
-source of truth. Deploy and run its two-account/real-device pass next; Milestone 4 security
-maturation and native Solace real-data comparison still follow. Kiosk work remains deferred.**
+**Phase: v0.28.3 is code-complete locally and awaiting production deployment plus household
+acceptance (2026-08-10).** Since the original v0.21 pilot gate, HomeStack has completed the
+generic sensitive-node lock and audit work (M4), shipped Fitness & Training (v0.25), Pools & spas
+inside Homestead (v0.26), rebuilt Money around daily use and a bucket ledger (v0.27), and closed
+the known behavioural gaps against standalone Solace including income allocation, cycle history
+and annual summaries (v0.28.0–0.28.1). The phone interaction and UI consistency passes are also
+complete through v0.28.2. **The next step is not another broad build:** rebuild/migrate the home
+server, import and verify the real Solace database, complete a real Fitness workout and pool-care
+check, then run the two-account/real-device acceptance pass. Home Assistant M5.5 follows those
+gates. Kiosk refinement remains deferred.**
 
 > **Owner direction, 2026-07-29.** Focus on usability, functionality, response time, navigation
 > and layout across the responsive web app. v0.12.0 delivers the shared foundation: route
@@ -139,10 +141,10 @@ maturation and native Solace real-data comparison still follow. Kiosk work remai
 > running Postgres schema is separate from the image. Forgetting it causes `column ... does not
 > exist` 500s (this bit us on the Hub page after `atlas.0002` added `quantity`/`due_at`).
 
-- [x] Documentation consolidated to one canonical set (docs 00–26 + milestone checklists).
-- [x] All architectural decisions made (D1–D23).
-- [x] **Milestone 1 (Walking Skeleton) — DONE** (Phases 1.0–1.12). Only outstanding item:
-  deploy to the home server for daily use (running via Podman locally).
+- [x] Documentation consolidated to one canonical set (docs 00–27 + milestone checklists).
+- [x] All current architectural decisions recorded (D1–D24).
+- [x] **Milestone 1 (Walking Skeleton) — DONE** (Phases 1.0–1.12) and used on the Docker home
+  server. Current production deployment/acceptance work is tracked below, not as an M1 gap.
 - [~] **Milestone 2: native Meridian — functional, now under parity/cockpit revisit (owner
   request, 2026-07-10).** Backend + web/kiosk frontend had been marked complete: points-ledger
   parity (reservation/refund, balance vs lifetime earned), tasks (hot/behaviours/scope), routines
@@ -306,17 +308,17 @@ maturation and native Solace real-data comparison still follow. Kiosk work remai
   Ctrl/⌘ K, drawn calendar icon replacing the 📅 emoji that always read 17 July, left-edge active
   indicator that no longer truncates labels, faded nav overflow). `RowActions` gives one
   Edit/Delete/Remove vocabulary, applied to Pets. **642 backend tests green; production build
-  clean; no migration drift.** Open items in the audit: tab-pill treatment, duplicated node
-  identity between top bar and page header, stat-card/empty-state rollout, and the Books rail.
-- [~] **Milestone 4: security maturation — IN PROGRESS (v0.17.0).** Shared attachments now have
+  clean; no migration drift.** Those audit items are now resolved through v0.28.2; only the
+  deferred decision about replacing warm node emoji with a formal icon set remains.
+- [x] **Milestone 4: security maturation — FUNCTIONALLY COMPLETE (v0.24.1).** Shared attachments have
   protected upload/list/download/delete APIs, visibility+sensitivity enforcement through the
   central resolver, randomized non-public storage, sensitive-download audit records and frontend
   client/types. Existing Education files use a permission-checked download route; direct private
   assessment/note/file ID access was tightened. Password re-auth now expires after five minutes
-  and rejects old permanent session flags. Remaining: generic sensitive-lock/kiosk UX, complete
-  audit coverage for permission/user changes, and the pre-remote-access checklist (only if remote
-  access is pursued).
-- [~] **Milestone 5: native Solace — standalone feature parity complete locally (v0.16.0);
+  and rejects old permanent session flags. The generic node lock, machine-readable re-auth
+  contract, one-minute kiosk elevation and account/permission audit coverage are shipped. Only
+  the pre-remote-access checklist remains, and only if remote access is pursued.
+- [~] **Milestone 5: native Solace — standalone feature parity complete locally (v0.28.1);
   production cutover validation remains.**
   Backend `apps/solace` covers bills, paydays, planned purchases, budget buckets/set-asides,
   subscriptions and payday checklist items. All rows default to `visibility="sensitive"` +
@@ -327,7 +329,7 @@ maturation and native Solace real-data comparison still follow. Kiosk work remai
   Manage → Solace settings; `solace.*` permissions remain enforced. Calendar hides sensitive/financial events
   until re-auth; Solace Hub widgets return content only when unlocked and authorised. Frontend
   `/solace` route shipped with password unlock, overview, search and tabs. `import_solace`
-  now dry-runs/imports the local legacy SQLite DB (`/home/moose/Documents/project-solace`):
+  now dry-runs/imports the local legacy SQLite DB (`/home/instructor/Documents/new/project-solace`):
   settings, categories, recurring bills and occurrence history, paydays, planned purchases,
   buckets, balances, preferences, closeouts and the latest payday-checklist cycle. Legacy
   subscription-category recurring payments remain Bills so their occurrence and set-aside
@@ -343,34 +345,49 @@ maturation and native Solace real-data comparison still follow. Kiosk work remai
   3–24 month bills-account cash-flow forecast and closes the deeper standalone workflow gaps:
   bill autopay/stop dates/history/edit scope and filtering, current/next pay plans and
   checklists, standard payday workflow steps, calculated upcoming income dates, purchase
-  quick-saving, normalised/filterable category reporting and fuller setup health checks. See
-  `docs/SOLACE_PARITY_CHECKLIST.md`. **Still to do for cutover:** deploy migrations/import real
-  data, compare a full pay cycle and monthly schedule, accept the phone/laptop workflow, then
+  quick-saving, normalised/filterable category reporting and fuller setup health checks.
+  v0.27.0 reorganises Money around Now/Bills/Plan/Insights/Manage, adds due-before-payday actions
+  and an auditable bucket ledger. v0.28.0–0.28.1 adds individual/shared income scope, standard/
+  lump/custom shared allocation, per-person contribution breakdowns, cycle history, calendar/
+  financial-year summaries and standalone-matching purchase completion. No behavioural parity
+  gap is currently known; `docs/SOLACE_PARITY_CHECKLIST.md` is the source of truth. **Still to do
+  for cutover:** deploy migrations/import real data, compare a full pay cycle and monthly
+  schedule, accept the phone/laptop workflow, then
   retire standalone Solace.
 - [~] **Homestead node — SHIPPED (2026-07-21; costs & cover v0.11.2; room planning v0.18.0;
-  decision D21).** The household's home/property hub (maintenance, appliances/warranties,
+  Pools & spas v0.26.0; decision D21).** The household's home/property hub (maintenance,
+  appliances/warranties,
   service contacts, improvements + property record). Rooms/areas now link to dedicated pages
   with unified purchase/maintenance/renovation/upgrade plans, active/completed/archived lifecycle,
   estimated/actual costs and exact room/whole-house totals; stable IDs plus `floorplan_data`
   prepare for a future clickable floor plan. Folds the *home* scope of planned **Assets**.
   Protected insurance + rates/water/gas/utility cost tracking mirrors linked Solace bills through
-  events (D4); full Projects integration remains future. See spec `25_Node_Homestead.md`.
-- [ ] **Milestone 5.5: Home Assistant bridge — IMPORTANT / PLANNED (D22).** After the household
-  pilot, remaining M4 security work and Solace production cutover validation: establish the
+  events (D4). Pools/spas add water testing, sanitiser/surface-aware target bands and idempotent
+  care jobs implemented as normal recurring Homestead maintenance (not a parallel scheduler).
+  Real pool-shop guidance still needs to be compared with the defaults; pool-specific FTS remains
+  a small follow-up. Full Projects integration remains future. See spec `25_Node_Homestead.md`.
+- [~] **Fitness & Training — SHIPPED LOCALLY (v0.25.0, D24); production acceptance pending.**
+  Forty-five seeded exercises, searchable custom library, assigned multi-day programs, immutable
+  live sessions, previous-performance defaults, editable sets and mid-workout add/drop, strength/
+  running/swimming personal records, notifications, global search and a Hub widget are complete.
+  **Still to do:** deploy/migrate, enable the node and log a complete real phone workout before
+  prioritising rest timers, RPE, pace splits or trend charts. See `docs/27_Node_Fitness.md`.
+- [ ] **Milestone 5.5: Home Assistant bridge — IMPORTANT / PLANNED (D22).** After production
+  deployment, household acceptance and Solace cutover validation: establish the
   backend-only secret/connection and allowlist gate; ship read-only mapped Home Status + Hub
   widget; add safe centrally permissioned/audited controls; then deliver approved HomeStack
   events into Home Assistant automations. WebSocket live state and a custom component remain
   conditional follow-ups. See `docs/26_Node_Home_Assistant.md`.
 - [ ] Milestone 6: Inventory, Assets (non-home only, or retire — see D21), Hearth, Travel, Projects, Health.
 
-## 6. Active tasks — household pilot, then continue M4 locally
+## 6. Active tasks — deploy, cut over and validate before the next major build
 
-**Current state (2026-08-09):** the owner has reset the production database and is running
-v0.23.x on the home server, reporting bugs from real use. Fix those first — they have found
-three genuine defects that tests did not (a `datetime-local` input silently discarding
-date-only entries, a min/step mismatch rejecting whole numbers, and backdated bills arriving
-pre-loaded with arrears). `docs/PARTNER_PILOT_READINESS.md` remains the acceptance list for
-inviting the partner in; the two-account/real-device pass is still outstanding.
+**Current state (2026-08-10):** `main` is clean at v0.28.3 with 766 backend tests green, a clean
+frontend production build and no migration drift. The production/home-server deployment and its
+database may still be behind this code. The real-use defects found on v0.23.x have been fixed;
+the remaining work is deployment and acceptance, not another speculative UI pass.
+`docs/PARTNER_PILOT_READINESS.md` remains the two-account/real-device release gate and should be
+extended during acceptance to cover Fitness and Pools & spas.
 
 **Milestone 4 is functionally complete (v0.24.1).** The sensitive-node lock is generic
 (`apps/nodes/access.py`), account/permission changes are audited, the locked-state contract is
@@ -379,29 +396,42 @@ and the kiosk's elevation window is a minute against the web's five — a client
 declare its surface gets the cautious one. What remains is the **pre-remote-access checklist in
 `docs/05_Security_Architecture_Document.md` §14**, and only if remote access is ever pursued.
 
-**Next local build step:** Milestone 5.5, the Home Assistant bridge — start with its 5.5.0
-contract/security gate, not a custom component. See `docs/26_Node_Home_Assistant.md`.
+**Priority order:**
 
-**Next important feature after those gates:** Milestone 5.5, the dedicated Home Assistant node.
-Start with its 5.5.0 contract/security gate; do not begin with a custom component or generic
-integration framework. The exact sequence and acceptance gates are in the roadmap and
-`docs/26_Node_Home_Assistant.md`.
+1. Rebuild both home-server images, run all migrations and confirm the migration heads below.
+2. Run the Solace dry-run/import/verify sequence against the home server's **real** standalone
+   SQLite database, then compare one full pay cycle and month before retiring standalone.
+3. Enable Fitness and complete one real phone workout, checking previous-weight defaults,
+   mid-session edits, totals, personal records and household/private notifications.
+4. Compare the saltwater-pool target bands and starter care jobs with the pool shop's guidance;
+   adjust `apps/homestead/pool_care.py` only from that evidence.
+5. Complete the partner readiness pass on both adult phones plus desktop. Record task/device
+   friction; do not begin another broad visual rewrite.
+6. After those gates, begin Home Assistant Milestone 5.5.0 with backend reachability, secrets,
+   TLS/timeouts, allowlists and failure/permission tests. Do not start with controls, WebSockets,
+   a custom component or a generic integrations framework. See `docs/26_Node_Home_Assistant.md`.
 
 **Production track (requires the home server):** rebuild both images and run `migrate`. Current
-heads: `atlas.0004`, `scheduling.0003`, `meridian.0013`, `education.0006` (all
-`_multi_person_assignment`), `homestead.0007_room_plan_project_mode`,
-`hub.0014_upcoming_widget_and_always_visible`, `solace.0007`, `permissions.0020`,
-`attachments.0001`.
+heads that matter for this deployment are: `atlas.0004`, `scheduling.0003`, `meridian.0013`,
+`education.0006`, `homestead.0008_pool_and_water_tests`, `fitness.0002_seed_common_exercises`,
+`hub.0015_seed_fitness_widget`, `nodes.0008_seed_fitness_node`,
+`permissions.0021_seed_fitness_permissions`, `solace.0009_income_scope_and_allocations` and
+`attachments.0001`. Verify rather than assuming with:
 
-The Solace cutover sequence remains: rerun the importer
-dry-run/apply so settings, categories, bucket rules, historical occurrences, balances,
-preferences and closeouts are enriched, then run the read-only `import_solace --verify`.
-Compare a full standalone pay cycle and month against the native Pay plan/Schedule: bill dates
-and totals, paid/skipped state, income dates, transfers, month-end bills and closeout. Record a
-fresh bills-account balance and verify the Forecast event trail, lowest balance, shortfall and
-safe-withdrawal amount against the real account. Then verify management, import/export,
-reminders, pay/Undo and Hub finance cards on phone and laptop. Retire standalone Solace only
-after the owner accepts those checks.
+```bash
+docker compose up -d --build
+docker exec homestack-backend python manage.py migrate
+docker exec homestack-backend python manage.py showmigrations
+```
+
+The Solace cutover sequence remains a data/acceptance exercise: dry-run/apply so settings,
+categories, bucket rules and ledger state, historical occurrences, income scope/allocations,
+balances, preferences and closeouts are imported, then run read-only `--verify`. Compare a full
+standalone pay cycle and month against Now, Pay plan, Schedule, cycle history and annual summary:
+bill dates/totals, paid/skipped state, income ownership/dates, shared allocation, transfers,
+month-end bills and closeout. Record a fresh bills-account balance and verify the Forecast event
+trail, lowest balance, shortfall and safe-withdrawal amount against the real account. Retire
+standalone Solace only after the owner accepts those checks on phone and laptop.
 
 Production command sequence (copy the legacy database into the container first because the host
 path is not mounted there):
@@ -575,6 +605,8 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-08-10 | Assistant | Solace | **Closed the last three standalone parity gaps (v0.28.1).** **Cycle history** (`GET /solace/cycle-history/`) lists every closeout newest first with paid/skipped/outstanding counts and totals per cycle — recomputed from the occurrences in each window rather than stored, so a later bill correction flows through. **Annual summary** (`GET /solace/annual-summary/?year_type=calendar|financial`) groups a year of occurrences by category then by bill, both ordered by cost, with an expandable category list; the financial year runs 1 Jul – 30 Jun and uncategorised bills are counted as "Uncategorised". **Purchase completion** now raises `saved_amount` to `target_amount` when status becomes `bought`, matching standalone, while keeping a balance that already exceeds the target. Both views are sections under Insights and old `?tab=cycle-history` / `annual-summary` links map to them. `docs/SOLACE_PARITY_CHECKLIST.md` now records that no behavioural gap is known and asks that anything newly found be added rather than assumed absent. **766 backend tests green (11 new); build clean; no migration.** | Cutover is now a data and acceptance exercise, not a build one: deploy, migrate, run `import_solace --dry-run` **against the home server's copy of the standalone database** (no copy on this PC has real data), then `--verify`, then compare one full pay cycle side by side before retiring standalone. |
 
 | 2026-08-10 | Assistant | UI consistency | **Worked the open items in `docs/UI_CONSISTENCY_AUDIT.md` (v0.28.2); one item now remains.** **School & study's dead end is reproduced and fixed** — `personIdForUser` returns nothing when the signed-in account has no linked Person, and the Profile tab it opens on hid its student picker unless the household had 2+ people, so there was no way to recover; it now falls back to the first person, always shows the picker, and gives a people-less household a real empty state instead of a permanent "Loading profile…". **Settings vocabulary unified** — Meridian's tab is labelled Manage like Money's (key stays `settings` so links work); Homestead's property record is recorded as `[decided]` reference content, not settings. **Approve/reject** had three treatments across two Meridian screens and is now primary/ghost everywhere. **Homestead's six hand-rolled Edit/Delete pairs use `RowActions`**, removing the app's last bare `✕` deletes. Tasks & rewards' duplicate top-balance tile removed. The two-search-boxes question is settled as `[decided]` with a rule: an in-node box must name its scope, never a bare "Search…". **766 backend tests green; build clean; no migration.** | Only `[~] Emoji as the icon system` is left, and it is a deferred design decision rather than a defect — a proper icon set is its own piece of work. Any new UI finding should be appended to that audit rather than fixed silently. |
+
+| 2026-08-10 | Assistant | Handover | **Forward-looking handover corrected and released as v0.28.3.** Updated the canonical-doc index through D24/doc 27, replaced the stale v0.21 phase summary, marked M4 functionally complete, brought Fitness, Pools & spas and Solace v0.28 parity into the status section, corrected the standalone Solace path and production migration heads, and replaced duplicate Home Assistant guidance with an ordered deploy → Solace cutover → real Fitness/pool checks → partner acceptance → Home Assistant 5.5.0 sequence. Historical progress entries were preserved. | Rebuild/migrate the home server, execute the real Solace import/verify and acceptance gates, then update the household-acceptance results before starting Home Assistant. |
 
 ### Session notes (free-form, optional)
 
