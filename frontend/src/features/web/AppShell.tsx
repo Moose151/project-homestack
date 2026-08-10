@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext'
 import { Avatar } from '../../components/Avatar'
 import { NotificationBell } from '../../components/NotificationBell'
 import { CalendarPeek } from '../../components/CalendarPeek'
+import { Logo } from '../../components/Logo'
 import { useDarkMode } from '../../hooks/useDarkMode'
 import { useStacks } from '../stacks/StacksContext'
 import { STACKS, softColour } from '../../config/stacks'
@@ -272,7 +273,7 @@ export function AppShell() {
           className="flex h-[62px] flex-shrink-0 items-center gap-3 border-b border-line px-3 transition-colors hover:bg-sunken/60 md:h-[68px] md:px-6"
           aria-label="HomeStack home"
         >
-          <span className="inline-grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl bg-primary text-base font-black text-white shadow-soft">◇</span>
+          <Logo className="h-9 w-9 flex-shrink-0" />
           <span className="min-w-0">
             <span className="block truncate text-base font-extrabold tracking-tight text-ink">HomeStack</span>
             <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">Our household</span>

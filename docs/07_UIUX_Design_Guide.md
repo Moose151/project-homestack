@@ -53,6 +53,23 @@ Atlas blue · Home Wiki warm neutral · Pets green · Education purple · Invent
 slate · Hearth orange/red · Travel sky blue · Projects amber · Health red/pink · Meridian gold
 · Solace teal/green · Homestead warm terracotta · Home Assistant blue · Fitness coral/red.
 
+### 6a. The logo (added 2026-08-10)
+
+Three marks, each with one job. Sources in `brand/`, web assets in `frontend/public/brand/`
+(rebuilt by `scripts/build_brand_assets.py`), and every use goes through
+`components/Logo.tsx` so sizes and alt text are decided once.
+
+- **Mark** (the house with the stack) — the sidebar header, the kiosk ambient screen, the
+  favicon and the app icons. Used wherever space is tight or the word "HomeStack" is already
+  written beside it, in which case the image is `aria-hidden` rather than repeating the name.
+- **Wordmark** — a wide strip where the name must carry itself. Light-toned, so it belongs on
+  dark surfaces first.
+- **Lockup** (mark above the name) — **one per surface**, on the screen that introduces the app:
+  the web sign-in page. Not a page decoration.
+
+Check any replacement against both the paper and the dark surface, and at 36px as well as full
+size — the sidebar draws it small, and a mark that dissolves there is the wrong mark.
+
 ## 7. Layouts
 
 - **Mobile:** single column, bottom navigation, large tap targets, fast actions.

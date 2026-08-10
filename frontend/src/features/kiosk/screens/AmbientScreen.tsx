@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { KioskThemeToggle } from '../components/KioskThemeToggle'
+import { Logo } from '../../../components/Logo'
 
 interface Props {
   onStart: () => void
@@ -26,6 +27,11 @@ export function AmbientScreen({ onStart }: Props) {
       className="relative flex h-full w-full cursor-pointer select-none flex-col items-center justify-center bg-sunken text-ink"
       onClick={onStart}
     >
+      {/* Named quietly in the corner: the clock is what this screen is for. */}
+      <div className="absolute left-6 top-5 flex items-center gap-3">
+        <Logo className="h-11 w-11" />
+        <Logo variant="wordmark" alt="HomeStack" className="hidden h-6 w-auto sm:block" />
+      </div>
       <div className="absolute right-6 top-5 flex items-center gap-3">
         <KioskThemeToggle />
         <a

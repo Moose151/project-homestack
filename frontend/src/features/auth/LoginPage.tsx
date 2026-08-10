@@ -3,6 +3,7 @@ import { api } from '../../api/client'
 import { useAuth } from './AuthContext'
 import { PINPad } from '../../components/PINPad'
 import { Avatar } from '../../components/Avatar'
+import { Logo } from '../../components/Logo'
 import type { KioskUser } from '../../api/types'
 
 type Step = 'select' | 'pin' | 'username'
@@ -55,7 +56,8 @@ export function LoginPage() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-6 sm:mb-8">
-          <span className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-primary text-xl text-white shadow-soft">◇</span>
+          {/* The one place that introduces the app, so it gets the full lockup. */}
+          <Logo variant="lockup" alt="HomeStack" className="mx-auto mb-4 h-28 w-auto sm:h-32" />
           <h1 className="text-3xl font-extrabold tracking-tight text-ink">Welcome home</h1>
           <p className="text-muted mt-1">Everything your household needs, together.</p>
         </div>

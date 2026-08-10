@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.29.0**
+> **Current version: 0.29.1**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,22 @@
 ---
 
 ## 0.29 — What the house actually uses
+
+### 0.29.1 — 2026-08-10 — the logo, in the app
+- **HomeStack has its own face.** The owner's three brand renders are in `brand/` as sources;
+  `scripts/build_brand_assets.py` crops each to its artwork, resizes it and writes the committed
+  web assets to `frontend/public/brand/`. The sources are ~1 MB each of mostly empty canvas —
+  not something to download to draw a 36px logo.
+- **Where each one goes:** the **mark** replaces the `◇` placeholder in the sidebar header and
+  names the kiosk ambient screen; the **wordmark** sits beside it there; the **lockup** leads the
+  sign-in page — one per surface, on the screen that introduces the app.
+- **Browser tab, home screen and installs**: favicon at 32 and 192, an Apple touch icon drawn on
+  the app's paper colour (iOS fills a transparent icon with black), and light/dark `theme-color`.
+- Sizes and alt text live in one `components/Logo.tsx`, which marks the logo `aria-hidden` where
+  the word "HomeStack" is already on screen beside it rather than saying the name twice.
+- Checked against the warm paper *and* the dark surface at both full size and 36px.
+- Documentation-and-assets change: typecheck and production build clean; no backend change, no
+  migration.
 
 ### 0.29.0 — 2026-08-10 — metered water & electricity usage
 - **Enter a bill, get the graphs.** A new **Power & water** tab in Our home takes a water,
