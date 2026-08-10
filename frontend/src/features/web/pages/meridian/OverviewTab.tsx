@@ -101,10 +101,12 @@ export function OverviewTab({ canManage, pointsLabel, onOpenTasks, onOpenShop }:
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4">
-        <StatCard className="col-span-2 md:col-span-1" label="Pending approvals" value={pendingCount} hint={`${taskCompletions.length} tasks · ${rewardRequests.length} rewards`} />
+      {/* The top balance used to have a tile of its own as well as sitting at the head of the
+          Balances card below, which stated the same fact twice on one screen. The card keeps it,
+          because there it comes with everyone else's for comparison. */}
+      <div className="grid grid-cols-2 gap-3 md:gap-4">
+        <StatCard label="Pending approvals" value={pendingCount} hint={`${taskCompletions.length} tasks · ${rewardRequests.length} rewards`} />
         <StatCard label="Active earners" value={topBalances.length} hint="People with Meridian activity" />
-        <StatCard label={`Top ${pointsLabel} balance`} value={topBalances[0] ? `★ ${topBalances[0].balance}` : '★ 0'} hint={topBalances[0]?.display_name || 'No activity yet'} />
       </div>
 
       {canManage && (

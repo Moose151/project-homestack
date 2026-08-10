@@ -378,8 +378,8 @@ function TaskMobileCard({
             <div key={completion.id} className="rounded-xl bg-warning-soft p-2.5 text-xs text-warning">
               <p><strong>{completion.person_display_name}</strong> submitted {formatWhen(completion.submitted_at)}</p>
               <div className="mt-2 grid grid-cols-2 gap-2">
-                <button className="min-h-10 rounded-lg bg-warning px-2 font-bold text-white" onClick={() => onApprove(completion.id)}>Approve</button>
-                <button className="min-h-10 rounded-lg border border-warning/30 px-2 font-bold" onClick={() => onReject(completion.id)}>Reject</button>
+                <Button size="sm" onClick={() => onApprove(completion.id)}>Approve</Button>
+                <Button size="sm" variant="ghost" onClick={() => onReject(completion.id)}>Reject</Button>
               </div>
             </div>
           ))}
@@ -446,8 +446,8 @@ function TaskRow({
               <div key={c.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-warning-soft px-2 py-1 text-xs text-warning">
                 <span className="font-semibold">{c.person_display_name}</span>
                 <span>submitted {formatWhen(c.submitted_at)}</span>
-                <button className="font-semibold underline" onClick={() => onApprove(c.id)}>Approve</button>
-                <button className="font-semibold underline" onClick={() => onReject(c.id)}>Reject</button>
+                <Button size="sm" onClick={() => onApprove(c.id)}>Approve</Button>
+                <Button size="sm" variant="ghost" onClick={() => onReject(c.id)}>Reject</Button>
               </div>
             ))}
           </div>

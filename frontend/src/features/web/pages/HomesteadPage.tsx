@@ -18,6 +18,7 @@ import { EmptyState } from '../../../components/EmptyState'
 import { Modal } from '../../../components/Modal'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
+import { DeleteAction, EditAction } from '../../../components/RowActions'
 import { StatCard } from '../../../components/StatCard'
 import { RoomIconSelect } from '../../../components/RoomIconSelect'
 import { SensitiveGate } from '../../../components/SensitiveGate'
@@ -568,8 +569,8 @@ function MaintenanceTab({ people, defaultAssignee, onError, canUseMoney }: {
                   {t.next_due_at && <Button size="sm" variant="secondary" onClick={() => complete(t)} className="mr-auto sm:mr-1">Done</Button>}
                   {!t.solace_bill_ref && canUseMoney && <Button size="sm" variant="ghost" onClick={() => startCost(t)}>Track cost</Button>}
                   <div className="flex items-center gap-1 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
-                    <button onClick={() => startEdit(t)} className="min-h-10 rounded-lg px-3 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
-                    <button onClick={() => remove(t)} className="grid h-10 w-10 place-items-center rounded-lg text-muted hover:bg-danger-soft hover:text-danger" aria-label="Delete">✕</button>
+                    <EditAction onClick={() => startEdit(t)} label={t.title} />
+                    <DeleteAction onClick={() => remove(t)} label={t.title} />
                   </div>
                 </div>
               </div>
@@ -719,8 +720,8 @@ function AppliancesTab({ onError }: { onError: (m: string) => void }) {
                     {a.notes && <p className="mt-1 whitespace-pre-wrap text-sm text-muted-strong">{a.notes}</p>}
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-1 sm:opacity-0 transition-opacity sm:group-hover:opacity-100">
-                    <button onClick={() => startEdit(a)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
-                    <button onClick={() => remove(a)} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger" aria-label="Delete">✕</button>
+                    <EditAction onClick={() => startEdit(a)} label={a.name} />
+                    <DeleteAction onClick={() => remove(a)} label={a.name} />
                   </div>
                 </div>
               </Card>
@@ -1249,8 +1250,8 @@ function ImprovementsTab({ people, defaultAssignee, onError }: {
             {IMPROVEMENT_STATUSES.map(s => <option key={s} value={s}>{cap(s)}</option>)}
           </Select>
           <div className="flex items-center gap-1 sm:opacity-0 transition-opacity sm:group-hover:opacity-100">
-            <button onClick={() => startEdit(i)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
-            <button onClick={() => remove(i)} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger" aria-label="Delete">✕</button>
+            <EditAction onClick={() => startEdit(i)} label={i.title} />
+            <DeleteAction onClick={() => remove(i)} label={i.title} />
           </div>
         </div>
       </div>
@@ -1405,8 +1406,8 @@ function ContactsTab({ onError }: { onError: (m: string) => void }) {
                   {p.notes && <p className="mt-1 whitespace-pre-wrap text-sm text-muted-strong">{p.notes}</p>}
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-1 sm:opacity-0 transition-opacity sm:group-hover:opacity-100">
-                  <button onClick={() => startEdit(p)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken hover:text-ink">Edit</button>
-                  <button onClick={() => remove(p)} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-danger" aria-label="Delete">✕</button>
+                  <EditAction onClick={() => startEdit(p)} label={p.name} />
+                  <DeleteAction onClick={() => remove(p)} label={p.name} />
                 </div>
               </div>
             </Card>
@@ -1687,8 +1688,8 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
                       </div>
                     </div>
                     <div className="flex flex-shrink-0 justify-end gap-1 border-t border-line pt-2 sm:border-0 sm:pt-0">
-                      <button onClick={() => startPolicy(policy)} className="min-h-10 rounded-lg px-3 py-1 text-sm text-muted hover:bg-sunken hover:text-ink">Edit</button>
-                      <button onClick={() => removePolicy(policy)} className="grid h-10 w-10 place-items-center rounded-lg text-muted hover:bg-danger-soft hover:text-danger" aria-label="Delete">✕</button>
+                      <EditAction onClick={() => startPolicy(policy)} label={policy.name} />
+                      <DeleteAction onClick={() => removePolicy(policy)} label={policy.name} />
                     </div>
                   </div>
                 </Card>
@@ -1755,8 +1756,8 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
                       {cost.notes && <p className="mt-2 whitespace-pre-wrap text-sm text-muted">{cost.notes}</p>}
                     </div>
                     <div className="flex flex-shrink-0 justify-end gap-1 border-t border-line pt-2 sm:border-0 sm:pt-0">
-                      <button onClick={() => startCost(cost)} className="min-h-10 rounded-lg px-3 py-1 text-sm text-muted hover:bg-sunken hover:text-ink">Edit</button>
-                      <button onClick={() => removeCost(cost)} className="grid h-10 w-10 place-items-center rounded-lg text-muted hover:bg-danger-soft hover:text-danger" aria-label="Delete">✕</button>
+                      <EditAction onClick={() => startCost(cost)} label={cost.name} />
+                      <DeleteAction onClick={() => removeCost(cost)} label={cost.name} />
                     </div>
                   </div>
                 </Card>

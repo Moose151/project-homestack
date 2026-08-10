@@ -4,7 +4,8 @@ Recorded from a desktop pass over Home, Calendar, Lists & notes, School & study,
 Pets, Our home, Tasks & rewards and Money before the partner pilot. Owner-reported items are
 marked **(owner)**.
 
-Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
+Status key: `[ ]` open · `[~]` partly done · `[x]` fixed · `[decided]` deliberately kept as is.
+Fixes span v0.22.0–v0.28.2.
 
 ## 1. Structure and layout
 
@@ -38,13 +39,19 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
 - [decided] **Home's H1 is a greeting while the top bar says "Home".** Keeping the greeting: a
   personal salutation on the household dashboard is deliberate warmth, and Home is the only
   page where the H1 is not a destination name. Recorded so it is not "fixed" by accident later.
-- [~] **Two search boxes on every node page** (global top bar + in-node). Money no longer
-  needs a **Search** button — it searches as you type on the same 300ms debounce as every other
-  node, keeping only Refresh (its figures are recalculated server-side). Whether a node needs
-  its own box at all, given the global one, is still open.
-- [~] **Same fact twice on one screen.** Books' duplicated shelf counts are gone with the rail.
-  Tasks & rewards still shows the top balance in both its tile and the Balances card, and
-  Money's finance-health list still restates what the all-zero tiles say.
+- [decided] **Two search boxes on every node page** (global top bar + in-node). **Both stay.**
+  They answer different questions: the top bar finds a thing anywhere in HomeStack and navigates
+  to it, while the in-node box narrows the destination you are already in. What stops them
+  reading as the same control is that every in-node box names its own scope — "Search bills,
+  plans and purchases…", "Search pets, treatments and appointments…" — against the top bar's
+  "Search anything". All eight node pages already follow this; **a new page must not ship a bare
+  "Search…" placeholder.** Money also lost its Search button and searches as you type like the
+  rest, keeping only Refresh because its figures are recalculated server-side.
+- [x] **Same fact twice on one screen.** Books' duplicated shelf counts went with the rail.
+  Tasks & rewards' top-balance tile is gone — the Balances card beneath it already led with the
+  same figure, and there it comes with everyone else's for comparison. Money's six all-zero tiles
+  went with the Overview rebuild (v0.27.0), and its health panel now appears only while setup is
+  unfinished, so it no longer restates a healthy state that the screen already shows.
 - [x] **Duplicate quick-capture.** Home offered two kinds where Lists offered three, so the same
   job had a different answer depending on where you started it. Home now offers To-do / Note /
   Reminder in the same order, picking a list for a to-do exactly as Lists does.
@@ -54,10 +61,14 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
 
 ## 3. Action language
 
-- [~] **Five button styles with no primary/secondary rule.** "+ Add book" was primary while
-  "+ Add pet" and "+ New list" were secondary — identical rank, opposite treatment.
-  **Fixed:** Pets and Lists now use the primary variant. Money's coloured **View** pills and
-  the remaining ad-hoc buttons across Meridian/Homestead still need a pass.
+- [x] **Five button styles with no primary/secondary rule.** "+ Add book" was primary while
+  "+ Add pet" and "+ New list" were secondary — identical rank, opposite treatment. Pets and
+  Lists use the primary variant; Money's coloured **View** pills are gone (the tile is the link).
+  The Meridian/Homestead pass is now done: **approving is a primary button and rejecting a ghost
+  one**, everywhere it appears — Tasks & rewards had rendered the same decision three ways
+  (filled warning, outlined warning, and bare underlined text) on two screens. Homestead's six
+  hand-rolled Edit/Delete pairs now use `RowActions`, which removes the last three bare `✕`
+  deletes in the app, and the shop's lower-case "remove" chip became a proper Remove action.
 - [x] **Three destructive vocabularies:** "Delete" (Pets), bare `×` (Books, Lists), "clear"
   (Our home counters), none in the danger colour. `components/RowActions.tsx` now gives one
   Edit/Delete/Remove vocabulary with danger-toned deletes, rolled out across Pets, Books, Lists,
@@ -94,9 +105,10 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
   `rounded-xl` like every other input, not pills, and Money's tiles now use the shared `StatCard`.
   The genuine outlier was Hub widgets at `rounded-3xl` against `rounded-2xl` cards; they match
   now.
-- [~] **Money's 12-tab row** now sits in the full-width underlined bar rather than a pill group
-  sized to itself, so it no longer looks like a different component to Pets' three. Whether 12
-  tabs is the right information architecture for Money is a separate question.
+- [x] **Money's 12-tab row.** The separate question this raised — whether twelve tabs was the
+  right information architecture — was answered in v0.27.0: they became five, grouped by the
+  question being asked (Now / Bills / Plan / Insights / Manage), with the old second level kept
+  as `secondary` tabs inside each.
 
 ## 5. Content and semantics
 
@@ -104,8 +116,12 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
   the same "<Brand> keeps … together" shape as the rest.
 - [x] **"Error" badge for incomplete Money setup** made a fresh install look broken. The badge
   now reads "Setup needed" / "Needs attention" / "Ready"; the backend status is unchanged.
-- [ ] **Settings live in different places:** Tasks & rewards "Settings", Money "Manage", Our
-  home a setup form on Overview.
+- [x] **Settings live in different places.** Tasks & rewards said "Settings" where Money said
+  "Manage" for the same job in the same last-tab position; both now say **Manage** (the Meridian
+  tab key stays `settings`, so existing links keep working). Our home is **[decided]** to be a
+  different case rather than an inconsistency: its property record — address, purchase dates,
+  emergency shut-off locations — is reference content the household reads, edited in place like a
+  pet or a book, not a settings page. Only its first-run state is a form, which is the point.
 - [x] **Mixed date formats on one page** — Home's header omitted the year while its Countdown
   widget always showed one. The Countdown now shows the year only when it isn't the current one.
 
@@ -123,9 +139,14 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
 - [x] **Active nav label truncated only when active**, because the indicator consumed width.
   The indicator is now absolutely positioned, so the label box is identical in both states.
 - [x] **Active indicator sat on the right edge**, reading as a scrollbar. Now on the left.
-- [ ] **School & study opens on a dead end.** It already defaults to the signed-in user's
-  Person (`personIdForUser`), so the blank state in the screenshot has another cause — needs
-  reproducing on the server before a fix.
+- [x] **School & study opens on a dead end.** Reproduced and fixed. `personIdForUser` returns
+  nothing when the signed-in account has no linked Person — an admin who is not a student, or a
+  partner's login — and School & study opens on the Profile tab, so it landed on "Select a person"
+  **with no selector to do it with**, because the picker only rendered when the household had more
+  than one person. Three fixes: the tab falls back to the first person when the account has none
+  of its own, the student picker is always shown so the choice can be changed or recovered, and a
+  household with no people at all now gets an empty state pointing at People & access instead of
+  a "Loading profile…" that was never going to resolve.
 - [x] **Calendar legend row does two jobs.** The colour legend and the "use ‹ › to forecast"
   hint are now separate lines with a rule between them, so the row stops reading as one
   sentence.

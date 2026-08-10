@@ -28,7 +28,9 @@ export function MeridianPage() {
 
   const tabKeys: Tab[] = ['overview', 'tasks', 'routines', 'shop', 'goals', 'wishlist', 'leaderboard']
   if (canManage) tabKeys.push('settings')
-  const tabs: TabDef<Tab>[] = tabKeys.map(t => ({ key: t, label: t }))
+  // "Manage" everywhere a node has a setup tab, so the same job is not called two things in
+  // two destinations. The key stays `settings` so existing links keep working.
+  const tabs: TabDef<Tab>[] = tabKeys.map(t => ({ key: t, label: t === 'settings' ? 'manage' : t }))
 
   return (
     <div className="flex flex-col gap-4 sm:gap-5">

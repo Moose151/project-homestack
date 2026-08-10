@@ -361,8 +361,8 @@ function RewardMobileCard({
             <div key={request.id} className="rounded-xl bg-warning-soft p-2.5 text-xs text-warning">
               <p><strong>{personName(request.requested_by_person_id)}</strong> requested this for ★ {request.points_spent}</p>
               <div className="mt-2 grid grid-cols-2 gap-2">
-                <button className="min-h-10 rounded-lg bg-warning px-2 font-bold text-white" onClick={() => onApprove(request.id)}>Approve</button>
-                <button className="min-h-10 rounded-lg border border-warning/30 px-2 font-bold" onClick={() => onReject(request.id)}>Reject</button>
+                <Button size="sm" onClick={() => onApprove(request.id)}>Approve</Button>
+                <Button size="sm" variant="ghost" onClick={() => onReject(request.id)}>Reject</Button>
               </div>
             </div>
           ))}
@@ -435,8 +435,8 @@ function RewardRow({
                   <div key={req.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-warning-soft px-2 py-1 text-xs text-warning">
                     <span className="font-semibold">{personName(req.requested_by_person_id)}</span>
                     <span>requested ★ {req.points_spent}</span>
-                    <button className="font-semibold underline" onClick={() => onApprove(req.id)}>Approve</button>
-                    <button className="font-semibold underline" onClick={() => onReject(req.id)}>Reject</button>
+                    <Button size="sm" onClick={() => onApprove(req.id)}>Approve</Button>
+                    <Button size="sm" variant="ghost" onClick={() => onReject(req.id)}>Reject</Button>
                   </div>
                 ))}
               </div>
@@ -664,7 +664,7 @@ function ShopperView({
               return (
                 <li key={`${id}-${idx}`} className="flex items-center justify-between text-sm">
                   <span className="text-ink">{r?.name} · ★ {r?.cost_points}</span>
-                  <button className="text-muted hover:text-danger" onClick={() => onRemove(id)}>remove</button>
+                  <button className="min-h-10 px-1 text-xs font-semibold text-muted hover:text-danger" onClick={() => onRemove(id)}>Remove</button>
                 </li>
               )
             })}

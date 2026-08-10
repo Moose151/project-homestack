@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.28.1**
+> **Current version: 0.28.2**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,29 @@
 ---
 
 ## 0.28 — Income the way the standalone app does it
+
+### 0.28.2 — 2026-08-10 — closing the UI consistency audit
+- **School & study no longer opens on a dead end.** Reproduced at last: the Profile tab it opens
+  on defaults to the signed-in account's linked Person, and an admin who is not a student — or a
+  partner's login — has none, so it landed on "Select a person" *with no selector to do it with*,
+  because the picker only appeared when the household had more than one person. It now falls back
+  to the first person, always shows the student picker so the choice can be changed or recovered,
+  and gives a household with no people an empty state pointing at People & access instead of a
+  "Loading profile…" that was never going to resolve.
+- **One word for setting a node up.** Tasks & rewards said "Settings" where Money said "Manage"
+  for the same job in the same position; both now say Manage. Our home is recorded as a different
+  case rather than an inconsistency: its property record is reference content edited in place.
+- **One treatment for approving and rejecting.** Tasks & rewards rendered the same decision three
+  ways across two screens — filled warning, outlined warning, and bare underlined text. Approving
+  is now a primary button and rejecting a ghost one, everywhere.
+- **The last bare `✕` deletes are gone.** Homestead's six hand-rolled Edit/Delete pairs now use
+  the shared `RowActions`, and the rewards shop's lower-case "remove" chip became a Remove action.
+- **The top-balance tile is gone from Tasks & rewards** — the Balances card beneath already led
+  with the same figure, and there it comes with everyone else's for comparison.
+- **The two-search-boxes question is settled:** both stay, because they answer different questions,
+  and every in-node box names its own scope against the top bar's "Search anything".
+- `docs/UI_CONSISTENCY_AUDIT.md` now has one item left, the deferred icon-set decision.
+- **766 backend tests green; typecheck and production build clean; no migration.**
 
 ### 0.28.1 — 2026-08-10 — the last three parity gaps
 - **Cycle history.** Every closed-out pay cycle, newest first, with what was paid, skipped and

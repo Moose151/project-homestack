@@ -886,9 +886,12 @@ function ProfileTab({ people, institutions, onInstitutionCreated, defaultPersonI
   const [institutionInput, setInstitutionInput] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // The signed-in account may have no Person of its own — an admin who is not a student, or a
+  // partner logging in — and School & study opens on this tab. Without a fallback it opened on
+  // "Select a person" with no selector to do it with.
   useEffect(() => {
-    if (defaultPersonId !== null) setPersonId(p => p ?? defaultPersonId)
-  }, [defaultPersonId])
+    setPersonId(current => current ?? defaultPersonId ?? people[0]?.id ?? null)
+  }, [defaultPersonId, people])
 
   useEffect(() => {
     if (!personId) return
@@ -947,14 +950,28 @@ function ProfileTab({ people, institutions, onInstitutionCreated, defaultPersonI
   const required = profile?.credits_required ?? 0
   const pct = required > 0 ? Math.min(100, Math.round((credits / required) * 100)) : 0
 
-  if (people.length === 0 || loading) {
+  if (loading) {
     return <Card><p className="text-sm text-muted">Loading profile…</p></Card>
+  }
+
+  // Claiming to be loading forever was the worst of the dead ends: nothing was coming.
+  if (people.length === 0) {
+    return (
+      <EmptyState
+        icon="🎓"
+        title="No one to study yet"
+        hint="A study profile belongs to a person. Add the people in your household first, then their courses and deadlines hang off them."
+        action={<Link to="/users"><Button>Add people</Button></Link>}
+      />
+    )
   }
 
   return (
     <div className="space-y-4">
-      {/* Person selector (in case multiple people in household) */}
-      {people.length > 1 && (
+      {/* Always available, not only when there are two people: it is the way to change student,
+          and it was the only recovery from landing here with nobody selected. */}
+      <label className="flex flex-col gap-1.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-strong">Student</span>
         <select
           className={inputCls}
           value={personId ?? ''}
@@ -963,7 +980,7 @@ function ProfileTab({ people, institutions, onInstitutionCreated, defaultPersonI
           <option value="">Select person</option>
           {people.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}
         </select>
-      )}
+      </label>
 
       {!personId ? (
         <Card><p className="text-sm text-muted py-4 text-center">Select a person to view their academic profile.</p></Card>
