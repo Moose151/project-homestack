@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.25.1**
+> **Current version: 0.25.2**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,14 @@
 ---
 
 ## 0.25 — Fitness & Training
+
+### 0.25.2 — 2026-08-10 — phone navigation follow-up
+- The bottom bar now answers "where am I" from anywhere. A destination without its own slot
+  (Fitness, Books, Money) left nothing in the bar marked; the More button now stands in for the
+  current destination, wearing its icon, colour and name until you open it.
+- Money's month calendar fits a phone. It was pinned to 760px, so a phone scrolled a calendar
+  sideways and never saw a week at once. Below `sm` each day carries coloured dots for what falls
+  on it and the month's entries are listed beneath in order; the labelled chips return above `sm`.
 
 ### 0.25.1 — 2026-08-10 — phone interaction pass
 - Form fields no longer zoom the page. Every control was below 16px, which makes iOS Safari zoom

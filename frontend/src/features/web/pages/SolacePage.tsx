@@ -1400,36 +1400,56 @@ function ScheduleTab({ schedule, month, loading, onMonth, onAction }: {
         </div>
       )}
       {view === 'calendar' ? (
-        <Card className="overflow-x-auto" contentClassName="p-3">
-          <div className="min-w-[760px]">
-            <div className="grid grid-cols-7 text-center text-xs font-semibold uppercase tracking-wide text-muted">
-              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => <div key={day} className="p-2">{day}</div>)}
-            </div>
-            <div className="grid grid-cols-7">
-              {cells.map((day, index) => {
-                if (!day) return <div key={`empty-${index}`} className="min-h-28 border border-line/60 bg-sunken/30" />
-                const key = `${month}-${String(day).padStart(2, '0')}`
-                const dayEvents = eventsByDay.get(key) || []
-                return (
-                  <div key={key} className={`min-h-28 border border-line/60 p-2 ${key === todayKey ? 'bg-primary/5 ring-1 ring-inset ring-primary/40' : 'bg-surface'}`}>
-                    <p className="text-xs font-semibold text-muted">{day}</p>
-                    <div className="mt-1 space-y-1">
-                      {dayEvents.map(event => (
-                        <div
-                          key={event.key}
-                          className={`rounded px-1.5 py-1 text-[11px] leading-tight ${event.kind === 'income' ? 'bg-success/10 text-success' : event.occurrence.status === 'paid' ? 'bg-primary/10 text-primary' : event.occurrence.status === 'skipped' ? 'bg-sunken text-muted' : 'bg-warning/10 text-ink'}`}
-                          title={`${event.title} · ${money(event.amount)}`}
-                        >
-                          <p className="truncate font-semibold">{event.title}</p>
-                          <p>{money(event.amount)}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+        // The month used to be pinned to 760px, so a phone scrolled a calendar sideways and
+        // could never see a week at once. The grid now fits the screen: below sm each day
+        // carries coloured dots for what falls on it, and the labelled chips return where
+        // there is room for them. The list view below remains the way to read the detail.
+        <Card contentClassName="p-2 sm:p-3">
+          <div className="grid grid-cols-7 text-center text-[11px] font-semibold uppercase tracking-wide text-muted sm:text-xs">
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+              <div key={day} className="p-1 sm:p-2"><span className="sm:hidden">{day[0]}</span><span className="hidden sm:inline">{day}</span></div>
+            ))}
           </div>
+          <div className="grid grid-cols-7">
+            {cells.map((day, index) => {
+              if (!day) return <div key={`empty-${index}`} className="min-h-14 border border-line/60 bg-sunken/30 sm:min-h-28" />
+              const key = `${month}-${String(day).padStart(2, '0')}`
+              const dayEvents = eventsByDay.get(key) || []
+              const dotClass = (event: typeof dayEvents[number]) =>
+                event.kind === 'income' ? 'bg-success'
+                  : event.occurrence.status === 'paid' ? 'bg-primary'
+                    : event.occurrence.status === 'skipped' ? 'bg-line-strong' : 'bg-warning'
+              return (
+                <div key={key} className={`min-h-14 border border-line/60 p-1 sm:min-h-28 sm:p-2 ${key === todayKey ? 'bg-primary/5 ring-1 ring-inset ring-primary/40' : 'bg-surface'}`}>
+                  <p className="text-[11px] font-semibold text-muted sm:text-xs">{day}</p>
+                  <div className="mt-1 flex flex-wrap gap-0.5 sm:hidden" aria-hidden>
+                    {dayEvents.slice(0, 4).map(event => (
+                      <span key={event.key} className={`h-1.5 w-1.5 rounded-full ${dotClass(event)}`} />
+                    ))}
+                  </div>
+                  {dayEvents.length > 0 && (
+                    <span className="sr-only">{dayEvents.length} entries: {dayEvents.map(event => event.title).join(', ')}</span>
+                  )}
+                  <div className="mt-1 hidden space-y-1 sm:block">
+                    {dayEvents.map(event => (
+                      <div
+                        key={event.key}
+                        className={`rounded px-1.5 py-1 text-[11px] leading-tight ${event.kind === 'income' ? 'bg-success/10 text-success' : event.occurrence.status === 'paid' ? 'bg-primary/10 text-primary' : event.occurrence.status === 'skipped' ? 'bg-sunken text-muted' : 'bg-warning/10 text-ink'}`}
+                        title={`${event.title} · ${money(event.amount)}`}
+                      >
+                        <p className="truncate font-semibold">{event.title}</p>
+                        <p>{money(event.amount)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          {/* On a phone the dots say when, not what; the month's entries follow in order. */}
+          {events.length > 0 && (
+            <div className="mt-3 grid gap-2 sm:hidden">{events.map(eventRow)}</div>
+          )}
         </Card>
       ) : events.length === 0 ? (
         <EmptyState icon="🗓️" title="Nothing scheduled this month" hint="Recurring bills and active paydays will appear here." />

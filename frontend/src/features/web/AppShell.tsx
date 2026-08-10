@@ -216,6 +216,10 @@ export function AppShell() {
     .map(key => stackNav.find(item => item.key === key))
     .filter((item): item is NavItem => Boolean(item))
   const currentNav = [...stackNav, ...adminNav].find(item => location.pathname.startsWith(item.route))
+  // The destination the More button represents while you are on it, because it has no slot.
+  const moreStandsIn = currentNav && !mobilePrimary.some(item => item.key === currentNav.key)
+    ? currentNav
+    : null
 
   const toggleMobileKey = (key: string) => {
     setMobileKeys(previous => {
@@ -419,16 +423,30 @@ export function AppShell() {
             )}
           </NavLink>
         ))}
+        {/* When you are somewhere that has no slot of its own — Fitness, Books, Money — nothing
+            in the bar used to be marked, so the phone gave no answer to "where am I". The More
+            button then stands in for the current destination and wears its icon and colour. */}
         <button
           onClick={() => setMoreOpen(true)}
+          style={moreStandsIn && !moreOpen ? { color: moreStandsIn.colour } : undefined}
           className={`relative flex min-w-0 flex-1 flex-col items-center justify-center pb-1.5 pt-1.5 text-[11px] font-bold transition-colors ${
-            moreOpen ? 'text-primary' : 'text-muted'
-          }`}
-          aria-label="More navigation and profile options"
+            moreOpen || moreStandsIn ? '' : 'text-muted'
+          } ${moreOpen ? 'text-primary' : ''}`}
+          aria-label={moreStandsIn ? `${moreStandsIn.label} — open all destinations` : 'More navigation and profile options'}
         >
-          <span className={`mb-0.5 grid h-8 min-w-11 place-items-center rounded-full px-2 text-xl ${moreOpen ? 'bg-primary-soft' : ''}`}>☰</span>
-          More
-          {moreOpen && <span className="absolute bottom-0 h-0.5 w-5 rounded-full bg-primary" />}
+          <span
+            className={`mb-0.5 grid h-8 min-w-11 place-items-center rounded-full px-2 text-xl ${moreOpen ? 'bg-primary-soft' : ''}`}
+            style={moreStandsIn && !moreOpen ? { background: softColour(moreStandsIn.colour, '24') } : undefined}
+          >
+            {moreStandsIn && !moreOpen ? moreStandsIn.icon : '☰'}
+          </span>
+          <span className="max-w-full truncate px-1">{moreStandsIn && !moreOpen ? moreStandsIn.shortLabel : 'More'}</span>
+          {(moreOpen || moreStandsIn) && (
+            <span
+              className="absolute bottom-0 h-0.5 w-5 rounded-full"
+              style={{ backgroundColor: moreOpen || !moreStandsIn ? 'var(--hs-primary)' : moreStandsIn.colour }}
+            />
+          )}
         </button>
       </nav>
 
