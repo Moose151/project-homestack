@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.29.2**
+> **Current version: 0.29.3**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,15 @@
 ---
 
 ## 0.29 — What the house actually uses
+
+### 0.29.3 — 2026-08-11 — one place for subscriptions
+- Bills categorised as Subscription now appear in the Subscriptions section instead of the
+  ordinary Bills list. Changing their category moves them back automatically.
+- The two underlying record types remain intact: bill-based subscriptions retain payment
+  occurrences, Mark paid, autopay and set-aside planning, while dedicated subscriptions retain
+  renewal-cycle tracking. Both are presented together with their correct edit controls.
+- Added a useful combined empty state and explanation of why some subscriptions have payment
+  history. **Frontend production build clean; backend unchanged at 787 tests; no migration.**
 
 ### 0.29.2 — 2026-08-11 — Solace allocation ceiling
 - Active percentage bucket rules now have a transaction-safe aggregate ceiling of 100%; create

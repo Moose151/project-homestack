@@ -115,6 +115,9 @@ const LEGACY_TABS: Record<string, [Tab, string | null]> = {
 }
 
 const BILL_CATS = ['mortgage', 'utilities', 'insurance', 'council', 'debt', 'subscription', 'childcare', 'other']
+const isSubscriptionBill = (bill: SolaceBill) => ['subscription', 'subscriptions'].includes(
+  bill.category.trim().toLowerCase(),
+)
 type HomeDestination = '' | 'insurance_policy' | 'household_cost' | 'maintenance'
 const homeDestinationForCategory = (category: string): HomeDestination => {
   const normalised = category.toLowerCase()
@@ -436,6 +439,53 @@ function BillDetails({ bill }: { bill: SolaceBill }) {
   )
 }
 
+function BillCard({ bill, categories, reload, onError, onPay, paying }: {
+  bill: SolaceBill
+  categories: string[]
+  reload: () => void
+  onError: (message: string) => void
+  onPay: (bill: SolaceBill) => void
+  paying: number | null
+}) {
+  return (
+    <Card contentClassName="p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="font-semibold text-ink truncate">{bill.name}</h3>
+          <p className="text-sm text-muted">{bill.provider || cap(bill.category)} · {money(bill.amount)}</p>
+          {bill.is_active && bill.include_in_set_aside && (
+            <p className="text-xs text-muted">{money(bill.fortnightly_amount)}/fortnight · {money(bill.annual_amount)}/year</p>
+          )}
+          {bill.source_node === 'homestead' && <div className="mt-1"><Badge tone="success">Managed in Homestead</Badge></div>}
+        </div>
+        <DueBadge iso={bill.next_due_at || bill.due_at} paid={bill.is_paid && !bill.recurrence_rule} />
+      </div>
+      {bill.notes && <p className="mt-3 text-sm text-muted">{bill.notes}</p>}
+      <div className="mt-3 flex items-center gap-2">
+        {bill.recurrence_rule && <Badge tone="neutral">Recurring</Badge>}
+        {bill.is_autopay && <Badge tone="success">Autopay</Badge>}
+        {!bill.is_active && <Badge tone="neutral">Paused</Badge>}
+        {bill.next_occurrence_id && bill.is_active && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onPay(bill)}
+            loading={paying === bill.next_occurrence_id}
+          >
+            Mark next paid
+          </Button>
+        )}
+      </div>
+      <BillDetails bill={bill} />
+      {bill.source_node
+        ? bill.source_node === 'homestead'
+          ? <Link to={homeDestinationPath(bill.source_record_type)} className="mt-3 flex min-h-11 items-center justify-between gap-3 border-t border-line pt-3 text-sm font-semibold text-primary">View and edit in Homestead <span aria-hidden>→</span></Link>
+          : <p className="mt-3 border-t border-line pt-3 text-xs text-muted">Edit this linked bill from {cap(bill.source_node)}.</p>
+        : <BillEditor bill={bill} categories={categories} reload={reload} onError={onError} />}
+    </Card>
+  )
+}
+
 function BillsTab({ bills, categories, reload, onOccurrence, onError }: {
   bills: SolaceBill[]
   categories: string[]
@@ -526,41 +576,10 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError }: {
       {bills.length === 0 ? <EmptyState icon="💸" title="No bills yet" hint="Add a recurring or one-off bill to start forecasting what the household needs to set aside." /> : (
         visibleBills.length === 0 ? <EmptyState icon="🔎" title="No bills match these filters" hint="Try another category or status." /> : <div className="grid gap-3 lg:grid-cols-2">
           {visibleBills.map(b => (
-            <Card key={b.id} contentClassName="p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="font-semibold text-ink truncate">{b.name}</h3>
-                  <p className="text-sm text-muted">{b.provider || cap(b.category)} · {money(b.amount)}</p>
-                  {b.is_active && b.include_in_set_aside && (
-                    <p className="text-xs text-muted">{money(b.fortnightly_amount)}/fortnight · {money(b.annual_amount)}/year</p>
-                  )}
-                  {b.source_node === 'homestead' && <div className="mt-1"><Badge tone="success">Managed in Homestead</Badge></div>}
-                </div>
-                <DueBadge iso={b.next_due_at || b.due_at} paid={b.is_paid && !b.recurrence_rule} />
-              </div>
-              {b.notes && <p className="mt-3 text-sm text-muted">{b.notes}</p>}
-              <div className="mt-3 flex items-center gap-2">
-                {b.recurrence_rule && <Badge tone="neutral">Recurring</Badge>}
-                {b.is_autopay && <Badge tone="success">Autopay</Badge>}
-                {!b.is_active && <Badge tone="neutral">Paused</Badge>}
-                {b.next_occurrence_id && b.is_active && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => pay(b)}
-                    loading={paying === b.next_occurrence_id}
-                  >
-                    Mark next paid
-                  </Button>
-                )}
-              </div>
-              <BillDetails bill={b} />
-              {b.source_node
-                ? b.source_node === 'homestead'
-                  ? <Link to={homeDestinationPath(b.source_record_type)} className="mt-3 flex min-h-11 items-center justify-between gap-3 border-t border-line pt-3 text-sm font-semibold text-primary">View and edit in Homestead <span aria-hidden>→</span></Link>
-                  : <p className="mt-3 border-t border-line pt-3 text-xs text-muted">Edit this linked bill from {cap(b.source_node)}.</p>
-                : <BillEditor bill={b} categories={categories} reload={reload} onError={onError} />}
-            </Card>
+            <BillCard
+              key={b.id} bill={b} categories={categories} reload={reload} onError={onError}
+              onPay={pay} paying={paying}
+            />
           ))}
         </div>
       )}
@@ -1017,17 +1036,59 @@ function SubscriptionEditor({ subscription, reload, onError }: {
   )
 }
 
-function SubscriptionsTab({ subscriptions, reload, onError }: {
-  subscriptions: SolaceSubscription[]; reload: () => void; onError: (message: string) => void
+function SubscriptionsTab({ subscriptions, bills, categories, reload, onOccurrence, onError }: {
+  subscriptions: SolaceSubscription[]
+  bills: SolaceBill[]
+  categories: string[]
+  reload: () => void
+  onOccurrence: (id: number, action: 'paid' | 'unpaid' | 'skip') => Promise<SolaceBillOccurrence>
+  onError: (message: string) => void
 }) {
+  const [undoOccurrence, setUndoOccurrence] = useState<{ id: number; name: string } | null>(null)
+  const [paying, setPaying] = useState<number | null>(null)
+  const pay = async (bill: SolaceBill) => {
+    if (!bill.next_occurrence_id) return
+    setPaying(bill.next_occurrence_id)
+    try {
+      const updated = await onOccurrence(bill.next_occurrence_id, 'paid')
+      setUndoOccurrence({ id: updated.id, name: bill.name })
+    } catch (error) {
+      onError(errMsg(error))
+    } finally {
+      setPaying(null)
+    }
+  }
+  const undo = async () => {
+    if (!undoOccurrence) return
+    const previous = undoOccurrence
+    setUndoOccurrence(null)
+    try {
+      await onOccurrence(previous.id, 'unpaid')
+    } catch (error) {
+      onError(errMsg(error))
+    }
+  }
   return (
     <div className="flex flex-col gap-4">
       <CreatePanel label="Add subscription">
         {close => <SubscriptionForm onCreated={() => { reload(); close() }} onError={onError} />}
       </CreatePanel>
-      <div className="grid gap-3 lg:grid-cols-3">
+      {bills.length > 0 && (
+        <p className="text-sm text-muted">
+          Subscription-category bills keep their payment history and set-aside planning here alongside renewal-based subscriptions.
+        </p>
+      )}
+      {bills.length === 0 && subscriptions.length === 0 ? (
+        <EmptyState icon="🔁" title="No subscriptions yet" hint="Add a subscription here, or categorise a bill as Subscription." />
+      ) : <div className="grid gap-3 lg:grid-cols-2">
+        {bills.map(bill => (
+          <BillCard
+            key={`bill-${bill.id}`} bill={bill} categories={categories} reload={reload}
+            onError={onError} onPay={pay} paying={paying}
+          />
+        ))}
         {subscriptions.map(s => (
-          <Card key={s.id} contentClassName="p-4">
+          <Card key={`subscription-${s.id}`} contentClassName="p-4">
             <div className="flex items-start justify-between gap-3">
               <div><h3 className="font-semibold text-ink">{s.name}</h3><p className="text-sm text-muted">{s.provider || cap(s.billing_cycle)} · {money(s.amount)}</p></div>
               <DueBadge iso={s.next_renewal_at} />
@@ -1036,7 +1097,14 @@ function SubscriptionsTab({ subscriptions, reload, onError }: {
             <SubscriptionEditor subscription={s} reload={reload} onError={onError} />
           </Card>
         ))}
-      </div>
+      </div>}
+      {undoOccurrence && (
+        <UndoToast
+          message={`${undoOccurrence.name} marked paid`}
+          onUndo={undo}
+          onDismiss={() => setUndoOccurrence(null)}
+        />
+      )}
     </div>
   )
 }
@@ -2493,6 +2561,8 @@ export function SolacePage() {
       .map(category => category.name)
     return names.length ? names : BILL_CATS
   }, [categories])
+  const subscriptionBills = useMemo(() => bills.filter(isSubscriptionBill), [bills])
+  const nonSubscriptionBills = useMemo(() => bills.filter(bill => !isSubscriptionBill(bill)), [bills])
 
 
   useEffect(() => {
@@ -2639,14 +2709,23 @@ export function SolacePage() {
           <Tabs tabs={BILLS_SECTIONS} active={billsSection} onChange={setBillsSection} variant="secondary" />
           {billsSection === 'bills' && (
             <BillsTab
-              bills={bills}
+              bills={nonSubscriptionBills}
               categories={billCategoryNames}
               reload={load}
               onOccurrence={updateOccurrence}
               onError={setError}
             />
           )}
-          {billsSection === 'subscriptions' && <SubscriptionsTab subscriptions={subscriptions} reload={load} onError={setError} />}
+          {billsSection === 'subscriptions' && (
+            <SubscriptionsTab
+              subscriptions={subscriptions}
+              bills={subscriptionBills}
+              categories={billCategoryNames}
+              reload={load}
+              onOccurrence={updateOccurrence}
+              onError={setError}
+            />
+          )}
           {billsSection === 'schedule' && (
             <ScheduleTab
               schedule={schedule}
