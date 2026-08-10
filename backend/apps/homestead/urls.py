@@ -14,6 +14,10 @@ from apps.homestead.views import (
     MaintenanceCostView,
     MaintenanceDetailView,
     MaintenanceListView,
+    PoolCareScheduleView,
+    PoolDetailView,
+    PoolListView,
+    PoolStatusView,
     PropertyDetailView,
     PropertyListView,
     ProviderDetailView,
@@ -24,6 +28,8 @@ from apps.homestead.views import (
     RoomListView,
     RoomProductDetailView,
     RoomProductListView,
+    WaterTestDetailView,
+    WaterTestListView,
 )
 
 urlpatterns = [
@@ -52,6 +58,13 @@ urlpatterns = [
     path("rooms/<int:room_id>/items/<int:item_id>/", RoomItemDetailView.as_view(), name="homestead-room-item-detail"),
     path("rooms/<int:room_id>/items/<int:item_id>/products/", RoomProductListView.as_view(), name="homestead-room-product-list"),
     path("rooms/<int:room_id>/items/<int:item_id>/products/<int:product_id>/", RoomProductDetailView.as_view(), name="homestead-room-product-detail"),
+
+    path("pools/", PoolListView.as_view(), name="homestead-pool-list"),
+    path("pools/<int:pool_id>/", PoolDetailView.as_view(), name="homestead-pool-detail"),
+    path("pools/<int:pool_id>/status/", PoolStatusView.as_view(), name="homestead-pool-status"),
+    path("pools/<int:pool_id>/care-schedule/", PoolCareScheduleView.as_view(), name="homestead-pool-care-schedule"),
+    path("pools/<int:pool_id>/water-tests/", WaterTestListView.as_view(), name="homestead-water-test-list"),
+    path("pools/<int:pool_id>/water-tests/<int:test_id>/", WaterTestDetailView.as_view(), name="homestead-water-test-detail"),
 
     path("insurance/", InsurancePolicyListView.as_view(), name="homestead-insurance-list"),
     path("insurance/<int:policy_id>/", InsurancePolicyDetailView.as_view(), name="homestead-insurance-detail"),

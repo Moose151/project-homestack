@@ -1,30 +1,26 @@
 import type {
-  AtlasList, AtlasListItem, AtlasNote, AtlasReminder,
-  AuthUser, CalendarEvent, CalendarEventWrite, RotatingSchedule, RotatingScheduleOccurrence,
-  RotatingScheduleWrite, HubResponse, HubWidgetConfig, KioskUser,
-  KioskMeridian, MeridianPointsResponse, MeridianReward,
-  MeridianRewardRequest, MeridianTask, MeridianTaskCompletion,
-  MeridianCategory, MeridianRoutine, MeridianGoal,
-  MeridianWishlistItem, MeridianWishlistRequest, MeridianSettings,
-  MeridianReports, MeridianAllowanceRow, Badge, PersonBadge, NotificationList, Person, AdminUser,
-  AtlasSearchResults,
-  EducationInstitution, EducationCourse, EducationAssessment, EducationClassSession, EducationEvent,
-  AssessmentNote, AssessmentFile, AcademicProfile, AcademicProfileResponse,
-  WikiCategory, WikiPage,
-  Pet, PetTreatment, PetAppointment,
-  Property, ServiceProvider, Appliance, MaintenanceTask, Improvement, HomesteadSearchResults,
-  InsurancePolicy, HouseholdCost, RoomArea, RoomDetailResponse, RoomListResponse, RoomPlanItem, RoomPlanMode, RoomPlanProduct,
-  RoomAreaType, RoomItemPriority, RoomItemStatus, RoomItemType,
-  SolaceBill, SolaceBillOccurrence, SolaceBillTimeline, SolacePayday, SolacePurchase, SolaceSchedule,
-  SolaceBucket, SolaceSubscription,
-  SolaceChecklistItem, SolacePayCyclePlan, SolaceSearchResults,
-  SolaceBalanceForecast, SolaceBalanceSnapshot, SolaceBillImportPreview, SolaceBootstrap, SolaceCategory, SolaceCategoryReport, SolaceChecklistPreference,
-  SolaceCloseoutResponse, SolaceCycleCloseout, SolaceHealth, SolaceSettings,
-  GlobalSearchResponse,
-  Attachment, AttachmentSensitivity, AttachmentVisibility,
-  NodeInfo, Household,
-  Book, BookClub, ClubBookEntry, ClubQueueItem, PersonalBookEntry, BookRating, BooksUser, BookShelfStatus,
-  FitnessExercise, FitnessProgram, FitnessRecord, FitnessSession, FitnessSessionExercise, FitnessSessionSet,
+  AcademicProfile, AcademicProfileResponse, AdminUser, Appliance, AssessmentFile,
+  AssessmentNote, AtlasList, AtlasListItem, AtlasNote, AtlasReminder, AtlasSearchResults,
+  Attachment, AttachmentSensitivity, AttachmentVisibility, AuthUser, Badge, Book, BookClub,
+  BookRating, BookShelfStatus, BooksUser, CalendarEvent, CalendarEventWrite, ClubBookEntry,
+  ClubQueueItem, EducationAssessment, EducationClassSession, EducationCourse, EducationEvent,
+  EducationInstitution, FitnessExercise, FitnessProgram, FitnessRecord, FitnessSession,
+  FitnessSessionExercise, FitnessSessionSet, GlobalSearchResponse, HomesteadSearchResults,
+  Household, HouseholdCost, HubResponse, HubWidgetConfig, Improvement, InsurancePolicy,
+  KioskMeridian, KioskUser, MaintenanceTask, MeridianAllowanceRow, MeridianCategory,
+  MeridianGoal, MeridianPointsResponse, MeridianReports, MeridianReward, MeridianRewardRequest,
+  MeridianRoutine, MeridianSettings, MeridianTask, MeridianTaskCompletion,
+  MeridianWishlistItem, MeridianWishlistRequest, NodeInfo, NotificationList, Person,
+  PersonBadge, PersonalBookEntry, Pet, PetAppointment, PetTreatment, Pool, PoolStatus,
+  PoolWrite, Property, RoomArea, RoomAreaType, RoomDetailResponse, RoomItemPriority,
+  RoomItemStatus, RoomItemType, RoomListResponse, RoomPlanItem, RoomPlanMode, RoomPlanProduct,
+  RotatingSchedule, RotatingScheduleOccurrence, RotatingScheduleWrite, ServiceProvider,
+  SolaceBalanceForecast, SolaceBalanceSnapshot, SolaceBill, SolaceBillImportPreview,
+  SolaceBillOccurrence, SolaceBillTimeline, SolaceBootstrap, SolaceBucket, SolaceCategory,
+  SolaceCategoryReport, SolaceChecklistItem, SolaceChecklistPreference, SolaceCloseoutResponse,
+  SolaceCycleCloseout, SolaceHealth, SolacePayCyclePlan, SolacePayday, SolacePurchase,
+  SolaceSchedule, SolaceSearchResults, SolaceSettings, SolaceSubscription, WaterTest,
+  WaterTestWrite, WikiCategory, WikiPage
 } from './types'
 
 /** Which screen is signing in. Only 'web' earns the longer re-authentication window. */
@@ -906,6 +902,25 @@ export const api = {
     }),
   deleteMaintenance: (id: number): Promise<void> =>
     _fetch(`/homestead/maintenance/${id}/`, { method: 'DELETE' }),
+
+  getPools: (activeOnly = false): Promise<Pool[]> =>
+    _fetch(`/homestead/pools/${activeOnly ? '?active=1' : ''}`),
+  createPool: (data: PoolWrite): Promise<Pool> =>
+    _fetch('/homestead/pools/', { method: 'POST', body: JSON.stringify(data) }),
+  updatePool: (id: number, data: PoolWrite): Promise<Pool> =>
+    _fetch(`/homestead/pools/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePool: (id: number): Promise<void> =>
+    _fetch(`/homestead/pools/${id}/`, { method: 'DELETE' }),
+  getPoolStatus: (id: number): Promise<PoolStatus> =>
+    _fetch(`/homestead/pools/${id}/status/`),
+  applyPoolCareSchedule: (id: number): Promise<{ created: MaintenanceTask[] }> =>
+    _fetch(`/homestead/pools/${id}/care-schedule/`, { method: 'POST' }),
+  getWaterTests: (poolId: number): Promise<WaterTest[]> =>
+    _fetch(`/homestead/pools/${poolId}/water-tests/`),
+  logWaterTest: (poolId: number, data: WaterTestWrite): Promise<WaterTest> =>
+    _fetch(`/homestead/pools/${poolId}/water-tests/`, { method: 'POST', body: JSON.stringify(data) }),
+  deleteWaterTest: (poolId: number, testId: number): Promise<void> =>
+    _fetch(`/homestead/pools/${poolId}/water-tests/${testId}/`, { method: 'DELETE' }),
 
   getImprovements: (open = false): Promise<Improvement[]> =>
     _fetch(`/homestead/improvements/${open ? '?open=1' : ''}`),

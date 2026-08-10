@@ -13,11 +13,13 @@ from apps.homestead.models import (
     Improvement,
     InsurancePolicy,
     MaintenanceTask,
+    Pool,
     Property,
     RoomArea,
     RoomPlanItem,
     RoomPlanProduct,
     ServiceProvider,
+    WaterTest,
 )
 
 
@@ -89,12 +91,13 @@ class MaintenanceTaskSerializer(AssigneeSerializerMixin, serializers.ModelSerial
     # DRF treats a bare `<fk>_id` in `fields` as read-only; declare it so writes land.
     appliance_id = serializers.IntegerField(required=False, allow_null=True)
     provider_id = serializers.IntegerField(required=False, allow_null=True)
+    pool_id = serializers.IntegerField(required=False, allow_null=True)
     is_overdue = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = MaintenanceTask
         fields = [
-            "id", "appliance_id", "provider_id", "assigned_to_person_ids",
+            "id", "appliance_id", "provider_id", "pool_id", "assigned_to_person_ids",
             "title", "category", "next_due_at", "is_all_day", "recurrence_rule",
             "last_done_at", "notes", "solace_bill_ref", "is_overdue", "calendar_event_id", "visibility",
             "created_at", "updated_at",
@@ -249,3 +252,60 @@ class HouseholdCostSerializer(serializers.ModelSerializer):
 
     def validate_name(self, value: str) -> str:
         return _non_blank(value)
+
+
+class PoolSerializer(serializers.ModelSerializer):
+    room_id = serializers.IntegerField(required=False, allow_null=True)
+    has_salt_cell = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = Pool
+        fields = [
+            "id", "room_id", "name", "kind", "sanitiser", "surface", "filter_type",
+            "volume_litres", "is_indoor", "equipment_notes", "notes", "is_active",
+            "has_salt_cell", "visibility", "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "has_salt_cell", "created_at", "updated_at"]
+
+    def validate_name(self, value: str) -> str:
+        return _non_blank(value)
+
+
+class WaterTestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WaterTest
+        fields = [
+            "id", "pool_id", "tested_at", "free_chlorine", "ph", "total_alkalinity",
+            "calcium_hardness", "cyanuric_acid", "salt", "water_temp_c", "notes",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "pool_id", "created_at", "updated_at"]
+
+    def validate_ph(self, value):
+        # Outside 0–14 is a typo, and a stored typo quietly makes the guidance nonsense.
+        if value is not None and not (Decimal("0") <= value <= Decimal("14")):
+            raise serializers.ValidationError("pH is measured from 0 to 14.")
+        return value
+
+
+class PoolReadingAssessmentSerializer(serializers.Serializer):
+    """One assessed reading: what it was, whether it is in band, and what to do about it."""
+
+    status = serializers.CharField()
+    label = serializers.CharField()
+    unit = serializers.CharField()
+    value = serializers.DecimalField(max_digits=10, decimal_places=2)
+    min = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)
+    max = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)
+    advice = serializers.CharField(allow_blank=True)
+    why = serializers.CharField(allow_blank=True)
+
+
+class PoolTargetSerializer(serializers.Serializer):
+    label = serializers.CharField()
+    unit = serializers.CharField()
+    min = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)
+    max = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)
+    why = serializers.CharField(allow_blank=True)
+    low = serializers.CharField(allow_blank=True)
+    high = serializers.CharField(allow_blank=True)

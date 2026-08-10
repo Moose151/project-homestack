@@ -15,11 +15,15 @@ from apps.homestead.serializers import (
     InsurancePolicySerializer,
     MaintenanceCostRequestSerializer,
     MaintenanceTaskSerializer,
+    PoolReadingAssessmentSerializer,
+    PoolSerializer,
+    PoolTargetSerializer,
     PropertySerializer,
     RoomAreaSerializer,
     RoomPlanItemSerializer,
     RoomPlanProductSerializer,
     ServiceProviderSerializer,
+    WaterTestSerializer,
 )
 from apps.nodes.access import sensitive_node_access
 from apps.permissions.drf import HomeStackPermission
@@ -553,4 +557,138 @@ class HouseholdCostDetailView(HomesteadFinanceAccessMixin, APIView):
 
     def delete(self, request: Request, cost_id: int) -> Response:
         services.delete_household_cost(request.user, self._get(cost_id, request.user))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Pools
+# ---------------------------------------------------------------------------
+
+class PoolListView(APIView):
+    permission_classes = [_Perm]
+
+    def get(self, request: Request) -> Response:
+        rows = selectors.list_pools(request.user, active_only=request.query_params.get("active") == "1")
+        return Response(PoolSerializer(rows, many=True).data)
+
+    def post(self, request: Request) -> Response:
+        serializer = PoolSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        # A new pool arrives with its starter jobs unless the household opts out.
+        with_schedule = request.data.get("with_care_schedule", True) is not False
+        obj = services.create_pool(
+            request.user, with_care_schedule=with_schedule, **serializer.validated_data
+        )
+        return Response(PoolSerializer(obj).data, status=status.HTTP_201_CREATED)
+
+
+class PoolDetailView(APIView):
+    permission_classes = [_Perm]
+
+    def _get(self, request: Request, pool_id: int):
+        obj = selectors.get_pool(pool_id, request.user)
+        if obj is None:
+            raise NotFound()
+        return obj
+
+    def get(self, request: Request, pool_id: int) -> Response:
+        return Response(PoolSerializer(self._get(request, pool_id)).data)
+
+    def patch(self, request: Request, pool_id: int) -> Response:
+        serializer = PoolSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        obj = services.update_pool(request.user, self._get(request, pool_id), **serializer.validated_data)
+        return Response(PoolSerializer(obj).data)
+
+    def delete(self, request: Request, pool_id: int) -> Response:
+        services.delete_pool(request.user, self._get(request, pool_id))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PoolStatusView(APIView):
+    """Is the water balanced, what does each reading mean, and what care is due."""
+
+    permission_classes = [_Perm]
+
+    def get(self, request: Request, pool_id: int) -> Response:
+        pool = selectors.get_pool(pool_id, request.user)
+        if pool is None:
+            raise NotFound()
+        status_data = selectors.pool_status(request.user, pool)
+        return Response({
+            **status_data,
+            "readings": {
+                key: PoolReadingAssessmentSerializer(row).data
+                for key, row in status_data["readings"].items()
+            },
+            "targets": {
+                key: PoolTargetSerializer(row).data
+                for key, row in selectors.pool_targets(pool).items()
+            },
+            "care_tasks": MaintenanceTaskSerializer(
+                selectors.list_pool_care(request.user, pool), many=True
+            ).data,
+        })
+
+
+class PoolCareScheduleView(APIView):
+    """Add the starter care jobs this pool is missing. Safe to call more than once."""
+
+    permission_classes = [_Perm]
+    permission_action = "edit"
+
+    def post(self, request: Request, pool_id: int) -> Response:
+        pool = selectors.get_pool(pool_id, request.user)
+        if pool is None:
+            raise NotFound()
+        created = services.apply_care_schedule(request.user, pool)
+        return Response(
+            {"created": MaintenanceTaskSerializer(created, many=True).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class WaterTestListView(APIView):
+    permission_classes = [_Perm]
+
+    def _pool(self, request: Request, pool_id: int):
+        pool = selectors.get_pool(pool_id, request.user)
+        if pool is None:
+            raise NotFound()
+        return pool
+
+    def get(self, request: Request, pool_id: int) -> Response:
+        rows = selectors.list_water_tests(self._pool(request, pool_id))
+        return Response(WaterTestSerializer(rows, many=True).data)
+
+    def post(self, request: Request, pool_id: int) -> Response:
+        pool = self._pool(request, pool_id)
+        serializer = WaterTestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        obj = services.log_water_test(request.user, pool, **serializer.validated_data)
+        return Response(WaterTestSerializer(obj).data, status=status.HTTP_201_CREATED)
+
+
+class WaterTestDetailView(APIView):
+    permission_classes = [_Perm]
+
+    def _get(self, request: Request, pool_id: int, test_id: int):
+        pool = selectors.get_pool(pool_id, request.user)
+        if pool is None:
+            raise NotFound()
+        obj = selectors.get_water_test(test_id, pool)
+        if obj is None:
+            raise NotFound()
+        return obj
+
+    def patch(self, request: Request, pool_id: int, test_id: int) -> Response:
+        serializer = WaterTestSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        obj = services.update_water_test(
+            request.user, self._get(request, pool_id, test_id), **serializer.validated_data
+        )
+        return Response(WaterTestSerializer(obj).data)
+
+    def delete(self, request: Request, pool_id: int, test_id: int) -> Response:
+        services.delete_water_test(request.user, self._get(request, pool_id, test_id))
         return Response(status=status.HTTP_204_NO_CONTENT)

@@ -32,6 +32,7 @@ from apps.homestead.services import (
     update_maintenance,
     update_improvement,
 )
+from apps.homestead.models import MaintenanceTask
 from apps.scheduling.models import CalendarEvent
 from apps.solace.models import Bill
 
@@ -1041,3 +1042,176 @@ class HomesteadSearchAndHubTests(TestCase):
         create_improvement(self.admin, title="Old job", status="done")
         content = _homestead_widget_content("homestead_improvements", self.admin)
         self.assertEqual([i["title"] for i in content], ["Kitchen redo"])
+
+
+# ---------------------------------------------------------------------------
+# Pools and water tests
+# ---------------------------------------------------------------------------
+
+class PoolPermissionTests(TestCase):
+    """Permission spine first (D10): a pool is ordinary Homestead data, not a new resource."""
+
+    def setUp(self):
+        self.admin = _make_user("pooladmin")
+        self.child = _make_user("poolchild", role=User.Role.USER, is_child=True)
+
+    def test_anonymous_cannot_list_pools(self):
+        self.assertEqual(self.client.get("/api/v1/homestead/pools/").status_code, 403)
+
+    def test_child_can_view_but_cannot_create(self):
+        _login(self.client, "poolchild")
+        self.assertEqual(self.client.get("/api/v1/homestead/pools/").status_code, 200)
+        response = self.client.post(
+            "/api/v1/homestead/pools/", {"name": "Pool"}, content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+
+class PoolTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("poolowner")
+        _login(self.client, "poolowner")
+
+    def _create(self, **overrides):
+        payload = {"name": "Back pool", "sanitiser": "saltwater", "surface": "concrete"}
+        payload.update(overrides)
+        response = self.client.post(
+            "/api/v1/homestead/pools/", payload, content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        return response.data
+
+    def test_new_pool_arrives_with_its_starter_care_schedule(self):
+        pool = self._create()
+        response = self.client.get(f"/api/v1/homestead/pools/{pool['id']}/status/")
+        self.assertEqual(response.status_code, 200, response.data)
+        titles = [task["title"] for task in response.data["care_tasks"]]
+        self.assertIn("Test chlorine and pH", titles)
+        self.assertIn("Inspect and clean the salt cell", titles)
+        # Every starter job recurs and is dated, so it reaches the Calendar like any other.
+        self.assertTrue(all(task["recurrence_rule"] for task in response.data["care_tasks"]))
+        self.assertTrue(all(task["next_due_at"] for task in response.data["care_tasks"]))
+        self.assertTrue(all(task["category"] == "pool" for task in response.data["care_tasks"]))
+
+    def test_care_jobs_reach_the_calendar_as_homestead_events(self):
+        pool = self._create()
+        task = MaintenanceTask.objects.get(pool_id=pool["id"], title="Test chlorine and pH")
+        event = CalendarEvent.objects.get(pk=task.calendar_event_id)
+        self.assertEqual(event.source_node.key, "homestead")
+        self.assertEqual(event.source_record_id, task.id)
+
+    def test_a_manually_chlorinated_pool_gets_no_salt_cell_job(self):
+        pool = self._create(sanitiser="chlorine")
+        response = self.client.get(f"/api/v1/homestead/pools/{pool['id']}/status/")
+        titles = [task["title"] for task in response.data["care_tasks"]]
+        self.assertNotIn("Inspect and clean the salt cell", titles)
+        # ...and it is never asked for a salt reading it cannot have.
+        self.assertNotIn("salt", response.data["targets"])
+
+    def test_opting_out_leaves_the_pool_without_jobs(self):
+        response = self.client.post(
+            "/api/v1/homestead/pools/",
+            {"name": "Spa", "kind": "spa", "with_care_schedule": False},
+            content_type="application/json",
+        )
+        status_response = self.client.get(f"/api/v1/homestead/pools/{response.data['id']}/status/")
+        self.assertEqual(status_response.data["care_tasks"], [])
+
+    def test_applying_the_schedule_again_adds_only_what_is_missing(self):
+        pool = self._create()
+        before = self.client.get(f"/api/v1/homestead/pools/{pool['id']}/status/").data["care_task_count"]
+        response = self.client.post(
+            f"/api/v1/homestead/pools/{pool['id']}/care-schedule/", {}, content_type="application/json",
+        )
+        self.assertEqual(response.data["created"], [])
+        after = self.client.get(f"/api/v1/homestead/pools/{pool['id']}/status/").data["care_task_count"]
+        self.assertEqual(before, after)
+
+    def test_switching_to_a_salt_cell_adds_the_job_it_introduces(self):
+        pool = self._create(sanitiser="chlorine")
+        self.client.patch(
+            f"/api/v1/homestead/pools/{pool['id']}/",
+            {"sanitiser": "saltwater"}, content_type="application/json",
+        )
+        response = self.client.post(
+            f"/api/v1/homestead/pools/{pool['id']}/care-schedule/", {}, content_type="application/json",
+        )
+        self.assertEqual([task["title"] for task in response.data["created"]],
+                         ["Inspect and clean the salt cell"])
+
+    def test_water_test_is_judged_against_the_targets_with_advice(self):
+        pool = self._create()
+        response = self.client.post(
+            f"/api/v1/homestead/pools/{pool['id']}/water-tests/",
+            {"tested_at": timezone.now().isoformat(), "free_chlorine": "0.4", "ph": "7.4",
+             "salt": "3500"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        status_data = self.client.get(f"/api/v1/homestead/pools/{pool['id']}/status/").data
+        self.assertEqual(status_data["readings"]["free_chlorine"]["status"], "low")
+        self.assertTrue(status_data["readings"]["free_chlorine"]["advice"])
+        self.assertEqual(status_data["readings"]["ph"]["status"], "ok")
+        self.assertEqual(status_data["readings"]["salt"]["status"], "ok")
+        self.assertEqual(status_data["out_of_range"], ["free_chlorine"])
+        self.assertFalse(status_data["water_is_balanced"])
+
+    def test_a_reading_that_was_not_taken_is_not_assessed(self):
+        pool = self._create()
+        self.client.post(
+            f"/api/v1/homestead/pools/{pool['id']}/water-tests/",
+            {"tested_at": timezone.now().isoformat(), "ph": "7.4"},
+            content_type="application/json",
+        )
+        readings = self.client.get(f"/api/v1/homestead/pools/{pool['id']}/status/").data["readings"]
+        self.assertEqual(list(readings), ["ph"])
+
+    def test_balanced_water_reports_no_action(self):
+        pool = self._create()
+        self.client.post(
+            f"/api/v1/homestead/pools/{pool['id']}/water-tests/",
+            {"tested_at": timezone.now().isoformat(), "free_chlorine": "2.0", "ph": "7.4"},
+            content_type="application/json",
+        )
+        status_data = self.client.get(f"/api/v1/homestead/pools/{pool['id']}/status/").data
+        self.assertTrue(status_data["water_is_balanced"])
+        self.assertEqual(status_data["out_of_range"], [])
+
+    def test_salt_pools_are_held_to_a_higher_stabiliser_band(self):
+        salt = self._create()
+        chlorine = self._create(name="Front pool", sanitiser="chlorine")
+        salt_targets = self.client.get(f"/api/v1/homestead/pools/{salt['id']}/status/").data["targets"]
+        chlorine_targets = self.client.get(f"/api/v1/homestead/pools/{chlorine['id']}/status/").data["targets"]
+        self.assertEqual(salt_targets["cyanuric_acid"]["max"], "80.00")
+        self.assertEqual(chlorine_targets["cyanuric_acid"]["max"], "50.00")
+
+    def test_fibreglass_uses_its_own_calcium_band(self):
+        pool = self._create(surface="fibreglass")
+        targets = self.client.get(f"/api/v1/homestead/pools/{pool['id']}/status/").data["targets"]
+        self.assertEqual(targets["calcium_hardness"]["max"], "250.00")
+
+    def test_impossible_ph_is_rejected(self):
+        pool = self._create()
+        response = self.client.post(
+            f"/api/v1/homestead/pools/{pool['id']}/water-tests/",
+            {"tested_at": timezone.now().isoformat(), "ph": "74"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_deleting_a_pool_releases_its_calendar_events(self):
+        pool = self._create()
+        event_ids = list(
+            MaintenanceTask.objects.filter(pool_id=pool["id"]).values_list("calendar_event_id", flat=True)
+        )
+        self.assertTrue(all(event_ids))
+        self.client.delete(f"/api/v1/homestead/pools/{pool['id']}/")
+        self.assertFalse(CalendarEvent.objects.filter(pk__in=event_ids).exists())
+
+    def test_overdue_care_is_counted(self):
+        pool = self._create()
+        task = MaintenanceTask.objects.filter(pool_id=pool["id"]).first()
+        task.next_due_at = timezone.now() - timezone.timedelta(days=3)
+        task.save()
+        status_data = self.client.get(f"/api/v1/homestead/pools/{pool['id']}/status/").data
+        self.assertEqual(status_data["overdue_task_count"], 1)

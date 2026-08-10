@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type {
   Appliance, Improvement, ImprovementStatus, MaintenanceTask, Person, Property,
   ServiceProvider, HomesteadSearchResults, InsurancePolicy, HouseholdCost,
-  RoomAreaType, RoomListResponse,
+  RoomAreaType, RoomListResponse, Pool, PoolReadingKey, PoolSanitiser, PoolStatus,
+  PoolSurface, WaterTest, WaterTestWrite,
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
@@ -734,6 +736,445 @@ function AppliancesTab({ onError }: { onError: (m: string) => void }) {
 // Improvements tab
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Pool & spa
+// ---------------------------------------------------------------------------
+
+const POOL_SANITISERS: { value: PoolSanitiser; label: string }[] = [
+  { value: 'saltwater', label: 'Saltwater (chlorinator)' },
+  { value: 'chlorine', label: 'Manually chlorinated' },
+  { value: 'mineral', label: 'Mineral / magnesium' },
+  { value: 'bromine', label: 'Bromine' },
+  { value: 'other', label: 'Other' },
+]
+const POOL_SURFACES: { value: PoolSurface; label: string }[] = [
+  { value: 'concrete', label: 'Concrete / rendered' },
+  { value: 'fibreglass', label: 'Fibreglass' },
+  { value: 'vinyl_liner', label: 'Vinyl liner' },
+  { value: 'tiled', label: 'Fully tiled' },
+  { value: 'other', label: 'Other' },
+]
+const POOL_KINDS = [
+  { value: 'pool', label: 'Swimming pool' },
+  { value: 'spa', label: 'Spa / hot tub' },
+  { value: 'swim_spa', label: 'Swim spa' },
+  { value: 'plunge', label: 'Plunge pool' },
+]
+const POOL_FILTERS = [
+  { value: 'sand', label: 'Sand' },
+  { value: 'cartridge', label: 'Cartridge' },
+  { value: 'glass', label: 'Glass media' },
+  { value: 'de', label: 'Diatomaceous earth' },
+  { value: 'other', label: 'Not sure yet' },
+]
+/** The order readings are shown in: the weekly two first, then the monthly ones. */
+const READING_ORDER: PoolReadingKey[] = [
+  'free_chlorine', 'ph', 'total_alkalinity', 'cyanuric_acid', 'salt',
+  'calcium_hardness', 'water_temp_c',
+]
+const READING_TONE: Record<string, BadgeTone> = {
+  ok: 'success', low: 'warning', high: 'warning', info: 'neutral',
+}
+const READING_WORD: Record<string, string> = {
+  ok: 'In range', low: 'Low', high: 'High', info: 'Noted',
+}
+
+function targetText(min: string | null, max: string | null, unit: string) {
+  if (min === null || max === null) return 'No target — recorded for context'
+  return `Aim for ${Number(min)}–${Number(max)}${unit ? ` ${unit}` : ''}`
+}
+
+/** One reading with its verdict and, when it is out of band, what to do about it. */
+function ReadingRow({ reading }: { reading: PoolStatus['readings'][PoolReadingKey] }) {
+  if (!reading) return null
+  return (
+    <div className="rounded-xl border border-line bg-sunken/50 p-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="font-semibold text-ink">{reading.label}</p>
+        <div className="flex items-center gap-2">
+          <span className="text-lg font-black text-ink">
+            {Number(reading.value)}<span className="ml-0.5 text-xs font-semibold text-muted">{reading.unit}</span>
+          </span>
+          <Badge tone={READING_TONE[reading.status]}>{READING_WORD[reading.status]}</Badge>
+        </div>
+      </div>
+      <p className="mt-1 text-xs text-muted">{targetText(reading.min, reading.max, reading.unit)}</p>
+      {reading.advice && <p className="mt-2 text-sm leading-relaxed text-ink">{reading.advice}</p>}
+    </div>
+  )
+}
+
+function WaterTestForm({ pool, status, onSaved, onCancel, onError }: {
+  pool: Pool
+  status: PoolStatus | null
+  onSaved: () => Promise<void>
+  onCancel: () => void
+  onError: (message: string) => void
+}) {
+  const [values, setValues] = useState<Record<string, string>>({})
+  const [notes, setNotes] = useState('')
+  const [busy, setBusy] = useState(false)
+  // Only ask for the readings this pool actually has: a chlorine pool has no salt to measure.
+  const keys = READING_ORDER.filter(key => status?.targets[key])
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    const payload: WaterTestWrite = { tested_at: new Date().toISOString(), notes }
+    let entered = false
+    for (const key of keys) {
+      const raw = values[key]
+      if (raw !== undefined && raw !== '') { (payload as Record<string, unknown>)[key] = raw; entered = true }
+    }
+    if (!entered) { onError('Enter at least one reading.'); return }
+    setBusy(true)
+    try {
+      await api.logWaterTest(pool.id, payload)
+      await onSaved()
+      onCancel()
+    } catch (error) { onError(errMsg(error)) } finally { setBusy(false) }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <p className="text-sm text-muted">
+        Fill in whatever you measured — a weekly strip usually gives chlorine and pH, and the rest
+        come from a full test or a pool-shop sample.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {keys.map(key => {
+          const target = status?.targets[key]
+          if (!target) return null
+          return (
+            <Field key={key} label={`${target.label}${target.unit ? ` (${target.unit})` : ''}`} hint={targetText(target.min, target.max, target.unit)}>
+              <Input
+                type="number" step="any" inputMode="decimal"
+                value={values[key] ?? ''}
+                onChange={event => setValues(current => ({ ...current, [key]: event.target.value }))}
+              />
+            </Field>
+          )
+        })}
+      </div>
+      <Field label="Notes"><Textarea value={notes} onChange={event => setNotes(event.target.value)} placeholder="Anything you noticed — water clarity, recent rain, how long the pump ran." /></Field>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button type="submit" loading={busy} className="w-full sm:w-auto">Save reading</Button>
+        <Button type="button" variant="ghost" onClick={onCancel} className="w-full sm:w-auto">Cancel</Button>
+      </div>
+    </form>
+  )
+}
+
+function PoolSetupForm({ existing, onSaved, onCancel, onError }: {
+  existing: Pool | null
+  onSaved: () => Promise<void>
+  onCancel: () => void
+  onError: (message: string) => void
+}) {
+  const [form, setForm] = useState({
+    name: existing?.name ?? 'Pool',
+    kind: existing?.kind ?? 'pool',
+    sanitiser: existing?.sanitiser ?? 'saltwater',
+    surface: existing?.surface ?? 'concrete',
+    filter_type: existing?.filter_type ?? 'other',
+    volume_litres: existing?.volume_litres?.toString() ?? '',
+    equipment_notes: existing?.equipment_notes ?? '',
+  })
+  const [busy, setBusy] = useState(false)
+  const set = (key: keyof typeof form) => (event: { target: { value: string } }) =>
+    setForm(current => ({ ...current, [key]: event.target.value }))
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setBusy(true)
+    const payload = {
+      ...form,
+      kind: form.kind as Pool['kind'],
+      sanitiser: form.sanitiser as PoolSanitiser,
+      surface: form.surface as PoolSurface,
+      filter_type: form.filter_type as Pool['filter_type'],
+      volume_litres: form.volume_litres ? Number(form.volume_litres) : null,
+    }
+    try {
+      if (existing) await api.updatePool(existing.id, payload)
+      else await api.createPool(payload)
+      await onSaved()
+      onCancel()
+    } catch (error) { onError(errMsg(error)) } finally { setBusy(false) }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Name"><Input value={form.name} onChange={set('name')} /></Field>
+        <Field label="Type">
+          <Select value={form.kind} onChange={set('kind')}>
+            {POOL_KINDS.map(row => <option key={row.value} value={row.value}>{row.label}</option>)}
+          </Select>
+        </Field>
+        <Field label="How it is sanitised" hint="This sets the target water levels and which jobs you get.">
+          <Select value={form.sanitiser} onChange={set('sanitiser')}>
+            {POOL_SANITISERS.map(row => <option key={row.value} value={row.value}>{row.label}</option>)}
+          </Select>
+        </Field>
+        <Field label="Surface" hint="Fibreglass and vinyl need less calcium in the water than concrete.">
+          <Select value={form.surface} onChange={set('surface')}>
+            {POOL_SURFACES.map(row => <option key={row.value} value={row.value}>{row.label}</option>)}
+          </Select>
+        </Field>
+        <Field label="Filter">
+          <Select value={form.filter_type} onChange={set('filter_type')}>
+            {POOL_FILTERS.map(row => <option key={row.value} value={row.value}>{row.label}</option>)}
+          </Select>
+        </Field>
+        <Field label="Volume (litres)" hint="Optional — it is what dosing instructions are based on.">
+          <Input type="number" min="0" inputMode="numeric" value={form.volume_litres} onChange={set('volume_litres')} />
+        </Field>
+      </div>
+      <Field label="Equipment notes" hint="Pump and chlorinator models, filter pressure when clean, timer settings.">
+        <Textarea value={form.equipment_notes} onChange={set('equipment_notes')} />
+      </Field>
+      {!existing && (
+        <p className="rounded-xl bg-primary-soft px-3 py-2.5 text-sm text-ink">
+          Saving also sets up the usual care jobs for this kind of pool — skimming, testing,
+          brushing, filter cleaning — each with its own reminder. You can edit or delete any of them.
+        </p>
+      )}
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button type="submit" loading={busy} disabled={!form.name.trim()} className="w-full sm:w-auto">
+          {existing ? 'Save pool' : 'Add pool and its care schedule'}
+        </Button>
+        <Button type="button" variant="ghost" onClick={onCancel} className="w-full sm:w-auto">Cancel</Button>
+      </div>
+    </form>
+  )
+}
+
+function PoolTab({ onError, canEdit }: { onError: (message: string) => void; canEdit: boolean }) {
+  const [pools, setPools] = useState<Pool[]>([])
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [status, setStatus] = useState<PoolStatus | null>(null)
+  const [history, setHistory] = useState<WaterTest[]>([])
+  const [loading, setLoading] = useState(true)
+  const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const pool = pools.find(row => row.id === selectedId) ?? null
+
+  const loadPools = async () => {
+    try {
+      const rows = await api.getPools()
+      setPools(rows)
+      setSelectedId(current => (current && rows.some(row => row.id === current) ? current : rows[0]?.id ?? null))
+    } catch (error) { onError(errMsg(error)) } finally { setLoading(false) }
+  }
+  useEffect(() => { loadPools() }, [])
+
+  const loadDetail = async () => {
+    if (!selectedId) { setStatus(null); setHistory([]); return }
+    try {
+      const [statusData, tests] = await Promise.all([
+        api.getPoolStatus(selectedId), api.getWaterTests(selectedId),
+      ])
+      setStatus(statusData); setHistory(tests)
+    } catch (error) { onError(errMsg(error)) }
+  }
+  useEffect(() => { loadDetail() }, [selectedId])
+
+  const act = async (action: () => Promise<unknown>) => {
+    setBusy(true)
+    try { await action(); await loadDetail() } catch (error) { onError(errMsg(error)) } finally { setBusy(false) }
+  }
+
+  if (loading) return <div className="h-40 animate-pulse rounded-2xl bg-sunken" />
+
+  if (adding || (pools.length === 0 && canEdit && editing)) {
+    return (
+      <Card title="Add a pool or spa">
+        <PoolSetupForm existing={null} onError={onError} onCancel={() => { setAdding(false); setEditing(false) }} onSaved={loadPools} />
+      </Card>
+    )
+  }
+
+  if (!pool) {
+    return (
+      <EmptyState
+        icon="🏊"
+        title="No pool or spa yet"
+        hint="Add yours and HomeStack sets up the usual care schedule, then tells you what each water reading means."
+        action={canEdit ? <Button onClick={() => setAdding(true)}>Add a pool</Button> : undefined}
+      />
+    )
+  }
+
+  const overdue = status?.overdue_task_count ?? 0
+
+  return (
+    <div className="space-y-4">
+      {pools.length > 1 && (
+        <Select value={String(selectedId)} onChange={event => setSelectedId(Number(event.target.value))}>
+          {pools.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}
+        </Select>
+      )}
+
+      {/* Two questions the household actually has: is the water OK, and what is due. */}
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard
+          label="Water"
+          value={status?.latest_test_id ? (status.water_is_balanced ? 'Balanced' : 'Needs attention') : 'Not tested'}
+          hint={status?.latest_tested_at
+            ? `Last tested ${new Date(status.latest_tested_at).toLocaleDateString()}`
+            : 'Log a reading to see how it is tracking'}
+        />
+        <StatCard
+          label="Care"
+          value={overdue > 0 ? `${overdue} overdue` : 'Up to date'}
+          hint={status?.next_due_at ? `Next due ${new Date(status.next_due_at).toLocaleDateString()}` : `${status?.care_task_count ?? 0} jobs`}
+        />
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        {canEdit && <Button className="w-full sm:w-auto" onClick={() => setTesting(value => !value)}>{testing ? 'Close' : '+ Log a water test'}</Button>}
+        {canEdit && <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setEditing(value => !value)}>{editing ? 'Close' : 'Pool details'}</Button>}
+      </div>
+
+      {editing && (
+        <Card title={`${pool.name} details`}>
+          <PoolSetupForm existing={pool} onError={onError} onCancel={() => setEditing(false)} onSaved={async () => { await loadPools(); await loadDetail() }} />
+          <div className="mt-4 flex flex-col gap-2 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted">Changed how it is sanitised? Add any care jobs that change brings.</p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button size="sm" variant="secondary" disabled={busy} onClick={() => act(() => api.applyPoolCareSchedule(pool.id))}>
+                Add missing care jobs
+              </Button>
+              <Button
+                size="sm" variant="danger" disabled={busy}
+                onClick={async () => {
+                  if (!(await confirmDialog({
+                    title: `Delete "${pool.name}"?`,
+                    message: 'Its care jobs, reminders and water-test history go too.',
+                    confirmLabel: 'Delete',
+                  }))) return
+                  await act(() => api.deletePool(pool.id))
+                  await loadPools()
+                  setEditing(false)
+                }}
+              >Delete pool</Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {testing && (
+        <Card title="New water test">
+          <WaterTestForm pool={pool} status={status} onError={onError} onCancel={() => setTesting(false)} onSaved={loadDetail} />
+        </Card>
+      )}
+
+      <Card title={status?.latest_tested_at ? `Water on ${new Date(status.latest_tested_at).toLocaleDateString()}` : 'Water'}>
+        {!status?.latest_test_id ? (
+          <p className="text-sm text-muted">
+            No readings yet. A test strip takes a minute and tells you whether the water is safe to
+            swim in — chlorine and pH are the two that matter weekly.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {READING_ORDER.filter(key => status.readings[key]).map(key => (
+              <ReadingRow key={key} reading={status.readings[key]} />
+            ))}
+            {status.water_is_balanced && (
+              <p className="rounded-xl bg-success-soft px-3 py-2.5 text-sm text-success">
+                Everything measured is in range. Keep skimming and testing on schedule.
+              </p>
+            )}
+          </div>
+        )}
+      </Card>
+
+      <Card title="What each reading is for">
+        <dl className="space-y-3">
+          {READING_ORDER.filter(key => status?.targets[key]).map(key => {
+            const target = status?.targets[key]
+            if (!target) return null
+            return (
+              <div key={key}>
+                <dt className="text-sm font-semibold text-ink">
+                  {target.label}
+                  <span className="ml-2 text-xs font-medium text-muted">{targetText(target.min, target.max, target.unit)}</span>
+                </dt>
+                <dd className="mt-0.5 text-sm leading-relaxed text-muted">{target.why}</dd>
+              </div>
+            )
+          })}
+        </dl>
+        <p className="mt-4 border-t border-line pt-3 text-xs text-muted">
+          General guidance for a domestic pool, not a substitute for a pool shop's water analysis —
+          worth getting one at the start of the season and whenever something looks off.
+        </p>
+      </Card>
+
+      <Card title="Care schedule">
+        {!status?.care_tasks.length ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted">No care jobs set up yet.</p>
+            {canEdit && (
+              <Button size="sm" disabled={busy} onClick={() => act(() => api.applyPoolCareSchedule(pool.id))}>
+                Set up the usual jobs
+              </Button>
+            )}
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {status.care_tasks.map(task => (
+              <li key={task.id} className="rounded-xl border border-line bg-sunken/50 p-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-ink">{task.title}</p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      {task.next_due_at ? `Due ${new Date(task.next_due_at).toLocaleDateString()}` : 'No date set'}
+                      {task.is_overdue ? ' · overdue' : ''}
+                    </p>
+                  </div>
+                  {canEdit && (
+                    <Button size="sm" variant="secondary" disabled={busy} onClick={() => act(() => api.completeMaintenance(task.id))}>
+                      Done
+                    </Button>
+                  )}
+                </div>
+                {task.notes && <p className="mt-2 text-sm leading-relaxed text-muted">{task.notes}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-4 border-t border-line pt-3 text-xs text-muted">
+          These are ordinary home maintenance jobs, so they also show on the Calendar and in
+          Maintenance. Marking one done moves it to its next date.
+        </p>
+      </Card>
+
+      {history.length > 1 && (
+        <Card title="Test history">
+          <ul className="divide-y divide-line/70">
+            {history.map(test => (
+              <li key={test.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                <span className="text-sm font-medium text-ink">{new Date(test.tested_at).toLocaleDateString()}</span>
+                <span className="text-xs text-muted">
+                  {[
+                    test.free_chlorine !== null ? `Cl ${Number(test.free_chlorine)}` : '',
+                    test.ph !== null ? `pH ${Number(test.ph)}` : '',
+                    test.salt !== null ? `Salt ${Number(test.salt)}` : '',
+                  ].filter(Boolean).join(' · ') || 'No headline readings'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+    </div>
+  )
+}
+
 function ImprovementsTab({ people, defaultAssignee, onError }: {
   people: Person[]; defaultAssignee: number[]; onError: (m: string) => void
 }) {
@@ -1373,7 +1814,7 @@ function SearchResults({ results }: { results: HomesteadSearchResults }) {
 // Homestead page
 // ---------------------------------------------------------------------------
 
-type Tab = 'overview' | 'rooms' | 'maintenance' | 'appliances' | 'improvements' | 'contacts' | 'finances'
+type Tab = 'overview' | 'rooms' | 'maintenance' | 'appliances' | 'pool' | 'improvements' | 'contacts' | 'finances'
 const TAB_KEYS: Tab[] = ['overview', 'rooms', 'maintenance', 'appliances', 'improvements', 'contacts', 'finances']
 
 export function HomesteadPage() {
@@ -1431,6 +1872,7 @@ export function HomesteadPage() {
               { key: 'rooms', label: 'rooms' },
               { key: 'maintenance', label: 'maintenance' },
               { key: 'appliances', label: 'appliances' },
+              { key: 'pool', label: 'pool & spa' },
               { key: 'improvements', label: 'improvements' },
               { key: 'contacts', label: 'contacts' },
               ...(canUseMoney ? [{ key: 'finances' as const, label: 'costs & cover' }] : []),
@@ -1445,6 +1887,7 @@ export function HomesteadPage() {
           {tab === 'rooms' && <RoomsTab onError={setError} canEdit={Boolean(user && user.role !== 'guest' && !user.is_child_account)} />}
           {tab === 'maintenance' && <MaintenanceTab people={people} defaultAssignee={defaultAssignee} onError={setError} canUseMoney={canUseMoney} />}
           {tab === 'appliances' && <AppliancesTab onError={setError} />}
+          {tab === 'pool' && <PoolTab onError={setError} canEdit={Boolean(user && user.role !== 'guest' && !user.is_child_account)} />}
           {tab === 'improvements' && <ImprovementsTab people={people} defaultAssignee={defaultAssignee} onError={setError} />}
           {tab === 'contacts' && <ContactsTab onError={setError} />}
           {tab === 'finances' && canUseMoney && <FinanceTab onError={setError} />}

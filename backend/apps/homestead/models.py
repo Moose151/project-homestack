@@ -177,11 +177,17 @@ class MaintenanceTask(CalendarSyncMixin, HouseholdBaseModel):
         EXTERIOR = "exterior", "Exterior"
         CLEANING = "cleaning", "Cleaning"
         APPLIANCE = "appliance", "Appliance"
+        POOL = "pool", "Pool / spa"
         RENEWAL = "renewal", "Renewal / admin"
         GENERAL = "general", "General"
 
     appliance = models.ForeignKey(
         Appliance, on_delete=models.SET_NULL, null=True, blank=True, related_name="maintenance_tasks"
+    )
+    # Pool care is ordinary maintenance: recurring, calendar-synced and completed the same way.
+    # The link exists so the pool screen can show its own jobs, not to fork the behaviour.
+    pool = models.ForeignKey(
+        "homestead.Pool", on_delete=models.CASCADE, null=True, blank=True, related_name="care_tasks"
     )
     provider = models.ForeignKey(
         ServiceProvider, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
@@ -687,3 +693,115 @@ class HouseholdCost(HouseholdBaseModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class Pool(HouseholdBaseModel):
+    """A pool or spa on the property, its equipment, and how it is sanitised.
+
+    Kept general (D15): the target water bands and the starter care schedule come from
+    `pool_care.py` and vary by sanitiser and surface, not by whose pool it is. Care jobs are
+    ordinary `MaintenanceTask` rows pointing back here, so a pool job recurs, reaches the
+    Calendar (D7/D8) and is completed exactly like any other home job.
+    """
+
+    class Kind(models.TextChoices):
+        POOL = "pool", "Swimming pool"
+        SPA = "spa", "Spa / hot tub"
+        SWIM_SPA = "swim_spa", "Swim spa"
+        PLUNGE = "plunge", "Plunge pool"
+
+    class Sanitiser(models.TextChoices):
+        SALTWATER = "saltwater", "Saltwater (chlorinator)"
+        CHLORINE = "chlorine", "Manually chlorinated"
+        MINERAL = "mineral", "Mineral / magnesium"
+        BROMINE = "bromine", "Bromine"
+        OTHER = "other", "Other"
+
+    class Surface(models.TextChoices):
+        CONCRETE = "concrete", "Concrete / rendered"
+        FIBREGLASS = "fibreglass", "Fibreglass"
+        VINYL_LINER = "vinyl_liner", "Vinyl liner"
+        TILED = "tiled", "Fully tiled"
+        OTHER = "other", "Other"
+
+    class FilterType(models.TextChoices):
+        SAND = "sand", "Sand"
+        CARTRIDGE = "cartridge", "Cartridge"
+        GLASS = "glass", "Glass media"
+        DE = "de", "Diatomaceous earth"
+        OTHER = "other", "Other"
+
+    room = models.ForeignKey(
+        RoomArea, on_delete=models.SET_NULL, null=True, blank=True, related_name="pools"
+    )
+    name = models.CharField(max_length=160, default="Pool")
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.POOL)
+    sanitiser = models.CharField(
+        max_length=20, choices=Sanitiser.choices, default=Sanitiser.SALTWATER
+    )
+    surface = models.CharField(max_length=20, choices=Surface.choices, default=Surface.CONCRETE)
+    filter_type = models.CharField(
+        max_length=20, choices=FilterType.choices, default=FilterType.OTHER
+    )
+    volume_litres = models.PositiveIntegerField(null=True, blank=True)
+    is_indoor = models.BooleanField(default=False)
+    equipment_notes = models.TextField(
+        blank=True, default="", help_text="Pump, filter and chlorinator models, settings, quirks."
+    )
+    notes = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    visibility = models.CharField(
+        max_length=20, choices=Visibility.choices, default=Visibility.HOUSEHOLD
+    )
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "pool or spa"
+        ordering = ["name", "id"]
+
+    def __str__(self) -> str:
+        return self.name
+
+    @property
+    def has_salt_cell(self) -> bool:
+        return self.sanitiser in (self.Sanitiser.SALTWATER, self.Sanitiser.MINERAL)
+
+
+class WaterTest(HouseholdBaseModel):
+    """One set of water readings, so the household can see whether things are drifting.
+
+    Every reading is optional: a weekly strip gives chlorine and pH, while the monthly shop test
+    fills in the rest. Whether a number is in range is decided against `pool_care` targets at
+    read time, not stored, so corrected guidance applies to old readings too.
+    """
+
+    pool = models.ForeignKey(Pool, on_delete=models.CASCADE, related_name="water_tests")
+    tested_at = models.DateTimeField()
+    free_chlorine = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    ph = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    total_alkalinity = models.DecimalField(max_digits=7, decimal_places=1, null=True, blank=True)
+    calcium_hardness = models.DecimalField(max_digits=7, decimal_places=1, null=True, blank=True)
+    cyanuric_acid = models.DecimalField(max_digits=7, decimal_places=1, null=True, blank=True)
+    salt = models.DecimalField(max_digits=8, decimal_places=1, null=True, blank=True)
+    water_temp_c = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    notes = models.TextField(blank=True, default="")
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "water test"
+        ordering = ["-tested_at", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.pool.name} — {self.tested_at:%Y-%m-%d}"
+
+    def reading_values(self) -> dict:
+        return {
+            "free_chlorine": self.free_chlorine, "ph": self.ph,
+            "total_alkalinity": self.total_alkalinity, "calcium_hardness": self.calcium_hardness,
+            "cyanuric_acid": self.cyanuric_acid, "salt": self.salt,
+            "water_temp_c": self.water_temp_c,
+        }

@@ -8,17 +8,20 @@ from django.db import connection
 from django.db.models import Q
 from django.utils import timezone
 
+from apps.homestead import pool_care
 from apps.homestead.models import (
     Appliance,
     HouseholdCost,
     Improvement,
     InsurancePolicy,
     MaintenanceTask,
+    Pool,
     Property,
     RoomArea,
     RoomPlanItem,
     RoomPlanProduct,
     ServiceProvider,
+    WaterTest,
 )
 from apps.permissions.visibility import apply_visibility
 
@@ -330,3 +333,72 @@ def search_homestead(user, query: str) -> dict:
         "rooms": list(rooms_qs.order_by("display_order", "name")),
         "room_items": list(room_items_qs.order_by("room__name", "position")),
     }
+
+
+# ---------------------------------------------------------------------------
+# Pools and water tests
+# ---------------------------------------------------------------------------
+
+def list_pools(user=None, *, active_only: bool = False):
+    qs = Pool.objects.select_related("room").order_by("name", "id")
+    if active_only:
+        qs = qs.filter(is_active=True)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return list(qs)
+
+
+def get_pool(pk: int, user=None) -> Pool | None:
+    qs = Pool.objects.filter(pk=pk)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return qs.first()
+
+
+def list_water_tests(pool: Pool, *, limit: int | None = 30):
+    qs = WaterTest.objects.filter(pool=pool).order_by("-tested_at", "-id")
+    return list(qs[:limit] if limit else qs)
+
+
+def get_water_test(pk: int, pool: Pool) -> WaterTest | None:
+    return WaterTest.objects.filter(pk=pk, pool=pool).first()
+
+
+def list_pool_care(user, pool: Pool):
+    """The pool's own maintenance jobs, soonest first."""
+    qs = MaintenanceTask.objects.filter(pool=pool).select_related("provider").order_by(
+        "next_due_at", "-updated_at"
+    )
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return list(qs)
+
+
+def pool_status(user, pool: Pool) -> dict:
+    """Everything the pool screen needs to answer "is the water OK and what is due?".
+
+    The assessment is computed from the current targets rather than stored, so a reading taken
+    months ago is still judged against the guidance shipping today.
+    """
+    latest = WaterTest.objects.filter(pool=pool).order_by("-tested_at", "-id").first()
+    readings = (
+        pool_care.assess(latest.reading_values(), pool.sanitiser, pool.surface) if latest else {}
+    )
+    out_of_range = [key for key, row in readings.items() if row["status"] in ("low", "high")]
+    care = list_pool_care(user, pool)
+    now = timezone.now()
+    overdue = [task for task in care if task.next_due_at and task.next_due_at < now]
+    return {
+        "latest_test_id": latest.id if latest else None,
+        "latest_tested_at": latest.tested_at if latest else None,
+        "readings": readings,
+        "out_of_range": out_of_range,
+        "water_is_balanced": bool(latest) and not out_of_range,
+        "care_task_count": len(care),
+        "overdue_task_count": len(overdue),
+        "next_due_at": next((task.next_due_at for task in care if task.next_due_at), None),
+    }
+
+
+def pool_targets(pool: Pool) -> dict:
+    return pool_care.targets_for(pool.sanitiser, pool.surface)

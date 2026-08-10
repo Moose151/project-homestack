@@ -799,12 +799,13 @@ export interface Appliance {
 
 export type MaintenanceCategory =
   | 'heating' | 'plumbing' | 'electrical' | 'safety' | 'garden'
-  | 'exterior' | 'cleaning' | 'appliance' | 'renewal' | 'general'
+  | 'exterior' | 'cleaning' | 'appliance' | 'pool' | 'renewal' | 'general'
 
 export interface MaintenanceTask {
   id: number
   appliance_id: number | null
   provider_id: number | null
+  pool_id: number | null
   assigned_to_person_ids: number[]
   title: string
   category: MaintenanceCategory
@@ -819,6 +820,87 @@ export interface MaintenanceTask {
   visibility: string
   created_at: string
   updated_at: string
+}
+
+// --- Pools and water tests -------------------------------------------------
+export type PoolKind = 'pool' | 'spa' | 'swim_spa' | 'plunge'
+export type PoolSanitiser = 'saltwater' | 'chlorine' | 'mineral' | 'bromine' | 'other'
+export type PoolSurface = 'concrete' | 'fibreglass' | 'vinyl_liner' | 'tiled' | 'other'
+export type PoolFilterType = 'sand' | 'cartridge' | 'glass' | 'de' | 'other'
+/** The readings a pool can be tested for. Which ones apply depends on how it is sanitised. */
+export type PoolReadingKey =
+  | 'free_chlorine' | 'ph' | 'total_alkalinity' | 'calcium_hardness'
+  | 'cyanuric_acid' | 'salt' | 'water_temp_c'
+
+export interface Pool {
+  id: number
+  room_id: number | null
+  name: string
+  kind: PoolKind
+  sanitiser: PoolSanitiser
+  surface: PoolSurface
+  filter_type: PoolFilterType
+  volume_litres: number | null
+  is_indoor: boolean
+  equipment_notes: string
+  notes: string
+  is_active: boolean
+  has_salt_cell: boolean
+  visibility: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PoolWrite {
+  name?: string; kind?: PoolKind; sanitiser?: PoolSanitiser; surface?: PoolSurface
+  filter_type?: PoolFilterType; volume_litres?: number | null; is_indoor?: boolean
+  equipment_notes?: string; notes?: string; is_active?: boolean; room_id?: number | null
+  /** Create only: set false to add the pool without its starter care jobs. */
+  with_care_schedule?: boolean
+}
+
+export interface WaterTest {
+  id: number
+  pool_id: number
+  tested_at: string
+  free_chlorine: string | null
+  ph: string | null
+  total_alkalinity: string | null
+  calcium_hardness: string | null
+  cyanuric_acid: string | null
+  salt: string | null
+  water_temp_c: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
+export type WaterTestWrite = Partial<Omit<WaterTest, 'id' | 'pool_id' | 'created_at' | 'updated_at'>>
+
+/** What a reading means, and what to do when it sits outside its band. */
+export interface PoolTarget {
+  label: string; unit: string; min: string | null; max: string | null
+  why: string; low: string; high: string
+}
+
+export interface PoolReadingAssessment {
+  status: 'ok' | 'low' | 'high' | 'info'
+  label: string; unit: string; value: string
+  min: string | null; max: string | null
+  advice: string; why: string
+}
+
+export interface PoolStatus {
+  latest_test_id: number | null
+  latest_tested_at: string | null
+  readings: Partial<Record<PoolReadingKey, PoolReadingAssessment>>
+  targets: Partial<Record<PoolReadingKey, PoolTarget>>
+  out_of_range: PoolReadingKey[]
+  water_is_balanced: boolean
+  care_task_count: number
+  overdue_task_count: number
+  next_due_at: string | null
+  care_tasks: MaintenanceTask[]
 }
 
 export type ImprovementStatus =

@@ -48,6 +48,30 @@ Solace insurance bill.
 **Household costs** — rates, water, gas, electricity, mortgage/rent, strata/body corporate,
 waste, internet or other; provider/account number, expected/latest amount, billing cycle and next
 due date. Each active record mirrors to one linked Solace bill.
+**Pools & spas** — a pool, spa, swim spa or plunge pool, with how it is sanitised (saltwater,
+manually chlorinated, mineral, bromine), surface, filter type, volume and equipment notes.
+Two things follow from those choices rather than being asked for again:
+
+- **Target water bands.** `pool_care.py` holds the widely published domestic-pool ranges and
+  varies them by sanitiser and surface — a salt pool is held to a higher stabiliser band because
+  the cell trickles chlorine in all day, fibreglass and vinyl need less calcium than concrete, and
+  a manually chlorinated pool is never asked for a salt reading. A `WaterTest` records whichever
+  readings were actually taken; whether each is in range is computed at read time against the
+  current targets, never stored, so corrected guidance applies to old readings too. Every reading
+  carries what it is for and, when out of band, what to do about it — the node is meant to be
+  usable by a household that has never looked after a pool.
+- **A starter care schedule.** Adding a pool creates the usual jobs (skim, test, brush, vacuum,
+  empty baskets, monthly full test, filter clean, salt-cell inspection, annual service), staggered
+  so they do not all land on day one. These are ordinary `MaintenanceTask` rows carrying
+  `category="pool"` and a `pool` FK, so they recur (D8), reach the Calendar (D7), complete and
+  advance, and appear in Maintenance and the Hub exactly like any other home job — the link exists
+  so the pool screen can claim its own jobs, not to fork the behaviour. Re-applying the schedule is
+  idempotent by title, so switching to a salt cell adds only the job that switch introduces and
+  never overwrites a job the household has edited.
+
+Kept general (D15): the bands and the schedule come from how the pool is built and sanitised, not
+from whose pool it is.
+
 **Rooms & areas** — named interior, outdoor, utility, storage or other spaces. Every room is a
 link to a stable dedicated page (and therefore a future floor-plan destination), with icon,
 colour, ordering, description and reserved `floorplan_data` metadata.
@@ -107,7 +131,8 @@ kept out of the ordinary Homestead search response.
 ## 8. Data model
 
 `homestead` app. `Property`, `ServiceProvider`, `Appliance`, `MaintenanceTask` (CalendarSyncMixin),
-`Improvement` (CalendarSyncMixin), `RoomArea`, `RoomPlanItem`, `InsurancePolicy`, `HouseholdCost`. All inherit
+`Improvement` (CalendarSyncMixin), `RoomArea`, `RoomPlanItem`, `InsurancePolicy`, `HouseholdCost`,
+`Pool`, `WaterTest`. All inherit
 `HouseholdBaseModel`. No per-item `property` FK in V1 (single home; avoids the
 `property`/`@property` clash and is YAGNI). `InsurancePolicy`/`HouseholdCost` own the home-context
 fields and keep `solace_bill_ref`; the linked `Solace.Bill` owns the financial Calendar mirror.
@@ -119,9 +144,10 @@ Homestead Calendar mirror so the shared timeline remains single-entry.
 
 V1 (done): property record + emergency info · maintenance with recurrence + complete-advances +
 calendar sync · appliances + warranties · service-provider directory · improvements · structured
-room/area plans and costs · FTS · three Hub widgets · `homestead.*` permissions · node catalogue
+room/area plans and costs · pools/spas with target water bands, water-test history and a starter
+care schedule · FTS · three Hub widgets · `homestead.*` permissions · node catalogue
 (disabled by default). Frontend: `/homestead` route (node-gated) + 7 tabs
-(Overview/Rooms/Maintenance/Appliances/Improvements/Contacts/Costs & cover), dedicated
+(Overview/Rooms/Maintenance/Appliances/Pool & spa/Improvements/Contacts/Costs & cover), dedicated
 `/homestead/rooms/:roomId` pages, search and Hub renderers.
 Costs & cover includes annualised summaries, protected search, full CRUD and Solace sync.
 Solace bill creation/edit can hand home insurance, household services and paid maintenance into

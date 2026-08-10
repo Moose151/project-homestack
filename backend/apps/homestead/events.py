@@ -188,3 +188,31 @@ def solace_bill_linked(
         "household_id": household_id,
         "acting_user_id": acting_user_id,
     })
+
+
+def pool_saved(obj, acting_user_id: int) -> None:
+    publish("homestead.pool_saved", payload={
+        "pool_id": obj.id,
+        "name": obj.name,
+        "sanitiser": obj.sanitiser,
+        "household_id": obj.household_id,
+        "acting_user_id": acting_user_id,
+    })
+
+
+def pool_deleted(obj, acting_user_id: int) -> None:
+    publish("homestead.pool_deleted", payload={
+        "pool_id": obj.id,
+        "household_id": obj.household_id,
+        "acting_user_id": acting_user_id,
+    })
+
+
+def water_test_logged(obj, acting_user_id: int) -> None:
+    publish("homestead.water_test_logged", payload={
+        "water_test_id": obj.id,
+        "pool_id": obj.pool_id,
+        "tested_at": obj.tested_at.isoformat(),
+        "household_id": obj.household_id,
+        "acting_user_id": acting_user_id,
+    })

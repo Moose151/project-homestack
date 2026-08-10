@@ -5,23 +5,28 @@ scheduling helper only (D7) — never CalendarEvent.objects directly.
 """
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.core.assignment import apply_assignees, pop_assignees
 from apps.core.models import get_active_household
 from apps.homestead import events
+from apps.homestead import pool_care
 from apps.homestead.models import (
     Appliance,
     HouseholdCost,
     Improvement,
     InsurancePolicy,
     MaintenanceTask,
+    Pool,
     Property,
     RoomArea,
     RoomPlanItem,
     RoomPlanProduct,
     ServiceProvider,
+    WaterTest,
 )
 from apps.scheduling.helpers import delete_event_for, sync_event_for
 
@@ -134,7 +139,7 @@ def delete_appliance(acting_user: User, obj: Appliance) -> None:
 # ---------------------------------------------------------------------------
 
 _TASK_FIELDS = {
-    "appliance_id", "provider_id", "title", "category",
+    "appliance_id", "provider_id", "pool_id", "title", "category",
     "next_due_at", "is_all_day", "recurrence_rule", "last_done_at", "notes", "visibility",
     "solace_bill_ref",
 }
@@ -638,6 +643,106 @@ def delete_household_cost(acting_user: User, obj: HouseholdCost) -> None:
     events.home_finance_record_deleted(
         "household_cost", obj.id, obj.household_id, acting_user.id
     )
+    obj.updated_by = acting_user
+    obj.save(update_fields=["updated_by", "updated_at"])
+    obj.soft_delete()
+
+
+# ---------------------------------------------------------------------------
+# Pools and water tests
+# ---------------------------------------------------------------------------
+
+_POOL_FIELDS = {
+    "room_id", "name", "kind", "sanitiser", "surface", "filter_type", "volume_litres",
+    "is_indoor", "equipment_notes", "notes", "is_active", "visibility",
+}
+_WATER_TEST_FIELDS = {
+    "tested_at", "free_chlorine", "ph", "total_alkalinity", "calcium_hardness",
+    "cyanuric_acid", "salt", "water_temp_c", "notes",
+}
+
+
+def create_pool(acting_user: User, *, with_care_schedule: bool = True, **data) -> Pool:
+    """Add a pool. Unless told otherwise it arrives with its starter care schedule already set
+    up, because a household that has never run a pool does not know what the jobs are."""
+    obj = Pool(
+        household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
+    )
+    obj.save()
+    if with_care_schedule:
+        apply_care_schedule(acting_user, obj)
+    events.pool_saved(obj, acting_user.id)
+    return obj
+
+
+def update_pool(acting_user: User, obj: Pool, **data) -> Pool:
+    for key, val in data.items():
+        if key in _POOL_FIELDS:
+            setattr(obj, key, val)
+    obj.updated_by = acting_user
+    obj.save()
+    events.pool_saved(obj, acting_user.id)
+    return obj
+
+
+def delete_pool(acting_user: User, obj: Pool) -> None:
+    # Its care jobs are real Calendar-synced maintenance, so release those events first.
+    for task in obj.care_tasks.all():
+        delete_maintenance(acting_user, task)
+    events.pool_deleted(obj, acting_user.id)
+    obj.updated_by = acting_user
+    obj.save(update_fields=["updated_by", "updated_at"])
+    obj.soft_delete()
+
+
+def apply_care_schedule(acting_user: User, pool: Pool) -> list[MaintenanceTask]:
+    """Create the starter care jobs this pool does not already have.
+
+    Idempotent by title, so calling it again after switching to a salt cell adds only the jobs
+    that switch introduced, and never duplicates or overwrites a job the household has edited.
+    """
+    existing = set(pool.care_tasks.values_list("title", flat=True))
+    now = timezone.now()
+    created = []
+    for index, job in enumerate(pool_care.schedule_for(pool.sanitiser)):
+        if job["title"] in existing:
+            continue
+        created.append(create_maintenance(
+            acting_user,
+            pool_id=pool.id,
+            title=job["title"],
+            category=MaintenanceTask.Category.POOL,
+            # Stagger the first due dates so ten jobs do not all land on day one.
+            next_due_at=now + timedelta(days=index),
+            is_all_day=True,
+            recurrence_rule=job["recurrence_rule"],
+            notes=job["notes"],
+            visibility=pool.visibility,
+        ))
+    return created
+
+
+def log_water_test(acting_user: User, pool: Pool, **data) -> WaterTest:
+    data.setdefault("tested_at", timezone.now())
+    obj = WaterTest(
+        pool=pool, household=get_active_household(),
+        created_by=acting_user, updated_by=acting_user, **data
+    )
+    obj.save()
+    events.water_test_logged(obj, acting_user.id)
+    return obj
+
+
+def update_water_test(acting_user: User, obj: WaterTest, **data) -> WaterTest:
+    for key, val in data.items():
+        if key in _WATER_TEST_FIELDS:
+            setattr(obj, key, val)
+    obj.updated_by = acting_user
+    obj.save()
+    return obj
+
+
+def delete_water_test(acting_user: User, obj: WaterTest) -> None:
     obj.updated_by = acting_user
     obj.save(update_fields=["updated_by", "updated_at"])
     obj.soft_delete()

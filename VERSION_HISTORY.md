@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.25.2**
+> **Current version: 0.26.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,27 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.26 — Pools & spas
+
+### 0.26.0 — 2026-08-10
+- Homestead can now look after a pool or spa (owner request). A pool records how it is sanitised,
+  its surface, filter, volume and equipment notes — and those answers drive everything else.
+- Adding a pool sets up the usual care jobs (skim, test, brush, vacuum, empty baskets, monthly
+  full test, filter clean, salt-cell inspection, annual service), staggered so they do not all land
+  on day one. They are ordinary maintenance rows, so they recur, reach the Calendar, complete and
+  advance, and appear in Maintenance and the Hub like any other home job. Re-applying is idempotent
+  by title, so switching to a salt cell adds only the job that switch introduces.
+- Water tests record whichever readings were taken and are judged against the target band for that
+  kind of pool: a salt pool is held to a higher stabiliser band, fibreglass and vinyl need less
+  calcium than concrete, and a manually chlorinated pool is never asked for a salt reading. Whether
+  a reading is in range is computed at read time, so corrected guidance applies to old readings.
+- Every reading says what it is for and, when out of band, what to do about it — the screen is
+  written for a household that has never run a pool, and says plainly that it is general guidance
+  rather than a substitute for a pool-shop analysis.
+- Kept general per D15: bands and schedule come from how the pool is built and sanitised.
+- **734 backend tests green (16 new); typecheck and production build clean; migration
+  `homestead.0008`.**
 
 ## 0.25 — Fitness & Training
 
