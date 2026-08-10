@@ -18,6 +18,7 @@ import { sourceColour, sourcePath } from '../../../lib/sourceLinks'
 import { useAuth } from '../../auth/AuthContext'
 import { useStacks } from '../../stacks/StacksContext'
 import { useUrlAction } from '../../../hooks/useUrlTab'
+import { confirmDialog } from '../../../components/Dialogs'
 
 // ---------------------------------------------------------------------------
 // Date helpers (no external deps)
@@ -124,7 +125,7 @@ function EventModal({
   }
 
   const remove = async () => {
-    if (!event || !confirm(`Delete "${event.title}"?`)) return
+    if (!event || !(await confirmDialog({ title: `Delete "${event.title}"?`, confirmLabel: 'Delete' }))) return
     try { await api.deleteEvent(event.id); onSaved() } catch (e) { onError(errMsg(e)) }
   }
 
@@ -351,7 +352,7 @@ function RotationScheduleModal({ schedule, schedules, people, onSelect, onClose,
     } catch (error) { onError(errMsg(error)) } finally { setSaving(false) }
   }
   const remove = async () => {
-    if (!schedule || !confirm(`Delete the “${schedule.title}” rotation?`)) return
+    if (!schedule || !(await confirmDialog({ title: `Delete the “${schedule.title}” rotation?`, confirmLabel: 'Delete' }))) return
     try { await api.deleteRotatingSchedule(schedule.id); onSaved() } catch (error) { onError(errMsg(error)) }
   }
   const anchor = f.anchor_date ? dateFromKey(f.anchor_date) : new Date()

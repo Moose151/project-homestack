@@ -12,6 +12,7 @@ import { DeleteAction, EditAction, RowActions } from '../../../components/RowAct
 import { DateTimeField } from '../../../components/DateTimeField'
 import { useAuth } from '../../auth/AuthContext'
 import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
+import { confirmDialog } from '../../../components/Dialogs'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -148,7 +149,7 @@ function TreatmentRow({ t, onChange, onDelete, onError }: {
     try { onChange(await api.completePetTreatment(t.id)) } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
   const remove = async () => {
-    if (!confirm('Delete this treatment?')) return
+    if (!(await confirmDialog({ title: 'Delete this treatment?', confirmLabel: 'Delete' }))) return
     try { await api.deletePetTreatment(t.id); onDelete(t.id) } catch (e) { onError(errMsg(e)) }
   }
   if (editing) {
@@ -188,7 +189,7 @@ function AppointmentRow({ appointment, onChange, onDelete, onError }: {
   const [editing, setEditing] = useState(false)
 
   const remove = async () => {
-    if (!confirm(`Delete "${appointment.display_title}"?`)) return
+    if (!(await confirmDialog({ title: `Delete "${appointment.display_title}"?`, confirmLabel: 'Delete' }))) return
     try {
       await api.deletePetAppointment(appointment.id)
       onDelete(appointment.id)
@@ -245,7 +246,7 @@ function PetCard({ pet, onChange, onDelete, onError, canDelete }: {
     catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
   const remove = async () => {
-    if (!confirm(`Delete "${pet.name}"? Their treatments and appointments go too.`)) return
+    if (!(await confirmDialog({ title: `Delete "${pet.name}"?`, message: 'Their treatments and appointments go too.', confirmLabel: 'Delete' }))) return
     try { await api.deletePet(pet.id); onDelete(pet.id) } catch (e) { onError(errMsg(e)) }
   }
 

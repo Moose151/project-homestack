@@ -22,6 +22,7 @@ import { SensitiveGate } from '../../../components/SensitiveGate'
 import { useAuth } from '../../auth/AuthContext'
 import { useStacks } from '../../stacks/StacksContext'
 import { useUrlAction, useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
+import { confirmDialog } from '../../../components/Dialogs'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ')
@@ -443,7 +444,7 @@ function MaintenanceTab({ people, defaultAssignee, onError, canUseMoney }: {
     try { await api.completeMaintenance(t.id); load() } catch (e) { onError(errMsg(e)) }
   }
   const remove = async (t: MaintenanceTask) => {
-    if (!confirm(`Delete "${t.title}"?`)) return
+    if (!(await confirmDialog({ title: `Delete "${t.title}"?`, confirmLabel: 'Delete' }))) return
     try { await api.deleteMaintenance(t.id); load() } catch (e) { onError(errMsg(e)) }
   }
   const startCost = (task: MaintenanceTask) => {
@@ -654,7 +655,7 @@ function AppliancesTab({ onError }: { onError: (m: string) => void }) {
     } catch (e) { onError(errMsg(e)) } finally { setSaving(false) }
   }
   const remove = async (a: Appliance) => {
-    if (!confirm(`Delete "${a.name}"?`)) return
+    if (!(await confirmDialog({ title: `Delete "${a.name}"?`, confirmLabel: 'Delete' }))) return
     try { await api.deleteAppliance(a.id); load() } catch (e) { onError(errMsg(e)) }
   }
 
@@ -780,7 +781,7 @@ function ImprovementsTab({ people, defaultAssignee, onError }: {
     try { await api.updateImprovement(i.id, { status }); load() } catch (e) { onError(errMsg(e)) }
   }
   const remove = async (i: Improvement) => {
-    if (!confirm(`Delete "${i.title}"?`)) return
+    if (!(await confirmDialog({ title: `Delete "${i.title}"?`, confirmLabel: 'Delete' }))) return
     try { await api.deleteImprovement(i.id); load() } catch (e) { onError(errMsg(e)) }
   }
 
@@ -906,7 +907,7 @@ function ContactsTab({ onError }: { onError: (m: string) => void }) {
     } catch (e) { onError(errMsg(e)) } finally { setSaving(false) }
   }
   const remove = async (p: ServiceProvider) => {
-    if (!confirm(`Delete "${p.name}"?`)) return
+    if (!(await confirmDialog({ title: `Delete "${p.name}"?`, confirmLabel: 'Delete' }))) return
     try { await api.deleteProvider(p.id); load() } catch (e) { onError(errMsg(e)) }
   }
 
@@ -1069,7 +1070,7 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
   }
 
   const removePolicy = async (policy: InsurancePolicy) => {
-    if (!confirm(`Delete insurance policy "${policy.name}"? Its linked Solace bill will also be removed.`)) return
+    if (!(await confirmDialog({ title: `Delete insurance policy "${policy.name}"?`, message: 'Its linked Solace bill will also be removed.', confirmLabel: 'Delete' }))) return
     try {
       await api.deleteInsurancePolicy(policy.id)
       await load()
@@ -1116,7 +1117,7 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
   }
 
   const removeCost = async (cost: HouseholdCost) => {
-    if (!confirm(`Delete "${cost.name}"? Its linked Solace bill will also be removed.`)) return
+    if (!(await confirmDialog({ title: `Delete "${cost.name}"?`, message: 'Its linked Solace bill will also be removed.', confirmLabel: 'Delete' }))) return
     try {
       await api.deleteHouseholdCost(cost.id)
       await load()

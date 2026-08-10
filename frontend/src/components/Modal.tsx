@@ -37,7 +37,12 @@ export function Modal({
     document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
     const frame = requestAnimationFrame(() => {
-      dialogRef.current?.querySelector<HTMLElement>('[autofocus], input, select, textarea, button')?.focus()
+      // React never renders an `autofocus` attribute, so a dialog that wants a specific control
+      // focused marks it `data-autofocus`; otherwise focus falls to the first control, which in
+      // document order is the header's close button.
+      const dialog = dialogRef.current
+      const preferred = dialog?.querySelector<HTMLElement>('[data-autofocus]')
+      ;(preferred ?? dialog?.querySelector<HTMLElement>('input, select, textarea, button'))?.focus()
     })
     return () => {
       cancelAnimationFrame(frame)

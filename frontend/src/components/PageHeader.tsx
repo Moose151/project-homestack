@@ -33,26 +33,31 @@ export function PageHeader({
   icon?: ReactNode
   actions?: ReactNode
   className?: string
-  /** The mobile shell already names the destination. Show only when the page adds useful context. */
+  /**
+   * Whether the *heading* repeats on phones, where the shell already names the destination.
+   * Actions are never hidden: this defaulted to hiding the whole header, which took the page's
+   * primary button ("+ Add pet", "+ New list") with it and left no way to create from a phone.
+   */
   mobile?: 'hide' | 'show'
 }) {
   const { pathname } = useLocation()
   const redundant = duplicatesDestination(title, pathname)
+  const headingOnPhone = mobile === 'show'
 
   // Nothing left to render once the heading is redundant and there are no actions.
   if (redundant && !actions) return null
 
   if (redundant) {
     return (
-      <div className={`${mobile === 'show' ? 'flex' : 'hidden sm:flex'} flex-wrap items-center justify-end gap-2 ${className}`}>
+      <div className={`flex flex-wrap items-center justify-end gap-2 ${className}`}>
         {actions}
       </div>
     )
   }
 
   return (
-    <div className={`${mobile === 'show' ? 'flex' : 'hidden sm:flex'} flex-wrap items-center justify-between gap-3 border-b border-line/70 pb-4 sm:pb-5 ${className}`}>
-      <div className="flex min-w-0 items-center gap-3 sm:gap-3.5">
+    <div className={`${headingOnPhone || actions ? 'flex' : 'hidden sm:flex'} flex-wrap items-center justify-between gap-3 border-line/70 pb-4 sm:border-b sm:pb-5 ${headingOnPhone ? 'border-b' : ''} ${className}`}>
+      <div className={`${headingOnPhone ? 'flex' : 'hidden sm:flex'} min-w-0 items-center gap-3 sm:gap-3.5`}>
         {icon && <span className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-2xl border border-line bg-surface text-xl leading-none shadow-soft sm:h-12 sm:w-12 sm:text-2xl">{icon}</span>}
         <div className="min-w-0">
           <h1 className="truncate text-xl font-black tracking-tight text-ink sm:text-[1.65rem]">{title}</h1>

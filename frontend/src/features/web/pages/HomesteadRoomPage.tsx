@@ -17,6 +17,7 @@ import { DeleteAction, EditAction } from '../../../components/RowActions'
 import { StatCard } from '../../../components/StatCard'
 import { RoomIconSelect } from '../../../components/RoomIconSelect'
 import { useAuth } from '../../auth/AuthContext'
+import { confirmDialog, promptDialog } from '../../../components/Dialogs'
 
 const ITEM_TYPES: RoomItemType[] = ['purchase', 'maintenance', 'renovation', 'upgrade']
 const ITEM_STATUSES: RoomItemStatus[] = ['planned', 'in_progress', 'completed', 'archived']
@@ -122,10 +123,12 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
     const product = products.find(row => row.id === productId)
     let actual_cost: string | null = null
     if (purchased && product) {
-      const answer = prompt(
-        `What did "${product.title}" actually cost? Leave blank to use the estimate.`,
-        product.total_cost,
-      )
+      const answer = await promptDialog({
+        title: `What did "${product.title}" cost?`,
+        message: 'Leave blank to use the estimate.',
+        label: 'Actual cost', defaultValue: product.total_cost,
+        inputMode: 'decimal', confirmLabel: 'Mark bought',
+      })
       if (answer === null) return
       actual_cost = answer.trim() === '' ? null : answer.trim()
     }
@@ -140,7 +143,7 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
   }
 
   const remove = async (productId: number, title: string) => {
-    if (!confirm(`Remove "${title}" from the options?`)) return
+    if (!(await confirmDialog({ title: `Remove "${title}" from the options?`, confirmLabel: 'Remove' }))) return
     setBusy(true)
     try {
       await api.deleteRoomProduct(roomId, item.id, productId)
@@ -430,7 +433,7 @@ export function HomesteadRoomPage() {
   }
 
   const removeRoom = async () => {
-    if (!confirm(`Delete "${data.room.name}" and all of its plan items?`)) return
+    if (!(await confirmDialog({ title: `Delete "${data.room.name}" and all of its plan items?`, confirmLabel: 'Delete' }))) return
     try { await api.deleteRoom(id); navigate('/homestead?tab=rooms') } catch (e) { setError(errMsg(e)) }
   }
 
@@ -476,7 +479,7 @@ export function HomesteadRoomPage() {
   }
 
   const removeItem = async (item: RoomPlanItem) => {
-    if (!confirm(`Delete "${item.title}"?`)) return
+    if (!(await confirmDialog({ title: `Delete "${item.title}"?`, confirmLabel: 'Delete' }))) return
     try { await api.deleteRoomItem(id, item.id); await load() } catch (e) { setError(errMsg(e)) }
   }
 

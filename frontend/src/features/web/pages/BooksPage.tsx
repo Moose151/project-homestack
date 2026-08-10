@@ -11,6 +11,7 @@ import { PageHeader } from '../../../components/PageHeader'
 import { Tabs } from '../../../components/Tabs'
 import { RemoveAction } from '../../..//components/RowActions'
 import { useUrlAction, useUrlQueryState } from '../../../hooks/useUrlTab'
+import { confirmDialog } from '../../../components/Dialogs'
 
 type Surface = 'personal' | 'club'
 
@@ -438,8 +439,8 @@ function ClubSettings({ club, users, onChanged }: {
             <button
               type="button"
               disabled={busy}
-              onClick={() => {
-                if (!confirm(`Remove ${m.user_name} from ${club.name}?`)) return
+              onClick={async () => {
+                if (!(await confirmDialog({ title: `Remove ${m.user_name} from ${club.name}?`, confirmLabel: 'Remove' }))) return
                 void act(async () => { await api.removeBookClubMember(club.id, m.id); await onChanged() })
               }}
               className="grid min-h-10 min-w-10 place-items-center text-lg text-muted hover:text-danger disabled:opacity-40"
@@ -676,8 +677,8 @@ export function BooksPage() {
                     clubs={clubs}
                     onRefresh={reloadAll}
                     onMove={status => act(async () => { await api.updatePersonalBook(entry.id, { status }); await reloadAll() })}
-                    onDelete={() => {
-                      if (!confirm(`Remove "${entry.book.title}" from your books?`)) return Promise.resolve()
+                    onDelete={async () => {
+                      if (!(await confirmDialog({ title: `Remove "${entry.book.title}" from your books?`, confirmLabel: 'Remove' }))) return
                       return act(async () => { await api.deletePersonalBook(entry.id); await reloadAll() })
                     }}
                     onAddToClub={clubId => act(async () => { await api.createClubBook(clubId, { book_id: entry.book_id, status: 'backlog', position: 0 }); await reloadAll() })}
@@ -723,8 +724,8 @@ export function BooksPage() {
                     club={selectedClub}
                     onRefresh={reloadAll}
                     onMove={status => act(async () => { await api.updateClubBook(selectedClub.id, entry.id, { status }); await reloadAll() })}
-                    onDelete={() => {
-                      if (!confirm(`Remove "${entry.book.title}" from ${selectedClub.name}?`)) return Promise.resolve()
+                    onDelete={async () => {
+                      if (!(await confirmDialog({ title: `Remove "${entry.book.title}" from ${selectedClub.name}?`, confirmLabel: 'Remove' }))) return
                       return act(async () => { await api.deleteClubBook(selectedClub.id, entry.id); await reloadAll() })
                     }}
                     onQueue={() => act(async () => { await api.addClubQueueItem(selectedClub.id, entry.id, queue.length + 1); await loadClub() })}

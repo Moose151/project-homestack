@@ -11,6 +11,7 @@ import { STACKS, softColour } from '../../config/stacks'
 import { APP_VERSION } from '../../config/version'
 import { api } from '../../api/client'
 import type { AuthUser } from '../../api/types'
+import { DialogHost } from '../../components/Dialogs'
 import { ConnectionBanner } from '../../components/ConnectionBanner'
 import { CONTENT_CONTAINER } from '../../components/PageContainer'
 import { GlobalSearch } from '../../components/GlobalSearch'
@@ -404,7 +405,7 @@ export function AppShell() {
             to={item.route}
             style={({ isActive }) => (isActive ? { color: item.colour } : undefined)}
             className={({ isActive }) =>
-              `relative flex min-w-0 flex-1 flex-col items-center justify-center pb-1.5 pt-1.5 text-[10px] font-bold transition-colors ${
+              `relative flex min-w-0 flex-1 flex-col items-center justify-center pb-1.5 pt-1.5 text-[11px] font-bold transition-colors ${
                 isActive ? '' : 'text-muted'
               }`
             }
@@ -420,7 +421,7 @@ export function AppShell() {
         ))}
         <button
           onClick={() => setMoreOpen(true)}
-          className={`relative flex min-w-0 flex-1 flex-col items-center justify-center pb-1.5 pt-1.5 text-[10px] font-bold transition-colors ${
+          className={`relative flex min-w-0 flex-1 flex-col items-center justify-center pb-1.5 pt-1.5 text-[11px] font-bold transition-colors ${
             moreOpen ? 'text-primary' : 'text-muted'
           }`}
           aria-label="More navigation and profile options"
@@ -441,7 +442,7 @@ export function AppShell() {
               <div className="flex items-center justify-between">
                 <span>
                   <span className="block text-base font-extrabold text-ink">Go anywhere</span>
-                  <span className="block text-[11px] text-muted">All your household spaces in one place</span>
+                  <span className="block text-xs text-muted">All your household spaces in one place</span>
                 </span>
                 <button onClick={() => setMoreOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl text-muted hover:bg-sunken" aria-label="Close">✕</button>
               </div>
@@ -454,7 +455,7 @@ export function AppShell() {
                     <Avatar name={user.display_name} colour={user.colour} avatar={user.avatar} size="md" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-extrabold text-ink">{user.display_name}</p>
-                      <p className="text-[11px] font-semibold capitalize text-muted">{user.role} profile</p>
+                      <p className="text-xs font-semibold capitalize text-muted">{user.role} profile</p>
                     </div>
                     <button
                       onClick={() => setEditingProfile(value => !value)}
@@ -478,8 +479,8 @@ export function AppShell() {
               <div>
                 <div className="mb-2 flex items-center justify-between gap-3 px-1">
                   <span>
-                    <span className="block text-[10px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Destinations</span>
-                    {customisingNav && <span className="mt-0.5 block text-[10px] text-muted">Choose up to four for the bottom bar</span>}
+                    <span className="block text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Destinations</span>
+                    {customisingNav && <span className="mt-0.5 block text-[11px] text-muted">Choose up to four for the bottom bar</span>}
                   </span>
                   <button onClick={() => setCustomisingNav(value => !value)} className="min-h-9 rounded-lg px-2 text-xs font-bold text-primary hover:bg-primary-soft">
                     {customisingNav ? 'Finish editing' : 'Edit bottom bar'}
@@ -500,8 +501,8 @@ export function AppShell() {
                         >
                           <span className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl text-xl" style={{ background: softColour(item.colour, '18') }}>{item.icon}</span>
                           <span className="min-w-0">
-                            <span className="block truncate text-xs font-extrabold">{item.label}</span>
-                            <span className="mt-0.5 block text-[9px] font-medium opacity-70">{pinned ? 'In bottom bar' : 'Add to bottom bar'}</span>
+                            <span className="block truncate text-sm font-extrabold">{item.label}</span>
+                            <span className="mt-0.5 block text-[11px] font-medium opacity-70">{pinned ? 'In bottom bar' : 'Add to bottom bar'}</span>
                           </span>
                           <span className="absolute right-2 top-1.5 text-xs font-black">{pinned ? '✓' : '+'}</span>
                         </button>
@@ -517,8 +518,8 @@ export function AppShell() {
                       >
                         <span className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-2xl text-2xl" style={{ background: softColour(item.colour, '18') }}>{item.icon}</span>
                         <span className="min-w-0">
-                          <span className="block truncate text-xs font-extrabold">{item.label}</span>
-                          <span className="mt-1 block text-[9px] leading-tight opacity-70">{item.description}</span>
+                          <span className="block truncate text-sm font-extrabold">{item.label}</span>
+                          <span className="mt-1 block text-[11px] leading-tight opacity-70">{item.description}</span>
                         </span>
                       </NavLink>
                     )
@@ -527,7 +528,7 @@ export function AppShell() {
               </div>
 
               <div>
-                <p className="mb-2 px-1 text-[10px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Quick actions</p>
+                <p className="mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Quick actions</p>
                 <div className="grid grid-cols-2 gap-2">
                   <button onClick={() => { setMoreOpen(false); setSearchOpen(true) }} className="flex min-h-12 items-center gap-2 rounded-2xl border border-line bg-surface px-3 text-sm font-bold text-ink"><span className="text-lg">⌕</span> Search</button>
                   <button onClick={() => { setMoreOpen(false); setQuickOpen(true) }} className="flex min-h-12 items-center gap-2 rounded-2xl bg-primary px-3 text-sm font-bold text-white shadow-soft"><span className="text-lg">＋</span> Add something</button>
@@ -536,12 +537,12 @@ export function AppShell() {
 
               {adminNav.length > 0 && (
                 <div>
-                  <p className="mb-2 px-1 text-[10px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Manage</p>
+                  <p className="mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Manage</p>
                   <div className="grid grid-cols-2 gap-2">
                     {adminNav.map(item => (
                       <NavLink key={item.route} to={item.route} onClick={() => setMoreOpen(false)} className={({ isActive }) => `flex min-h-[64px] items-center gap-2.5 rounded-2xl border px-3 text-left ${isActive ? 'border-primary bg-primary-soft text-primary' : 'border-line bg-surface text-muted-strong'}`}>
                         <span className="text-xl">{item.icon}</span>
-                        <span className="min-w-0"><span className="block truncate text-xs font-bold">{item.label}</span><span className="block truncate text-[9px] text-muted">{item.description}</span></span>
+                        <span className="min-w-0"><span className="block truncate text-sm font-bold">{item.label}</span><span className="block truncate text-[11px] text-muted">{item.description}</span></span>
                       </NavLink>
                     ))}
                   </div>
@@ -549,7 +550,7 @@ export function AppShell() {
               )}
 
               <div>
-                <p className="mb-2 px-1 text-[10px] font-extrabold uppercase tracking-[0.15em] text-muted/70">App & session</p>
+                <p className="mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">App & session</p>
                 <div className="overflow-hidden rounded-2xl border border-line bg-surface">
                   <button
                     onClick={() => { setDark(!dark); }}
@@ -584,6 +585,7 @@ export function AppShell() {
       )}
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} enabledKeys={enabledKeys} />
       <QuickCreate open={quickOpen} onClose={() => setQuickOpen(false)} enabledKeys={enabledKeys} />
+      <DialogHost />
     </div>
   )
 }

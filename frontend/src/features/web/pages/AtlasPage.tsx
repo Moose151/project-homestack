@@ -13,6 +13,7 @@ import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSel
 import { DeleteAction } from '../../..//components/RowActions'
 import { useAuth } from '../../auth/AuthContext'
 import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
+import { confirmDialog } from '../../../components/Dialogs'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -184,7 +185,7 @@ function ListCard({ list, people, defaultAssignee, onDeleted, onError }: {
   }
 
   const deleteList = async () => {
-    if (!confirm(`Delete "${list.title}"?`)) return
+    if (!(await confirmDialog({ title: `Delete "${list.title}"?`, confirmLabel: 'Delete' }))) return
     try {
       await api.deleteList(list.id)
       onDeleted(list.id)
@@ -313,7 +314,7 @@ function NoteCard({ note, onSaved, onDeleted, onError }: {
   }
 
   const remove = async () => {
-    if (!confirm(`Delete "${note.title}"?`)) return
+    if (!(await confirmDialog({ title: `Delete "${note.title}"?`, confirmLabel: 'Delete' }))) return
     try { await api.deleteNote(note.id); onDeleted(note.id) } catch (e) { onError(errMsg(e)) }
   }
 

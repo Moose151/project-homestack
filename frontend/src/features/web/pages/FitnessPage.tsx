@@ -13,6 +13,7 @@ import { PageHeader } from '../../../components/PageHeader'
 import { InlineAlert } from '../../../components/PageState'
 import { Tabs } from '../../../components/Tabs'
 import { useUrlTab } from '../../../hooks/useUrlTab'
+import { confirmDialog } from '../../../components/Dialogs'
 
 declare global {
   interface String { replaceAll(searchValue: string, replaceValue: string): string }
@@ -139,7 +140,7 @@ function LiveSession({ session, exercises, reload, onDone }: {
       ) : <Button variant="secondary" className="w-full" onClick={() => setAdding(true)}>+ Add or swap an exercise</Button>}
       <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 flex gap-2 rounded-2xl border border-line bg-surface/95 p-2 shadow-soft backdrop-blur sm:static sm:bg-transparent sm:p-0 sm:shadow-none">
         <Button className="flex-1" loading={busy} onClick={() => change(async () => { await api.finishFitnessSession(session.id); onDone() })}>Finish workout</Button>
-        <Button variant="danger" disabled={busy} onClick={() => { if (confirm('Abandon this workout? Logged sets will not count toward records.')) change(async () => { await api.abandonFitnessSession(session.id); onDone() }) }}>Abandon</Button>
+        <Button variant="danger" disabled={busy} onClick={async () => { if ((await confirmDialog({ title: 'Abandon this workout?', message: 'Logged sets will not count toward records.', confirmLabel: 'Abandon' }))) change(async () => { await api.abandonFitnessSession(session.id); onDone() }) }}>Abandon</Button>
       </div>
     </div>
   )

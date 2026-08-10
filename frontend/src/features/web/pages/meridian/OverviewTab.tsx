@@ -10,6 +10,7 @@ import type {
 import { Card } from '../../../../components/Card'
 import { Button } from '../../../../components/Button'
 import { StatCard } from '../../../../components/StatCard'
+import { promptDialog } from '../../../../components/Dialogs'
 
 interface Props {
   canManage: boolean
@@ -66,7 +67,11 @@ export function OverviewTab({ canManage, pointsLabel, onOpenTasks, onOpenShop }:
   }
 
   const rejectCompletion = async (id: number) => {
-    const reason = prompt('Reason (optional)') || ''
+    const reason = await promptDialog({
+      title: 'Send this back?', label: 'Reason (optional)',
+      placeholder: 'What needs doing differently?', confirmLabel: 'Send back',
+    })
+    if (reason === null) return
     await api.rejectMeridianTaskCompletion(id, reason)
     await reload()
   }
@@ -77,7 +82,11 @@ export function OverviewTab({ canManage, pointsLabel, onOpenTasks, onOpenShop }:
   }
 
   const rejectReward = async (id: number) => {
-    const reason = prompt('Reason (optional)') || ''
+    const reason = await promptDialog({
+      title: 'Send this back?', label: 'Reason (optional)',
+      placeholder: 'What needs doing differently?', confirmLabel: 'Send back',
+    })
+    if (reason === null) return
     await api.rejectMeridianRewardRequest(id, reason)
     await reload()
   }

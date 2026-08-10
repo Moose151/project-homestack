@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.25.0**
+> **Current version: 0.25.1**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,28 @@
 ---
 
 ## 0.25 — Fitness & Training
+
+### 0.25.1 — 2026-08-10 — phone interaction pass
+- Form fields no longer zoom the page. Every control was below 16px, which makes iOS Safari zoom
+  in on focus and never zoom back out, so filling in any form left the app oversized. Touch
+  devices now get a 16px floor; the desktop scale is unchanged.
+- Replaced all 43 `window.confirm` and 9 `window.prompt` boxes with in-app dialogs. The native
+  ones are system alerts that name the origin, ignore the theme, cannot carry a danger tone and
+  offer only OK/Cancel — every delete in the app ended in something that looked like a browser
+  error. Confirmations now state the verb ("Delete pet"), stack full-width on phones with the
+  destructive action away from the Cancel thumb, and prompts have a real label, placeholder and
+  the numeric keypad where a number is wanted.
+- Restored the primary action on phones. `PageHeader` defaulted to hiding itself on mobile, which
+  took the page's own button with it — "+ Add pet", "+ New list" and "Add household login" were
+  simply not reachable from a phone. The heading still steps aside for the shell's title; the
+  actions never do.
+- One rule for tabs on phones: up to three fit a row, more become a labelled picker. It used to
+  be each page's choice, so Pets swiped a cramped row while Money got a picker.
+- Money's six-column category report becomes per-category cards below `md` instead of a
+  sideways-scrolling table that hid the figures.
+- Raised the 9–10px text in the bottom bar and the mobile destination directory to a readable
+  size, and the destination names to `text-sm`.
+- **718 backend tests green; typecheck and production build clean; no migration.**
 
 ### 0.25.0 — 2026-08-10
 - Added the first-class Fitness node, deliberately separate from password-gated medical Health.

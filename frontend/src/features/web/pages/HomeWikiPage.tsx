@@ -9,6 +9,7 @@ import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
 import { useAuth } from '../../auth/AuthContext'
 import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
+import { confirmDialog } from '../../../components/Dialogs'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -142,7 +143,7 @@ function PageCard({ page, categories, onChange, onDelete, onError, canDelete }: 
     } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
   const remove = async () => {
-    if (!confirm(`Delete "${page.title}"?`)) return
+    if (!(await confirmDialog({ title: `Delete "${page.title}"?`, confirmLabel: 'Delete' }))) return
     try { await api.deleteWikiPage(page.id); onDelete(page.id) } catch (e) { onError(errMsg(e)) }
   }
   const toggleFavourite = async () => {
@@ -310,7 +311,7 @@ function CategoriesTab({ categories, onChange, isAdmin, onError }: {
     } catch (e) { onError(errMsg(e)) }
   }
   const remove = async (c: WikiCategory) => {
-    if (!confirm(`Delete "${c.name}"? Its pages keep their content but lose the category.`)) return
+    if (!(await confirmDialog({ title: `Delete "${c.name}"?`, message: 'Its pages keep their content but lose the category.', confirmLabel: 'Delete' }))) return
     try { await api.deleteWikiCategory(c.id); onChange(categories.filter(x => x.id !== c.id)) }
     catch (e) { onError(errMsg(e)) }
   }

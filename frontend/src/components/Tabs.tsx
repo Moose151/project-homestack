@@ -29,10 +29,15 @@ export function Tabs<T extends string>({
   active: T
   onChange: (key: T) => void
   className?: string
-  /** Replace long scrolling tab rows with a labelled picker on narrow phones. */
+  /** Names the picker that replaces a long tab row on phones. Defaults to "Section". */
   mobileSelectLabel?: string
   variant?: 'primary' | 'secondary'
 }) {
+  // Whether a phone gets the picker used to be each page's choice, so Pets swiped a cramped
+  // row while Money got a picker — the same control behaving differently per destination.
+  // Now it is one rule: up to three tabs fit a phone row, more than that becomes a picker.
+  const usePicker = variant === 'primary' && tabs.length > 3
+  const pickerLabel = mobileSelectLabel || 'Section'
   const buttons = useRef<Array<HTMLButtonElement | null>>([])
   useEffect(() => {
     buttons.current[tabs.findIndex(tab => tab.key === active)]?.scrollIntoView({
@@ -49,9 +54,9 @@ export function Tabs<T extends string>({
 
   return (
     <>
-      {mobileSelectLabel && (
+      {usePicker && (
         <label className="flex flex-col gap-1.5 sm:hidden">
-          <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-muted">{mobileSelectLabel}</span>
+          <span className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted">{pickerLabel}</span>
           <span className="relative block">
             <select
               value={active}
@@ -66,7 +71,7 @@ export function Tabs<T extends string>({
           </span>
         </label>
       )}
-      <div className={mobileSelectLabel ? 'hidden sm:block' : ''}>
+      <div className={usePicker ? 'hidden sm:block' : ''}>
         <div
           className={
             variant === 'primary'

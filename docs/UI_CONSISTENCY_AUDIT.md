@@ -188,3 +188,32 @@ Status key: `[ ]` open · `[~]` partly done · `[x]` fixed (v0.22.0–v0.23.2).
   offers to open its URL. *(A household that wants images from hotlink-protected shops would
   need the server to fetch and cache them — deliberately not done: it turns the backend into a
   fetcher of arbitrary URLs, which needs an SSRF allowlist first.)*
+
+## 10. Phone interaction pass (owner: "still very clunky and annoying to use", 2026-08-10)
+
+The audit above was a desktop pass; these were found by reading the same surfaces as a phone.
+
+- [x] **Every form field zoomed the page in.** All controls were `text-sm` (14px), and iOS Safari
+  zooms in on any control under 16px and does not zoom back out — so filling in one field left
+  the whole app oversized until you pinched out. One `@media (pointer: coarse)` floor of 16px in
+  `index.css`; `!important` because it has to beat the per-page `text-sm` utilities.
+- [x] **43 `window.confirm` and 9 `window.prompt` boxes.** A system alert naming the origin, with
+  no theme, no danger tone and no verb — the last thing you saw when deleting anything.
+  `components/Dialogs.tsx` gives `confirmDialog()`/`promptDialog()` plus one `DialogHost` in the
+  shell; module-level functions, not hooks, so no provider had to be threaded through every
+  component owning a delete button. Falls back to the native dialog when no host is mounted.
+- [x] **The page's primary action was invisible on phones.** `PageHeader` defaulted to
+  `hidden sm:flex` on the whole header to avoid repeating the destination name, which also hid
+  its actions: "+ Add pet", "+ New list" and "Add household login" could not be reached from a
+  phone at all. Only the heading now steps aside.
+- [x] **Tabs behaved differently per page.** The phone picker was opt-in via `mobileSelectLabel`,
+  so three-tab Pets swiped a cramped row while Money got a picker. Now one rule: more than three
+  primary tabs becomes a picker, and the label defaults to "Section".
+- [x] **Money's category report scrolled sideways.** Six money columns cannot fit a phone; below
+  `md` each category is now a card carrying its own weekly/fortnightly/monthly/yearly figures.
+- [x] **9–10px text in the mobile shell.** The bottom-bar labels, the destination directory
+  descriptions and the sheet's section labels were below readable size; raised, with destination
+  names at `text-sm`.
+- [x] **A modal focused its close button.** `Modal` grabbed the first focusable element, which in
+  document order is the header ✕, so a dialog wanting a field focused did not get it (React never
+  renders an `autofocus` attribute to find). It now prefers `[data-autofocus]`.

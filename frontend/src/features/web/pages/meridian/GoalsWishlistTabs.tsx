@@ -7,6 +7,7 @@ import { Card } from '../../../../components/Card'
 import { Button } from '../../../../components/Button'
 import { Field, Input, Textarea, fieldClass } from '../../../../components/ui'
 import { useAuth } from '../../../auth/AuthContext'
+import { confirmDialog, promptDialog } from '../../../../components/Dialogs'
 
 // Shared bits ---------------------------------------------------------------
 
@@ -109,7 +110,7 @@ export function GoalsTab({ canManage, pointsLabel }: { canManage: boolean; point
                       type="button"
                       aria-label={`Delete ${g.title}`}
                       onClick={async () => {
-                        if (!confirm(`Delete "${g.title}"?`)) return
+                        if (!(await confirmDialog({ title: `Delete "${g.title}"?`, confirmLabel: 'Delete' }))) return
                         setError(null)
                         try { await api.deleteMeridianGoal(g.id); await reload() } catch (e) { setError(errMsg(e)) }
                       }}
@@ -247,8 +248,13 @@ export function WishlistTab({ canManage, pointsLabel }: { canManage: boolean; po
                 <span className="text-sm text-ink">{personName(r.person_id)} · {r.requested_name}</span>
                 <div className="grid grid-cols-2 gap-2 sm:flex">
                   <Button size="sm" onClick={async () => {
-                    const cost = Number(prompt(`Point cost for "${r.requested_name}"?`, '50'))
-                    if (cost <= 0) return
+                    const answer = await promptDialog({
+                      title: `Approve "${r.requested_name}"`, label: 'Point cost',
+                      defaultValue: '50', inputMode: 'numeric', confirmLabel: 'Approve', required: true,
+                    })
+                    if (answer === null) return
+                    const cost = Number(answer)
+                    if (!(cost > 0)) { setError('Enter a point cost above zero.'); return }
                     setError(null)
                     try { await api.approveWishlistRequest(r.id, cost); await reload() } catch (e) { setError(errMsg(e)) }
                   }}>Approve</Button>
@@ -277,7 +283,7 @@ export function WishlistTab({ canManage, pointsLabel }: { canManage: boolean; po
                       type="button"
                       aria-label={`Delete ${it.name}`}
                       onClick={async () => {
-                        if (!confirm(`Delete "${it.name}"?`)) return
+                        if (!(await confirmDialog({ title: `Delete "${it.name}"?`, confirmLabel: 'Delete' }))) return
                         setError(null)
                         try { await api.deleteWishlistItem(it.id); await reload() } catch (e) { setError(errMsg(e)) }
                       }}

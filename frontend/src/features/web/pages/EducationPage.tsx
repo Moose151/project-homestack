@@ -19,6 +19,7 @@ import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSel
 import { DeleteAction } from '../../../components/RowActions'
 import { useAuth } from '../../auth/AuthContext'
 import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
+import { confirmDialog } from '../../../components/Dialogs'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -138,7 +139,7 @@ function AssessmentDetail({ assessment, onError }: {
   }
 
   const deleteFile = async (fileId: number) => {
-    if (!confirm('Remove this file?')) return
+    if (!(await confirmDialog({ title: 'Remove this file?', confirmLabel: 'Remove' }))) return
     try {
       await api.deleteAssessmentFile(assessment.id, fileId)
       setFiles(prev => prev.filter(f => f.id !== fileId))
@@ -347,7 +348,7 @@ function AssignmentRow({ a, onChange, onDelete, onError }: {
     catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
   const remove = async () => {
-    if (!confirm('Delete this assignment?')) return
+    if (!(await confirmDialog({ title: 'Delete this assignment?', confirmLabel: 'Delete' }))) return
     try { await api.deleteAssessment(a.id); onDelete(a.id) } catch (e) { onError(errMsg(e)) }
   }
 
@@ -492,7 +493,7 @@ function CoursesTab({ courses, reload, people, onError }: {
     } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
   const remove = async (c: EducationCourse) => {
-    if (!confirm(`Delete "${c.name}"? Its assignments stay but lose their course link.`)) return
+    if (!(await confirmDialog({ title: `Delete "${c.name}"?`, message: 'Its assignments stay but lose their course link.', confirmLabel: 'Delete' }))) return
     try { await api.deleteCourse(c.id); reload() } catch (e) { onError(errMsg(e)) }
   }
 
@@ -608,7 +609,7 @@ function TimetableTab({ courses, onError }: { courses: EducationCourse[]; onErro
     } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
   const remove = async (s: EducationClassSession) => {
-    if (!confirm('Delete this class from your timetable?')) return
+    if (!(await confirmDialog({ title: 'Delete this class from your timetable?', confirmLabel: 'Delete' }))) return
     try { await api.deleteClassSession(s.id); setSessions(prev => prev.filter(x => x.id !== s.id)) }
     catch (e) { onError(errMsg(e)) }
   }
@@ -735,7 +736,7 @@ function EventsTab({ courses, people, institutions, defaultAssignee, onError }: 
     } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
   const remove = async (ev: EducationEvent) => {
-    if (!confirm('Delete this event?')) return
+    if (!(await confirmDialog({ title: 'Delete this event?', confirmLabel: 'Delete' }))) return
     try { await api.deleteEducationEvent(ev.id); setEvents(prev => prev.filter(x => x.id !== ev.id)) }
     catch (e) { onError(errMsg(e)) }
   }
@@ -1148,7 +1149,7 @@ function InstitutionsTab({ institutions, onChange, onError }: {
   }
 
   const remove = async (i: EducationInstitution) => {
-    if (!confirm(`Delete "${i.name}"?`)) return
+    if (!(await confirmDialog({ title: `Delete "${i.name}"?`, confirmLabel: 'Delete' }))) return
     try { await api.deleteInstitution(i.id); onChange(institutions.filter(x => x.id !== i.id)) }
     catch (e) { onError(errMsg(e)) }
   }

@@ -6,6 +6,13 @@ import { Button } from '../../../../components/Button'
 import { Field, Input, Select, Textarea, fieldClass } from '../../../../components/ui'
 import { EmptyState } from '../../../../components/EmptyState'
 import { useAuth } from '../../../auth/AuthContext'
+import { confirmDialog, promptDialog } from '../../../../components/Dialogs'
+
+/** One wording for sending a submission back, on the phone keyboard rather than a system box. */
+const askRejectionReason = () => promptDialog({
+  title: 'Send this back?', label: 'Reason (optional)',
+  placeholder: 'What needs doing differently?', confirmLabel: 'Send back',
+})
 
 type RewardFilter = 'active' | 'pending' | 'stock' | 'hidden' | 'all'
 
@@ -212,9 +219,9 @@ export function ShopTab({ canManage, pointsLabel, searchQuery = '' }: {
                       onEdit={() => setEditingId(reward.id)}
                       onToggleActive={() => act(api.updateMeridianReward(reward.id, { is_active: !reward.is_active }))}
                       onArchive={() => act(api.updateMeridianReward(reward.id, { is_archived: !reward.is_archived }))}
-                      onDelete={() => { if (confirm(`Delete "${reward.name}"?`)) act(api.deleteMeridianReward(reward.id)) }}
+                      onDelete={async () => { if ((await confirmDialog({ title: `Delete "${reward.name}"?`, confirmLabel: 'Delete' }))) act(api.deleteMeridianReward(reward.id)) }}
                       onApprove={(id) => act(api.approveMeridianRewardRequest(id))}
-                      onReject={(id) => act(api.rejectMeridianRewardRequest(id, prompt('Reason (optional)') || ''))}
+                      onReject={async (id) => { const reason = await askRejectionReason(); if (reason !== null) act(api.rejectMeridianRewardRequest(id, reason)) }}
                     />
                   )
                 ))}
@@ -252,9 +259,9 @@ export function ShopTab({ canManage, pointsLabel, searchQuery = '' }: {
                         onEdit={() => setEditingId(reward.id)}
                         onToggleActive={() => act(api.updateMeridianReward(reward.id, { is_active: !reward.is_active }))}
                         onArchive={() => act(api.updateMeridianReward(reward.id, { is_archived: !reward.is_archived }))}
-                        onDelete={() => { if (confirm(`Delete "${reward.name}"?`)) act(api.deleteMeridianReward(reward.id)) }}
+                        onDelete={async () => { if ((await confirmDialog({ title: `Delete "${reward.name}"?`, confirmLabel: 'Delete' }))) act(api.deleteMeridianReward(reward.id)) }}
                         onApprove={(id) => act(api.approveMeridianRewardRequest(id))}
-                        onReject={(id) => act(api.rejectMeridianRewardRequest(id, prompt('Reason (optional)') || ''))}
+                        onReject={async (id) => { const reason = await askRejectionReason(); if (reason !== null) act(api.rejectMeridianRewardRequest(id, reason)) }}
                       />
                     )
                   ))}
@@ -276,7 +283,7 @@ export function ShopTab({ canManage, pointsLabel, searchQuery = '' }: {
                   <p className="text-sm text-muted">{personName(req.requested_by_person_id)} · ★ {req.points_spent} {pointsLabel}</p>
                   <div className="mt-2 flex gap-2">
                     <Button size="sm" onClick={() => act(api.approveMeridianRewardRequest(req.id))}>Approve</Button>
-                    <Button size="sm" variant="ghost" onClick={() => act(api.rejectMeridianRewardRequest(req.id, prompt('Reason (optional)') || ''))}>Reject</Button>
+                    <Button size="sm" variant="ghost" onClick={async () => { const reason = await askRejectionReason(); if (reason !== null) act(api.rejectMeridianRewardRequest(req.id, reason)) }}>Reject</Button>
                   </div>
                 </li>
               ))}

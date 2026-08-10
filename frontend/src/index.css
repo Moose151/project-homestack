@@ -118,6 +118,18 @@
       min-height: 44px;
     }
 
+    /* iOS Safari zooms the whole page in when you focus a control smaller than 16px, and it
+       does not zoom back out — which is why filling in any form on a phone left the app
+       oversized and needing a pinch. Touch devices get 16px controls; the desktop scale is
+       untouched. The !important is deliberate: this floor has to beat the per-page `text-sm`
+       utilities already on hundreds of controls, and a utility class always outranks a plain
+       element selector. */
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+
     /* Hover-reveal actions must stay visible on touch laptops/tablets, even above sm. */
     .group .opacity-0,
     .group [class~="sm:opacity-0"] {

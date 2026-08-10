@@ -21,6 +21,7 @@ import { SensitiveGate } from '../../../components/SensitiveGate'
 import { CloseoutTab, HealthPanel, ManagementTab } from './SolaceManagement'
 import { setSolaceCurrencySymbol, solaceMoney as money } from './solaceFormat'
 import { useStacks } from '../../stacks/StacksContext'
+import { confirmDialog } from '../../../components/Dialogs'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ')
@@ -254,7 +255,7 @@ function BillEditor({ bill, categories, reload, onError }: {
     }
   }
   const remove = async () => {
-    if (!window.confirm(`Delete ${bill.name} and its occurrence history?`)) return
+    if (!(await confirmDialog({ title: `Delete ${bill.name} and its occurrence history?`, confirmLabel: 'Delete' }))) return
     setSaving(true)
     try {
       await api.deleteSolaceBill(bill.id)
@@ -638,7 +639,7 @@ function BucketRuleEditor({ bucket, reload, onError }: {
     }
   }
   const remove = async () => {
-    if (!window.confirm(`Delete the ${bucket.name} bucket?`)) return
+    if (!(await confirmDialog({ title: `Delete the ${bucket.name} bucket?`, confirmLabel: 'Delete' }))) return
     setSaving(true)
     try {
       await api.deleteSolaceBucket(bucket.id)
@@ -788,7 +789,7 @@ function SubscriptionEditor({ subscription, reload, onError }: {
     }
   }
   const remove = async () => {
-    if (!window.confirm(`Delete ${subscription.name}?`)) return
+    if (!(await confirmDialog({ title: `Delete ${subscription.name}?`, confirmLabel: 'Delete' }))) return
     setSaving(true)
     try {
       await api.deleteSolaceSubscription(subscription.id)
@@ -910,7 +911,7 @@ function PurchaseEditor({ purchase, categories, reload, onError }: {
     }
   }
   const remove = async () => {
-    if (!window.confirm(`Delete ${purchase.name}?`)) return
+    if (!(await confirmDialog({ title: `Delete ${purchase.name}?`, confirmLabel: 'Delete' }))) return
     setSaving(true)
     try {
       await api.deleteSolacePurchase(purchase.id)
@@ -1074,7 +1075,7 @@ function PaydaysTab({ paydays, reload, onError }: {
       }
     }
     const remove = async () => {
-      if (!window.confirm(`Delete ${payday.title}?`)) return
+      if (!(await confirmDialog({ title: `Delete ${payday.title}?`, confirmLabel: 'Delete' }))) return
       setSaving(true)
       try {
         await api.deleteSolacePayday(payday.id)

@@ -16,6 +16,7 @@ import { EmptyState } from '../../../components/EmptyState'
 import { Field, Input, Select } from '../../../components/Field'
 import { solaceMoney as money } from './solaceFormat'
 import { useStacks } from '../../stacks/StacksContext'
+import { confirmDialog } from '../../../components/Dialogs'
 
 const cap = (value: string) => value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, ' ')
 const errMsg = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong.'
@@ -80,7 +81,7 @@ function CategoryEditor({ category, reload, onError }: {
     }
   }
   const remove = async () => {
-    if (!window.confirm(`Delete ${category.name}? Records using it will move to Other.`)) return
+    if (!(await confirmDialog({ title: `Delete ${category.name}?`, message: 'Records using it will move to Other.', confirmLabel: 'Delete' }))) return
     setSaving(true)
     try {
       await api.deleteSolaceCategory(category.id)
@@ -138,7 +139,7 @@ function BalanceEditor({ row, reload, onError }: {
     }
   }
   const remove = async () => {
-    if (!window.confirm('Delete this balance snapshot?')) return
+    if (!(await confirmDialog({ title: 'Delete this balance snapshot?', confirmLabel: 'Delete' }))) return
     setSaving(true)
     try {
       await api.deleteSolaceBalance(row.id)
@@ -478,8 +479,30 @@ export function ManagementTab({ settings, categories, balances, report, health, 
         {!reportView || reportView.categories.length === 0 ? (
           <EmptyState icon="📊" title="No category totals yet" hint="Add active bills to populate this report." />
         ) : (
-          <div className={`mt-4 overflow-x-auto ${saving === 'report' ? 'opacity-60' : ''}`}>
-            <table className="w-full min-w-[680px] text-left text-sm">
+          <div className={`mt-4 ${saving === 'report' ? 'opacity-60' : ''}`}>
+            {/* Six money columns cannot fit a phone, and a sideways-scrolling table hides the
+                figures people came for. Below md each category is a card that states its own
+                totals; the table returns where the columns genuinely fit. */}
+            <div className="grid gap-2 md:hidden">
+              {reportView.categories.map(row => (
+                <div key={row.category} className="rounded-xl border border-line bg-sunken/60 p-3">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <p className="font-semibold text-ink">{cap(row.category)}</p>
+                    <p className="text-base font-bold text-ink">{money(row.annual_total)}<span className="ml-1 text-xs font-medium text-muted">/yr</span></p>
+                  </div>
+                  <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
+                    {([['Weekly', row.weekly_total], ['Fortnightly', row.fortnightly_total], ['Monthly', row.monthly_total]] as const).map(([label, value]) => (
+                      <div key={label} className="rounded-lg bg-surface px-2 py-1.5">
+                        <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</dt>
+                        <dd className="text-sm font-semibold text-ink">{money(value)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <p className="mt-2 text-xs text-muted">{row.bill_count} {row.bill_count === 1 ? 'bill' : 'bills'}</p>
+                </div>
+              ))}
+            </div>
+            <table className="hidden w-full text-left text-sm md:table">
               <thead className="text-muted">
                 <tr><th className="py-2">Category</th><th className="py-2 text-right">Bills</th><th className="py-2 text-right">Weekly</th><th className="py-2 text-right">Fortnightly</th><th className="py-2 text-right">Monthly</th><th className="py-2 text-right">Yearly</th></tr>
               </thead>

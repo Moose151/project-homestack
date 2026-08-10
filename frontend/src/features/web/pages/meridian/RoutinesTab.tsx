@@ -8,6 +8,7 @@ import { AssigneeSelect, assigneeLabel } from '../../../../components/AssigneeSe
 import { DeleteAction } from '../../../..//components/RowActions'
 import { EmptyState } from '../../../../components/EmptyState'
 import { useAuth } from '../../../auth/AuthContext'
+import { confirmDialog } from '../../../../components/Dialogs'
 
 // Mirrors the legacy routines.html: daily-habit cards with done-today + streak badges and a
 // Mark-Done button; admin create/manage. Points award immediately on completion.
@@ -92,7 +93,7 @@ function RoutineCard({ routine, canManage, pointsLabel, canComplete, assignedNam
     }
   }
   const remove = async () => {
-    if (!confirm(`Delete "${routine.title}"?`)) return
+    if (!(await confirmDialog({ title: `Delete "${routine.title}"?`, confirmLabel: 'Delete' }))) return
     setBusy(true)
     try {
       await api.deleteMeridianRoutine(routine.id)

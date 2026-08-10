@@ -7,6 +7,7 @@ import { Avatar } from '../../../components/Avatar'
 import { useAuth } from '../../auth/AuthContext'
 import { PageHeader } from '../../../components/PageHeader'
 import { InlineAlert, PageSkeleton } from '../../../components/PageState'
+import { confirmDialog } from '../../../components/Dialogs'
 
 const ROLES = ['admin', 'manager', 'user', 'guest'] as const
 const ROLE_LABEL: Record<(typeof ROLES)[number], string> = {
@@ -146,7 +147,7 @@ export function UsersPage() {
                 </Button>
                 {u.is_active && u.id !== user.id && (
                   <Button size="sm" variant="ghost" className="flex-1 sm:flex-none"
-                    onClick={() => { if (confirm(`Deactivate ${u.display_name}?`)) api.deactivateUser(u.id).then(reload) }}>
+                    onClick={async () => { if (await confirmDialog({ title: `Deactivate ${u.display_name}?`, confirmLabel: 'Deactivate' })) api.deactivateUser(u.id).then(reload) }}>
                     Deactivate
                   </Button>
                 )}

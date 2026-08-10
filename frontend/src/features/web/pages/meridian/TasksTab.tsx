@@ -6,6 +6,13 @@ import { Button } from '../../../../components/Button'
 import { fieldClass } from '../../../../components/ui'
 import { AssigneeSelect, assigneeLabel } from '../../../../components/AssigneeSelect'
 import { useUrlAction } from '../../../../hooks/useUrlTab'
+import { confirmDialog, promptDialog } from '../../../../components/Dialogs'
+
+/** One wording for sending a submission back, on the phone keyboard rather than a system box. */
+const askRejectionReason = () => promptDialog({
+  title: 'Send this back?', label: 'Reason (optional)',
+  placeholder: 'What needs doing differently?', confirmLabel: 'Send back',
+})
 
 type TaskFilter = 'all' | 'active' | 'pending' | 'hidden' | 'hot'
 
@@ -227,9 +234,9 @@ export function TasksTab({ canManage, pointsLabel, searchQuery = '' }: {
                       onEdit={() => setEditingId(task.id)}
                       onToggleActive={() => act(api.updateMeridianTask(task.id, { is_active: !task.is_active }))}
                       onArchive={() => act(api.updateMeridianTask(task.id, { is_archived: !task.is_archived }))}
-                      onDelete={() => { if (confirm(`Delete "${task.title}"?`)) act(api.deleteMeridianTask(task.id)) }}
+                      onDelete={async () => { if ((await confirmDialog({ title: `Delete "${task.title}"?`, confirmLabel: 'Delete' }))) act(api.deleteMeridianTask(task.id)) }}
                       onApprove={(id) => act(api.approveMeridianTaskCompletion(id))}
-                      onReject={(id) => act(api.rejectMeridianTaskCompletion(id, prompt('Reason (optional)') || ''))}
+                      onReject={async (id) => { const reason = await askRejectionReason(); if (reason !== null) act(api.rejectMeridianTaskCompletion(id, reason)) }}
                     />
                   )
                 ))}
@@ -268,9 +275,9 @@ export function TasksTab({ canManage, pointsLabel, searchQuery = '' }: {
                         onEdit={() => setEditingId(task.id)}
                         onToggleActive={() => act(api.updateMeridianTask(task.id, { is_active: !task.is_active }))}
                         onArchive={() => act(api.updateMeridianTask(task.id, { is_archived: !task.is_archived }))}
-                        onDelete={() => { if (confirm(`Delete "${task.title}"?`)) act(api.deleteMeridianTask(task.id)) }}
+                        onDelete={async () => { if ((await confirmDialog({ title: `Delete "${task.title}"?`, confirmLabel: 'Delete' }))) act(api.deleteMeridianTask(task.id)) }}
                         onApprove={(id) => act(api.approveMeridianTaskCompletion(id))}
-                        onReject={(id) => act(api.rejectMeridianTaskCompletion(id, prompt('Reason (optional)') || ''))}
+                        onReject={async (id) => { const reason = await askRejectionReason(); if (reason !== null) act(api.rejectMeridianTaskCompletion(id, reason)) }}
                       />
                     )
                   ))}
