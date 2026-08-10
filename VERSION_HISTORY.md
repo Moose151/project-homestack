@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.29.1**
+> **Current version: 0.29.2**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,15 @@
 ---
 
 ## 0.29 — What the house actually uses
+
+### 0.29.2 — 2026-08-11 — Solace allocation ceiling
+- Active percentage bucket rules now have a transaction-safe aggregate ceiling of 100%; create
+  and edit requests that would exceed it return a clear validation error without changing data.
+  Inactive future rules do not consume the available percentage.
+- Custom shared-income splits also reject percentage totals above 100% before replacing the
+  saved split. Individual percentage inputs are constrained to 0–100%.
+- Bucket and income-split editors show available/allocated percentages and disable invalid saves.
+  **787 backend tests green; frontend production build clean; no migration.**
 
 ### 0.29.1 — 2026-08-10 — the logo, in the app
 - **HomeStack has its own face.** The owner's three brand renders are in `brand/` as sources;

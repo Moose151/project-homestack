@@ -1383,6 +1383,64 @@ class BucketEntryTests(TestCase):
         self.assertEqual(self._entry(kind="deposit", amount="10.00").status_code, 403)
 
 
+class BucketAllocationLimitTests(TestCase):
+    """Active percentage buckets describe shares of one pay and cannot exceed the whole."""
+
+    def setUp(self):
+        self.admin = _make_user("bucketallocator", User.Role.ADMIN)
+        _login(self.client, "bucketallocator")
+        _reauth(self.client)
+        self.first = create_bucket(
+            self.admin,
+            name="Bills",
+            allocation_method="percentage",
+            allocation_value="60.00",
+        )
+
+    def test_creating_a_bucket_cannot_take_the_total_over_100_percent(self):
+        response = self.client.post(
+            reverse("solace-bucket-list"),
+            {
+                "name": "Savings",
+                "allocation_method": "percentage",
+                "allocation_value": "40.01",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400, response.json())
+        self.assertIn("100%", str(response.json()))
+        self.assertFalse(BudgetBucket.objects.filter(name="Savings").exists())
+
+    def test_updating_a_bucket_cannot_take_the_total_over_100_percent(self):
+        second = create_bucket(
+            self.admin,
+            name="Savings",
+            allocation_method="percentage",
+            allocation_value="40.00",
+        )
+        response = self.client.patch(
+            reverse("solace-bucket-detail", args=[second.id]),
+            {"allocation_value": "40.01"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400, response.json())
+        second.refresh_from_db()
+        self.assertEqual(second.allocation_value, Decimal("40.00"))
+
+    def test_inactive_percentage_buckets_do_not_consume_the_limit(self):
+        response = self.client.post(
+            reverse("solace-bucket-list"),
+            {
+                "name": "Future plan",
+                "allocation_method": "percentage",
+                "allocation_value": "100.00",
+                "is_active": False,
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201, response.json())
+
+
 class SolaceNowTests(TestCase):
     """The landing answer: what is owed before the next payday, with its running total."""
 
@@ -1563,6 +1621,25 @@ class SharedIncomeAllocationTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_custom_split_cannot_exceed_100_percent_or_replace_the_saved_split(self):
+        payday = self._income(title="Side income", income_scope="shared", allocation_mode="custom")
+        url = reverse("solace-income-allocations", args=[payday.id])
+        saved = [{"bucket_id": self.bills.id, "percentage": "75.00", "is_remainder": False}]
+        self.assertEqual(self.client.put(url, saved, content_type="application/json").status_code, 200)
+
+        response = self.client.put(
+            url,
+            [
+                {"bucket_id": self.bills.id, "percentage": "75.00", "is_remainder": False},
+                {"bucket_id": self.savings.id, "percentage": "25.01", "is_remainder": False},
+            ],
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400, response.json())
+        rows = self.client.get(url).json()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["percentage"], "75.00")
 
     def test_standard_shared_income_still_flows_through_the_usual_rules(self):
         self._income(title="Alex salary", owner_name="Alex")

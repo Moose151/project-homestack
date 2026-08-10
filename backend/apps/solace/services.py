@@ -9,7 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.accounts.models import User
-from apps.core.models import get_active_household
+from apps.core.models import Household, get_active_household
 from apps.scheduling.helpers import delete_event_for, sync_event_for
 from apps.solace import events
 from apps.solace.models import (
@@ -65,6 +65,41 @@ _SETTINGS_FIELDS = {
 }
 _CATEGORY_FIELDS = {"name", "category_type", "is_active", "position", "visibility", "sensitivity"}
 _BALANCE_FIELDS = {"snapshot_date", "balance", "notes", "visibility", "sensitivity"}
+
+
+def _validate_bucket_percentage_total(
+    *,
+    allocation_method: str,
+    allocation_value: Decimal,
+    is_active: bool,
+    exclude_bucket_id: int | None = None,
+) -> None:
+    """Keep active percentage rules within one whole pay.
+
+    The rows are locked by the surrounding transaction so two simultaneous edits cannot both
+    consume the same remaining percentage.
+    """
+    if not is_active or allocation_method != BudgetBucket.AllocationMethod.PERCENTAGE:
+        return
+    household = get_active_household()
+    # Lock the tenant anchor as well as existing rows. Locking only the current buckets would
+    # leave an empty-range race where two new buckets could both see the same available share.
+    Household.objects.select_for_update().get(pk=household.pk)
+    buckets = BudgetBucket.objects.select_for_update().filter(
+        household=household,
+        is_active=True,
+        allocation_method=BudgetBucket.AllocationMethod.PERCENTAGE,
+    )
+    if exclude_bucket_id is not None:
+        buckets = buckets.exclude(pk=exclude_bucket_id)
+    allocated = sum((Decimal(row.allocation_value) for row in buckets), Decimal("0.00"))
+    proposed_total = allocated + Decimal(allocation_value)
+    if proposed_total > Decimal("100.00"):
+        remaining = max(Decimal("0.00"), Decimal("100.00") - allocated)
+        raise ValueError(
+            "Active percentage bucket allocations cannot exceed 100% in total. "
+            f"Only {remaining:.2f}% remains available."
+        )
 
 
 def get_or_create_settings(acting_user: User) -> SolaceSettings:
@@ -412,6 +447,11 @@ def create_bucket(acting_user: User, **data) -> BudgetBucket:
     obj = BudgetBucket(
         household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
     )
+    _validate_bucket_percentage_total(
+        allocation_method=obj.allocation_method,
+        allocation_value=obj.allocation_value,
+        is_active=obj.is_active,
+    )
     obj.save()
     if obj.cap_to_remaining:
         BudgetBucket.objects.exclude(pk=obj.pk).filter(cap_to_remaining=True).update(
@@ -427,6 +467,12 @@ def update_bucket(acting_user: User, obj: BudgetBucket, **data) -> BudgetBucket:
     for key, val in data.items():
         if key in _BUCKET_FIELDS:
             setattr(obj, key, val)
+    _validate_bucket_percentage_total(
+        allocation_method=obj.allocation_method,
+        allocation_value=obj.allocation_value,
+        is_active=obj.is_active,
+        exclude_bucket_id=obj.pk,
+    )
     obj.updated_by = acting_user
     obj.save()
     # Setting the balance by hand is still allowed, but it is recorded as a correction so the
@@ -631,6 +677,16 @@ def set_income_allocations(acting_user: User, payday: Payday, lines: list[dict])
     remainders = [line for line in lines if line.get("is_remainder")]
     if len(remainders) > 1:
         raise ValueError("Only one line can take the remainder.")
+    percentage_total = sum(
+        (
+            Decimal(line.get("percentage") or "0.00")
+            for line in lines
+            if not line.get("is_remainder")
+        ),
+        Decimal("0.00"),
+    )
+    if percentage_total > Decimal("100.00"):
+        raise ValueError("Income split percentages cannot exceed 100% in total.")
     payday.allocations.all().delete()
     created = []
     for position, line in enumerate(lines):

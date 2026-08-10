@@ -371,7 +371,7 @@ class SolaceHealthView(SolaceAccessMixin, APIView):
             ),
             Decimal("0.00"),
         )
-        if percentage_total > Decimal("105.00"):
+        if percentage_total > Decimal("100.00"):
             issues.append({"level": "error", "code": "allocation_over", "message": f"Percentage bucket rules total {percentage_total:.2f}%."})
         elif percentage_total and percentage_total < Decimal("95.00"):
             issues.append({"level": "warning", "code": "allocation_under", "message": f"Percentage bucket rules total only {percentage_total:.2f}%."})
@@ -811,7 +811,11 @@ class BucketListView(SolaceAccessMixin, APIView):
     def post(self, request: Request) -> Response:
         serializer = BudgetBucketSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        return Response(BudgetBucketSerializer(services.create_bucket(request.user, **serializer.validated_data)).data, status=201)
+        try:
+            bucket = services.create_bucket(request.user, **serializer.validated_data)
+        except ValueError as exc:
+            raise ValidationError({"allocation_value": str(exc)}) from exc
+        return Response(BudgetBucketSerializer(bucket).data, status=201)
 
 
 class CycleHistoryView(SolaceAccessMixin, APIView):
@@ -906,9 +910,16 @@ class BucketDetailView(SolaceAccessMixin, APIView):
         return obj
 
     def patch(self, request: Request, bucket_id: int) -> Response:
-        serializer = BudgetBucketSerializer(data=request.data, partial=True)
+        bucket = self._get(bucket_id)
+        serializer = BudgetBucketSerializer(bucket, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        return Response(BudgetBucketSerializer(services.update_bucket(request.user, self._get(bucket_id), **serializer.validated_data)).data)
+        try:
+            bucket = services.update_bucket(
+                request.user, bucket, **serializer.validated_data
+            )
+        except ValueError as exc:
+            raise ValidationError({"allocation_value": str(exc)}) from exc
+        return Response(BudgetBucketSerializer(bucket).data)
 
     def delete(self, request: Request, bucket_id: int) -> Response:
         services.delete_bucket(request.user, self._get(bucket_id))

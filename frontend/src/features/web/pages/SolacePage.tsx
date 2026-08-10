@@ -575,8 +575,8 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError }: {
   )
 }
 
-function BucketForm({ onCreated, onError }: {
-  onCreated: () => void; onError: (message: string) => void
+function BucketForm({ buckets, onCreated, onError }: {
+  buckets: SolaceBucket[]; onCreated: () => void; onError: (message: string) => void
 }) {
   const [f, setF] = useState({
     name: '', purpose: 'savings', category: '', target_amount: '', current_amount: '',
@@ -584,6 +584,16 @@ function BucketForm({ onCreated, onError }: {
     allocation_value: '', rounding_increment: '1.00', cap_to_remaining: true,
   })
   const [saving, setSaving] = useState(false)
+  const allocatedPercentage = buckets.reduce(
+    (sum, bucket) => sum + (
+      bucket.is_active && bucket.allocation_method === 'percentage'
+        ? Number(bucket.allocation_value)
+        : 0
+    ), 0,
+  )
+  const remainingPercentage = Math.max(0, 100 - allocatedPercentage)
+  const exceedsPercentage = f.allocation_method === 'percentage'
+    && Number(f.allocation_value || 0) > remainingPercentage
   const set = (k: string, v: string | boolean) => setF(prev => ({ ...prev, [k]: v }))
   const save = async () => {
     setSaving(true)
@@ -623,7 +633,12 @@ function BucketForm({ onCreated, onError }: {
           </Select>
         </Field>
         <Field label={f.allocation_method === 'percentage' ? 'Percent' : 'Amount'}>
-          <Input type="number" min="0" step="0.01" value={f.allocation_value} onChange={e => set('allocation_value', e.target.value)} />
+          <Input
+            type="number" min="0"
+            max={f.allocation_method === 'percentage' ? remainingPercentage : undefined}
+            step="0.01" value={f.allocation_value}
+            onChange={e => set('allocation_value', e.target.value)}
+          />
         </Field>
         <Field label="Round to">
           <Select value={f.rounding_increment} onChange={e => set('rounding_increment', e.target.value)}>
@@ -632,8 +647,13 @@ function BucketForm({ onCreated, onError }: {
         </Field>
         <Field label="Goal"><Input type="number" min="0" step="0.01" value={f.target_amount} onChange={e => set('target_amount', e.target.value)} /></Field>
         <Field label="Saved"><Input type="number" min="0" step="0.01" value={f.current_amount} onChange={e => set('current_amount', e.target.value)} /></Field>
-        <div className="flex items-end"><Button onClick={save} loading={saving} disabled={!f.name.trim()} className="w-full">Add</Button></div>
+        <div className="flex items-end"><Button onClick={save} loading={saving} disabled={!f.name.trim() || exceedsPercentage} className="w-full">Add</Button></div>
       </div>
+      {f.allocation_method === 'percentage' && (
+        <p className={`mt-2 text-xs ${exceedsPercentage ? 'text-danger' : 'text-muted'}`}>
+          {remainingPercentage.toFixed(2)}% remains available across active buckets.
+        </p>
+      )}
       <label className="mt-3 flex items-center gap-2 text-sm text-muted">
         <input type="checkbox" checked={f.cap_to_remaining} onChange={e => set('cap_to_remaining', e.target.checked)} />
         Never allocate more than the remaining pay
@@ -757,8 +777,8 @@ function BucketMoney({ bucket, reload, onError }: {
   )
 }
 
-function BucketRuleEditor({ bucket, reload, onError }: {
-  bucket: SolaceBucket; reload: () => void; onError: (message: string) => void
+function BucketRuleEditor({ bucket, buckets, reload, onError }: {
+  bucket: SolaceBucket; buckets: SolaceBucket[]; reload: () => void; onError: (message: string) => void
 }) {
   const [method, setMethod] = useState(bucket.allocation_method)
   const [name, setName] = useState(bucket.name)
@@ -771,6 +791,16 @@ function BucketRuleEditor({ bucket, reload, onError }: {
   const [capRemaining, setCapRemaining] = useState(bucket.cap_to_remaining)
   const [active, setActive] = useState(bucket.is_active)
   const [saving, setSaving] = useState(false)
+  const allocatedElsewhere = buckets.reduce(
+    (sum, row) => sum + (
+      row.id !== bucket.id && row.is_active && row.allocation_method === 'percentage'
+        ? Number(row.allocation_value)
+        : 0
+    ), 0,
+  )
+  const availablePercentage = Math.max(0, 100 - allocatedElsewhere)
+  const exceedsPercentage = active && method === 'percentage'
+    && Number(value || 0) > availablePercentage
   const save = async () => {
     setSaving(true)
     try {
@@ -820,7 +850,10 @@ function BucketRuleEditor({ bucket, reload, onError }: {
           </Select>
         </Field>
         <Field label={method === 'percentage' ? 'Percent' : 'Amount'}>
-          <Input type="number" min="0" step="0.01" value={value} onChange={e => setValue(e.target.value)} />
+          <Input
+            type="number" min="0" max={method === 'percentage' ? availablePercentage : undefined}
+            step="0.01" value={value} onChange={e => setValue(e.target.value)}
+          />
         </Field>
         <Field label="Round to">
           <Select value={rounding} onChange={e => setRounding(e.target.value)}>
@@ -839,8 +872,13 @@ function BucketRuleEditor({ bucket, reload, onError }: {
         </div>
         <Field label="Notes"><Input value={notes} onChange={e => setNotes(e.target.value)} /></Field>
       </div>
+      {active && method === 'percentage' && (
+        <p className={`mt-2 text-xs ${exceedsPercentage ? 'text-danger' : 'text-muted'}`}>
+          Up to {availablePercentage.toFixed(2)}% is available for this bucket.
+        </p>
+      )}
       <div className="mt-3 flex gap-2">
-        <Button size="sm" onClick={save} loading={saving} disabled={!name.trim()}>Save bucket</Button>
+        <Button size="sm" onClick={save} loading={saving} disabled={!name.trim() || exceedsPercentage}>Save bucket</Button>
         <Button size="sm" variant="danger" onClick={remove} disabled={saving}>Delete</Button>
       </div>
     </details>
@@ -853,7 +891,7 @@ function BucketsTab({ buckets, reload, onError }: {
   return (
     <div className="flex flex-col gap-4">
       <CreatePanel label="Add bucket">
-        {close => <BucketForm onCreated={() => { reload(); close() }} onError={onError} />}
+        {close => <BucketForm buckets={buckets} onCreated={() => { reload(); close() }} onError={onError} />}
       </CreatePanel>
       {buckets.length === 0 ? <EmptyState icon="🪣" title="No buckets yet" hint="Create buckets for the purposes you regularly divide household income between." /> : (
         <div className="grid gap-3 lg:grid-cols-3">
@@ -875,7 +913,7 @@ function BucketsTab({ buckets, reload, onError }: {
                   : 'Excluded from pay plan'}
               </p>
               <BucketMoney bucket={b} reload={reload} onError={onError} />
-              <BucketRuleEditor bucket={b} reload={reload} onError={onError} />
+              <BucketRuleEditor bucket={b} buckets={buckets} reload={reload} onError={onError} />
             </Card>
           ))}
         </div>
@@ -1251,7 +1289,7 @@ function IncomeSplitEditor({ payday, buckets, onError }: {
             </Field>
             <Field label="Percent">
               <Input
-                type="number" min="0" step="0.01" disabled={line.is_remainder}
+                type="number" min="0" max="100" step="0.01" disabled={line.is_remainder}
                 value={line.is_remainder ? '' : line.percentage}
                 onChange={e => update(index, { percentage: e.target.value })}
                 placeholder={line.is_remainder ? 'the rest' : ''}
@@ -1272,15 +1310,17 @@ function IncomeSplitEditor({ payday, buckets, onError }: {
           </div>
         ))}
       </div>
-      <p className="mt-2 text-xs text-muted">
+      <p className={`mt-2 text-xs ${total > 100 ? 'text-danger' : 'text-muted'}`}>
         {total.toFixed(2)}% allocated by percentage
-        {lines.some(row => row.is_remainder) ? '; one line takes whatever is left.' : '. Anything not allocated stays in the account.'}
+        {total > 100
+          ? '; reduce the split to 100% or less before saving.'
+          : lines.some(row => row.is_remainder) ? '; one line takes whatever is left.' : '. Anything not allocated stays in the account.'}
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
         <Button type="button" size="sm" variant="secondary" onClick={() => setLines(rows => [...rows, { bucket_id: '', percentage: '', is_remainder: false }])}>
           + Add line
         </Button>
-        <Button type="button" size="sm" loading={saving} onClick={save}>Save split</Button>
+        <Button type="button" size="sm" loading={saving} disabled={total > 100} onClick={save}>Save split</Button>
         {saved && <span className="self-center text-xs font-semibold text-success">Saved</span>}
       </div>
     </div>

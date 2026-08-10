@@ -135,6 +135,13 @@ class BillOccurrenceSerializer(serializers.ModelSerializer):
 class IncomeAllocationSerializer(serializers.ModelSerializer):
     bucket_id = serializers.IntegerField()
     bucket_name = serializers.CharField(source="bucket.name", read_only=True)
+    percentage = serializers.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        max_value=Decimal("100.00"),
+        required=False,
+    )
 
     class Meta:
         model = IncomeAllocation
@@ -233,6 +240,22 @@ class BudgetBucketSerializer(serializers.ModelSerializer):
         if value < 0:
             raise serializers.ValidationError("Allocation value cannot be negative.")
         return value
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        method = attrs.get(
+            "allocation_method",
+            getattr(self.instance, "allocation_method", BudgetBucket.AllocationMethod.PERCENTAGE),
+        )
+        value = attrs.get(
+            "allocation_value",
+            getattr(self.instance, "allocation_value", Decimal("0.00")),
+        )
+        if method == BudgetBucket.AllocationMethod.PERCENTAGE and value > Decimal("100.00"):
+            raise serializers.ValidationError(
+                {"allocation_value": "A percentage allocation cannot exceed 100%."}
+            )
+        return attrs
 
     def validate_rounding_increment(self, value):
         if value <= 0:
