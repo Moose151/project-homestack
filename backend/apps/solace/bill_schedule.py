@@ -146,10 +146,26 @@ def ensure_bill_occurrences(
     start: date,
     end: date,
 ) -> list[BillOccurrence]:
-    """Idempotently materialise one bill's occurrences in a window."""
+    """Reconcile and materialise one bill's unpaid occurrences in a window.
+
+    Reading a schedule has always materialised missing rows. It must also remove obsolete unpaid
+    rows left behind by older edit behaviour, otherwise a corrected first-due date can continue
+    to appear overdue forever. Paid and skipped history is never part of this reconciliation.
+    """
     due_values = occurrence_datetimes(bill, start, end)
-    if not due_values:
-        return []
+    tz = timezone.get_current_timezone()
+    start_at = timezone.make_aware(datetime.combine(start, time.min), tz)
+    end_at = timezone.make_aware(datetime.combine(end, time.max), tz)
+    window_rows = BillOccurrence.objects.filter(
+        bill=bill,
+        status=BillOccurrence.Status.UPCOMING,
+        due_at__gte=start_at,
+        due_at__lte=end_at,
+    )
+    if due_values:
+        window_rows.exclude(due_at__in=due_values).delete()
+    else:
+        window_rows.delete()
     existing = set(
         BillOccurrence.objects.filter(bill=bill, due_at__in=due_values).values_list(
             "due_at",
@@ -176,14 +192,8 @@ def ensure_bill_occurrences(
     return list(
         BillOccurrence.objects.filter(
             bill=bill,
-            due_at__gte=timezone.make_aware(
-                datetime.combine(start, time.min),
-                timezone.get_current_timezone(),
-            ),
-            due_at__lte=timezone.make_aware(
-                datetime.combine(end, time.max),
-                timezone.get_current_timezone(),
-            ),
+            due_at__gte=start_at,
+            due_at__lte=end_at,
         )
     )
 
@@ -196,8 +206,10 @@ def refresh_unpaid_occurrences(
     """Regenerate unpaid rows while always preserving payment history."""
     now = timezone.now()
     today = timezone.localdate()
-    rows = BillOccurrence.objects.filter(bill=bill).exclude(
-        status=BillOccurrence.Status.PAID
+    # Paid and skipped rows are history. Only genuinely unpaid occurrences may be regenerated.
+    rows = BillOccurrence.objects.filter(
+        bill=bill,
+        status=BillOccurrence.Status.UPCOMING,
     )
     if scope == "future_unpaid":
         rows = rows.filter(due_at__gte=now)

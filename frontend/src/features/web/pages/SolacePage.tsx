@@ -329,10 +329,10 @@ function BillEditor({ bill, categories, reload, onError }: {
         </Field>
         <Field label="Stop after"><Input type="date" value={f.end_date} onChange={e => set('end_date', e.target.value)} /></Field>
         <Field label="Notes"><Input value={f.notes} onChange={e => set('notes', e.target.value)} /></Field>
-        <Field label="Occurrence updates">
+        <Field label="Amount updates" hint="Schedule changes always rebuild every unpaid date; paid and skipped history is kept.">
           <Select value={f.occurrence_update_scope} onChange={e => set('occurrence_update_scope', e.target.value)}>
-            <option value="future_unpaid">Future unpaid only</option>
-            <option value="all_unpaid">All unpaid in budget year</option>
+            <option value="future_unpaid">Future unpaid amounts only</option>
+            <option value="all_unpaid">All unpaid amounts in budget year</option>
           </Select>
         </Field>
         {!bill.source_node && (

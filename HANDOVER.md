@@ -106,14 +106,15 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: v0.29.3 is code-complete locally and awaiting production deployment plus household
+**Phase: v0.29.4 is code-complete locally and awaiting production deployment plus household
 acceptance (2026-08-11).** Since the original v0.21 pilot gate, HomeStack has completed the
 generic sensitive-node lock and audit work (M4), shipped Fitness & Training (v0.25), Pools & spas
 inside Homestead (v0.26), rebuilt Money around daily use and a bucket ledger (v0.27), and closed
 the known behavioural gaps against standalone Solace including income allocation, cycle history
 and annual summaries (v0.28.0–0.28.1). The phone interaction and UI consistency passes are also
 complete through v0.28.2; v0.29 adds metered water/electricity usage, the HomeStack brand, a
-strict 100% ceiling for Solace percentage allocations and one combined subscriptions view.
+strict 100% ceiling for Solace percentage allocations, one combined subscriptions view and
+self-repairing bill occurrence schedules after date corrections.
 **The next step is not another broad build:** rebuild/migrate the home
 server, import and verify the real Solace database, complete a real Fitness workout and pool-care
 check, then run the two-account/real-device acceptance pass. Home Assistant M5.5 follows those
@@ -390,7 +391,7 @@ gates. Kiosk refinement remains deferred.**
 
 ## 6. Active tasks — deploy, cut over and validate before the next major build
 
-**Current state (2026-08-11):** v0.29.3 has 787 backend tests green, a clean
+**Current state (2026-08-11):** v0.29.4 has 790 backend tests green, a clean
 frontend production build and no migration drift. The production/home-server deployment and its
 database may still be behind this code. The real-use defects found on v0.23.x have been fixed;
 the remaining work is deployment and acceptance, not another speculative UI pass.
@@ -619,6 +620,7 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-08-10 | Assistant | Brand | **Logo implemented across the app (v0.29.1).** Owner supplied three renders; they now live in `brand/` as sources with a README, and `scripts/build_brand_assets.py` (Pillow) crops each to its artwork at alpha>40 with a 2% margin, resizes and writes the committed web assets to `frontend/public/brand/` — `mark.png`/`mark-192.png`, `wordmark.png`, `lockup.png`, `apple-touch-icon.png` (on paper, because iOS blacks out transparency) and `favicon-32.png`. Sources are ~1 MB of mostly empty canvas, so nothing loads them directly. Placement: **mark** replaces the `◇` tile in the sidebar header and names the kiosk ambient screen; **wordmark** beside it there; **lockup** leads the sign-in page (one lockup per surface). `index.html` gains favicon 32/192, Apple touch icon, app title and light/dark `theme-color`. All uses go through `components/Logo.tsx`, which declares intrinsic width/height and is `aria-hidden` where the word HomeStack is already beside it. Rendered and eyeballed on the warm paper and the dark surface at full size and at 36px. **Typecheck + production build clean; no backend change, no migration.** | Known nit: the lockup's navy "Home" is quiet on the dark surface — the standalone wordmark is the light-background/dark-background pair, so if it bothers anyone, swap the lockup for mark+wordmark in dark. Docs: design guide §6a, `brand/README.md`. |
 | 2026-08-11 | Assistant | Solace | **Percentage allocation ceiling shipped as v0.29.2.** Active bucket percentages are transactionally limited to a combined 100%, with inactive future rules excluded. Custom shared-income splits enforce the same ceiling before replacing saved rows. Both editors show the available/allocated share and prevent invalid saves; the API remains authoritative. **787 backend tests green; frontend production build clean; no migration.** | Deploy/rebuild, then confirm the live imported bucket rules total no more than 100% and complete the planned Solace cutover comparison. |
 | 2026-08-11 | Assistant | Solace | **Subscription presentation unified as v0.29.3.** A Bill whose category is Subscription is filtered out of the ordinary Bills section and presented beside dedicated Subscription records. It remains a Bill underneath, preserving occurrence/payment history, Mark paid, autopay and set-aside behaviour; dedicated Subscription records retain their renewal-cycle editor. Recategorising moves the record between sections on reload. Added a combined empty state and short in-product explanation. **Frontend production build clean; backend unchanged at 787 tests; no migration.** | Deploy/rebuild and confirm both an existing Subscription-category bill and a dedicated subscription appear together, with their respective edit/payment controls. |
+| 2026-08-11 | Assistant | Solace | **Stale overdue occurrences fixed as v0.29.4.** Root cause: Bill edit defaulted to `future_unpaid`, so moving First due forward regenerated future rows but deliberately stranded the old overdue row; Now then correctly counted that stale row forever. Schedule-field changes now rebuild all unpaid dates automatically, while amount-only edits keep their selectable scope. Paid and skipped history is preserved. `ensure_bill_occurrences` now reconciles obsolete upcoming rows inside its window, and opening Now starts at each bill's earliest unpaid row, automatically repairing old data even beyond the normal 90-day lookback. The editor relabels the scope as Amount updates and explains the schedule rule. **790 backend tests green; frontend production build clean; no migration.** | Deploy/rebuild, open Money → Now once to trigger reconciliation, and confirm the seven obsolete overdue notices disappear while genuine missed bills remain. |
 
 ### Session notes (free-form, optional)
 

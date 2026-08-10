@@ -288,19 +288,27 @@ def update_bill(
     occurrence_scope: str = "future_unpaid",
     **data,
 ) -> Bill:
-    schedule_changed = bool(
-        {"amount", "due_at", "recurrence_rule", "end_date", "is_active"} & set(data)
-    )
+    occurrence_fields = {"amount", "due_at", "recurrence_rule", "end_date", "is_active"}
+    schedule_fields = {"due_at", "recurrence_rule", "end_date", "is_active"}
+    changed_fields = {
+        key
+        for key in occurrence_fields & set(data)
+        if getattr(obj, key) != data[key]
+    }
     for key, val in data.items():
         if key in _BILL_FIELDS:
             setattr(obj, key, val)
     obj.updated_by = acting_user
     obj.save()
     sync_event_for(obj)
-    if schedule_changed:
+    if changed_fields:
         from apps.solace.bill_schedule import refresh_unpaid_occurrences
 
-        refresh_unpaid_occurrences(obj, scope=occurrence_scope)
+        # A changed schedule makes old unpaid dates invalid, including dates already overdue.
+        # Amount-only edits keep the user's selected scope because a genuinely missed payment
+        # should not disappear merely because its expected amount changed.
+        effective_scope = "all_unpaid" if changed_fields & schedule_fields else occurrence_scope
+        refresh_unpaid_occurrences(obj, scope=effective_scope)
     return obj
 
 

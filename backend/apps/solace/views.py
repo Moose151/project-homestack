@@ -853,6 +853,7 @@ class SolaceNowView(SolaceAccessMixin, APIView):
 
     def get(self, request: Request) -> Response:
         from apps.solace.bill_schedule import ensure_bill_occurrences
+        from apps.solace.models import BillOccurrence
 
         summary = selectors.get_now_summary(request.user)
         # Occurrences are materialised lazily, so make sure this cycle exists before reading it —
@@ -861,8 +862,14 @@ class SolaceNowView(SolaceAccessMixin, APIView):
         # was never paid is exactly what belongs at the top of this screen.
         start = date.fromisoformat(summary["cycle_start"]) - timedelta(days=90)
         end = date.fromisoformat(summary["cycle_end"])
-        for bill in selectors.list_bills(request.user, active_only=True):
-            ensure_bill_occurrences(bill, start, end)
+        for bill in selectors.list_bills(request.user):
+            earliest_unpaid = bill.occurrences.filter(
+                status=BillOccurrence.Status.UPCOMING,
+            ).order_by("due_at").values_list("due_at", flat=True).first()
+            # Older releases could strand an obsolete occurrence before the standard lookback.
+            # Reconcile from the earliest unpaid row so opening Now repairs those records too.
+            bill_start = min(start, timezone.localdate(earliest_unpaid)) if earliest_unpaid else start
+            ensure_bill_occurrences(bill, bill_start, end)
         return Response(SolaceNowSerializer(selectors.get_now_summary(request.user)).data)
 
 

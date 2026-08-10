@@ -496,6 +496,59 @@ class SolaceCrudAndCalendarTests(TestCase):
         self.assertEqual(corrected.status, BillOccurrence.Status.UPCOMING)
         self.assertEqual(corrected.amount, 95)
 
+    def test_moving_first_due_forward_removes_the_obsolete_overdue_occurrence(self):
+        old_due = timezone.now() - timedelta(days=7)
+        new_due = timezone.now() + timedelta(days=10)
+        bill = create_bill(
+            self.admin,
+            name="Corrected start date",
+            amount="70.00",
+            due_at=old_due,
+        )
+        old_occurrence = BillOccurrence.objects.get(bill=bill, due_at=old_due)
+        # Backdated bills are settled on entry; recreate the reported stale-overdue state.
+        old_occurrence.status = BillOccurrence.Status.UPCOMING
+        old_occurrence.paid_at = None
+        old_occurrence.save(update_fields=["status", "paid_at"])
+
+        response = self.client.patch(
+            reverse("solace-bill-detail", args=[bill.id]),
+            {"due_at": new_due.isoformat(), "occurrence_update_scope": "future_unpaid"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.json())
+        self.assertFalse(BillOccurrence.objects.filter(pk=old_occurrence.pk).exists())
+        replacement = BillOccurrence.objects.get(bill=bill)
+        self.assertEqual(replacement.due_at, new_due)
+        self.assertFalse(response.json()["is_overdue"])
+        self.assertEqual(self.client.get(reverse("solace-now")).json()["overdue_count"], 0)
+
+    def test_schedule_correction_preserves_skipped_history(self):
+        old_due = timezone.now() + timedelta(days=1)
+        bill = create_bill(
+            self.admin,
+            name="Rescheduled weekly bill",
+            amount="30.00",
+            due_at=old_due,
+            recurrence_rule="FREQ=WEEKLY",
+        )
+        skipped = bill.occurrences.first()
+        self.client.post(reverse("solace-occurrence-action", args=[skipped.id, "skip"]))
+
+        response = self.client.patch(
+            reverse("solace-bill-detail", args=[bill.id]),
+            {"due_at": (old_due + timedelta(days=2)).isoformat()},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.json())
+        skipped.refresh_from_db()
+        self.assertEqual(skipped.status, BillOccurrence.Status.SKIPPED)
+        self.assertTrue(
+            BillOccurrence.objects.filter(bill=bill, status=BillOccurrence.Status.UPCOMING).exists()
+        )
+
     def test_month_schedule_combines_bills_and_income(self):
         create_bill(
             self.admin,
@@ -1475,13 +1528,43 @@ class SolaceNowTests(TestCase):
             self.admin, name="Water", amount="80.00",
             due_at=timezone.now() + timedelta(days=3),
         )
+        bill = Bill.objects.get(name="Water")
         occurrence = BillOccurrence.objects.get(bill__name="Water", status="upcoming")
-        occurrence.due_at = timezone.now() - timedelta(days=6)
+        overdue_at = timezone.now() - timedelta(days=6)
+        # Move both the rule and its generated row to simulate time passing while keeping the
+        # occurrence consistent with the schedule it came from.
+        bill.due_at = overdue_at
+        bill.save(update_fields=["due_at"])
+        occurrence.due_at = overdue_at
         occurrence.save(update_fields=["due_at"])
         data = self._now()
         self.assertEqual(data["overdue_count"], 1)
         self.assertEqual(data["overdue_total"], "80.00")
         self.assertIn("Water", [row["bill_name"] for row in data["due"]])
+
+    def test_now_removes_an_obsolete_overdue_row_left_by_an_old_date_edit(self):
+        bill = create_bill(
+            self.admin,
+            name="Corrected water date",
+            amount="80.00",
+            due_at=timezone.now() + timedelta(days=3),
+        )
+        stale = BillOccurrence.objects.create(
+            household=get_active_household(),
+            bill=bill,
+            # Deliberately outside Now's normal 90-day lookback: the repair starts from the
+            # earliest stored unpaid row so old bad edits are not stranded permanently.
+            due_at=timezone.now() - timedelta(days=200),
+            amount="80.00",
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+
+        data = self._now()
+
+        self.assertEqual(data["overdue_count"], 0)
+        self.assertFalse(BillOccurrence.objects.filter(pk=stale.pk).exists())
+        self.assertIn("Corrected water date", [row["bill_name"] for row in data["due"]])
 
     def test_marking_one_paid_moves_it_out_of_what_is_owed(self):
         create_bill(

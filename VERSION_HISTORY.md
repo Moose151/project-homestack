@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.29.3**
+> **Current version: 0.29.4**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,16 @@
 ---
 
 ## 0.29 — What the house actually uses
+
+### 0.29.4 — 2026-08-11 — corrected bill dates clear stale overdue rows
+- Changing a bill's first due date, recurrence, stop date or active state now rebuilds all unpaid
+  occurrences from the corrected schedule. Amount-only edits retain the existing choice between
+  future and all unpaid amounts.
+- Paid and skipped occurrences are historical records and are always preserved.
+- Occurrence materialisation now reconciles obsolete unpaid rows as well as creating missing
+  ones. Opening Now automatically repairs stale overdue rows left by older date edits, including
+  rows outside its normal lookback, so the overdue badge and total correct themselves after
+  deployment. **790 backend tests green; frontend production build clean; no migration.**
 
 ### 0.29.3 — 2026-08-11 — one place for subscriptions
 - Bills categorised as Subscription now appear in the Subscriptions section instead of the
