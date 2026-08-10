@@ -1,9 +1,14 @@
 # Solace native parity checklist
 
 > Reference implementation: local standalone Project Solace at
-> `/home/moose/Documents/project-solace`. This checklist tracks behavioural parity; HomeStack
-> keeps shared authentication, permissions, Calendar, Hub, audit and backups rather than
-> rebuilding standalone infrastructure.
+> `/home/instructor/Documents/new/project-solace`. This checklist tracks behavioural parity;
+> HomeStack keeps shared authentication, permissions, Calendar, Hub, audit and backups rather
+> than rebuilding standalone infrastructure.
+>
+> **This document claimed complete parity before a line-by-line re-read of the standalone code on
+> 2026-08-10 (v0.28.0) found three features that had never been ported.** Two are now done; the
+> rest are listed under "Found missing" below. Tick items here only against the standalone source,
+> not against a summary of it.
 
 ## Core planning and daily use
 
@@ -17,8 +22,19 @@
 - [x] Income sources/paydays with recurring schedules and pause/include controls.
 - [x] Known income anchor plus calculated upcoming payday, with current/next Pay plan navigation.
 - [x] Percentage and fixed household bucket rules, proportional multi-income splitting,
-  rounding, remaining-pay caps and ordering.
+  rounding, remaining-pay caps and ordering. Only the first cap-to-remaining bucket may cap,
+  matching the reference engine's defensive behaviour.
 - [x] Household and per-income pay-cycle transfer plan.
+- [x] **Individual vs shared income (v0.28.0).** Shared income belongs to the household: it is
+  excluded from the per-person contribution breakdown and applied to buckets after the personal
+  splits, so a shared deposit cannot inflate anybody's share.
+- [x] **Shared-income allocation modes (v0.28.0).** `standard` flows through the usual bucket
+  rules; `lump` sends the whole amount to one nominated bucket; `custom` applies each line's
+  percentage in order with one line taking the remainder. Without a remainder line the unallocated
+  amount stays in the account rather than being invented into a bucket.
+- [x] **Per-person contribution breakdown (v0.28.0).** Income carries `owner_name`, so the pay
+  plan reports what each person contributed and where it went. The importer previously flattened
+  the owner into the income title, losing the grouping entirely.
 - [x] Cycle-specific, idempotent payday checklist generation and completion, including
   current/next navigation and confirm-income/review-bills/record-balance workflow steps.
 - [x] Planned purchases with targets, savings progress, priority, dates and capped quick-add.
@@ -69,9 +85,21 @@
 - [x] Finance documents use HomeStack's shared attachment/document direction; the standalone
   reference app has no bill-attachment workflow to port.
 
+## Found missing on re-reading the standalone source (2026-08-10)
+
+- [x] Individual vs shared income, allocation modes and the per-person breakdown — done, above.
+- [ ] **Cycle history.** Standalone has `/cycle-history` listing past closed cycles. HomeStack
+  stores `CycleCloseout` rows but only ever reads the current or next cycle, so previous cycles
+  are recorded and then unreachable.
+- [ ] **Annual summary.** Standalone has `/annual-summary`. HomeStack has per-bill annual cost and
+  a category report but no yearly view.
+- [~] **Purchase completion.** Standalone's mark-purchased also raises the saved amount to the
+  target so a completed purchase reads as fully funded; HomeStack sets the status only.
+
 ## Cutover gate
 
-Feature parity is complete. The standalone app can be retired only after the production
+Feature parity is complete apart from the items listed above. The standalone app can be retired
+only after the production
 migrations and real household import have run, `import_solace --verify` passes, pay-plan/monthly
 totals have been compared for at least one full pay cycle, and the owner has accepted the
 phone/laptop workflow. These are cutover checks rather than remaining implementation gaps.

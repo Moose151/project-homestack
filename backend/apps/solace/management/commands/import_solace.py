@@ -42,6 +42,7 @@ from apps.solace.services import (
     create_checklist_item,
     create_payday,
     create_purchase,
+    set_income_allocations,
 )
 
 # Where the standalone app keeps its database on this machine. Overridable with --sqlite-db,
@@ -58,6 +59,7 @@ class LegacyData:
     purchases: list[dict[str, Any]]
     buckets: list[dict[str, Any]]
     incomes: list[dict[str, Any]]
+    income_allocations: list[dict[str, Any]]
     checklist: list[dict[str, Any]]
     settings: list[dict[str, Any]]
     balances: list[dict[str, Any]]
@@ -170,6 +172,15 @@ def _priority(value: str | None) -> str:
     return v if v in {"low", "medium", "high"} else "medium"
 
 
+def _income_scope(value: str | None) -> str:
+    return Payday.Scope.SHARED if (value or "").strip().lower() == "shared" else Payday.Scope.INDIVIDUAL
+
+
+def _allocation_mode(value: str | None) -> str:
+    mode = (value or "standard").strip().lower()
+    return mode if mode in {"standard", "lump", "custom"} else "standard"
+
+
 def _income_rrule(value: str | None) -> str:
     return {
         "weekly": "FREQ=WEEKLY",
@@ -228,6 +239,7 @@ def _load_legacy(path: Path) -> LegacyData:
             purchases=_rows(conn, "planned_purchase"),
             buckets=_rows(conn, "bucket"),
             incomes=_rows(conn, "income_source"),
+            income_allocations=_optional_rows(conn, "shared_income_allocation"),
             checklist=_rows(conn, "payday_checklist_item"),
             settings=_optional_rows(conn, "settings"),
             balances=_optional_rows(conn, "account_balance_snapshot"),
@@ -473,41 +485,6 @@ class Command(BaseCommand):
                 )
                 stats["bill_occurrences"] += int(created)
 
-        for row in data.incomes:
-            if not _bool(row.get("active")):
-                stats["skipped_inactive"] += 1
-                continue
-            title = f"{row.get('owner_name') or 'Household'}: {row.get('name') or 'Income'}"
-            if Payday.objects.filter(title=title).exists():
-                continue
-            create_payday(
-                system_user,
-                title=title,
-                expected_amount=_money(row.get("amount")),
-                pay_at=_parse_dt(row.get("next_pay_date")),
-                recurrence_rule=_income_rrule(row.get("frequency")),
-                notes=row.get("notes") or f"Imported from legacy income source #{row['id']}.",
-            )
-            stats["paydays"] += 1
-
-        for row in data.purchases:
-            if PlannedPurchase.objects.filter(name=row["name"]).exists():
-                continue
-            create_purchase(
-                system_user,
-                name=row["name"],
-                category=_native_category(
-                    _category_name(data.categories, row.get("category_id"))
-                ),
-                target_amount=_money(row.get("target_amount")),
-                saved_amount=_money(row.get("amount_saved")),
-                target_date=_parse_dt(row.get("target_date")),
-                status=_purchase_status(row.get("status")),
-                priority=_priority(row.get("priority")),
-                notes=row.get("notes") or "",
-            )
-            stats["planned_purchases"] += 1
-
         for row in data.buckets:
             if not _bool(row.get("active")):
                 stats["skipped_inactive"] += 1
@@ -567,6 +544,69 @@ class Command(BaseCommand):
                 notes=notes,
             )
             stats["buckets"] += 1
+
+        # Legacy bucket id -> imported bucket, so a shared income's split can be rebuilt.
+        bucket_ids = {}
+        for row in data.buckets:
+            match = BudgetBucket.objects.filter(name=row["name"]).first()
+            if match:
+                bucket_ids[row["id"]] = match.id
+
+        for row in data.incomes:
+            if not _bool(row.get("active")):
+                stats["skipped_inactive"] += 1
+                continue
+            title = f"{row.get('owner_name') or 'Household'}: {row.get('name') or 'Income'}"
+            if Payday.objects.filter(title=title).exists():
+                continue
+            payday = create_payday(
+                system_user,
+                title=title,
+                owner_name=row.get("owner_name") or "Household",
+                income_scope=_income_scope(row.get("income_scope")),
+                allocation_mode=_allocation_mode(row.get("allocation_mode")),
+                lump_bucket_id=bucket_ids.get(row.get("lump_bucket_id")),
+                expected_amount=_money(row.get("amount")),
+                pay_at=_parse_dt(row.get("next_pay_date")),
+                recurrence_rule=_income_rrule(row.get("frequency")),
+                notes=row.get("notes") or f"Imported from legacy income source #{row['id']}.",
+            )
+            # A custom split is meaningless without the lines that define it, so they come across
+            # with the income rather than in a separate pass.
+            lines = [
+                {
+                    "bucket_id": bucket_ids[alloc["bucket_id"]],
+                    "percentage": _money(alloc.get("percentage")),
+                    "is_remainder": _bool(alloc.get("is_remainder")),
+                }
+                for alloc in sorted(
+                    (a for a in data.income_allocations if a.get("income_source_id") == row["id"]),
+                    key=lambda a: a.get("sort_order") or 0,
+                )
+                if alloc.get("bucket_id") in bucket_ids
+            ]
+            if lines:
+                set_income_allocations(system_user, payday, lines)
+                stats["income_allocations"] += len(lines)
+            stats["paydays"] += 1
+
+        for row in data.purchases:
+            if PlannedPurchase.objects.filter(name=row["name"]).exists():
+                continue
+            create_purchase(
+                system_user,
+                name=row["name"],
+                category=_native_category(
+                    _category_name(data.categories, row.get("category_id"))
+                ),
+                target_amount=_money(row.get("target_amount")),
+                saved_amount=_money(row.get("amount_saved")),
+                target_date=_parse_dt(row.get("target_date")),
+                status=_purchase_status(row.get("status")),
+                priority=_priority(row.get("priority")),
+                notes=row.get("notes") or "",
+            )
+            stats["planned_purchases"] += 1
 
         latest_cycle = max((row.get("cycle_start") or "" for row in data.checklist), default="")
         for row in data.checklist:

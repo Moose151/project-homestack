@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.27.0**
+> **Current version: 0.28.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,30 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.28 — Income the way the standalone app does it
+
+### 0.28.0 — 2026-08-10
+- Re-read the standalone app's source line by line rather than trusting the parity checklist, and
+  found three features that had never been ported. The checklist has been corrected; it had
+  claimed complete parity.
+- **Individual vs shared income.** Shared income belongs to the household, not a person: it is
+  left out of the per-person contribution breakdown and applied to buckets after the personal
+  splits, so a shared deposit can no longer inflate somebody's share.
+- **Shared-income allocation modes.** `standard` flows through the usual bucket rules, `lump`
+  sends the whole amount to one nominated bucket, and `custom` applies each line's percentage in
+  order with one line taking the remainder. Without a remainder line the unallocated amount stays
+  in the account rather than being invented into a bucket.
+- **Per-person contributions are back.** Income now carries whose it is, so the pay plan reports
+  what each person contributed and where it went. The importer had been flattening the owner into
+  the income title, which lost the grouping entirely.
+- Matched the reference engine's rule that only the first cap-to-remaining bucket may cap.
+- The importer brings income scope, allocation mode and custom split lines across, and tolerates
+  older standalone databases that predate the shared-income tables.
+- **Still missing and now recorded:** cycle history, annual summary, and purchase completion not
+  raising the saved amount to the target.
+- **755 backend tests green (8 new); typecheck and production build clean; migration
+  `solace.0009`.**
 
 ## 0.27 — Money you can actually run the household on
 

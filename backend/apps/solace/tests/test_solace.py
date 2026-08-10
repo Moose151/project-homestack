@@ -1456,3 +1456,128 @@ class SolaceNowTests(TestCase):
         _make_user("nowchild", User.Role.USER, is_child=True)
         _login(self.client, "nowchild")
         self.assertEqual(self.client.get(reverse("solace-now")).status_code, 403)
+
+
+class SharedIncomeAllocationTests(TestCase):
+    """Shared income belongs to the household, not to a person, and can bypass the usual rules.
+
+    Mirrors the standalone app's behaviour: personal percentage splits run on individual income
+    only, so a shared deposit cannot inflate someone's contribution.
+    """
+
+    def setUp(self):
+        self.admin = _make_user("splitter", User.Role.ADMIN)
+        _login(self.client, "splitter")
+        _reauth(self.client)
+        self.bills = create_bucket(
+            self.admin, name="Bills", purpose="bills",
+            allocation_method="percentage", allocation_value="50.00",
+            rounding_increment="0.01", cap_to_remaining=False,
+        )
+        self.savings = create_bucket(
+            self.admin, name="Savings", purpose="savings",
+            allocation_method="percentage", allocation_value="10.00",
+            rounding_increment="0.01", cap_to_remaining=False,
+        )
+
+    def _income(self, **overrides):
+        payload = dict(
+            title="Pay", expected_amount="1000.00",
+            pay_at=timezone.make_aware(datetime(2026, 8, 3, 9)),
+            recurrence_rule="FREQ=WEEKLY;INTERVAL=2",
+        )
+        payload.update(overrides)
+        return create_payday(self.admin, **payload)
+
+    def _plan(self):
+        from apps.solace.selectors import get_pay_cycle_plan
+        return get_pay_cycle_plan(self.admin, as_of=date(2026, 8, 5))
+
+    def test_individual_income_is_grouped_by_owner(self):
+        self._income(title="Alex salary", owner_name="Alex")
+        self._income(title="Sam salary", owner_name="Sam", expected_amount="500.00")
+        people = self._plan()["people"]
+        self.assertEqual([row["owner_name"] for row in people], ["Alex", "Sam"])
+        self.assertEqual(people[0]["income_total"], "1000.00")
+        self.assertEqual(people[1]["income_total"], "500.00")
+
+    def test_shared_income_is_left_out_of_the_personal_breakdown(self):
+        self._income(title="Alex salary", owner_name="Alex")
+        self._income(title="Rent received", owner_name="Household", income_scope="shared", expected_amount="400.00")
+        plan = self._plan()
+        self.assertEqual([row["owner_name"] for row in plan["people"]], ["Alex"])
+        self.assertEqual(plan["individual_income_total"], "1000.00")
+        self.assertEqual(plan["shared_income_total"], "400.00")
+        self.assertEqual(plan["income_total"], "1400.00")
+
+    def test_a_lump_share_goes_entirely_to_one_bucket(self):
+        self._income(
+            title="Tax refund", income_scope="shared", allocation_mode="lump",
+            lump_bucket_id=self.savings.id, expected_amount="600.00",
+        )
+        buckets = {row["bucket_name"]: row["amount"] for row in self._plan()["buckets"]}
+        self.assertEqual(buckets["Savings"], "600.00")
+        self.assertNotIn("Bills", buckets)
+
+    def test_a_custom_split_applies_percentages_and_gives_the_rest_to_the_remainder(self):
+        payday = self._income(
+            title="Side income", income_scope="shared", allocation_mode="custom",
+            expected_amount="1000.00",
+        )
+        response = self.client.put(
+            reverse("solace-income-allocations", args=[payday.id]),
+            [
+                {"bucket_id": self.bills.id, "percentage": "70.00", "is_remainder": False},
+                {"bucket_id": self.savings.id, "percentage": "0.00", "is_remainder": True},
+            ],
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.json())
+        buckets = {row["bucket_name"]: row["amount"] for row in self._plan()["buckets"]}
+        self.assertEqual(buckets["Bills"], "700.00")
+        self.assertEqual(buckets["Savings"], "300.00")
+
+    def test_a_custom_split_without_a_remainder_leaves_the_rest_alone(self):
+        payday = self._income(
+            title="Side income", income_scope="shared", allocation_mode="custom",
+            expected_amount="1000.00",
+        )
+        self.client.put(
+            reverse("solace-income-allocations", args=[payday.id]),
+            [{"bucket_id": self.bills.id, "percentage": "40.00", "is_remainder": False}],
+            content_type="application/json",
+        )
+        plan = self._plan()
+        buckets = {row["bucket_name"]: row["amount"] for row in plan["buckets"]}
+        self.assertEqual(buckets["Bills"], "400.00")
+        self.assertEqual(plan["allocated_total"], "400.00")
+
+    def test_only_one_line_may_take_the_remainder(self):
+        payday = self._income(title="Side income", income_scope="shared", allocation_mode="custom")
+        response = self.client.put(
+            reverse("solace-income-allocations", args=[payday.id]),
+            [
+                {"bucket_id": self.bills.id, "percentage": "0.00", "is_remainder": True},
+                {"bucket_id": self.savings.id, "percentage": "0.00", "is_remainder": True},
+            ],
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_standard_shared_income_still_flows_through_the_usual_rules(self):
+        self._income(title="Alex salary", owner_name="Alex")
+        self._income(
+            title="Board money", income_scope="shared", allocation_mode="standard",
+            expected_amount="200.00",
+        )
+        buckets = {row["bucket_name"]: row["amount"] for row in self._plan()["buckets"]}
+        # 50% of each source: 500 from the salary, 100 from the shared income.
+        self.assertEqual(buckets["Bills"], "600.00")
+
+    def test_replacing_a_split_removes_the_lines_it_replaces(self):
+        payday = self._income(title="Side income", income_scope="shared", allocation_mode="custom")
+        url = reverse("solace-income-allocations", args=[payday.id])
+        self.client.put(url, [{"bucket_id": self.bills.id, "percentage": "50.00"}], content_type="application/json")
+        self.client.put(url, [{"bucket_id": self.savings.id, "percentage": "25.00"}], content_type="application/json")
+        rows = self.client.get(url).json()
+        self.assertEqual([row["bucket_name"] for row in rows], ["Savings"])

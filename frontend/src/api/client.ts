@@ -17,11 +17,11 @@ import type {
   RotatingSchedule, RotatingScheduleOccurrence, RotatingScheduleWrite, ServiceProvider,
   SolaceBalanceForecast, SolaceBalanceSnapshot, SolaceBill, SolaceBillImportPreview,
   SolaceBillOccurrence, SolaceBillTimeline, SolaceBootstrap, SolaceBucket, SolaceBucketEntry,
-  SolaceBucketEntryWrite, SolaceCategory, SolaceCategoryReport, SolaceChecklistItem,
-  SolaceChecklistPreference, SolaceCloseoutResponse, SolaceCycleCloseout, SolaceHealth,
-  SolaceNow, SolacePayCyclePlan, SolacePayday, SolacePurchase, SolaceSchedule,
-  SolaceSearchResults, SolaceSettings, SolaceSubscription, WaterTest, WaterTestWrite,
-  WikiCategory, WikiPage
+  SolaceBucketEntryWrite, SolaceBucketPurpose, SolaceCategory, SolaceCategoryReport,
+  SolaceChecklistItem, SolaceChecklistPreference, SolaceCloseoutResponse, SolaceCycleCloseout,
+  SolaceHealth, SolaceIncomeAllocation, SolaceIncomeAllocationWrite, SolaceNow,
+  SolacePayCyclePlan, SolacePayday, SolacePurchase, SolaceSchedule, SolaceSearchResults,
+  SolaceSettings, SolaceSubscription, WaterTest, WaterTestWrite, WikiCategory, WikiPage
 } from './types'
 
 /** Which screen is signing in. Only 'web' earns the longer re-authentication window. */
@@ -166,7 +166,10 @@ type SolaceBillWrite = Partial<{
 }>
 
 type SolacePaydayWrite = Partial<{
-  title: string; expected_amount: string; pay_at: string | null; is_all_day: boolean
+  title: string; owner_name: string
+  income_scope: SolacePayday['income_scope']; allocation_mode: SolacePayday['allocation_mode']
+  lump_bucket_id: number | null
+  expected_amount: string; pay_at: string | null; is_all_day: boolean
   recurrence_rule: string; received_at: string | null; is_active: boolean
   notes: string; visibility: string; sensitivity: string
 }>
@@ -178,6 +181,7 @@ type SolacePurchaseWrite = Partial<{
 }>
 
 type SolaceBucketWrite = Partial<{
+  purpose: SolaceBucketPurpose
   name: string; category: string; target_amount: string; current_amount: string
   allocation_method: 'percentage' | 'fixed'; allocation_value: string
   rounding_increment: string; cap_to_remaining: boolean; is_active: boolean; position: number
@@ -1027,6 +1031,11 @@ export const api = {
     }),
   deleteSolacePurchase: (id: number): Promise<void> =>
     _fetch(`/solace/purchases/${id}/`, { method: 'DELETE' }),
+  getSolaceIncomeAllocations: (paydayId: number): Promise<SolaceIncomeAllocation[]> =>
+    _fetch(`/solace/paydays/${paydayId}/allocations/`),
+  setSolaceIncomeAllocations: (paydayId: number, lines: SolaceIncomeAllocationWrite[]): Promise<SolaceIncomeAllocation[]> =>
+    _fetch(`/solace/paydays/${paydayId}/allocations/`, { method: 'PUT', body: JSON.stringify(lines) }),
+
   getSolaceNow: (): Promise<SolaceNow> => _fetch('/solace/now/'),
   getSolaceBucketEntries: (bucketId: number): Promise<SolaceBucketEntry[]> =>
     _fetch(`/solace/buckets/${bucketId}/entries/`),

@@ -1161,9 +1161,32 @@ export interface SolaceSchedule {
   }
 }
 
+export interface SolaceIncomeAllocation {
+  id: number
+  payday_id: number
+  bucket_id: number
+  bucket_name: string
+  percentage: string
+  is_remainder: boolean
+  position: number
+}
+
+export interface SolaceIncomeAllocationWrite {
+  bucket_id: number
+  percentage: string
+  is_remainder?: boolean
+}
+
 export interface SolacePayday {
   id: number
   title: string
+  /** Whose income it is; used to group the contribution breakdown. */
+  owner_name: string
+  income_scope: 'individual' | 'shared'
+  /** Only meaningful for shared income: how it reaches the buckets. */
+  allocation_mode: 'standard' | 'lump' | 'custom'
+  lump_bucket_id: number | null
+  allocations: SolaceIncomeAllocation[]
   expected_amount: string
   pay_at: string | null
   next_pay_at: string | null
@@ -1319,6 +1342,9 @@ export interface SolacePlanAllocation {
 export interface SolacePlanSource {
   payday_id: number
   title: string
+  owner_name: string
+  income_scope: 'individual' | 'shared'
+  allocation_mode: 'standard' | 'lump' | 'custom'
   pay_dates: string[]
   income_total: string
   allocated_total: string
@@ -1333,13 +1359,26 @@ export interface SolacePlanBucket {
   amount: string
 }
 
+/** One person's share of the cycle. Shared income has no owner and is excluded from these. */
+export interface SolacePlanPerson {
+  owner_name: string
+  income_total: string
+  allocated_total: string
+  remaining: string
+  sources: string[]
+  allocations: SolacePlanAllocation[]
+}
+
 export interface SolacePayCyclePlan {
   cycle_start: string
   cycle_end: string
   income_total: string
+  individual_income_total: string
+  shared_income_total: string
   allocated_total: string
   remaining: string
   sources: SolacePlanSource[]
+  people: SolacePlanPerson[]
   buckets: SolacePlanBucket[]
   set_aside: {
     recurring_bills: string

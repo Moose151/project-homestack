@@ -97,38 +97,50 @@ def build_pay_cycle_plan(
             source_income[payday.id] += _money(payday.expected_amount)
             source_dates[payday.id].append(occurrence.isoformat())
 
-    household_income = _money(sum(source_income.values(), Decimal("0.00")))
+    # Individual and shared income are separated before any bucket maths: shared income belongs
+    # to the household, so letting it into the percentage split would inflate personal shares.
+    individual_ids = [
+        pk for pk in source_income
+        if source_rows[pk].income_scope != Payday.Scope.SHARED
+    ]
+    shared_ids = [pk for pk in source_income if pk not in individual_ids]
+    individual_income = _money(sum((source_income[pk] for pk in individual_ids), Decimal("0.00")))
+    shared_income = _money(sum((source_income[pk] for pk in shared_ids), Decimal("0.00")))
+    household_income = _money(individual_income + shared_income)
     active_buckets = [bucket for bucket in buckets if bucket.is_active]
     bucket_totals: dict[int, Decimal] = defaultdict(lambda: Decimal("0.00"))
     sources = []
+    people: dict[str, dict] = {}
 
-    for payday_id, income in sorted(
-        source_income.items(),
-        key=lambda item: (source_dates[item[0]][0], source_rows[item[0]].title.lower()),
-    ):
-        payday = source_rows[payday_id]
+    def _allocate(income: Decimal, pool_total: Decimal) -> tuple[list[dict], Decimal]:
+        """Bucket rows for one slice of income, against a pool total for fixed-rule shares."""
         allocated = Decimal("0.00")
-        allocations = []
+        rows = []
+        # Only the first bucket allowed to cap may do so; later flags are ignored defensively,
+        # matching the reference implementation even though creation keeps a single one.
+        remainder_seen = False
         for bucket in active_buckets:
             if bucket.allocation_method == BudgetBucket.AllocationMethod.FIXED:
-                share = income / household_income if household_income else Decimal("0.00")
+                share = income / pool_total if pool_total else Decimal("0.00")
                 raw = _money(bucket.allocation_value * share)
             else:
                 raw = _money(income * bucket.allocation_value / Decimal("100"))
-
             amount = _round_to_increment(raw, bucket.rounding_increment)
             remaining_before = _money(income - allocated)
             capped = False
-            if bucket.cap_to_remaining and amount > max(remaining_before, Decimal("0.00")):
+            cap_enabled = bucket.cap_to_remaining and not remainder_seen
+            if cap_enabled:
+                remainder_seen = True
+            if cap_enabled and amount > max(remaining_before, Decimal("0.00")):
                 amount = max(remaining_before, Decimal("0.00"))
                 capped = True
             allocated = _money(allocated + amount)
-            bucket_totals[bucket.id] += amount
-            allocations.append(
+            rows.append(
                 {
                     "bucket_id": bucket.id,
                     "bucket_name": bucket.name,
                     "category": bucket.category,
+                    "purpose": bucket.purpose,
                     "allocation_method": bucket.allocation_method,
                     "allocation_value": _money_string(bucket.allocation_value),
                     "raw_amount": _money_string(raw),
@@ -136,15 +148,62 @@ def build_pay_cycle_plan(
                     "capped": capped,
                 }
             )
+        return rows, allocated
+
+    for payday_id in sorted(
+        source_income,
+        key=lambda pk: (source_dates[pk][0], source_rows[pk].title.lower()),
+    ):
+        payday = source_rows[payday_id]
+        income = source_income[payday_id]
+        is_shared = payday.income_scope == Payday.Scope.SHARED
+        mode = payday.allocation_mode if is_shared else Payday.AllocationMode.STANDARD
+
+        if is_shared and mode != Payday.AllocationMode.STANDARD:
+            allocations = _shared_allocations(payday, income, active_buckets)
+            for row in allocations:
+                bucket_totals[row["bucket_id"]] += Decimal(row["amount"])
+            allocated = _money(sum((Decimal(row["amount"]) for row in allocations), Decimal("0.00")))
+        else:
+            # Standard shared income joins the household pool and is split by the usual rules.
+            pool = individual_income if not is_shared else income
+            allocations, allocated = _allocate(income, pool)
+            for row in allocations:
+                bucket_totals[row["bucket_id"]] += Decimal(row["amount"])
 
         sources.append(
             {
                 "payday_id": payday.id,
                 "title": payday.title,
-                "pay_dates": source_dates[payday.id],
+                "owner_name": payday.owner_name or "Household",
+                "income_scope": payday.income_scope,
+                "allocation_mode": mode,
+                "pay_dates": source_dates[payday_id],
                 "income_total": _money_string(income),
                 "allocated_total": _money_string(allocated),
                 "remaining": _money_string(income - allocated),
+                "allocations": allocations,
+            }
+        )
+
+        # Contribution breakdown covers individual income only; shared income has no owner.
+        if not is_shared:
+            owner = payday.owner_name or "Household"
+            entry = people.setdefault(owner, {"owner_name": owner, "income": Decimal("0.00"), "titles": []})
+            entry["income"] += income
+            entry["titles"].append(payday.title)
+
+    person_rows = []
+    for owner in sorted(people, key=str.lower):
+        entry = people[owner]
+        allocations, allocated = _allocate(entry["income"], individual_income)
+        person_rows.append(
+            {
+                "owner_name": owner,
+                "income_total": _money_string(entry["income"]),
+                "allocated_total": _money_string(allocated),
+                "remaining": _money_string(entry["income"] - allocated),
+                "sources": entry["titles"],
                 "allocations": allocations,
             }
         )
@@ -154,6 +213,7 @@ def build_pay_cycle_plan(
             "bucket_id": bucket.id,
             "bucket_name": bucket.name,
             "category": bucket.category,
+            "purpose": bucket.purpose,
             "amount": _money_string(bucket_totals[bucket.id]),
         }
         for bucket in active_buckets
@@ -164,8 +224,55 @@ def build_pay_cycle_plan(
         "cycle_start": cycle_start.isoformat(),
         "cycle_end": cycle_end.isoformat(),
         "income_total": _money_string(household_income),
+        "individual_income_total": _money_string(individual_income),
+        "shared_income_total": _money_string(shared_income),
         "allocated_total": _money_string(allocated_total),
         "remaining": _money_string(household_income - allocated_total),
         "sources": sources,
+        "people": person_rows,
         "buckets": bucket_summaries,
     }
+
+
+def _shared_allocations(payday: Payday, income: Decimal, buckets: list[BudgetBucket]) -> list[dict]:
+    """Bucket rows for shared income that bypasses the usual rules.
+
+    `lump` sends the whole amount to one bucket. `custom` applies each line's percentage in
+    order, and the line marked as the remainder takes whatever is left. With no remainder line
+    an unallocated amount simply stays in the account rather than being invented into a bucket.
+    """
+    by_id = {bucket.id: bucket for bucket in buckets}
+    rows: list[dict] = []
+
+    def _row(bucket: BudgetBucket, amount: Decimal, label: str) -> dict:
+        return {
+            "bucket_id": bucket.id,
+            "bucket_name": bucket.name,
+            "category": bucket.category,
+            "purpose": bucket.purpose,
+            "allocation_method": "shared",
+            "allocation_value": label,
+            "raw_amount": _money_string(amount),
+            "amount": _money_string(amount),
+            "capped": False,
+        }
+
+    if payday.allocation_mode == Payday.AllocationMode.LUMP:
+        bucket = by_id.get(payday.lump_bucket_id)
+        return [_row(bucket, _money(income), "All of it")] if bucket else []
+
+    allocated = Decimal("0.00")
+    remainder_bucket = None
+    for line in payday.allocations.all():
+        bucket = by_id.get(line.bucket_id)
+        if not bucket:
+            continue
+        if line.is_remainder:
+            remainder_bucket = bucket
+            continue
+        amount = _money(income * Decimal(line.percentage) / Decimal("100"))
+        allocated = _money(allocated + amount)
+        rows.append(_row(bucket, amount, f"{Decimal(line.percentage):g}%"))
+    if remainder_bucket:
+        rows.append(_row(remainder_bucket, max(_money(income - allocated), Decimal("0.00")), "Remainder"))
+    return rows

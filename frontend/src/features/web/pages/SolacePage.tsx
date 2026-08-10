@@ -586,6 +586,7 @@ function BucketForm({ onCreated, onError }: {
     try {
       await api.createSolaceBucket({
         ...f,
+        purpose: f.purpose as SolaceBucketPurpose,
         target_amount: f.target_amount || '0.00',
         current_amount: f.current_amount || '0.00',
         allocation_value: f.allocation_value || '0.00',
@@ -1157,7 +1158,10 @@ function PurchasesTab({ purchases, categories, reload, onError }: {
 function PaydayForm({ onCreated, onError }: {
   onCreated: () => void; onError: (message: string) => void
 }) {
-  const [f, setF] = useState({ title: 'Payday', expected_amount: '', pay_at: '', recurrence_rule: 'FREQ=WEEKLY;INTERVAL=2' })
+  const [f, setF] = useState({
+    title: 'Payday', owner_name: 'Household', income_scope: 'individual',
+    expected_amount: '', pay_at: '', recurrence_rule: 'FREQ=WEEKLY;INTERVAL=2',
+  })
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: string) => setF(prev => ({ ...prev, [k]: v }))
   const save = async () => {
@@ -1165,12 +1169,16 @@ function PaydayForm({ onCreated, onError }: {
     try {
       await api.createSolacePayday({
         ...f,
+        income_scope: f.income_scope as SolacePayday['income_scope'],
         expected_amount: f.expected_amount || '0.00',
         pay_at: fromLocalDateInput(f.pay_at),
         is_all_day: true,
         is_active: true,
       })
-      setF({ title: 'Payday', expected_amount: '', pay_at: '', recurrence_rule: 'FREQ=WEEKLY;INTERVAL=2' })
+      setF({
+        title: 'Payday', owner_name: 'Household', income_scope: 'individual',
+        expected_amount: '', pay_at: '', recurrence_rule: 'FREQ=WEEKLY;INTERVAL=2',
+      })
       onCreated()
     } catch (error) {
       onError(errMsg(error))
@@ -1178,8 +1186,15 @@ function PaydayForm({ onCreated, onError }: {
   }
   return (
     <Card contentClassName="p-4">
-      <div className="grid gap-3 lg:grid-cols-[1.4fr_0.8fr_1fr_1fr_auto]">
+      <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr_1fr_0.8fr_1fr_1fr_auto]">
         <Field label="Title"><Input value={f.title} onChange={e => set('title', e.target.value)} /></Field>
+        <Field label="Whose income"><Input value={f.owner_name} onChange={e => set('owner_name', e.target.value)} placeholder="Household" /></Field>
+        <Field label="Counts as" hint="Shared income is not attributed to a person.">
+          <Select value={f.income_scope} onChange={e => set('income_scope', e.target.value)}>
+            <option value="individual">One person's</option>
+            <option value="shared">Shared</option>
+          </Select>
+        </Field>
         <Field label="Expected"><Input type="number" step="0.01" value={f.expected_amount} onChange={e => set('expected_amount', e.target.value)} /></Field>
         <Field label="Date"><input type="date" className={fieldClass} value={f.pay_at} onChange={e => set('pay_at', e.target.value)} /></Field>
         <Field label="Repeats"><Select value={f.recurrence_rule} onChange={e => set('recurrence_rule', e.target.value)}>{RECURRENCE.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}</Select></Field>
@@ -1189,8 +1204,87 @@ function PaydayForm({ onCreated, onError }: {
   )
 }
 
-function PaydaysTab({ paydays, reload, onError }: {
-  paydays: SolacePayday[]; reload: () => void; onError: (message: string) => void
+/** The lines of a shared income's custom split: a share each, and one line taking the rest. */
+function IncomeSplitEditor({ payday, buckets, onError }: {
+  payday: SolacePayday; buckets: SolaceBucket[]; onError: (message: string) => void
+}) {
+  const [lines, setLines] = useState(
+    payday.allocations.map(row => ({
+      bucket_id: String(row.bucket_id), percentage: row.percentage, is_remainder: row.is_remainder,
+    })),
+  )
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const update = (index: number, patch: Partial<typeof lines[number]>) =>
+    setLines(rows => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)))
+
+  const save = async () => {
+    setSaving(true); setSaved(false)
+    try {
+      await api.setSolaceIncomeAllocations(payday.id, lines
+        .filter(row => row.bucket_id)
+        .map(row => ({
+          bucket_id: Number(row.bucket_id),
+          percentage: row.percentage || '0.00',
+          is_remainder: row.is_remainder,
+        })))
+      setSaved(true)
+    } catch (e) { onError(errMsg(e)) } finally { setSaving(false) }
+  }
+
+  const total = lines.reduce((sum, row) => sum + (row.is_remainder ? 0 : Number(row.percentage || 0)), 0)
+  return (
+    <div className="mt-3 rounded-xl bg-sunken/60 p-3">
+      <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-muted">Custom split</p>
+      <div className="mt-2 space-y-2">
+        {lines.map((line, index) => (
+          <div key={index} className="grid gap-2 sm:grid-cols-[2fr_1fr_auto_auto] sm:items-end">
+            <Field label="Bucket">
+              <Select value={line.bucket_id} onChange={e => update(index, { bucket_id: e.target.value })}>
+                <option value="">Choose…</option>
+                {buckets.map(bucket => <option key={bucket.id} value={bucket.id}>{bucket.name}</option>)}
+              </Select>
+            </Field>
+            <Field label="Percent">
+              <Input
+                type="number" min="0" step="0.01" disabled={line.is_remainder}
+                value={line.is_remainder ? '' : line.percentage}
+                onChange={e => update(index, { percentage: e.target.value })}
+                placeholder={line.is_remainder ? 'the rest' : ''}
+              />
+            </Field>
+            <label className="flex min-h-11 items-center gap-2 text-xs text-muted-strong">
+              <input
+                type="checkbox" checked={line.is_remainder}
+                onChange={e => setLines(rows => rows.map((row, i) => ({
+                  ...row, is_remainder: i === index ? e.target.checked : false,
+                })))}
+              />
+              Takes the rest
+            </label>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setLines(rows => rows.filter((_, i) => i !== index))}>
+              Remove
+            </Button>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-muted">
+        {total.toFixed(2)}% allocated by percentage
+        {lines.some(row => row.is_remainder) ? '; one line takes whatever is left.' : '. Anything not allocated stays in the account.'}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button type="button" size="sm" variant="secondary" onClick={() => setLines(rows => [...rows, { bucket_id: '', percentage: '', is_remainder: false }])}>
+          + Add line
+        </Button>
+        <Button type="button" size="sm" loading={saving} onClick={save}>Save split</Button>
+        {saved && <span className="self-center text-xs font-semibold text-success">Saved</span>}
+      </div>
+    </div>
+  )
+}
+
+function PaydaysTab({ paydays, buckets, reload, onError }: {
+  paydays: SolacePayday[]; buckets: SolaceBucket[]; reload: () => void; onError: (message: string) => void
 }) {
   const toggle = async (payday: SolacePayday) => {
     try {
@@ -1203,6 +1297,10 @@ function PaydaysTab({ paydays, reload, onError }: {
   const PaydayEditor = ({ payday }: { payday: SolacePayday }) => {
     const [f, setF] = useState({
       title: payday.title,
+      owner_name: payday.owner_name,
+      income_scope: payday.income_scope,
+      allocation_mode: payday.allocation_mode,
+      lump_bucket_id: payday.lump_bucket_id ? String(payday.lump_bucket_id) : '',
       expected_amount: payday.expected_amount,
       pay_at: toLocalDateInput(payday.pay_at),
       recurrence_rule: payday.recurrence_rule,
@@ -1215,6 +1313,9 @@ function PaydaysTab({ paydays, reload, onError }: {
       try {
         await api.updateSolacePayday(payday.id, {
           ...f,
+          income_scope: f.income_scope as SolacePayday['income_scope'],
+          allocation_mode: f.allocation_mode as SolacePayday['allocation_mode'],
+          lump_bucket_id: f.lump_bucket_id ? Number(f.lump_bucket_id) : null,
           expected_amount: f.expected_amount || '0.00',
           pay_at: fromLocalDateInput(f.pay_at),
         })
@@ -1242,11 +1343,38 @@ function PaydaysTab({ paydays, reload, onError }: {
         <summary className="cursor-pointer text-sm font-medium text-primary">Edit income source</summary>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Field label="Title"><Input value={f.title} onChange={event => set('title', event.target.value)} /></Field>
+          <Field label="Whose income"><Input value={f.owner_name} onChange={event => set('owner_name', event.target.value)} /></Field>
+          <Field label="Counts as" hint="Shared income stays out of the personal contribution split.">
+            <Select value={f.income_scope} onChange={event => set('income_scope', event.target.value)}>
+              <option value="individual">One person's</option>
+              <option value="shared">Shared</option>
+            </Select>
+          </Field>
+          {f.income_scope === 'shared' && (
+            <Field label="Where it goes">
+              <Select value={f.allocation_mode} onChange={event => set('allocation_mode', event.target.value)}>
+                <option value="standard">Through the usual bucket rules</option>
+                <option value="lump">All of it into one bucket</option>
+                <option value="custom">Split across chosen buckets</option>
+              </Select>
+            </Field>
+          )}
+          {f.income_scope === 'shared' && f.allocation_mode === 'lump' && (
+            <Field label="Bucket">
+              <Select value={f.lump_bucket_id} onChange={event => set('lump_bucket_id', event.target.value)}>
+                <option value="">Choose…</option>
+                {buckets.map(bucket => <option key={bucket.id} value={bucket.id}>{bucket.name}</option>)}
+              </Select>
+            </Field>
+          )}
           <Field label="Expected"><Input type="number" min="0" step="0.01" value={f.expected_amount} onChange={event => set('expected_amount', event.target.value)} /></Field>
           <Field label="Next date"><input type="date" className={fieldClass} value={f.pay_at} onChange={event => set('pay_at', event.target.value)} /></Field>
           <Field label="Repeats"><Select value={f.recurrence_rule} onChange={event => set('recurrence_rule', event.target.value)}>{RECURRENCE.map(rule => <option key={rule.value} value={rule.value}>{rule.label}</option>)}</Select></Field>
           <Field label="Notes"><Input value={f.notes} onChange={event => set('notes', event.target.value)} /></Field>
         </div>
+        {f.income_scope === 'shared' && f.allocation_mode === 'custom' && (
+          <IncomeSplitEditor payday={payday} buckets={buckets} onError={onError} />
+        )}
         <div className="mt-3 flex gap-2">
           <Button size="sm" onClick={save} loading={saving} disabled={!f.title.trim()}>Save</Button>
           <Button size="sm" variant="danger" onClick={remove} disabled={saving}>Delete</Button>
@@ -1829,6 +1957,42 @@ function PayPlan({ plan, generating, onGenerate, onSection, onError }: {
           </Card>
         ))}
       </div>
+
+      {/* Who contributed what. Shared income has no owner, so it is reported separately rather
+          than inflating anybody's share. */}
+      {viewed.people.length > 0 && (
+        <Card contentClassName="p-4">
+          <h3 className="font-bold text-ink">Individual contributions</h3>
+          {Number(viewed.shared_income_total) > 0 && (
+            <p className="mt-1 text-sm text-muted">
+              Plus {money(viewed.shared_income_total)} shared income, which belongs to the household
+              rather than to one person.
+            </p>
+          )}
+          <div className="mt-3 space-y-3">
+            {viewed.people.map(person => (
+              <div key={person.owner_name} className="rounded-xl bg-sunken/60 p-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="font-semibold text-ink">{person.owner_name}</p>
+                  <p className="text-lg font-black text-ink">{money(person.income_total)}</p>
+                </div>
+                <p className="mt-0.5 text-xs text-muted">{person.sources.join(' · ')}</p>
+                <ul className="mt-2 space-y-1">
+                  {person.allocations.filter(row => Number(row.amount) > 0).map(row => (
+                    <li key={row.bucket_id} className="flex justify-between gap-3 text-sm">
+                      <span className="text-muted-strong">{row.bucket_name}</span>
+                      <span className="font-semibold text-ink">{money(row.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 border-t border-line pt-2 text-xs text-muted">
+                  {money(person.allocated_total)} transferred · {money(person.remaining)} left
+                </p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
       <Card contentClassName="p-4">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
           <div>
@@ -2302,7 +2466,7 @@ export function SolacePage() {
           <Tabs tabs={PLAN_SECTIONS} active={planSection} onChange={setPlanSection} variant="secondary" />
           {planSection === 'payplan' && <PayPlan plan={plan} generating={generatingChecklist} onGenerate={generateChecklist} onSection={goSection} onError={setError} />}
           {planSection === 'buckets' && <BucketsTab buckets={buckets} reload={load} onError={setError} />}
-          {planSection === 'paydays' && <PaydaysTab paydays={paydays} reload={load} onError={setError} />}
+          {planSection === 'paydays' && <PaydaysTab paydays={paydays} buckets={buckets} reload={load} onError={setError} />}
           {planSection === 'purchases' && (
             <PurchasesTab
               purchases={purchases}

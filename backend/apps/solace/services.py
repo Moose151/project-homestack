@@ -20,6 +20,7 @@ from apps.solace.models import (
     BudgetBucket,
     CycleCloseout,
     FinanceCategory,
+    IncomeAllocation,
     Payday,
     PaydayChecklistItem,
     PaydayChecklistPreference,
@@ -36,6 +37,7 @@ _BILL_FIELDS = {
     "source_record_id", "visibility", "sensitivity",
 }
 _PAYDAY_FIELDS = {
+    "owner_name", "income_scope", "allocation_mode", "lump_bucket_id",
     "title", "expected_amount", "pay_at", "is_all_day", "recurrence_rule", "received_at",
     "is_active", "notes", "visibility", "sensitivity",
 }
@@ -612,3 +614,26 @@ def generate_plan_checklist(acting_user: User, plan: dict) -> list[PaydayCheckli
         )
         generated.append(obj)
     return generated
+
+
+@transaction.atomic
+def set_income_allocations(acting_user: User, payday: Payday, lines: list[dict]) -> list[IncomeAllocation]:
+    """Replace one income's custom split.
+
+    Replacing wholesale keeps the rule readable: a split is one statement about where an income
+    goes, not a pile of independently edited rows. At most one line may be the remainder, since
+    two lines both claiming "whatever is left" has no meaning.
+    """
+    remainders = [line for line in lines if line.get("is_remainder")]
+    if len(remainders) > 1:
+        raise ValueError("Only one line can take the remainder.")
+    payday.allocations.all().delete()
+    created = []
+    for position, line in enumerate(lines):
+        created.append(IncomeAllocation.objects.create(
+            payday=payday, household=get_active_household(),
+            created_by=acting_user, updated_by=acting_user,
+            bucket_id=line["bucket_id"], percentage=line.get("percentage") or Decimal("0.00"),
+            is_remainder=bool(line.get("is_remainder")), position=position,
+        ))
+    return created

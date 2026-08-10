@@ -20,6 +20,7 @@ from apps.nodes.models import Node
 from apps.permissions.drf import HomeStackPermission
 from apps.solace import selectors, services
 from apps.solace.serializers import (
+    IncomeAllocationSerializer,
     BucketEntrySerializer,
     SolaceNowSerializer,
     AccountBalanceSnapshotSerializer,
@@ -775,6 +776,30 @@ class PurchaseSavingsView(SolaceAccessMixin, APIView):
             serializer.validated_data["amount"],
         )
         return Response(PlannedPurchaseSerializer(obj).data)
+
+
+class IncomeAllocationView(SolaceAccessMixin, APIView):
+    """The custom split for one shared income: read it, or replace it wholesale."""
+
+    def _payday(self, payday_id: int):
+        obj = selectors.get_payday(payday_id)
+        if obj is None:
+            raise NotFound()
+        return obj
+
+    def get(self, request: Request, payday_id: int) -> Response:
+        payday = self._payday(payday_id)
+        return Response(IncomeAllocationSerializer(payday.allocations.all(), many=True).data)
+
+    def put(self, request: Request, payday_id: int) -> Response:
+        payday = self._payday(payday_id)
+        serializer = IncomeAllocationSerializer(data=request.data, many=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            rows = services.set_income_allocations(request.user, payday, serializer.validated_data)
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
+        return Response(IncomeAllocationSerializer(rows, many=True).data)
 
 
 class BucketListView(SolaceAccessMixin, APIView):

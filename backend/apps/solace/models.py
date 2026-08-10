@@ -150,7 +150,34 @@ class BillOccurrence(HouseholdBaseModel):
 
 
 class Payday(CalendarSyncMixin, HouseholdBaseModel):
+    class Scope(models.TextChoices):
+        """Whose income this is.
+
+        Shared income belongs to the household rather than a person: it is left out of the
+        per-person contribution breakdown and applied to buckets after the personal splits.
+        """
+
+        INDIVIDUAL = "individual", "One person's income"
+        SHARED = "shared", "Shared household income"
+
+    class AllocationMode(models.TextChoices):
+        """How this income reaches the buckets. Only meaningful for shared income."""
+
+        STANDARD = "standard", "Through the usual bucket rules"
+        LUMP = "lump", "All of it into one bucket"
+        CUSTOM = "custom", "Split across chosen buckets"
+
     title = models.CharField(max_length=200, default="Payday")
+    # Free text rather than a Person link: an income can belong to someone who has no profile,
+    # and the standalone app this replaces groups contributions by name.
+    owner_name = models.CharField(max_length=120, blank=True, default="Household")
+    income_scope = models.CharField(max_length=20, choices=Scope.choices, default=Scope.INDIVIDUAL)
+    allocation_mode = models.CharField(
+        max_length=20, choices=AllocationMode.choices, default=AllocationMode.STANDARD
+    )
+    lump_bucket = models.ForeignKey(
+        "solace.BudgetBucket", on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+    )
     expected_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     pay_at = models.DateTimeField(null=True, blank=True)
     is_all_day = models.BooleanField(default=True)
@@ -187,6 +214,32 @@ class Payday(CalendarSyncMixin, HouseholdBaseModel):
 
     def get_calendar_node_key(self) -> str:
         return "solace"
+
+
+class IncomeAllocation(HouseholdBaseModel):
+    """One line of a shared income's custom split: send this share to this bucket.
+
+    Exactly one line per income may be the remainder, which receives whatever is left after the
+    percentages are applied — the same idea as a bucket capping itself to the remaining pay.
+    """
+
+    payday = models.ForeignKey(Payday, on_delete=models.CASCADE, related_name="allocations")
+    bucket = models.ForeignKey("solace.BudgetBucket", on_delete=models.CASCADE, related_name="+")
+    percentage = models.DecimalField(max_digits=6, decimal_places=2, default=Decimal("0.00"))
+    is_remainder = models.BooleanField(default=False)
+    position = models.PositiveSmallIntegerField(default=0)
+    visibility = models.CharField(max_length=20, choices=Visibility.choices, default=Visibility.SENSITIVE)
+    sensitivity = models.CharField(max_length=20, choices=Sensitivity.choices, default=Sensitivity.FINANCIAL)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        ordering = ["position", "id"]
+        verbose_name = "income allocation"
+
+    def __str__(self) -> str:
+        return f"{self.payday.title} → {self.bucket.name}"
 
 
 class PlannedPurchase(CalendarSyncMixin, HouseholdBaseModel):

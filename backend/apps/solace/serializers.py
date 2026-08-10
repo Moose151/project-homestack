@@ -14,6 +14,7 @@ from apps.solace.models import (
     BudgetBucket,
     CycleCloseout,
     FinanceCategory,
+    IncomeAllocation,
     Payday,
     PaydayChecklistItem,
     PaydayChecklistPreference,
@@ -131,13 +132,26 @@ class BillOccurrenceSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class IncomeAllocationSerializer(serializers.ModelSerializer):
+    bucket_id = serializers.IntegerField()
+    bucket_name = serializers.CharField(source="bucket.name", read_only=True)
+
+    class Meta:
+        model = IncomeAllocation
+        fields = ["id", "payday_id", "bucket_id", "bucket_name", "percentage", "is_remainder", "position"]
+        read_only_fields = ["id", "payday_id", "bucket_name"]
+
+
 class PaydaySerializer(serializers.ModelSerializer):
     next_pay_at = serializers.SerializerMethodField()
+    lump_bucket_id = serializers.IntegerField(required=False, allow_null=True)
+    allocations = IncomeAllocationSerializer(many=True, read_only=True)
 
     class Meta:
         model = Payday
         fields = [
-            "id", "title", "expected_amount", "pay_at", "is_all_day", "recurrence_rule",
+            "id", "title", "owner_name", "income_scope", "allocation_mode", "lump_bucket_id",
+            "allocations", "expected_amount", "pay_at", "is_all_day", "recurrence_rule",
             "next_pay_at", "received_at", "is_active", "notes", "calendar_event_id",
             "visibility", "sensitivity",
             "created_at", "updated_at",
