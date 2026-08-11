@@ -50,4 +50,7 @@ def apply_visibility(queryset: QuerySet, user) -> QuerySet:
     if is_child and _model_has_field(queryset.model, "sensitivity"):
         queryset = queryset.exclude(sensitivity="sensitive")
 
+    if _model_has_field(queryset.model, "hidden_from_users") and getattr(user, "is_authenticated", False):
+        queryset = queryset.exclude(hidden_from_users=user).distinct()
+
     return queryset

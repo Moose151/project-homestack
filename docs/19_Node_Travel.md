@@ -1,6 +1,6 @@
 # Node Spec — Travel
 
-> Canonical. **Next owner-requested node (2026-08-11).** Global rules from
+> Canonical. **Initial useful slice shipped in v0.33.0 (2026-08-11).** Global rules from
 > `00_README_and_Changelog.md` apply: household-scoped base models; assignments are People (D12);
 > dates sync only through the Calendar helper (D7); cross-node effects use signals (D4); shared
 > attachments own uploaded files; reads use central visibility (D10) and Postgres FTS (D9).
@@ -32,7 +32,9 @@ requirement is enabled.
 A `Trip` stores title, destination/place, comments/description, start and end dates, timezone,
 status (`planning`, `ready_to_book`, `booked`, `travelling`, `completed`, `cancelled`), selected
 Calendar colour, visibility and People participants. Empty participants means the whole household;
-otherwise several selected People means all of those individuals.
+otherwise several selected People means all of those individuals. A separate **Keep this a
+surprise** control can hide a household-visible Trip from selected linked Users. This exclusion is
+copied to every owned Calendar entry/deadline and enforced for direct links as well as lists.
 
 Two explicit requirements—**Flights required** and **Accommodation required**—control the setup
 checklist and visible sections. They do not imply booked: each required component must have at
@@ -115,7 +117,8 @@ notification work lands, with a sensible node default until then.
 
 A `TravelIdea` is deliberately lighter than a Trip: destination/title, where it is, comments,
 flight/accommodation requirement flags, rough cost/currency, participants (optional), visibility,
-colour and multiple images. It has states active, converted and archived.
+colour, selected surprise exclusions and multiple images. It has states active, converted and
+archived. Conversion retains both participants and surprise exclusions.
 
 **Plan this trip** opens a preview and transactionally creates one Trip, copies the confirmed
 fields/image links and marks the idea converted with `converted_trip_id`. Repeating the action is
@@ -137,9 +140,12 @@ Hub, kiosk or notification payloads.
 ## 11. Permissions and social behaviour
 
 `travel.view/create/edit/delete` follows normal node roles. Visibility supports household,
-private and restricted records. Children see only permitted trip summaries/packing; adult-only
-references, costs and identity documents stay hidden. Participant assignment is not itself an ACL:
-visibility still decides who may read the record.
+private and restricted records. In addition, Trips and ideas may explicitly exclude selected
+linked Users for surprise planning. That exclusion applies even to managers/admins and across
+Travel API/UI, Calendar and Agenda list/detail routes, Hub projections, notifications, Search and
+Corners; the creator cannot accidentally exclude themselves. Children see only permitted trip
+summaries/packing; adult-only references, costs and identity documents stay hidden. Participant
+assignment is not itself an ACL: visibility still decides who may read the record.
 
 Notifications: destination idea added; participant assigned; booking deadline approaching/
 overdue; booking added/changed; trip approaching; packing incomplete. Avoid noisy per-keystroke
@@ -159,9 +165,9 @@ packing and attachment metadata, always permission-filtered.
 ## 13. Proposed data model
 
 - `travel_trips` — core plan, status, dates, colour, requirement flags, visibility;
-  M2M `participants`; `calendar_event_id`.
+  M2M `participants`, M2M `hidden_from_users`; `calendar_event_id`.
 - `travel_ideas` — lightweight To-go entry, requirements/rough cost, conversion link;
-  M2M participants.
+  M2M participants and `hidden_from_users`.
 - `travel_images` — trip or idea parent, URL or attachment, caption/credit, order, cover flag.
 - `travel_bookings` — typed flight/stay/other component, times, quote/actual cost, booked state,
   `book_by`, booking/deadline Calendar references.
@@ -197,6 +203,9 @@ parents: use explicit nullable Trip/Idea FKs with a constraint that exactly one 
   once into a pre-filled Trip with its notes/images retained.
 - Private/restricted trips, costs, references and attachments do not leak through API, Search,
   Calendar, Hub, notifications, Corner or kiosk tests.
+- Hide a surprise plan from one selected linked User; it remains available to its creator but is
+  absent for the selected User from Travel and Calendar lists and returns 404 through direct
+  Travel/Calendar URLs. No destination notification is sent to that User.
 
 ## 16. Deferred
 

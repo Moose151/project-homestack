@@ -70,7 +70,7 @@ class CalendarEventDetailView(APIView):
 
     def _get_event(self, request: Request, event_id: int):
         from rest_framework.exceptions import NotFound
-        event = selectors.get_event(event_id)
+        event = selectors.get_event(event_id, request.user)
         if event is None:
             raise NotFound()
         if (

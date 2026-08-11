@@ -47,8 +47,11 @@ def list_events(
     return list(qs)
 
 
-def get_event(pk: int) -> CalendarEvent | None:
-    return CalendarEvent.objects.filter(pk=pk).first()
+def get_event(pk: int, user=None) -> CalendarEvent | None:
+    qs = CalendarEvent.objects.filter(pk=pk)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return qs.first()
 
 
 def search_events(user, query: str, *, sensitive_unlocked: bool = False) -> list[CalendarEvent]:

@@ -204,6 +204,7 @@ contract would either leak medical information or make ordinary training unusabl
 
 | Date | Change |
 |------|--------|
+| 2026-08-11 | Shipped v0.33.0 Travel: project-like Trips and To-go ideas, People/images/shared notes, conditional editable bookings and whole-party costs, planned/booked Calendar entries, separate component book-by Agenda/Hub actions, destination notifications/Corner activity, and end-to-end selected-user surprise exclusions. |
 | 2026-08-11 | Added v0.32.1 documentation: Travel is the next node, with project-like Trips/To-go planning, participants/images, conditional flights/accommodation, cost and booking progress, Calendar status/flight times, book-by actions and destination notifications. |
 | 2026-08-11 | Shipped v0.32.0 Daily Coordination: Calendar appointments, Atlas Agenda, automatic dated-item Calendar sync, virtual turning-age birthdays from household People and Atlas contacts, and independently editable pool-care schedules. Web Push remains gated on HTTPS. |
 | 2026-08-11 | Shipped v0.31.1: product preview rejects retailer interruption/security titles, preserves manually entered fields and reports honest partial results; also documented Daily Coordination as Milestone 2.6/core spec 30. |

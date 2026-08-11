@@ -235,7 +235,7 @@ POST /api/v1/home-assistant/event-mappings/{mapping_id}/test/
 ```
 
 ## 18. Later nodes
-Inventory, Assets, Hearth, Travel, Projects, Health endpoints follow the same patterns as
+Inventory, Assets, Hearth, Projects and Health endpoints follow the same patterns as
 their node specs (CRUD + node-specific actions), each behind the central permission layer.
 Health is fully sensitive and re-auth-gated.
 
@@ -257,6 +257,23 @@ Session responses prefill each set's weight from the person's last completed tra
 exercise, and every session exercise carries a read-only `last_performance`
 (`session_name`, `performed_at`, `sets`) naming where those defaults came from — `null` until the
 exercise has visible history.
+
+## 18.2 Travel
+
+```
+GET/POST                 /api/v1/travel/trips/
+GET/PATCH/DELETE         /api/v1/travel/trips/{trip_id}/
+POST                     /api/v1/travel/trips/{trip_id}/bookings/
+PATCH/DELETE             /api/v1/travel/bookings/{booking_id}/
+GET/POST                 /api/v1/travel/ideas/
+PATCH/DELETE             /api/v1/travel/ideas/{idea_id}/
+POST                     /api/v1/travel/ideas/{idea_id}/convert/
+```
+
+Trip/idea writes accept `participant_ids`, ordered `images` and `hidden_from_user_ids`. Hidden
+Users receive 404 from Travel and owned Calendar detail routes as well as being absent from list
+projections. Idea conversion is idempotent. Booking `book_by` fields own one task-classified
+Calendar mirror which is removed when the component is booked or cancelled.
 
 ## 19. Standard error & response shape
 

@@ -6,12 +6,14 @@ from rest_framework import serializers
 from apps.core.serializers import AssigneeSerializerMixin
 
 from apps.people.models import Person
+from apps.accounts.models import User
 from apps.scheduling.models import CalendarEvent, RotatingSchedule, RotatingScheduleException
 
 
 class CalendarEventSerializer(AssigneeSerializerMixin, serializers.ModelSerializer):
     is_synced = serializers.BooleanField(read_only=True)
     source_node = serializers.SerializerMethodField()
+    hidden_from_user_ids = serializers.PrimaryKeyRelatedField(source="hidden_from_users", many=True, read_only=True)
 
     class Meta:
         model = CalendarEvent
@@ -30,6 +32,7 @@ class CalendarEventSerializer(AssigneeSerializerMixin, serializers.ModelSerializ
             "source_record_type",
             "source_record_id",
             "assigned_to_person_ids",
+            "hidden_from_user_ids",
             "colour",
             "location",
             "provider",
@@ -58,6 +61,7 @@ class CalendarEventSerializer(AssigneeSerializerMixin, serializers.ModelSerializ
 
 class CalendarEventWriteSerializer(AssigneeSerializerMixin, serializers.ModelSerializer):
     """Accepts writes for standalone events only. Synced events are immutable via API."""
+    hidden_from_user_ids = serializers.PrimaryKeyRelatedField(source="hidden_from_users", queryset=User.objects.all(), many=True, required=False)
 
     class Meta:
         model = CalendarEvent
@@ -71,6 +75,7 @@ class CalendarEventWriteSerializer(AssigneeSerializerMixin, serializers.ModelSer
             "timezone",
             "recurrence_rule",
             "assigned_to_person_ids",
+            "hidden_from_user_ids",
             "colour",
             "location",
             "provider",

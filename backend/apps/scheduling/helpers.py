@@ -65,6 +65,7 @@ def sync_event_for(record) -> None:
     # after the row exists. `None` means "the record did not say", which leaves whatever the
     # event already had; an empty list means "assigned to nobody in particular".
     person_ids = data.get("assigned_to_person_ids") if "assigned_to_person_ids" in data else None
+    hidden_user_ids = data.get("hidden_from_user_ids") if "hidden_from_user_ids" in data else None
 
     existing_id = getattr(record, "calendar_event_id", None)
     if existing_id:
@@ -76,6 +77,8 @@ def sync_event_for(record) -> None:
             event.save()
             if person_ids is not None:
                 event.assigned_to_people.set(person_ids)
+            if hidden_user_ids is not None:
+                event.hidden_from_users.set(hidden_user_ids)
             return
         except CalendarEvent.DoesNotExist:
             pass  # create a fresh event below
@@ -84,6 +87,8 @@ def sync_event_for(record) -> None:
     event = CalendarEvent.objects.create(**event_fields)
     if person_ids:
         event.assigned_to_people.set(person_ids)
+    if hidden_user_ids:
+        event.hidden_from_users.set(hidden_user_ids)
 
     # Write calendar_event_id back without triggering service-layer save hooks.
     type(record).objects.filter(pk=record.pk).update(calendar_event_id=event.pk)

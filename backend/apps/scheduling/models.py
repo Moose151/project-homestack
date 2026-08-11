@@ -72,6 +72,10 @@ class CalendarEvent(HouseholdBaseModel):
             "particular owner. Several people means each of them, not one of them."
         ),
     )
+    hidden_from_users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name="hidden_calendar_events",
+        help_text="Users explicitly excluded from surprise shared events.",
+    )
     colour = models.CharField(max_length=7, blank=True, default="")
     location = models.CharField(max_length=255, blank=True, default="")
     provider = models.CharField(max_length=160, blank=True, default="")

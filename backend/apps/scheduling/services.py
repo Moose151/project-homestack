@@ -13,6 +13,7 @@ from apps.scheduling.models import CalendarEvent, RotatingSchedule, RotatingSche
 
 def create_event(acting_user: User, **data) -> CalendarEvent:
     people = pop_assignees(data)
+    hidden_users = data.pop("hidden_from_users", [])
     household = get_active_household()
     event = CalendarEvent(
         household=household,
@@ -22,17 +23,19 @@ def create_event(acting_user: User, **data) -> CalendarEvent:
     )
     event.save()
     apply_assignees(event, people)
+    event.hidden_from_users.set(hidden_users)
     return event
 
 
 def update_event(acting_user: User, event: CalendarEvent, **data) -> CalendarEvent:
     people = pop_assignees(data)
+    hidden_users = data.pop("hidden_from_users", None)
     if event.is_synced:
         raise ValueError("Synced events cannot be updated via the API.")
     allowed = {
         "title", "description", "start_at", "end_at", "is_all_day",
         "timezone", "recurrence_rule",
-        "colour", "location", "visibility", "sensitivity",
+        "event_kind", "colour", "location", "provider", "contact", "visibility", "sensitivity",
     }
     for key, val in data.items():
         if key in allowed:
@@ -40,6 +43,8 @@ def update_event(acting_user: User, event: CalendarEvent, **data) -> CalendarEve
     event.updated_by = acting_user
     event.save()
     apply_assignees(event, people)
+    if hidden_users is not None:
+        event.hidden_from_users.set(hidden_users)
     return event
 
 

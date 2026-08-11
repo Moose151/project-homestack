@@ -520,6 +520,21 @@ export const api = {
   deleteAtlasContact: (id: number): Promise<void> => _fetch(`/atlas/contacts/${id}/`, { method: 'DELETE' }),
   getBirthdayOccurrences: (start: string, end: string): Promise<import('./types').BirthdayOccurrence[]> =>
     _fetch(`/atlas/birthday-occurrences/?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`),
+
+  // --- Travel ---
+  getTrips: (): Promise<import('./types').Trip[]> => _fetch('/travel/trips/'),
+  getTrip: (id: number): Promise<import('./types').Trip> => _fetch(`/travel/trips/${id}/`),
+  createTrip: (data: Record<string, unknown>): Promise<import('./types').Trip> => _fetch('/travel/trips/', { method: 'POST', body: JSON.stringify(data) }),
+  updateTrip: (id: number, data: Record<string, unknown>): Promise<import('./types').Trip> => _fetch(`/travel/trips/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteTrip: (id: number): Promise<void> => _fetch(`/travel/trips/${id}/`, { method: 'DELETE' }),
+  createTravelBooking: (tripId: number, data: Record<string, unknown>): Promise<import('./types').TravelBooking> => _fetch(`/travel/trips/${tripId}/bookings/`, { method: 'POST', body: JSON.stringify(data) }),
+  updateTravelBooking: (id: number, data: Record<string, unknown>): Promise<import('./types').TravelBooking> => _fetch(`/travel/bookings/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteTravelBooking: (id: number): Promise<void> => _fetch(`/travel/bookings/${id}/`, { method: 'DELETE' }),
+  getTravelIdeas: (): Promise<import('./types').TravelIdea[]> => _fetch('/travel/ideas/'),
+  createTravelIdea: (data: Record<string, unknown>): Promise<import('./types').TravelIdea> => _fetch('/travel/ideas/', { method: 'POST', body: JSON.stringify(data) }),
+  updateTravelIdea: (id: number, data: Record<string, unknown>): Promise<import('./types').TravelIdea> => _fetch(`/travel/ideas/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteTravelIdea: (id: number): Promise<void> => _fetch(`/travel/ideas/${id}/`, { method: 'DELETE' }),
+  convertTravelIdea: (id: number): Promise<import('./types').Trip> => _fetch(`/travel/ideas/${id}/convert/`, { method: 'POST' }),
   createEvent: (data: CalendarEventWrite): Promise<CalendarEvent> =>
     _fetch('/calendar/events/', { method: 'POST', body: JSON.stringify(data) }),
   updateEvent: (id: number, data: Partial<CalendarEventWrite>): Promise<CalendarEvent> =>

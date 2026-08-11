@@ -287,6 +287,32 @@ export interface BirthdayOccurrence {
   event_kind: 'birthday'
 }
 
+export interface TravelImage { id: number; image_url: string; caption: string; source_credit: string; position: number; is_cover: boolean }
+export interface TravelBooking {
+  id: number; trip_id: number; kind: 'flight' | 'accommodation' | 'transport' | 'activity' | 'restaurant' | 'other'
+  title: string; provider: string; status: 'researching' | 'planned' | 'booked' | 'cancelled'
+  quoted_amount: string | null; booked_amount: string | null; currency: string
+  booking_reference: string; url: string; start_at: string | null; end_at: string | null
+  location: string; flight_number: string; departure_airport: string; arrival_airport: string
+  book_by: string | null; booked_at: string | null; notes: string; colour: string
+  calendar_event_id: number | null; deadline_calendar_event_id: number | null
+}
+export interface Trip {
+  id: number; title: string; destination: string; notes: string; start_date: string | null; end_date: string | null
+  timezone: string; status: 'planning' | 'ready_to_book' | 'booked' | 'travelling' | 'completed' | 'cancelled'
+  colour: string; flights_required: boolean; accommodation_required: boolean; visibility: string
+  participant_ids: number[]; hidden_from_user_ids: number[]; images: TravelImage[]; bookings: TravelBooking[]
+  cost_summary: { currency: string; quoted: string; booked: string }[]
+  booking_progress: { required_types: string[]; booked_required_types: string[]; component_count: number; booked_count: number }
+  calendar_event_id: number | null
+}
+export interface TravelIdea {
+  id: number; title: string; destination: string; notes: string; flights_required: boolean
+  accommodation_required: boolean; rough_cost: string | null; currency: string; colour: string
+  status: 'active' | 'converted' | 'archived'; visibility: string; participant_ids: number[]
+  hidden_from_user_ids: number[]; images: TravelImage[]; converted_trip_id: number | null; created_by_id: number
+}
+
 export interface RotatingSchedulePerson {
   id: number
   display_name: string

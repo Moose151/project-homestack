@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.32.1**
+> **Current version: 0.33.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,23 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.33 — Travel planning
+
+### 0.33.0 — 2026-08-11 — Trips, destination ideas and surprise planning
+- Added the Travel node with responsive Trips and To go workflows, shared notes, People
+  assignment, multiple linked images, colour/status/date planning and idempotent idea-to-trip
+  conversion. Destination ideas notify permitted household members and appear in their creator's
+  Corner.
+- Added editable flight, accommodation and other booking components with whole-party quote/actual
+  totals, booked progress, flight/stay times, references and independent component book-by dates.
+  Trips and timed components mirror to Calendar; booking deadlines appear once as clearly named
+  Travel tasks in Calendar, Atlas Agenda and the Hub, then resolve when booked.
+- Added **Keep this a surprise** exclusions for selected linked Users. Hidden plans, bookings and
+  deadlines are filtered from Travel, Calendar list/detail, Agenda, Hub, notifications, Search and
+  Corners even for direct URLs, while the creator remains able to manage the plan. Added Travel,
+  Scheduling and permission migrations. **813 backend tests green; frontend production build
+  clean; no migration drift.**
 
 ## 0.32 — Daily coordination
 

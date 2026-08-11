@@ -69,6 +69,7 @@ LOCAL_APPS = [
     "apps.homestead",  # Home/property hub — maintenance, appliances, providers, improvements (Node Spec 25)
     "apps.solace",  # Milestone 5 — native finance node (sensitive, re-auth required)
     "apps.fitness",  # Social fitness/training node; deliberately separate from medical Health
+    "apps.travel",  # Project-like trips, destination ideas, bookings and travel deadlines
 ]
 
 INSTALLED_APPS = [

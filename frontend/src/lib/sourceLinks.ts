@@ -8,6 +8,7 @@ import { STACK_BY_KEY } from '../config/stacks'
 export interface SourceRef {
   source_node: string | null
   source_record_type: string
+  source_record_id?: number | null
   title: string
 }
 
@@ -39,6 +40,10 @@ export function sourcePath(ref: SourceRef): string | null {
       return `/solace?tab=${SOLACE_TABS[ref.source_record_type] || 'schedule'}&q=${query}`
     case 'meridian':
       return '/meridian?tab=tasks'
+    case 'travel':
+      return ref.source_record_type === 'Trip' && ref.source_record_id
+        ? `/travel?trip=${ref.source_record_id}`
+        : '/travel'
     default:
       return null
   }

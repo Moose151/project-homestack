@@ -45,6 +45,7 @@ const MOBILE_DEFAULT_PRIORITY = [
   'hub', 'calendar', 'atlas', 'homestead', 'pets', 'home_wiki',
   'education', 'books', 'meridian', 'solace',
   'fitness',
+  'travel',
 ]
 
 const EMOJI_OPTS = ['🐱','🐶','🦊','🐼','🐻','🦋','🦄','🐸','🐳','🌻','🌙','⭐','🎸','🎮','🏄','🍕','🎩','🔮','🌈','🦅']
