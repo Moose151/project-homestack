@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.30.0**
+> **Current version: 0.30.1**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,18 @@
 ---
 
 ## 0.30 — The house as a place
+
+### 0.30.1 — 2026-08-11 — readable plan views and saved room links
+- Reworked the initial all-in-one drawing into two focused views: a large connected interior plan
+  and a simplified whole-property view. Shared walls, square room boundaries, subtle door/window
+  cues and a dedicated details rail make the plan read like the house rather than a set of cards.
+- Every space is selectable by pointer or keyboard and receives a strong filled highlight and
+  glow. The details rail can open a matched room or explicitly link the space to any existing
+  Homestead room; saved links persist in `floorplan_data` and the drawing adopts that room's name,
+  icon and colour. Links can be moved or removed without creating duplicate room records.
+- Kept name-based matching as a clearly labelled suggestion for existing data, while explicit
+  links take precedence. **Frontend production build clean; room metadata persistence regression
+  green; no migration.**
 
 ### 0.30.0 — 2026-08-11 — native interactive floor plan
 - Added a native SVG redraw of the supplied house plans to Homestead → Rooms. It combines the

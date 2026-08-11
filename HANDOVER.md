@@ -106,7 +106,7 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: v0.30.0 is code-complete locally and awaiting production deployment plus household
+**Phase: v0.30.1 is code-complete locally and awaiting production deployment plus household
 acceptance (2026-08-11).** Since the original v0.21 pilot gate, HomeStack has completed the
 generic sensitive-node lock and audit work (M4), shipped Fitness & Training (v0.25), Pools & spas
 inside Homestead (v0.26), rebuilt Money around daily use and a bucket ledger (v0.27), and closed
@@ -117,7 +117,9 @@ strict 100% ceiling for Solace percentage allocations, consolidated subscription
 self-repairing bill occurrence schedules after date corrections, exact local pay-cycle boundaries,
 Solace-only financial ownership for every home bill displayed in Homestead, complete removal of
 the leftover Subscriptions subsection, household-timezone-aware cycle boundaries, and a native
-interactive SVG of the real house/property plan in Homestead Rooms.
+interactive SVG of the real house/property plan in Homestead Rooms. Its focused interior/property
+views now support strong selected-space highlighting and explicit persistent links to existing
+room records, whose saved names, icons and colours are then used on the plan.
 **The next step is not another broad build:** rebuild/migrate the home
 server, import and verify the real Solace database, complete a real Fitness workout and pool-care
 check, then run the two-account/real-device acceptance pass. Home Assistant M5.5 follows those
@@ -365,8 +367,9 @@ gates. Kiosk refinement remains deferred.**
   appliances/warranties,
   service contacts, improvements + property record). Rooms/areas now link to dedicated pages
   with unified purchase/maintenance/renovation/upgrade plans, active/completed/archived lifecycle,
-  estimated/actual costs and exact room/whole-house totals; stable IDs plus `floorplan_data`
-  prepare for a future clickable floor plan. Folds the *home* scope of planned **Assets**.
+  estimated/actual costs and exact room/whole-house totals. The clickable floor plan uses stable
+  room IDs plus `floorplan_data.floorplan_slot` for explicit links and falls back to name-based
+  suggestions for older data. Folds the *home* scope of planned **Assets**.
   Protected insurance + rates/water/gas/utility cost tracking mirrors linked Solace bills through
   events (D4). Pools/spas add water testing, sanitiser/surface-aware target bands and idempotent
   care jobs implemented as normal recurring Homestead maintenance (not a parallel scheduler).
@@ -394,7 +397,7 @@ gates. Kiosk refinement remains deferred.**
 
 ## 6. Active tasks — deploy, cut over and validate before the next major build
 
-**Current state (2026-08-11):** v0.30.0 has 794 backend tests green, a clean
+**Current state (2026-08-11):** v0.30.1 has 794 backend tests green, a clean
 frontend production build and no migration drift. The production/home-server deployment and its
 database may still be behind this code. The real-use defects found on v0.23.x have been fixed;
 the remaining work is deployment and acceptance, not another speculative UI pass.
@@ -628,6 +631,7 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-08-11 | Assistant | Solace + Homestead | **Exact cycle boundaries and one bill owner shipped as v0.29.6 (owner request).** Fixed the local-date/UTC leak that put 12 August occurrences into the cycle displayed as ending 11 August, and made cycle windows use their literal displayed dates. Solace now owns all insurance and household-service financial fields and retains full edit/delete, occurrence history, Mark paid and autopay behavior even while a bill is shown in Homestead. Costs & cover is a protected read-through: its cards update from Solace events, link back to Solace, and edit only policy/excess/claims/account metadata. Creation/deletion there directs users to Solace. `homestead.0010` preserves valid links and creates a linked Solace bill for every existing Homestead-only policy/cost. Migration and ownership regressions added. **794 backend tests green; frontend production build clean; no model drift.** | Deploy/rebuild and migrate through `homestead.0010`; open Money → Now and confirm 12 August bills appear only in the new cycle, then inspect Electricity and every Costs & cover card in Solace. |
 | 2026-08-11 | Assistant | Solace follow-up | **Subscriptions fully absorbed and the actual timezone defect fixed as v0.29.7.** The v0.29.6 occurrence bounds still read Django's active timezone, which is UTC inside Docker, rather than the configured Household timezone; a Brisbane-local 12 August midnight could therefore remain 11 August to the backend. Pay-cycle construction, bill bounds, today and overdue comparisons now explicitly use `Household.timezone`, and Now accepts its date parameter. Removed the leftover Subscriptions subsection/filter entirely: subscription-category rows are normal Bills and legacy links land on Bills. The regression deliberately leaves Django in UTC while setting the household to Australia/Brisbane. **794 backend tests green; frontend production build clean; no migration.** | Rebuild both images (a restart of the old baked images is insufficient), confirm Settings → Household timezone is `Australia/Brisbane`, then hard-refresh and recheck Money → Now/Bills. |
 | 2026-08-11 | Assistant | Homestead floor plan | **The real house plan is now a native interactive Homestead surface (v0.30.0, owner request).** Used the supplied full-property plan for pool/cabana/shed/carport placement and the detailed plan for internal rooms/dimensions, but did not ship either branded image. `HomeFloorPlan.tsx` redraws it as responsive SVG using HomeStack light/dark tokens, room colours, zoom, keyboard links and accessible labels. It matches common room-name aliases to existing stable Room pages; unlinked spaces remain plan references. Rooms defaults to Floor plan and retains Room list as a secondary view. **Frontend production build clean; backend unchanged at 794 tests; no migration.** | Rebuild frontend and inspect the plan on phone/desktop. Rename existing Room records to the labels shown (or a supported alias) where a space is not linked; report any physical boundary/label that needs correcting from lived knowledge. |
+| 2026-08-11 | Assistant | Homestead floor plan | **The floor plan was made readable and explicitly linkable (v0.30.1, owner feedback).** Replaced the sparse all-in-one canvas and card-like rounded rooms with a large connected internal plan plus a simplified whole-property view. Shared walls, restrained architectural cues, fit/zoom controls and a side detail rail keep it visually integrated with HomeStack. Clicking or keyboard-selecting a space now gives it a strong filled highlight/glow. Editors can link any plan space to an existing Room; the association persists in `floorplan_data.floorplan_slot`, explicit links win over legacy name suggestions, and the plan adopts the room's saved name/icon/colour. Moving a room clears its old slot, and unlinking preserves all room data. **Frontend production build clean; persistence regression green; no migration.** | Rebuild the frontend, hard-refresh, then use Homestead → Rooms → Floor plan to save the real room associations. Check the interior and whole-property views on phone and laptop; only physical-boundary refinements from lived knowledge remain. |
 
 ### Session notes (free-form, optional)
 

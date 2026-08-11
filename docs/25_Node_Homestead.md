@@ -98,10 +98,13 @@ not an appointment, and its account already owns the due date (D7).
 **Rooms & areas** — named interior, outdoor, utility, storage or other spaces. Every room is a
 link to a stable dedicated page, with icon, colour, ordering, description and reserved
 `floorplan_data` metadata. The Rooms tab includes a native SVG redraw of this installation's
-house/property plan: internal rooms plus pool, cabana, shed, verandah and carport. It uses app
-tokens rather than embedding the listing image and matches tolerant room-name aliases to stable
-room pages; unmatched spaces remain labelled reference areas. Zoom and keyboard navigation are
-built in, and Room list remains available beside it.
+house/property plan, split into a detailed **Inside the house** view and a simplified **Whole
+property** view for the pool, cabana, shed and carport. It uses app tokens rather than embedding
+the listing image. Every space is pointer- and keyboard-selectable with a persistent highlighted
+selection. Editors can link it to any existing room; `floorplan_data.floorplan_slot` stores the
+association and the plan adopts that room's saved name, icon and colour. Tolerant name matching
+provides non-destructive suggestions for older rooms, while explicit links take precedence. Zoom,
+fit controls and the Room list remain available.
 **Room plans** — one unified list of purchases, maintenance, renovations and upgrades per room,
 including status (planned/in progress/completed/archived), priority, assignee, quantity,
 estimated unit cost, optional actual total cost, reference link and notes. Active items are

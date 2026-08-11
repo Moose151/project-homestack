@@ -350,7 +350,14 @@ function RoomsTab({ onError, canEdit }: { onError: (m: string) => void; canEdit:
         variant="secondary"
       />
 
-      {roomView === 'plan' && <HomeFloorPlan rooms={data.rooms} />}
+      {roomView === 'plan' && (
+        <HomeFloorPlan
+          rooms={data.rooms}
+          canEdit={canEdit}
+          onRoomsChanged={load}
+          onError={onError}
+        />
+      )}
 
       {roomView === 'list' && (
         data.rooms.length === 0 ? (

@@ -525,7 +525,7 @@ class HomesteadRoomsTests(TestCase):
             area_type="interior",
             description="Main family space",
             icon="🛋️",
-            floorplan_data={"label_x": 42, "label_y": 18},
+            floorplan_data={"label_x": 42, "label_y": 18, "floorplan_slot": "living"},
         )
 
     def test_room_crud_preserves_future_floorplan_metadata(self):
@@ -533,6 +533,7 @@ class HomesteadRoomsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["room"]["name"], "Living room")
         self.assertEqual(response.json()["room"]["floorplan_data"]["label_x"], 42)
+        self.assertEqual(response.json()["room"]["floorplan_data"]["floorplan_slot"], "living")
 
         response = self.client.patch(
             reverse("homestead-room-detail", args=[self.room.id]),
@@ -541,6 +542,7 @@ class HomesteadRoomsTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["description"], "TV and family space")
+        self.assertEqual(response.json()["floorplan_data"]["floorplan_slot"], "living")
 
     def test_room_item_costs_and_household_totals(self):
         create_room_item(
