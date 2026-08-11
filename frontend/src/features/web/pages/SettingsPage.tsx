@@ -9,6 +9,7 @@ import { NODE_GUIDE_BY_KEY, fallbackNodeGuide } from '../../../config/nodeGuides
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { PageHeader } from '../../../components/PageHeader'
+import { ColourPicker } from '../../../components/ColourPicker'
 
 const COMMON_TIMEZONES = [
   'UTC', 'Australia/Sydney', 'Australia/Melbourne', 'Australia/Brisbane',
@@ -188,21 +189,13 @@ export function SettingsPage() {
           assigned to a specific person).
         </p>
         <div className="flex items-center gap-3">
-          <input
-            type="color"
-            value={familyColour}
-            onChange={e => setFamilyColour(e.target.value)}
-            className="w-12 h-12 rounded-lg border border-line cursor-pointer"
-            aria-label="Family colour"
-            disabled={!isManager}
-          />
+          <div className="min-w-0 flex-1"><ColourPicker value={familyColour} onChange={value => isManager && setFamilyColour(value)} ariaLabel="Whole-family calendar colour" /></div>
           <span
             className="text-sm px-3 py-1.5 rounded-full font-medium"
             style={{ background: softColour(familyColour, '22'), color: familyColour }}
           >
             Whole family
           </span>
-          <div className="flex-1" />
           <Button onClick={saveColour} loading={savingColour} disabled={!isManager || familyColour === household?.family_colour}>Save</Button>
         </div>
       </Card>

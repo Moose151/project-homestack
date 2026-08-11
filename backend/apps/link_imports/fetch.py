@@ -99,7 +99,7 @@ def fetch_public(
             connection.request("GET", target, headers={
                 "Host": host_header,
                 "User-Agent": "HomeStack-LinkPreview/1.0 (+self-hosted household app)",
-                "Accept": "text/html,application/xhtml+xml,image/*;q=0.8",
+                "Accept": "text/html,application/xhtml+xml,application/json,image/*;q=0.8",
                 "Accept-Encoding": "identity",
                 "Connection": "close",
             })

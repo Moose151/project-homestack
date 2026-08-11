@@ -19,6 +19,7 @@ import { GlobalSearch } from '../../components/GlobalSearch'
 import { QuickCreate } from '../../components/QuickCreate'
 import { useScrollRestoration } from '../../hooks/useScrollRestoration'
 import { InlineAlert } from '../../components/PageState'
+import { ColourPicker } from '../../components/ColourPicker'
 
 interface NavItem {
   key: string
@@ -92,11 +93,12 @@ function ProfileEditor({ user, onSaved, onClose }: {
         onChange={e => setName(e.target.value)}
         placeholder="Your name"
       />
-      <div className="flex items-center gap-2">
-        <input type="color" value={colour} onChange={e => setColour(e.target.value)}
-          className="w-9 h-9 rounded-lg border border-line cursor-pointer p-0.5" title="Accent colour" />
-        <span className="text-xs text-muted-strong flex-1">Accent colour</span>
+      <div className="space-y-2">
+        <span className="text-xs font-semibold text-muted-strong">Accent colour</span>
+        <ColourPicker value={colour} onChange={setColour} ariaLabel="Profile accent colour" />
+        <div className="flex justify-end">
         <Avatar name={name || '?'} colour={colour} avatar={avatar} size="md" />
+        </div>
       </div>
       <div className="flex flex-wrap gap-1.5">
         {EMOJI_OPTS.map(e => (

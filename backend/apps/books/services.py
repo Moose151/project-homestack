@@ -7,7 +7,7 @@ from apps.books.models import Book, BookClub, BookClubBook, BookClubMembership, 
 from apps.core.models import get_active_household
 
 
-BOOK_FIELDS = {"title", "author", "pages", "genre", "isbn", "description", "cover_url"}
+BOOK_FIELDS = {"title", "author", "pages", "genre", "isbn", "publication_date", "description", "cover_url", "source_url"}
 CLUB_FIELDS = {"name", "colour", "description"}
 
 

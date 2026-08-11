@@ -2,7 +2,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.link_imports.extractors import extract_product
+from apps.link_imports.extractors import extract_book, extract_product
 from apps.link_imports.fetch import LinkFetchError
 from apps.link_imports.models import LinkWatch
 from apps.link_imports.serializers import LinkPreviewSerializer, LinkWatchSerializer
@@ -20,6 +20,8 @@ class LinkPreviewView(APIView):
         serializer = LinkPreviewSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
+            if serializer.validated_data["kind"] == "book":
+                return Response(extract_book(serializer.validated_data["query"]))
             return Response(extract_product(serializer.validated_data["url"]))
         except LinkFetchError as exc:
             return Response({"detail": str(exc), "code": "link_preview_failed"}, status=422)

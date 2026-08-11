@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.34.0**
+> **Current version: 0.34.1**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,17 @@
 ---
 
 ## 0.34 — Discoverability and daily navigation
+
+### 0.34.1 — 2026-08-11 — Book autofill and a shared colour palette
+- Books now accepts a public retailer/catalogue URL or ISBN-10/ISBN-13, safely extracts embedded
+  Book/Product metadata, enriches the edition through Open Library and fills an editable review
+  form with title, authors, publication date, pages, genre, description, cover, ISBN and source.
+  Partial/blocked results remain manually completable and existing-library matching still runs.
+- Added publication-date and source provenance to saved Books and displays imported covers and
+  dates on shelves. Added a shared 24-colour swatch palette with an unrestricted custom option for
+  user profiles, events, rotating schedules, household Calendar colour, trips, book clubs, rooms
+  and Wiki categories. Calendar events can still inherit their automatic person/family colour.
+  **817 backend tests green; frontend production build clean; migration `books.0002`; no drift.**
 
 ### 0.34.0 — 2026-08-11 — Personal defaults, inline agenda and in-app guides
 - My Corner and Education Study now resolve the signed-in User's linked Person instead of choosing

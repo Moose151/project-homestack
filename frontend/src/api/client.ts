@@ -1,7 +1,7 @@
 import type {
   AcademicProfile, AcademicProfileResponse, AdminUser, Appliance, AssessmentFile,
   AssessmentNote, AtlasList, AtlasListItem, AtlasListSuggestion, AtlasNote, AtlasReminder, AtlasSearchResults,
-  Attachment, AttachmentSensitivity, AttachmentVisibility, AuthUser, Badge, Book, BookClub,
+  Attachment, AttachmentSensitivity, AttachmentVisibility, AuthUser, Badge, Book, BookClub, BookLinkPreview,
   BookRating, BookShelfStatus, BooksUser, CalendarEvent, CalendarEventWrite, ClubBookEntry,
   ClubQueueItem, CornerResponse, EducationAssessment, EducationClassSession, EducationCourse, EducationEvent,
   EducationInstitution, FitnessExercise, FitnessProgram, FitnessRecord, FitnessSession,
@@ -230,7 +230,7 @@ type UserWrite = Partial<{
 
 type BookWrite = Partial<{
   title: string; author: string; pages: number | null; genre: string; isbn: string
-  description: string; cover_url: string
+  publication_date: string; description: string; cover_url: string; source_url: string
 }>
 
 type ShelfWrite = Partial<{
@@ -400,6 +400,8 @@ export const api = {
   // --- Safe link previews and price watches ---
   previewProductLink: (url: string): Promise<LinkPreview> =>
     _fetch('/link-imports/preview/', { method: 'POST', body: JSON.stringify({ url, kind: 'product' }) }),
+  previewBook: (query: string): Promise<BookLinkPreview> =>
+    _fetch('/link-imports/preview/', { method: 'POST', body: JSON.stringify({ query, kind: 'book' }) }),
   getLinkWatches: (): Promise<LinkWatch[]> => _fetch('/link-imports/watches/'),
   updateLinkWatch: (id: number, data: Partial<Pick<LinkWatch, 'is_active' | 'rule' | 'threshold_percent' | 'target_price'>>): Promise<LinkWatch> =>
     _fetch(`/link-imports/watches/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),

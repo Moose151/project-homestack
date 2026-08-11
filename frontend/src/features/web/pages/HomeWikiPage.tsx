@@ -10,6 +10,7 @@ import { EmptyState } from '../../../components/EmptyState'
 import { useAuth } from '../../auth/AuthContext'
 import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
+import { ColourPicker } from '../../../components/ColourPicker'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -322,7 +323,7 @@ function CategoriesTab({ categories, onChange, isAdmin, onError }: {
         <Card title="Add category">
           <form onSubmit={add} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_5rem_auto] sm:items-end">
             <Field label="Category name"><Input autoFocus value={name} onChange={e => setName(e.target.value)} /></Field>
-            <Field label="Colour"><input type="color" value={colour} onChange={e => setColour(e.target.value)} className="h-11 w-full rounded-xl border border-line bg-surface p-1" /></Field>
+            <Field label="Colour"><ColourPicker value={colour} onChange={setColour} ariaLabel="Wiki category colour" /></Field>
             <Button type="submit" loading={busy} disabled={!name.trim()}>Add</Button>
           </form>
         </Card>

@@ -4,8 +4,16 @@ from apps.link_imports.models import LinkWatch
 
 
 class LinkPreviewSerializer(serializers.Serializer):
-    url = serializers.URLField(max_length=1000)
-    kind = serializers.ChoiceField(choices=["product"])
+    url = serializers.URLField(max_length=1000, required=False)
+    query = serializers.CharField(max_length=1000, required=False, trim_whitespace=True)
+    kind = serializers.ChoiceField(choices=["product", "book"])
+
+    def validate(self, attrs):
+        value = attrs.get("url") or attrs.get("query")
+        if not value:
+            raise serializers.ValidationError({"query": "Enter a URL or ISBN."})
+        attrs["query"] = value
+        return attrs
 
 
 class LinkWatchSerializer(serializers.ModelSerializer):

@@ -11,6 +11,7 @@ import { EmptyState } from '../../../components/EmptyState'
 import { Field, Input, Select, Textarea } from '../../../components/Field'
 import { PageHeader } from '../../../components/PageHeader'
 import { DeleteAction, EditAction } from '../../../components/RowActions'
+import { ColourPicker } from '../../../components/ColourPicker'
 import { Tabs } from '../../../components/Tabs'
 import { confirmDialog } from '../../../components/Dialogs'
 
@@ -65,7 +66,7 @@ function PlanForm({ kind, people, existing, onCancel, onSaved, onError }: {
       <Field label="Where"><Input value={f.destination} onChange={e => set('destination', e.target.value)} placeholder="Tokyo, Japan" /></Field>
       {kind === 'trip' && <><Field label="Starts"><Input type="date" value={f.start_date} onChange={e => set('start_date', e.target.value)} /></Field><Field label="Ends"><Input type="date" value={f.end_date} onChange={e => set('end_date', e.target.value)} /></Field></>}
       <Field label="Who is going" hint="Nobody selected means the whole household."><AssigneeSelect people={people} value={f.participant_ids} onChange={value => set('participant_ids', value)} /></Field>
-      <Field label="Calendar colour"><input type="color" value={f.colour} onChange={e => set('colour', e.target.value)} className="h-11 w-full rounded-xl border border-line bg-surface p-1" /></Field>
+      <Field label="Calendar colour"><ColourPicker value={f.colour} onChange={value => set('colour', value)} ariaLabel="Trip calendar colour" /></Field>
       <label className="flex items-center gap-2 rounded-xl border border-line p-3 text-sm"><input type="checkbox" checked={f.flights_required} onChange={e => set('flights_required', e.target.checked)} /> Flights required</label>
       <label className="flex items-center gap-2 rounded-xl border border-line p-3 text-sm"><input type="checkbox" checked={f.accommodation_required} onChange={e => set('accommodation_required', e.target.checked)} /> Accommodation required</label>
       {kind === 'trip' && <Field label="Planning state"><Select value={f.status} onChange={e => set('status', e.target.value)}><option value="planning">Planning</option><option value="ready_to_book">Ready to book</option><option value="booked">Booked</option><option value="travelling">Travelling</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></Select></Field>}

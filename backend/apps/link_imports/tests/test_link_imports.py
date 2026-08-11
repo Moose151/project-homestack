@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.core.models import Household
-from apps.link_imports.extractors import extract_product
+from apps.link_imports.extractors import extract_book, extract_product
 from apps.link_imports.fetch import FetchResult, LinkFetchError, fetch_public
 from apps.link_imports.models import LinkWatch
 from apps.link_imports.tasks import run_daily_price_watches
@@ -64,6 +64,34 @@ class ProductExtractionTests(TestCase):
         self.assertEqual(result["retailer"], "harveynorman.com.au")
         self.assertTrue(any("title was ignored" in warning for warning in result["warnings"]))
         self.assertTrue(any("image link manually" in warning for warning in result["warnings"]))
+
+
+class BookExtractionTests(TestCase):
+    def test_isbn_uses_catalogue_metadata(self):
+        catalogue = b'''{"ISBN:9780553804577":{"title":"The Google Story","authors":[{"name":"David A. Vise"}],"publish_date":"2005-11-15","number_of_pages":207,"subjects":[{"name":"Business"}],"cover":{"large":"https://covers.example/book.jpg"}}}'''
+        with patch("apps.link_imports.extractors.fetch_public", return_value=FetchResult(
+            url="https://openlibrary.org/api/books", content=catalogue, content_type="application/json",
+            headers={"content-type": "application/json"},
+        )):
+            result = extract_book("978-0-553-80457-7")
+        self.assertEqual(result["isbn"], "9780553804577")
+        self.assertEqual(result["title"], "The Google Story")
+        self.assertEqual(result["author"], "David A. Vise")
+        self.assertEqual(result["publication_date"], "2005-11-15")
+        self.assertEqual(result["pages"], 207)
+
+    def test_retailer_book_schema_supplies_isbn_then_catalogue_enriches(self):
+        page = b'''<script type="application/ld+json">{"@type":"Book","name":"Piranesi","isbn":"9781526622433","image":"/cover.jpg"}</script>'''
+        catalogue = b'''{"ISBN:9781526622433":{"title":"Piranesi","authors":[{"name":"Susanna Clarke"}],"number_of_pages":272}}'''
+        with patch("apps.link_imports.extractors.fetch_public", side_effect=[
+            FetchResult(url="https://books.example/piranesi", content=page, content_type="text/html", headers={"content-type": "text/html"}),
+            FetchResult(url="https://openlibrary.org/api/books", content=catalogue, content_type="application/json", headers={"content-type": "application/json"}),
+        ]):
+            result = extract_book("https://books.example/piranesi")
+        self.assertEqual(result["title"], "Piranesi")
+        self.assertEqual(result["author"], "Susanna Clarke")
+        self.assertEqual(result["cover_url"], "https://books.example/cover.jpg")
+        self.assertEqual(result["source_url"], "https://books.example/piranesi")
 
 
 class PriceWatchScheduleTests(TestCase):

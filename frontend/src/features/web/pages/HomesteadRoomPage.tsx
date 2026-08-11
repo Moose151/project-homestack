@@ -18,6 +18,7 @@ import { StatCard } from '../../../components/StatCard'
 import { RoomIconSelect } from '../../../components/RoomIconSelect'
 import { useAuth } from '../../auth/AuthContext'
 import { confirmDialog, promptDialog } from '../../../components/Dialogs'
+import { ColourPicker } from '../../../components/ColourPicker'
 
 const ITEM_TYPES: RoomItemType[] = ['purchase', 'maintenance', 'renovation', 'upgrade']
 const ITEM_STATUSES: RoomItemStatus[] = ['planned', 'in_progress', 'completed', 'archived']
@@ -597,7 +598,7 @@ export function HomesteadRoomPage() {
             </div>
             <Field label="Description"><Textarea rows={2} value={roomForm.description} onChange={e => setRoomForm(f => ({ ...f, description: e.target.value }))} /></Field>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Colour"><Input type="color" value={roomForm.colour} onChange={e => setRoomForm(f => ({ ...f, colour: e.target.value }))} /></Field>
+              <Field label="Colour"><ColourPicker value={roomForm.colour} onChange={value => setRoomForm(form => ({ ...form, colour: value }))} ariaLabel="Room colour" /></Field>
               <Field label="Display order"><Input type="number" min="0" value={roomForm.display_order} onChange={e => setRoomForm(f => ({ ...f, display_order: Number(e.target.value) }))} /></Field>
             </div>
             <div className="flex justify-between gap-2">

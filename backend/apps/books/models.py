@@ -19,8 +19,10 @@ class Book(HouseholdBaseModel):
     pages = models.PositiveIntegerField(null=True, blank=True)
     genre = models.CharField(max_length=120, blank=True, default="")
     isbn = models.CharField(max_length=32, blank=True, default="")
+    publication_date = models.CharField(max_length=32, blank=True, default="")
     description = models.TextField(blank=True, default="")
     cover_url = models.URLField(blank=True, default="")
+    source_url = models.URLField(blank=True, default="")
 
     objects = HouseholdManager()
     all_objects = AllObjectsManager()

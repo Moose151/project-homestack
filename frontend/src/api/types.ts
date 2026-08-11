@@ -169,6 +169,21 @@ export interface LinkPreview {
   warnings: string[]
 }
 
+export interface BookLinkPreview {
+  kind: 'book'
+  source_url: string
+  source_site: string
+  title: string
+  author: string
+  publication_date: string
+  pages: number | null
+  genre: string
+  isbn: string
+  description: string
+  cover_url: string
+  warnings: string[]
+}
+
 export interface LinkWatch {
   id: number
   source_node: string
@@ -2013,8 +2028,10 @@ export interface Book {
   pages: number | null
   genre: string
   isbn: string
+  publication_date: string
   description: string
   cover_url: string
+  source_url: string
   created_at: string
   updated_at: string
 }

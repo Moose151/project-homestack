@@ -14,6 +14,11 @@ Should not feel: corporate, dense, technical, enterprise-like.
 
 Guiding rule: **experience consistency matters more than feature count.**
 
+Colour entry uses the shared HomeStack palette: a broad set of named-by-position visual swatches
+with pressed state and keyboard labels, plus the native custom picker for unrestricted colours.
+Calendar events may clear an explicit colour to inherit their Person/whole-family colour. Do not
+replace a palette with an unlabelled tiny colour well or maintain different palettes per node.
+
 ## 3. Navigation model
 
 Any person-scoped destination labelled as the user's own—such as **My Corner** or **Study**—first

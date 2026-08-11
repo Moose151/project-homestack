@@ -19,6 +19,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { useStacks } from '../../stacks/StacksContext'
 import { useUrlAction } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
+import { ColourPicker } from '../../../components/ColourPicker'
 
 // ---------------------------------------------------------------------------
 // Date helpers (no external deps)
@@ -229,12 +230,7 @@ export function EventModal({
               </Field>
             </div>
             <Field label="Colour">
-              <div className="flex items-center gap-2">
-                <input type="color" value={f.colour || '#6366F1'} onChange={e => set('colour', e.target.value)}
-                  className="h-9 w-12 cursor-pointer rounded-lg border border-line p-0.5" />
-                <span className="text-xs text-muted">{f.colour ? 'Custom colour' : 'Uses person / family colour'}</span>
-                {f.colour && <button type="button" onClick={() => set('colour', '')} className="text-xs text-muted hover:text-danger">clear</button>}
-              </div>
+              <ColourPicker value={f.colour} onChange={value => set('colour', value)} allowClear ariaLabel="Event colour" />
             </Field>
           </div>
         )}
@@ -463,10 +459,10 @@ function RotationScheduleModal({ schedule, schedules, people, onSelect, onClose,
           <summary className="cursor-pointer font-medium text-ink">Colours and visibility</summary>
           <div className="mt-3 grid grid-cols-2 gap-3">
             <Field label={f.primary_label || 'Primary'}>
-              <input type="color" value={f.primary_colour} onChange={event => set('primary_colour', event.target.value)} className="h-11 w-full rounded-lg border border-line bg-surface p-1" />
+              <ColourPicker value={f.primary_colour || '#3F7D65'} onChange={value => set('primary_colour', value)} ariaLabel={`${f.primary_label || 'Primary'} schedule colour`} />
             </Field>
             <Field label={f.secondary_label || 'Secondary'}>
-              <input type="color" value={f.secondary_colour} onChange={event => set('secondary_colour', event.target.value)} className="h-11 w-full rounded-lg border border-line bg-surface p-1" />
+              <ColourPicker value={f.secondary_colour || '#8A718E'} onChange={value => set('secondary_colour', value)} ariaLabel={`${f.secondary_label || 'Secondary'} schedule colour`} />
             </Field>
             <Field label="Visibility">
               <Select value={f.visibility} onChange={event => set('visibility', event.target.value)}>

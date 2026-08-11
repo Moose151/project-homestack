@@ -8,6 +8,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { PageHeader } from '../../../components/PageHeader'
 import { InlineAlert, PageSkeleton } from '../../../components/PageState'
 import { confirmDialog } from '../../../components/Dialogs'
+import { ColourPicker } from '../../../components/ColourPicker'
 
 const ROLES = ['admin', 'manager', 'user', 'guest'] as const
 const ROLE_LABEL: Record<(typeof ROLES)[number], string> = {
@@ -214,9 +215,7 @@ function UserForm({ people, onSaved, onError }: { people: Person[]; onSaved: () 
           </select>
           <span className="font-normal normal-case text-muted">{ROLE_HELP[f.role as (typeof ROLES)[number]]}</span>
         </label>
-        <label className="flex items-center gap-2 text-sm text-ink">
-          <input type="color" value={f.colour} onChange={e => set('colour', e.target.value)} /> Accent colour
-        </label>
+        <div className="space-y-1 text-xs font-semibold text-muted sm:col-span-2"><span>Accent colour</span><ColourPicker value={f.colour} onChange={value => set('colour', value)} ariaLabel="New user accent colour" /></div>
         <details className="rounded-xl border border-line sm:col-span-2">
           <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-sm font-semibold text-muted-strong">Choose an account picture <span>▾</span></summary>
           <div className="border-t border-line p-3"><EmojiPicker value={f.avatar} colour={f.colour} onChange={e => set('avatar', e)} /></div>
@@ -353,11 +352,7 @@ function EditUser({ u, person, onSaved, onError }: { u: AdminUser; person: Perso
       <label className="flex flex-col gap-1 text-xs font-semibold text-muted">Confirm new password
         <input className={input} type="password" autoComplete="new-password" placeholder="Repeat new password" value={f.password_confirm} onChange={e => set('password_confirm', e.target.value)} />
       </label>
-      <label className="flex items-center gap-3 text-sm text-muted-strong sm:col-span-2">
-        <input type="color" value={f.colour} onChange={e => set('colour', e.target.value)}
-          className="h-10 w-10 flex-shrink-0 cursor-pointer rounded-lg border border-line p-0.5" />
-        Accent colour
-      </label>
+      <div className="space-y-1 text-xs font-semibold text-muted sm:col-span-2"><span>Accent colour</span><ColourPicker value={f.colour} onChange={value => set('colour', value)} ariaLabel="User accent colour" /></div>
       <details className="rounded-xl border border-line sm:col-span-2">
         <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-sm font-semibold text-muted-strong">Change account picture <span>▾</span></summary>
         <div className="border-t border-line p-3"><EmojiPicker value={f.avatar} colour={f.colour} onChange={e => set('avatar', e)} /></div>

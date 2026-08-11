@@ -12,6 +12,7 @@ import { Tabs } from '../../../components/Tabs'
 import { RemoveAction } from '../../..//components/RowActions'
 import { useUrlAction, useUrlQueryState } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
+import { ColourPicker } from '../../../components/ColourPicker'
 
 type Surface = 'personal' | 'club'
 
@@ -26,13 +27,16 @@ function sorted<T extends { position: number; created_at: string }>(items: T[]) 
   return [...items].sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at))
 }
 
-function BookLine({ title, author, genre, pages }: { title: string; author?: string; genre?: string; pages?: number | null }) {
+function BookLine({ title, author, genre, pages, publicationDate, coverUrl }: { title: string; author?: string; genre?: string; pages?: number | null; publicationDate?: string; coverUrl?: string }) {
   return (
-    <div className="min-w-0">
-      <p className="font-semibold text-ink truncate">{title}</p>
-      <p className="text-xs text-muted truncate">
-        {[author, genre, pages ? `${pages} pages` : ''].filter(Boolean).join(' · ') || 'No details yet'}
-      </p>
+    <div className="flex min-w-0 items-center gap-3">
+      {coverUrl && <img src={coverUrl} alt="" className="h-14 w-10 flex-shrink-0 rounded-md border border-line object-cover" />}
+      <div className="min-w-0">
+        <p className="font-semibold text-ink truncate">{title}</p>
+        <p className="text-xs text-muted truncate">
+          {[author, publicationDate, genre, pages ? `${pages} pages` : ''].filter(Boolean).join(' · ') || 'No details yet'}
+        </p>
+      </div>
     </div>
   )
 }
@@ -133,7 +137,10 @@ function EditBookPanel({ book, onCancel, onSaved }: {
   const [pages, setPages] = useState(book.pages?.toString() || '')
   const [genre, setGenre] = useState(book.genre)
   const [isbn, setIsbn] = useState(book.isbn)
+  const [publicationDate, setPublicationDate] = useState(book.publication_date)
   const [description, setDescription] = useState(book.description)
+  const [coverUrl, setCoverUrl] = useState(book.cover_url)
+  const [sourceUrl, setSourceUrl] = useState(book.source_url)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -143,8 +150,11 @@ function EditBookPanel({ book, onCancel, onSaved }: {
     setPages(book.pages?.toString() || '')
     setGenre(book.genre)
     setIsbn(book.isbn)
+    setPublicationDate(book.publication_date)
     setDescription(book.description)
-  }, [book.id, book.title, book.author, book.pages, book.genre, book.isbn, book.description])
+    setCoverUrl(book.cover_url)
+    setSourceUrl(book.source_url)
+  }, [book.id, book.title, book.author, book.pages, book.genre, book.isbn, book.publication_date, book.description, book.cover_url, book.source_url])
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -157,7 +167,10 @@ function EditBookPanel({ book, onCancel, onSaved }: {
         pages: pages ? Number(pages) : null,
         genre: genre.trim(),
         isbn: isbn.trim(),
+        publication_date: publicationDate.trim(),
         description: description.trim(),
+        cover_url: coverUrl.trim(),
+        source_url: sourceUrl.trim(),
       })
       await onSaved()
       onCancel()
@@ -178,6 +191,11 @@ function EditBookPanel({ book, onCancel, onSaved }: {
         <Field label="Genre"><input className={inputCls} value={genre} onChange={e => setGenre(e.target.value)} /></Field>
       </div>
       <Field label="ISBN"><input className={inputCls} value={isbn} onChange={e => setIsbn(e.target.value)} /></Field>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Field label="Publication date"><input className={inputCls} value={publicationDate} onChange={e => setPublicationDate(e.target.value)} placeholder="Year or full date" /></Field>
+        <Field label="Cover image"><input className={inputCls} type="url" value={coverUrl} onChange={e => setCoverUrl(e.target.value)} /></Field>
+      </div>
+      <Field label="Source link"><input className={inputCls} type="url" value={sourceUrl} onChange={e => setSourceUrl(e.target.value)} /></Field>
       <Field label="Description"><textarea className={`${inputCls} min-h-[72px] resize-none`} value={description} onChange={e => setDescription(e.target.value)} /></Field>
       <div className="flex flex-wrap gap-2 justify-end">
         <Button type="button" size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
@@ -199,6 +217,14 @@ function AddBookPanel({ mode, clubs, selectedClub, defaultStatus, onClose, onAdd
   const [author, setAuthor] = useState('')
   const [pages, setPages] = useState('')
   const [genre, setGenre] = useState('')
+  const [isbn, setIsbn] = useState('')
+  const [publicationDate, setPublicationDate] = useState('')
+  const [description, setDescription] = useState('')
+  const [coverUrl, setCoverUrl] = useState('')
+  const [sourceUrl, setSourceUrl] = useState('')
+  const [importQuery, setImportQuery] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [warnings, setWarnings] = useState<string[]>([])
   const [status, setStatus] = useState<BookShelfStatus>(defaultStatus)
   const [clubId, setClubId] = useState<number | ''>(selectedClub?.id || clubs[0]?.id || '')
   const [busy, setBusy] = useState(false)
@@ -219,7 +245,20 @@ function AddBookPanel({ mode, clubs, selectedClub, defaultStatus, onClose, onAdd
 
   const useExisting = (b: Book) => {
     setTitle(b.title); setAuthor(b.author); setPages(b.pages?.toString() || ''); setGenre(b.genre)
+    setIsbn(b.isbn); setPublicationDate(b.publication_date); setDescription(b.description); setCoverUrl(b.cover_url); setSourceUrl(b.source_url)
     setPicked(true); setMatches([])
+  }
+
+  const fillFromImport = async () => {
+    if (!importQuery.trim()) return
+    setImporting(true); setError(null); setWarnings([])
+    try {
+      const preview = await api.previewBook(importQuery.trim())
+      setTitle(preview.title); setAuthor(preview.author); setPages(preview.pages?.toString() || '')
+      setGenre(preview.genre); setIsbn(preview.isbn); setPublicationDate(preview.publication_date)
+      setDescription(preview.description); setCoverUrl(preview.cover_url); setSourceUrl(preview.source_url)
+      setWarnings(preview.warnings); setPicked(false)
+    } catch (e) { setError(errMsg(e)) } finally { setImporting(false) }
   }
 
   const submit = async (e: FormEvent) => {
@@ -232,6 +271,11 @@ function AddBookPanel({ mode, clubs, selectedClub, defaultStatus, onClose, onAdd
         author: author.trim(),
         pages: pages ? Number(pages) : null,
         genre: genre.trim(),
+        isbn: isbn.trim(),
+        publication_date: publicationDate.trim(),
+        description: description.trim(),
+        cover_url: coverUrl.trim(),
+        source_url: sourceUrl.trim(),
       }
       if (mode === 'club') {
         if (!clubId) return
@@ -243,6 +287,7 @@ function AddBookPanel({ mode, clubs, selectedClub, defaultStatus, onClose, onAdd
       setAuthor('')
       setPages('')
       setGenre('')
+      setIsbn(''); setPublicationDate(''); setDescription(''); setCoverUrl(''); setSourceUrl(''); setImportQuery(''); setWarnings([])
       setPicked(false)
       setMatches([])
       await onAdded()
@@ -258,12 +303,33 @@ function AddBookPanel({ mode, clubs, selectedClub, defaultStatus, onClose, onAdd
     <Card title={mode === 'club' ? 'Add a book to this club' : 'Add a book to your shelves'}>
       <form onSubmit={submit} className="space-y-3">
         {error && <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+        <div className="rounded-xl border border-line bg-sunken p-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <Field label="Book link or ISBN" className="min-w-0 flex-1">
+              <input className={inputCls} value={importQuery} onChange={e => setImportQuery(e.target.value)} placeholder="Paste a retailer link, Open Library link or ISBN" />
+            </Field>
+            <Button type="button" variant="secondary" loading={importing} disabled={!importQuery.trim()} onClick={fillFromImport}>Fill details</Button>
+          </div>
+          <p className="mt-1 text-xs text-muted">HomeStack will fill what the page and public book catalogue provide. Review everything before saving.</p>
+          {warnings.length > 0 && <ul className="mt-2 space-y-1 text-xs text-warning">{warnings.map(warning => <li key={warning}>• {warning}</li>)}</ul>}
+        </div>
         <div className="grid md:grid-cols-[1.3fr_1fr_7rem_1fr] gap-2">
           <Field label="Title"><input autoFocus className={inputCls} value={title} onChange={e => { setTitle(e.target.value); setPicked(false) }} placeholder="Start typing to find an existing book" /></Field>
           <Field label="Author"><input className={inputCls} value={author} onChange={e => setAuthor(e.target.value)} /></Field>
           <Field label="Pages"><input className={inputCls} type="number" min={1} inputMode="numeric" value={pages} onChange={e => setPages(e.target.value)} /></Field>
           <Field label="Genre"><input className={inputCls} value={genre} onChange={e => setGenre(e.target.value)} /></Field>
         </div>
+        <details className="rounded-xl border border-line bg-surface p-3" open={Boolean(isbn || publicationDate || description || coverUrl)}>
+          <summary className="cursor-pointer text-sm font-bold text-ink">Book details</summary>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <Field label="ISBN"><input className={inputCls} value={isbn} onChange={e => setIsbn(e.target.value)} /></Field>
+            <Field label="Publication date"><input className={inputCls} value={publicationDate} onChange={e => setPublicationDate(e.target.value)} placeholder="Year or full date" /></Field>
+            <Field label="Cover image URL"><input className={inputCls} type="url" value={coverUrl} onChange={e => setCoverUrl(e.target.value)} /></Field>
+            <Field label="Source URL"><input className={inputCls} type="url" value={sourceUrl} onChange={e => setSourceUrl(e.target.value)} /></Field>
+            <Field label="Description" className="sm:col-span-2"><textarea className={`${inputCls} min-h-[88px] resize-y`} value={description} onChange={e => setDescription(e.target.value)} /></Field>
+          </div>
+          {coverUrl && <img src={coverUrl} alt="Imported book cover preview" className="mt-3 h-32 max-w-24 rounded-lg border border-line object-cover" />}
+        </details>
         {matches.length > 0 && (
           <div className="rounded-xl border border-line bg-surface p-2 text-sm">
             <p className="px-1 pb-1 text-xs text-muted">Already in your library — reuse instead of adding a duplicate:</p>
@@ -313,7 +379,7 @@ function PersonalBookCard({ entry, clubs, onRefresh, onMove, onDelete, onAddToCl
   return (
     <div className="rounded-xl border border-line bg-surface p-3 space-y-3">
       <div className="flex items-start gap-2">
-        <BookLine title={entry.book.title} author={entry.book.author} genre={entry.book.genre} pages={entry.book.pages} />
+        <BookLine title={entry.book.title} author={entry.book.author} genre={entry.book.genre} pages={entry.book.pages} publicationDate={entry.book.publication_date} coverUrl={entry.book.cover_url} />
         <div className="ml-auto flex items-center gap-1">
           <button type="button" onClick={() => setEditing(v => !v)} className="min-h-10 px-2 text-xs font-semibold text-muted hover:text-primary" aria-label={`Edit ${entry.book.title}`}>Edit</button>
           <RemoveAction onClick={onDelete} label={entry.book.title} />
@@ -353,7 +419,7 @@ function ClubBookCard({ entry, club, onRefresh, onMove, onDelete, onQueue }: {
   return (
     <div className="rounded-xl border border-line bg-surface p-3 space-y-3" style={{ borderLeftColor: entry.added_by_colour || club.colour, borderLeftWidth: 4 }}>
       <div className="flex items-start gap-2">
-        <BookLine title={entry.book.title} author={entry.book.author} genre={entry.book.genre} pages={entry.book.pages} />
+        <BookLine title={entry.book.title} author={entry.book.author} genre={entry.book.genre} pages={entry.book.pages} publicationDate={entry.book.publication_date} coverUrl={entry.book.cover_url} />
         <div className="ml-auto flex items-center gap-1">
           <button type="button" onClick={() => setEditing(v => !v)} className="min-h-10 px-2 text-xs font-semibold text-muted hover:text-primary" aria-label={`Edit ${entry.book.title}`}>Edit</button>
           <RemoveAction onClick={onDelete} label={entry.book.title} />
@@ -425,7 +491,7 @@ function ClubSettings({ club, users, onChanged }: {
           <input className={inputCls} value={name} onChange={e => setName(e.target.value)} />
         </Field>
         <Field label="Colour">
-          <input type="color" value={colour} onChange={e => setColour(e.target.value)} className="w-full h-11 rounded-xl border border-line p-1 bg-surface" />
+          <ColourPicker value={colour} onChange={setColour} ariaLabel="Book club colour" />
         </Field>
         <Button type="button" variant="secondary" loading={busy} disabled={!name.trim()} onClick={() => act(async () => { await api.updateBookClub(club.id, { name: name.trim(), colour }); await onChanged() })}>
           Save club
@@ -702,7 +768,7 @@ export function BooksPage() {
                       return (
                         <div key={`club-${entry.id}`} className="rounded-xl border border-line bg-surface p-3" style={{ borderLeftColor: club?.colour || '#888', borderLeftWidth: 4 }}>
                           <div className="text-[11px] font-semibold uppercase tracking-wide text-muted mb-1">{club?.name || 'Book club'}</div>
-                          <BookLine title={entry.book.title} author={entry.book.author} genre={entry.book.genre} pages={entry.book.pages} />
+                          <BookLine title={entry.book.title} author={entry.book.author} genre={entry.book.genre} pages={entry.book.pages} publicationDate={entry.book.publication_date} coverUrl={entry.book.cover_url} />
                         </div>
                       )
                     })}
@@ -746,7 +812,7 @@ export function BooksPage() {
                   {queue.map((item, idx) => (
                     <div key={item.id} className="flex items-center gap-2 rounded-xl bg-sunken p-2">
                       <span className="text-xs font-bold text-muted w-5">{idx + 1}</span>
-                      <BookLine title={item.club_book.book.title} author={item.club_book.book.author} />
+                      <BookLine title={item.club_book.book.title} author={item.club_book.book.author} publicationDate={item.club_book.book.publication_date} coverUrl={item.club_book.book.cover_url} />
                       <button
                         type="button"
                         aria-label={`Move ${item.club_book.book.title} up`}

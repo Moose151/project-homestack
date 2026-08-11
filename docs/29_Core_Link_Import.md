@@ -1,12 +1,13 @@
 # Core Spec — Safe Link Import & Enrichment
 
-> **Status:** Product slice shipped in v0.31.0. Roadmap 8.3. Initial consumers are Homestead room-plan
-> products and Atlas personal shopping/wish items; Hearth recipe import remains a later adapter. This
+> **Status:** Product slice shipped in v0.31.0 and URL/ISBN book enrichment shipped in v0.34.1.
+> Initial consumers are Homestead room-plan products, Atlas personal shopping/wish items and Books;
+> Hearth recipe import remains a later adapter. This
 > is preview-and-confirm enrichment, not a blind generic web scraper.
 
 ## 1. Purpose
 
-Let a user paste an ordinary public product or recipe URL and receive an editable draft populated
+Let a user paste an ordinary public product, book or recipe URL—or a bare ISBN for a book—and receive an editable draft populated
 with the useful information exposed by that page.
 
 For products, attempt: title, retailer/site name, price, currency and primary image. For recipes,
@@ -15,10 +16,16 @@ total time, yield/servings and source URL. Missing or ambiguous fields remain bl
 The linked page is provenance, but the user-confirmed HomeStack record becomes the saved source of
 truth; imports never overwrite later manual corrections automatically.
 
+For books, accept either ISBN-10/ISBN-13 or a public retailer/publisher/catalogue URL. Prefer an
+ISBN exposed by Schema.org `Book`/`Product` metadata, then enrich the exact edition from the public
+Open Library Books API. Attempt title, authors, publication date as published (year or full date),
+page count, subjects/genre, description, cover and source URL. This remains a user-triggered,
+rate-limited lookup; Open Library is not used as HomeStack's persistent database.
+
 ## 2. User experience
 
-Product lists in Homestead and Atlas gain **Paste product link**. Hearth later gains **Import
-recipe link**.
+Product lists in Homestead and Atlas gain **Paste product link**. Books gains **Book link or
+ISBN**, always followed by the same review-before-save flow. Hearth later gains **Import recipe link**.
 
 ```text
 Paste a link
@@ -63,6 +70,7 @@ inside each node. A suggested endpoint is:
 ```text
 POST /api/v1/link-imports/preview/
 { "url": "https://…", "kind": "product" | "recipe" }
+{ "query": "https://… or ISBN", "kind": "book" }
 ```
 
 It returns an ephemeral normalised preview plus field-level provenance/warnings. Saving happens
@@ -167,6 +175,8 @@ Recommended host cron (the command itself applies the Household-local 09:00 and 
    cannot dictate a poor recipe schema.
 6. **Evidence-driven adapters:** add a retailer/recipe-site adapter only after real URLs show that
    structured metadata is inadequate and the maintenance cost is justified.
+7. **Books adapter (shipped v0.34.1):** safely extract page ISBN/Book metadata, enrich through Open
+   Library, show partial-field warnings and save only the user-reviewed fields.
 
 ## 9. Acceptance gate
 
