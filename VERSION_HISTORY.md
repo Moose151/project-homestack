@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.29.7**
+> **Current version: 0.30.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,21 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.30 — The house as a place
+
+### 0.30.0 — 2026-08-11 — native interactive floor plan
+- Added a native SVG redraw of the supplied house plans to Homestead → Rooms. It combines the
+  full property arrangement (pool, cabana, shed and carport) with the detailed internal room
+  divisions and dimensions, without embedding either branded real-estate image.
+- The drawing inherits HomeStack paper/surface/border/accent tokens in light and dark modes,
+  includes wet/outdoor visual treatments, zoom controls, keyboard/assistive labels and an
+  explicit approximate-layout note so it reads as part of the app rather than an image pasted in.
+- Existing Homestead rooms are matched by tolerant aliases (for example Master/Bedroom 1,
+  Living/Family room and Porch/Verandah). Matched spaces use their saved icon/colour and open the
+  stable room planning page; unmatched spaces remain useful plan references. Rooms now default to
+  Floor plan with a secondary Room list view. **Frontend production build clean; backend unchanged
+  at 794 green tests; no migration.**
 
 ## 0.29 — What the house actually uses
 

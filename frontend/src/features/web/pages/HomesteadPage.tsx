@@ -28,6 +28,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { useStacks } from '../../stacks/StacksContext'
 import { useUrlAction, useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
+import { HomeFloorPlan } from '../components/HomeFloorPlan'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ')
@@ -270,6 +271,7 @@ function RoomsTab({ onError, canEdit }: { onError: (m: string) => void; canEdit:
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [roomView, setRoomView] = useState<'plan' | 'list'>('plan')
   const [form, setForm] = useState({
     name: '', area_type: 'interior' as RoomAreaType, description: '', icon: '',
   })
@@ -341,37 +343,44 @@ function RoomsTab({ onError, canEdit }: { onError: (m: string) => void; canEdit:
         </div>
       )}
 
-      {data.rooms.length === 0 ? (
-        <EmptyState icon="🚪" title="No rooms or areas yet" hint="Start with the spaces you want to plan — rooms, garage, garden, patio or any other area." />
-      ) : (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {data.rooms.map(room => (
-            <Link key={room.id} to={`/homestead/rooms/${room.id}`} className="group rounded-2xl border border-line bg-surface p-4 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm">
-              <div className="flex items-start gap-3">
-                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-2xl" style={{ backgroundColor: `${room.colour}20` }}>
-                  {room.icon || (room.area_type === 'outdoor' ? '🌿' : '🚪')}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="truncate font-bold text-ink group-hover:text-primary">{room.name}</h3>
-                    <span className="text-muted transition group-hover:translate-x-0.5">→</span>
-                  </div>
-                  <p className="text-xs text-muted">{cap(room.area_type)} · {room.summary.active_count} active</p>
-                  {room.description && <p className="mt-2 line-clamp-2 text-sm text-muted-strong">{room.description}</p>}
-                  <div className="mt-3 flex items-end justify-between gap-3 border-t border-line pt-2">
-                    <div><p className="text-xs text-muted">Remaining</p><p className="font-bold text-ink">{money(room.summary.remaining_estimated_cost)}</p></div>
-                    <p className="text-xs text-muted">{room.summary.completed_count} completed · {room.summary.archived_count} archived</p>
-                  </div>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
+      <Tabs
+        tabs={[{ key: 'plan' as const, label: 'Floor plan' }, { key: 'list' as const, label: 'Room list', badge: data.rooms.length }]}
+        active={roomView}
+        onChange={setRoomView}
+        variant="secondary"
+      />
 
-      <div className="rounded-xl border border-dashed border-line px-4 py-3 text-sm text-muted">
-        Floor-plan view is a future visual layer; every room already has a stable page for the map to open.
-      </div>
+      {roomView === 'plan' && <HomeFloorPlan rooms={data.rooms} />}
+
+      {roomView === 'list' && (
+        data.rooms.length === 0 ? (
+          <EmptyState icon="🚪" title="No rooms or areas yet" hint="Add rooms using the names shown on the floor plan to make each space clickable." />
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {data.rooms.map(room => (
+              <Link key={room.id} to={`/homestead/rooms/${room.id}`} className="group rounded-2xl border border-line bg-surface p-4 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-2xl" style={{ backgroundColor: `${room.colour}20` }}>
+                    {room.icon || (room.area_type === 'outdoor' ? '🌿' : '🚪')}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="truncate font-bold text-ink group-hover:text-primary">{room.name}</h3>
+                      <span className="text-muted transition group-hover:translate-x-0.5">→</span>
+                    </div>
+                    <p className="text-xs text-muted">{cap(room.area_type)} · {room.summary.active_count} active</p>
+                    {room.description && <p className="mt-2 line-clamp-2 text-sm text-muted-strong">{room.description}</p>}
+                    <div className="mt-3 flex items-end justify-between gap-3 border-t border-line pt-2">
+                      <div><p className="text-xs text-muted">Remaining</p><p className="font-bold text-ink">{money(room.summary.remaining_estimated_cost)}</p></div>
+                      <p className="text-xs text-muted">{room.summary.completed_count} completed · {room.summary.archived_count} archived</p>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )
+      )}
     </div>
   )
 }

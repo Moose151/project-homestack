@@ -3,7 +3,8 @@
 > Canonical. Shipped V1 (2026-07-21, v0.10.0); costs & cover added in v0.11.2;
 > room/area planning added in v0.18.0; single-entry Solace handoff added in v0.19.2;
 > maintenance-to-Solace cost creation added in v0.19.3; pools & spas added in v0.26.0;
-> metered utility usage added in v0.29.0; Solace-only bill ownership adopted in v0.29.6.
+> metered utility usage added in v0.29.0; Solace-only bill ownership adopted in v0.29.6;
+> native interactive floor plan added in v0.30.0.
 > Global rules from `00_README_and_Changelog.md`
 > apply. See **D21** for why this node exists and how it relates to Assets / Projects / Solace.
 
@@ -95,8 +96,12 @@ holds account and policy numbers. Nothing is written to the Calendar: a bill tha
 not an appointment, and its account already owns the due date (D7).
 
 **Rooms & areas** — named interior, outdoor, utility, storage or other spaces. Every room is a
-link to a stable dedicated page (and therefore a future floor-plan destination), with icon,
-colour, ordering, description and reserved `floorplan_data` metadata.
+link to a stable dedicated page, with icon, colour, ordering, description and reserved
+`floorplan_data` metadata. The Rooms tab includes a native SVG redraw of this installation's
+house/property plan: internal rooms plus pool, cabana, shed, verandah and carport. It uses app
+tokens rather than embedding the listing image and matches tolerant room-name aliases to stable
+room pages; unmatched spaces remain labelled reference areas. Zoom and keyboard navigation are
+built in, and Room list remains available beside it.
 **Room plans** — one unified list of purchases, maintenance, renovations and upgrades per room,
 including status (planned/in progress/completed/archived), priority, assignee, quantity,
 estimated unit cost, optional actual total cost, reference link and notes. Active items are
@@ -167,7 +172,7 @@ Homestead Calendar mirror so the shared timeline remains single-entry.
 
 V1 (done): property record + emergency info · maintenance with recurrence + complete-advances +
 calendar sync · appliances + warranties · service-provider directory · improvements · structured
-room/area plans and costs · pools/spas with target water bands, water-test history and a starter
+room/area plans and costs · native interactive house/property floor plan · pools/spas with target water bands, water-test history and a starter
 care schedule · metered utility usage with per-day comparison charts · FTS · three Hub widgets · `homestead.*` permissions · node catalogue
 (disabled by default). Frontend: `/homestead` route (node-gated) + 7 tabs
 (Overview/Rooms/Maintenance/Appliances/Pool & spa/Power & water/Improvements/Contacts/
@@ -178,7 +183,7 @@ for home-specific policy/account metadata. Bill CRUD, payment history and autopa
 Solace bill creation/edit can hand home insurance, household services and paid maintenance into
 these workspaces without re-entry; Homestead maintenance can create the same protected financial
 record in the other direction. Linked cards deep-link between their owning workspaces.
-Future: clickable floor-plan rendering, Projects linking, meter readings entered as counter
+Future: drag/edit floor-plan geometry, Projects linking, meter readings entered as counter
 values (usage is entered directly today), tying a utility bill to its `HouseholdCost` account,
 utility usage in FTS and a Hub widget, document attachments,
 seasonal maintenance templates, kiosk safe view, assignment/overdue notifications.
