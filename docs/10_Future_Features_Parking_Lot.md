@@ -37,8 +37,9 @@ suggestions, storage-box tracking.
 templates, insurance tracking.
 **Hearth:** recipe import, meal voting, nutrition, leftovers, batch cooking, pantry checks,
 grocery generation.
-**Travel:** maps, weather, currency conversion, travel journal, pet-care automation, Solace
-travel budgets.
+**Travel:** promoted as the next owner-requested Milestone 6 node; core scope is in spec 19.
+Maps, weather, live flight status, external booking APIs, currency conversion, travel journal,
+pet-care automation and deep Solace travel budgets remain parked.
 **Projects:** Kanban boards, templates, budget links, photo progress, garden templates, large-
 purchase workflow.
 **Health:** prescription tracking, health graphs, provider directory, emergency health card,

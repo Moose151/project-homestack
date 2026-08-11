@@ -337,6 +337,13 @@ separate from medical Health and includes the exercise/program/live-session/reco
 Each built end-to-end, one at a time, in roughly this order:
 **Inventory → Assets → Hearth → Travel → Projects → Health.**
 
+> **Owner reprioritisation (2026-08-11): Travel is the next node.** Build the project-like flow
+> specified in `19_Node_Travel.md`: Trips plus a lightweight To-go pipeline; participants and image
+> galleries; conditional multi-flight/accommodation planning; quote/booked cost roll-ups; coloured
+> Trip/flight Calendar entries with visible planning/booked state; component book-by actions in
+> Calendar/Atlas Agenda/Hub; and bundled destination-added notifications. Deliver in the four
+> slices defined by that spec and keep phone delivery behind the HTTPS gate.
+
 - Inventory and Assets pair naturally (consumables vs. owned items).
 - Hearth benefits from Inventory existing (pantry checks, grocery generation via Atlas).
 - **Health is last** and only after security maturation is proven (it already is, post-M4);

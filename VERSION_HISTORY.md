@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.32.0**
+> **Current version: 0.32.1**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,12 @@
 ---
 
 ## 0.32 — Daily coordination
+
+### 0.32.1 — 2026-08-11 — Travel planning specification
+- Promoted Travel as the next node and expanded its canonical spec into a project-like Trips/To-go
+  workflow: participants, multiple images, conditional flights/accommodation, booked and quoted
+  cost roll-ups, coloured Calendar status, flight times, booking deadlines in Agenda/Hub and
+  destination-added notifications. Documentation only; no migration.
 
 ### 0.32.0 — 2026-08-11 — appointments, Agenda, birthdays and pool schedules
 - Added explicit Calendar appointments with provider/contact fields. Calendar events now carry a
