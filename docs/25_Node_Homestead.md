@@ -136,6 +136,11 @@ Solace-funded maintenance follows the same rule: it appears in the Maintenance w
 does not create a second Calendar row.
 Notifications: assignment/overdue reminders are a later slice.
 
+Future Milestone 2.6 adds a Pool & spa care-schedule editor for cadence, preferred weekday,
+first/next occurrence, assignee and reminders. Edits affect future incomplete work only and never
+move completed history; customised schedules are not overwritten by new starter suggestions. See
+`30_Core_Daily_Coordination.md`.
+
 ## 6. Events (signals)
 
 Publishes (D4): `homestead.property_created`, `homestead.maintenance_completed`,

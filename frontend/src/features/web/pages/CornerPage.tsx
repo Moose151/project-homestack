@@ -82,7 +82,9 @@ function ProductEntry({ list, isMine, personName, onSaved }: {
     setBusy(true); setError(null)
     try {
       const result = await api.previewProductLink(url.trim())
-      setPreview(result); setTitle(result.title); setPrice(result.price || '')
+      setPreview(result)
+      setTitle(current => current.trim() ? current : result.title)
+      setPrice(current => current || result.price || '')
     } catch (reason) {
       setPreview(null)
       setError(`${reason instanceof Error ? reason.message : 'This shop could not be read.'} You can still enter the item manually.`)

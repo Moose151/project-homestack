@@ -62,6 +62,10 @@ record"; `is_synced` events are **read-only via the API** (edit the source recor
 **Standalone events** — created directly via the API (`POST /calendar/events/`); fully editable
 in place.
 
+**Appointments (planned, Milestone 2.6)** — an explicit standalone `event_kind` with provider,
+contact/location, attendees, recurrence and reminder lead times. Calendar owns the record; Atlas
+Agenda shows a permission-filtered projection rather than a copy.
+
 **Node-derived events** — created/updated/deleted automatically by `sync_event_for(record)` when
 a node record with a date changes; removed by `delete_event_for(record)` / when the source date
 is cleared. The node owns the truth; the calendar reflects it.
@@ -108,6 +112,11 @@ widget. The Hub never writes events. The Calendar is the full view that widget l
 Optional, sparing: event reminder (lead time), event starting soon, event changed/cancelled,
 assigned to an event. Channels via the shared Notifications service; the Calendar emits, it does
 not store the notification.
+
+Future shared notification preferences add per-user categories, lead times, quiet hours and
+per-device PWA Web Push subscriptions. Push content is deliberately sparse and every deep link
+re-checks authentication and source permission; in-app notifications remain authoritative. See
+`30_Core_Daily_Coordination.md`.
 
 ## 11. Events (signals)
 

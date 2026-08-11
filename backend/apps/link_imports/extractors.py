@@ -102,6 +102,21 @@ def _image(value) -> str:
     return ""
 
 
+def _is_interstitial_title(value: str) -> bool:
+    """Reject common bot/error-page titles without discarding useful partial metadata."""
+    title = re.sub(r"\s+", " ", value).strip().casefold()
+    exact = {
+        "access denied",
+        "attention required!",
+        "bot verification",
+        "pardon our interruption",
+        "request unsuccessful",
+        "security check",
+        "temporarily unavailable",
+    }
+    return title in exact or title.startswith("just a moment")
+
+
 def extract_product(url: str) -> dict:
     result = fetch_public(url)
     encoding = "utf-8"
@@ -125,6 +140,9 @@ def extract_product(url: str) -> dict:
     offers = offers if isinstance(offers, dict) else {}
 
     title = str(product.get("name") or parser.meta.get("og:title") or parser.title).strip()
+    rejected_title = _is_interstitial_title(title)
+    if rejected_title:
+        title = ""
     image = _image(product.get("image")) or parser.meta.get("og:image", "")
     price = _money(
         offers.get("price") or offers.get("lowPrice")
@@ -144,12 +162,14 @@ def extract_product(url: str) -> dict:
     canonical = urljoin(result.url, parser.canonical) if parser.canonical else result.url
     image = urljoin(result.url, image) if image else ""
     warnings: list[str] = []
-    if not title:
+    if rejected_title:
+        warnings.append("The shop showed a security/interruption page, so its page title was ignored; enter the product name manually.")
+    elif not title:
         warnings.append("The product name could not be found.")
     if price is None:
         warnings.append("The current price could not be found; enter it manually.")
     if not image:
-        warnings.append("The product image could not be found.")
+        warnings.append("The product image could not be found; paste the image link manually if you want one.")
     return {
         "kind": "product", "source_url": canonical, "source_site": retailer,
         "title": title[:255], "retailer": retailer[:160], "image_url": image[:1000],

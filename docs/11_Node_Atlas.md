@@ -50,8 +50,8 @@ is a **user**, `created_by` is a **user**.
 assigned shopper (person), category sort, kiosk-friendly ticking, mobile shopping view. May
 receive items from Hearth/Inventory later via signals.
 
-**Future personal lists (Roadmap 8.2)** — add optional `owner_person` to a list and a `wishlist`
-list type. This supplies ordinary personal shopping and point-free wishes to each Corner.
+**Personal lists (shipped v0.31.0)** — optional `owner_person` and a `wishlist` list type supply
+ordinary personal shopping and point-free wishes to each Corner.
 Household-visible is the proposed default, with Private available; a child's points-based wishlist
 continues to live in Meridian. Product-like items may use the shared safe URL preview from Roadmap
 8.3/core spec 29 rather than implementing an Atlas-specific scraper. Other people submit visible
@@ -79,9 +79,14 @@ checklist · quick add. Children get simplified widgets only.
 
 ## 9. Calendar integration
 
-Dated Atlas items (reminder/to-do/checklist due dates) may appear on the Calendar via the
-scheduling helper; the item owns its date and stores `calendar_event_id`. The user chooses
-whether a dated item appears on the Calendar — not all do by default.
+Dated Atlas items (reminder/to-do/checklist due dates) appear automatically on the Calendar via
+the scheduling helper; the item owns its date and stores `calendar_event_id`. Changing or clearing
+the date updates/removes that mirror, with no separate “show on Calendar” switch.
+
+Future Milestone 2.6 adds **Atlas Agenda**, a permission-filtered projection of all Calendar
+entries except birthdays, holidays and rotating layers, plus **People & birthdays** for external
+friends/relatives. Atlas does not copy Calendar-owned appointments or household Person records.
+See `30_Core_Daily_Coordination.md`.
 
 ## 10. Notifications
 

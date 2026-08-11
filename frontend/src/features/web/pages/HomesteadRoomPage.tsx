@@ -102,9 +102,11 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
     try {
       const preview = await api.previewProductLink(form.url.trim())
       setForm(current => ({
-        ...current, title: preview.title || current.title, url: preview.source_url,
-        image_url: preview.image_url, source_image_url: preview.image_url,
-        retailer: preview.retailer, unit_cost: preview.price || current.unit_cost,
+        ...current, title: current.title.trim() ? current.title : preview.title, url: preview.source_url,
+        image_url: current.image_url || preview.image_url,
+        source_image_url: current.source_image_url || preview.image_url,
+        retailer: current.retailer.trim() ? current.retailer : preview.retailer,
+        unit_cost: current.unit_cost || preview.price || '',
         currency: preview.currency || 'AUD', cache_image: true,
       }))
       if (preview.warnings.length) onError(preview.warnings.join(' '))

@@ -51,6 +51,20 @@ class ProductExtractionTests(TestCase):
             result = extract_product("https://shop.example/shelf")
         self.assertEqual(result["price"], "52.00")
 
+    def test_interruption_page_title_is_not_used_as_product_name(self):
+        html = b'''<html><head><title>Pardon Our Interruption</title></head>
+        <body><p data-locator="product-price">$2,977.00</p></body></html>'''
+        with patch("apps.link_imports.extractors.fetch_public", return_value=FetchResult(
+            url="https://www.harveynorman.com.au/tv.html", content=html, content_type="text/html",
+            headers={"content-type": "text/html; charset=utf-8"},
+        )):
+            result = extract_product("https://www.harveynorman.com.au/tv.html")
+        self.assertEqual(result["title"], "")
+        self.assertEqual(result["price"], "2977.00")
+        self.assertEqual(result["retailer"], "harveynorman.com.au")
+        self.assertTrue(any("title was ignored" in warning for warning in result["warnings"]))
+        self.assertTrue(any("image link manually" in warning for warning in result["warnings"]))
+
 
 class PriceWatchScheduleTests(TestCase):
     def setUp(self):

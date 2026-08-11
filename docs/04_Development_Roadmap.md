@@ -135,6 +135,29 @@ Permissions enforced throughout; all three follow the shared design system; used
 
 ---
 
+## Milestone 2.6 — Daily coordination follow-up (owner request, 2026-08-11)
+
+Build the coordinated Calendar/Atlas/People/Notifications follow-up in
+`30_Core_Daily_Coordination.md`: explicit appointments; an Atlas Agenda that projects every
+permitted Calendar entry except birthdays, holidays and rotating layers; automatic Calendar sync
+for every due-dated Atlas item; derived birthday events and turning ages from household People plus
+an Atlas directory for external people; editable future-only pool-care schedules; and per-user,
+per-device phone notification preferences through a responsive-PWA Web Push foundation.
+
+Preserve one source record throughout. Calendar-owned appointments remain editable in Calendar,
+node dates continue through the D7 helper, birthdays are derived rather than copied annually, and
+Atlas is an actionable projection rather than a second event store. Deliver in four slices:
+classification/Agenda → birthdays/people → pool schedule editor/history → notification preferences
+and Web Push.
+
+**Done when:** appointments and due-dated work appear exactly once in both their full Calendar and
+Atlas Agenda views; birthday ages derive correctly without duplicate people/events; pool schedule
+changes affect future incomplete work while preserving history; and two users can receive different
+safe phone notifications according to category, lead time, assignment and quiet hours. Permission
+and sensitive-payload regressions pass.
+
+---
+
 ## Milestone 3 — Home Wiki, Pets, Education
 
 > **Owner re-prioritisation (2026-07-14, new university term).** Two changes:

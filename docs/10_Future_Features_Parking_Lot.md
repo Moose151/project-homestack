@@ -24,7 +24,7 @@ These are intentionally not in V1 but the architecture leaves room for them:
 ## 3. Parked under existing nodes
 
 **Atlas:** rich text/Markdown, templates, recurring lists, quick capture, voice input, smart
-grocery suggestions.
+grocery suggestions. Agenda, appointments and People & birthdays are promoted to Milestone 2.6.
 **Home Wiki:** page templates, version history, linked pages, emergency mode, house-sitter
 mode, procedure blocks.
 **Pets:** feeding schedules, food-inventory link, weight graphs, pet insurance, house-sitter
@@ -46,7 +46,8 @@ encrypted health attachments, field-level encryption.
 **Meridian:** achievements, streaks, household challenges, task templates, weekly summaries.
 **Solace:** subscriptions (richer), travel/grocery/asset-purchase budget integration, reports,
 exports, encrypted finance fields.
-**Homestead:** a household-portable visual floor-plan builder: blank/template/image-tracing
+**Homestead:** editable pool-care cadence/day and future-only rescheduling are promoted to
+Milestone 2.6. A household-portable visual floor-plan builder: blank/template/image-tracing
 onboarding, drag/resize/snap rooms, optional polygons and architectural features, multi-level
 plans, draft/publish and revision history. Areas link to real Homestead rooms and inherit their
 name/icon/colour. Promoted to Roadmap 8.1 for productization; it remains a friendly approximate
@@ -60,9 +61,12 @@ for remaining polish.
 
 ## 4. Future platform features
 
-PWA · native Android/iOS · desktop app · offline mode · push/email notifications · external
+PWA · native Android/iOS · desktop app · offline mode · email notifications · external
 calendar sync · plugin architecture · general-purpose webhooks/automation · AI-assisted search ·
 OCR · semantic search.
+
+Per-user responsive-PWA Web Push preferences are promoted to Milestone 2.6; native-app push and
+email remain parked.
 
 **Safe link import/enrichment** — the product preview/cache/watch slice for Homestead/Atlas
 shipped in v0.31.0; Schema.org Recipe data for Hearth remains later. Roadmap 8.3/core spec 29

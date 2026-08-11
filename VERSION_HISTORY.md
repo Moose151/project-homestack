@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.31.0**
+> **Current version: 0.31.1**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,15 @@
 ---
 
 ## 0.31 — Household Corners and smart product links
+
+### 0.31.1 — 2026-08-11 — honest partial product previews and coordination roadmap
+- Product preview now rejects common retailer security/interruption-page titles instead of saving
+  them as product names. Preview actions fill blank fields only, preserving names, images, shops
+  and prices already entered manually; partial responses retain independently valid metadata and
+  clearly identify fields the shop withheld. Added the Harvey Norman interruption regression.
+- Added future Milestone 2.6/core spec 30 for appointments and Atlas Agenda, automatic dated Atlas
+  sync, birthdays/people, editable pool-care schedules and per-user/per-device PWA Web Push.
+  **All link-import tests green; frontend production build clean; no migration.**
 
 ### 0.31.0 — 2026-08-11 — Corners, suggestions, reactions and price-aware links
 - Added the core **My Corner / [Name]’s Corner** experience with a household switcher and
