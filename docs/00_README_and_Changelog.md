@@ -28,6 +28,7 @@ standalone documents. Archive the old files; do not edit them further.
 | `11`–`22`, `25`–`27_Node_*.md` | Per-node specifications, including Homestead, Home Assistant and Fitness. |
 | `23_Core_Hub.md` / `24_Core_Calendar.md` | Core aggregation and scheduling surface specs. |
 | `28_Core_Corners.md` / `29_Core_Link_Import.md` | Household Corners and safe URL-import contracts. |
+| `30_Core_Daily_Coordination.md` / `31_Core_Manage_HomeStack.md` | Agenda/appointments/notifications and in-app management/guides/capabilities. |
 | `PARTNER_PILOT_READINESS.md` | Two-adult account setup, per-destination readiness and real-device acceptance gate. |
 
 The node specifications cover Atlas, Home Wiki, Pets, Education, Inventory, Assets, Hearth,
@@ -204,6 +205,7 @@ contract would either leak medical information or make ordinary training unusabl
 
 | Date | Change |
 |------|--------|
+| 2026-08-11 | Shipped v0.34.0 navigation/discoverability: timed 48-hour countdowns, editable/filterable Atlas appointments/events, exact and expandable Corner activity links, current-user defaults for My Corner and Education Study, saved-Institution selectors, and generated in-app version history/node guides including disabled/future nodes. The proposed Homestead capability consolidation remains documentation only. |
 | 2026-08-11 | Shipped v0.33.0 Travel: project-like Trips and To-go ideas, People/images/shared notes, conditional editable bookings and whole-party costs, planned/booked Calendar entries, separate component book-by Agenda/Hub actions, destination notifications/Corner activity, and end-to-end selected-user surprise exclusions. |
 | 2026-08-11 | Added v0.32.1 documentation: Travel is the next node, with project-like Trips/To-go planning, participants/images, conditional flights/accommodation, cost and booking progress, Calendar status/flight times, book-by actions and destination notifications. |
 | 2026-08-11 | Shipped v0.32.0 Daily Coordination: Calendar appointments, Atlas Agenda, automatic dated-item Calendar sync, virtual turning-age birthdays from household People and Atlas contacts, and independently editable pool-care schedules. Web Push remains gated on HTTPS. |

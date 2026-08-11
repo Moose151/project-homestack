@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type { AtlasContact, AtlasList, AtlasListItem, AtlasNote, AtlasReminder, AtlasSearchResults, CalendarEvent, Person } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
+import { Modal } from '../../../components/Modal'
 import { Field, Input, SearchField, Textarea, Select } from '../../../components/Field'
 import { Tabs } from '../../../components/Tabs'
 import { PageHeader } from '../../../components/PageHeader'
@@ -14,6 +15,8 @@ import { DeleteAction } from '../../..//components/RowActions'
 import { useAuth } from '../../auth/AuthContext'
 import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
+import { sourcePath } from '../../../lib/sourceLinks'
+import { EventModal } from './CalendarPage'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -47,11 +50,12 @@ const listTypeMeta = (t: string) => LIST_TYPE_META[t] ?? { label: t, icon: '•'
 // ---------------------------------------------------------------------------
 
 function ItemRow({
-  item, listId, people, onToggle, onDelete, onError,
+  item, listId, people, focused, onToggle, onDelete, onError,
 }: {
   item: AtlasListItem
   listId: number
   people: Person[]
+  focused?: boolean
   onToggle: (item: AtlasListItem) => void
   onDelete: (item: AtlasListItem) => void
   onError: (m: string) => void
@@ -86,7 +90,7 @@ function ItemRow({
   }
 
   return (
-    <li className="group flex items-start gap-1">
+    <li id={`atlas-item-${item.id}`} className={`group flex items-start gap-1 rounded-xl ${focused ? 'bg-primary-soft ring-2 ring-primary' : ''}`}>
       {/* Whole checkbox+title is one tap target (comfortable on mobile). */}
       <button
         onClick={toggle}
@@ -137,10 +141,11 @@ function ItemRow({
 // Single list card
 // ---------------------------------------------------------------------------
 
-function ListCard({ list, people, defaultAssignee, onDeleted, onError }: {
+function ListCard({ list, people, defaultAssignee, focusedItemId, onDeleted, onError }: {
   list: AtlasList
   people: Person[]
   defaultAssignee: number[]
+  focusedItemId?: number
   onDeleted: (id: number) => void
   onError: (m: string) => void
 }) {
@@ -149,7 +154,7 @@ function ListCard({ list, people, defaultAssignee, onDeleted, onError }: {
   const [qty, setQty] = useState('')
   const [assignee, setAssignee] = useState<number[]>(defaultAssignee)
   const [adding, setAdding] = useState(false)
-  const [showDone, setShowDone] = useState(false)
+  const [showDone, setShowDone] = useState(Boolean(focusedItemId && items.some(item => item.id === focusedItemId && item.is_complete)))
   const inputRef = useRef<HTMLInputElement>(null)
   const hasQty = list.list_type === 'grocery' || list.list_type === 'shopping'
   const meta = listTypeMeta(list.list_type)
@@ -200,7 +205,7 @@ function ListCard({ list, people, defaultAssignee, onDeleted, onError }: {
   const pct = total ? Math.round((done.length / total) * 100) : 0
 
   return (
-    <Card>
+    <div id={`atlas-list-${list.id}`}><Card>
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-lg leading-none flex-shrink-0" aria-hidden>{meta.icon}</span>
@@ -226,7 +231,7 @@ function ListCard({ list, people, defaultAssignee, onDeleted, onError }: {
       {pending.length > 0 && (
         <ul className="divide-y divide-line/60">
           {pending.map(item => (
-            <ItemRow key={item.id} item={item} listId={list.id} people={people} onToggle={handleToggle} onDelete={handleDelete} onError={onError} />
+            <ItemRow key={item.id} item={item} listId={list.id} people={people} focused={focusedItemId === item.id} onToggle={handleToggle} onDelete={handleDelete} onError={onError} />
           ))}
         </ul>
       )}
@@ -243,7 +248,7 @@ function ListCard({ list, people, defaultAssignee, onDeleted, onError }: {
           {showDone && (
             <ul className="divide-y divide-line/60">
               {done.map(item => (
-                <ItemRow key={item.id} item={item} listId={list.id} people={people} onToggle={handleToggle} onDelete={handleDelete} onError={onError} />
+                <ItemRow key={item.id} item={item} listId={list.id} people={people} focused={focusedItemId === item.id} onToggle={handleToggle} onDelete={handleDelete} onError={onError} />
               ))}
             </ul>
           )}
@@ -283,7 +288,7 @@ function ListCard({ list, people, defaultAssignee, onDeleted, onError }: {
           <Button type="submit" size="sm" loading={adding} disabled={!newTitle.trim()}>Add</Button>
         </div>
       </form>
-    </Card>
+    </Card></div>
   )
 }
 
@@ -688,17 +693,82 @@ function SearchResults({ results }: { results: AtlasSearchResults }) {
 // Atlas page
 // ---------------------------------------------------------------------------
 
-function AgendaTab({ onError }: { onError: (message: string) => void }) {
+function AtlasItemAgendaModal({ list, item, people, onClose, onSaved, onError }: {
+  list: AtlasList; item: AtlasListItem; people: Person[]; onClose: () => void
+  onSaved: () => void; onError: (message: string) => void
+}) {
+  const [title, setTitle] = useState(item.title)
+  const [notes, setNotes] = useState(item.notes)
+  const [dueAt, setDueAt] = useState<string | null>(item.due_at)
+  const [allDay, setAllDay] = useState(false)
+  const [assignees, setAssignees] = useState<number[]>(item.assigned_to_person_ids)
+  const [saving, setSaving] = useState(false)
+  const save = async () => {
+    if (!title.trim()) return
+    setSaving(true)
+    try {
+      await api.updateItem(list.id, item.id, {
+        title: title.trim(), notes, due_at: dueAt, assigned_to_person_ids: assignees,
+      })
+      onSaved()
+    } catch (error) { onError(errMsg(error)) } finally { setSaving(false) }
+  }
+  return <Modal title="Edit to-do" onClose={onClose} footer={<><Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button><Button size="sm" onClick={save} loading={saving} disabled={!title.trim()}>Save</Button></>}>
+    <div className="space-y-3">
+      <Field label="To-do"><Input value={title} onChange={event => setTitle(event.target.value)} autoFocus /></Field>
+      <Field label="Due"><DateTimeField value={dueAt} allDay={allDay} onChange={({ value, allDay: nextAllDay }) => { setDueAt(value); setAllDay(nextAllDay) }} /></Field>
+      <Field label="Assigned to"><AssigneeSelect people={people} value={assignees} onChange={value => setAssignees(value || [])} /></Field>
+      <Field label="Notes"><Textarea value={notes} onChange={event => setNotes(event.target.value)} rows={3} /></Field>
+    </div>
+  </Modal>
+}
+
+function AgendaTab({ people, lists, defaultAssignee, onError, onListsChanged }: {
+  people: Person[]; lists: AtlasList[]; defaultAssignee: number[]
+  onError: (message: string) => void; onListsChanged: () => void
+}) {
   const [events, setEvents] = useState<CalendarEvent[]>([])
-  useEffect(() => { api.getEvents({ upcoming: true, agenda: true }).then(setEvents).catch(e => onError(errMsg(e))) }, [onError])
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
+  const [editingItem, setEditingItem] = useState<{ list: AtlasList; item: AtlasListItem } | null>(null)
+  const load = () => api.getEvents({ upcoming: true, agenda: true }).then(setEvents).catch(e => onError(errMsg(e)))
+  useEffect(() => { void load() }, [onError])
+  const open = (event: CalendarEvent) => {
+    if (!event.is_synced) { setEditingEvent(event); return }
+    if (event.source_node === 'atlas' && event.source_record_type === 'AtlasListItem') {
+      for (const list of lists) {
+        const item = list.items.find(row => row.id === event.source_record_id)
+        if (item) { setEditingItem({ list, item }); return }
+      }
+    }
+    const href = sourcePath(event)
+    if (href) window.location.assign(href)
+  }
   if (!events.length) return <EmptyState icon="📅" title="Nothing upcoming" hint="Appointments and anything with a due date will appear here automatically." />
-  return <div className="grid gap-3 lg:grid-cols-2">{events.slice(0, 50).map(event => <Card key={event.id}>
-    <Link to={calendarDayHref(event.start_at)} className="block">
+  return <><div className="grid gap-3 lg:grid-cols-2">{events.slice(0, 50).map(event => <Card key={event.id}>
+    <button type="button" onClick={() => open(event)} className="block w-full text-left">
       <div className="flex items-start gap-3"><span className="text-xl">{event.event_kind === 'appointment' ? '🩺' : event.event_kind === 'task' ? '✓' : '📅'}</span>
-        <div><h3 className="font-bold text-ink">{event.title}</h3><p className="text-sm text-muted">{new Date(event.start_at).toLocaleString()} · {event.source_node || event.event_kind}</p></div>
+        <div className="min-w-0 flex-1"><h3 className="font-bold text-ink">{event.title}</h3><p className="text-sm text-muted">{new Date(event.start_at).toLocaleString()} · {event.source_node || event.event_kind}</p><p className="mt-1 text-xs font-bold text-primary">{!event.is_synced || event.source_node === 'atlas' ? 'Edit here →' : 'Open source →'}</p></div>
       </div>
-    </Link>
+    </button>
   </Card>)}</div>
+    {editingEvent && <EventModal event={editingEvent} defaultDate={null} people={people} defaultAssignee={defaultAssignee} onClose={() => setEditingEvent(null)} onSaved={() => { setEditingEvent(null); void load() }} onError={onError} />}
+    {editingItem && <AtlasItemAgendaModal {...editingItem} people={people} onClose={() => setEditingItem(null)} onSaved={() => { setEditingItem(null); onListsChanged(); void load() }} onError={onError} />}
+  </>
+}
+
+function AppointmentsEventsTab({ people, defaultAssignee, onError }: { people: Person[]; defaultAssignee: number[]; onError: (message: string) => void }) {
+  const [events, setEvents] = useState<CalendarEvent[]>([])
+  const [filter, setFilter] = useState<'all' | 'appointment' | 'event'>('all')
+  const [editing, setEditing] = useState<CalendarEvent | null>(null)
+  const [creating, setCreating] = useState(false)
+  const load = () => api.getEvents({ upcoming: true }).then(rows => setEvents(rows.filter(row => row.event_kind === 'event' || row.event_kind === 'appointment'))).catch(error => onError(errMsg(error)))
+  useEffect(() => { void load() }, [onError])
+  const shown = filter === 'all' ? events : events.filter(event => event.event_kind === filter)
+  return <div className="space-y-4">
+    <div className="flex flex-wrap items-center justify-between gap-2"><div className="flex gap-2">{(['all', 'appointment', 'event'] as const).map(value => <button key={value} onClick={() => setFilter(value)} className={`min-h-10 rounded-full border px-3 text-sm font-bold ${filter === value ? 'border-primary bg-primary-soft text-primary' : 'border-line text-muted'}`}>{value === 'all' ? 'All' : value === 'appointment' ? 'Appointments' : 'Events'}</button>)}</div><Button size="sm" onClick={() => setCreating(true)}>+ Add</Button></div>
+    {!shown.length ? <EmptyState icon="📅" title={`No upcoming ${filter === 'all' ? 'appointments or events' : `${filter}s`}`} /> : <div className="grid gap-3 lg:grid-cols-2">{shown.map(event => <Card key={event.id}><button type="button" onClick={() => event.is_synced ? window.location.assign(sourcePath(event) || calendarDayHref(event.start_at)) : setEditing(event)} className="w-full text-left"><p className="text-xs font-bold uppercase text-primary">{event.event_kind}</p><h3 className="font-bold text-ink">{event.title}</h3><p className="text-sm text-muted">{new Date(event.start_at).toLocaleString()}{event.location ? ` · ${event.location}` : ''}</p><p className="mt-1 text-xs font-bold text-primary">{event.is_synced ? 'Open source →' : 'Edit here →'}</p></button></Card>)}</div>}
+    {(editing || creating) && <EventModal event={editing} defaultDate={creating ? new Date() : null} people={people} defaultAssignee={defaultAssignee} onClose={() => { setEditing(null); setCreating(false) }} onSaved={() => { setEditing(null); setCreating(false); void load() }} onError={onError} />}
+  </div>
 }
 
 function PeopleBirthdaysTab({ people, onError }: { people: Person[]; onError: (message: string) => void }) {
@@ -721,8 +791,8 @@ function PeopleBirthdaysTab({ people, onError }: { people: Person[]; onError: (m
   </div>
 }
 
-type Tab = 'agenda' | 'lists' | 'notes' | 'reminders' | 'people'
-const TAB_KEYS: Tab[] = ['agenda', 'lists', 'notes', 'reminders', 'people']
+type Tab = 'agenda' | 'schedule' | 'lists' | 'notes' | 'reminders' | 'people'
+const TAB_KEYS: Tab[] = ['agenda', 'schedule', 'lists', 'notes', 'reminders', 'people']
 
 const LIST_TYPES = Object.entries(LIST_TYPE_META).map(([key, m]) => ({ key, label: m.label, icon: m.icon }))
 
@@ -742,11 +812,17 @@ export function AtlasPage() {
   // Remount only the affected list card / self-fetching tab after a quick capture.
   const [cardRefresh, setCardRefresh] = useState<Record<number, number>>({})
   const [captureTick, setCaptureTick] = useState(0)
+  const [searchParams] = useSearchParams()
+  const focusedListId = Number(searchParams.get('list') || 0)
+  const focusedItemId = Number(searchParams.get('item') || 0)
 
   useEffect(() => {
     api.getLists().then(setLists).catch(e => setError(errMsg(e))).finally(() => setLoading(false))
   }, [])
   useEffect(() => { api.getPeople().then(setPeople).catch(() => {}) }, [])
+  useEffect(() => {
+    if (!loading && focusedListId) window.setTimeout(() => document.getElementById(focusedItemId ? `atlas-item-${focusedItemId}` : `atlas-list-${focusedListId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
+  }, [loading, focusedListId, focusedItemId])
 
   const defaultAssignee = personIdForUser(people, user?.id)
 
@@ -835,6 +911,7 @@ export function AtlasPage() {
           <Tabs
             tabs={[
               { key: 'agenda', label: 'agenda' },
+              { key: 'schedule', label: 'appointments & events' },
               { key: 'lists', label: 'lists', badge: lists.length || undefined },
               { key: 'notes', label: 'notes' },
               { key: 'reminders', label: 'reminders' },
@@ -845,7 +922,7 @@ export function AtlasPage() {
             className="w-fit"
           />
 
-          {tab === 'agenda' ? <AgendaTab onError={setError} /> : tab === 'lists' ? (
+          {tab === 'agenda' ? <AgendaTab people={people} lists={lists} defaultAssignee={defaultAssignee} onError={setError} onListsChanged={() => api.getLists().then(setLists).catch(error => setError(errMsg(error)))} /> : tab === 'schedule' ? <AppointmentsEventsTab people={people} defaultAssignee={defaultAssignee} onError={setError} /> : tab === 'lists' ? (
             <div className="flex flex-col gap-4">
               {creatingList ? (
                 <form onSubmit={createList} className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-3 sm:flex-row">
@@ -887,6 +964,7 @@ export function AtlasPage() {
                       list={list}
                       people={people}
                       defaultAssignee={defaultAssignee}
+                      focusedItemId={list.id === focusedListId ? focusedItemId : undefined}
                       onDeleted={id => setLists(prev => prev.filter(l => l.id !== id))}
                       onError={setError}
                     />

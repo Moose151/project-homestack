@@ -103,9 +103,21 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False, sensitive_unlocked: bool 
             content = []
 
         elif key == "countdown":
-            # Household-configured but client-rendered so the display stays timezone-local.
             content = []
             meta = dict(hw.settings_json or {})
+            # Date-only settings from older releases deliberately become noon, not midnight.
+            meta.setdefault("target_time", "12:00")
+            if meta.get("target_date"):
+                from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+                try:
+                    target = datetime.combine(
+                        datetime.fromisoformat(meta["target_date"]).date(),
+                        time.fromisoformat(meta["target_time"]),
+                        tzinfo=ZoneInfo(user.household.timezone),
+                    )
+                    meta["target_at"] = target.isoformat()
+                except (TypeError, ValueError, ZoneInfoNotFoundError):
+                    pass
 
         elif key == "atlas_todos":
             content = AtlasListItemSerializer(list_open_items(user, limit=20), many=True).data

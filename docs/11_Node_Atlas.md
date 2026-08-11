@@ -83,10 +83,13 @@ Dated Atlas items (reminder/to-do/checklist due dates) appear automatically on t
 the scheduling helper; the item owns its date and stores `calendar_event_id`. Changing or clearing
 the date updates/removes that mirror, with no separate “show on Calendar” switch.
 
-Future Milestone 2.6 adds **Atlas Agenda**, a permission-filtered projection of all Calendar
-entries except birthdays, holidays and rotating layers, plus **People & birthdays** for external
-friends/relatives. Atlas does not copy Calendar-owned appointments or household Person records.
-See `30_Core_Daily_Coordination.md`.
+Atlas Agenda is a permission-filtered projection of all Calendar entries except birthdays,
+holidays and rotating layers; **People & birthdays** covers external friends/relatives. The
+**Appointments & events** browse/manage view combines both types behind All/Appointments/Events
+filters rather than adding two redundant tabs. Standalone Calendar entries use the shared editor
+inside Atlas; node-owned entries expose only owner-approved inline actions or open the exact source.
+Atlas does not copy Calendar-owned appointments or household Person records. See
+`30_Core_Daily_Coordination.md`.
 
 ## 10. Notifications
 

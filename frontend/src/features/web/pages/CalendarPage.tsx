@@ -70,7 +70,7 @@ const DEFAULT_COLOUR = '#9CA3AF'
 // rest collapsed under "More options" so the frequent case is just title + start.
 // ---------------------------------------------------------------------------
 
-function EventModal({
+export function EventModal({
   event, defaultDate, people, defaultAssignee, onClose, onSaved, onError,
 }: {
   event: CalendarEvent | null

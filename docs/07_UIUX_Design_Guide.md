@@ -16,6 +16,11 @@ Guiding rule: **experience consistency matters more than feature count.**
 
 ## 3. Navigation model
 
+Any person-scoped destination labelled as the user's own—such as **My Corner** or **Study**—first
+resolves the signed-in User's linked Person. Alphabetic order is never an identity default. A
+visible person switcher may then move to another permitted member; an unlinked User gets an
+explicit selection/setup state rather than somebody else's data by default.
+
 Navigation leads with the household task in plain language; the node name is supporting context,
 not required vocabulary. Current shipped examples are: Home (Hub) · Calendar · Lists & notes
 (Atlas) · School & study (Education) · Books · Household guide (Home Wiki) · Pets · Our home

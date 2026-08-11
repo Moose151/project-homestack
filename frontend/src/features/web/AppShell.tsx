@@ -178,6 +178,13 @@ export function AppShell() {
   const [customisingNav, setCustomisingNav] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [quickOpen, setQuickOpen] = useState(false)
+  const guideStorageKey = `hs-hidden-guides-${user?.id ?? 'guest'}`
+  const [hiddenGuides, setHiddenGuides] = useState<string[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(`hs-hidden-guides-${user?.id ?? 'guest'}`) || '[]')
+      return Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string') : []
+    } catch { return [] }
+  })
   const [mobileKeys, setMobileKeys] = useState<string[]>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('hs-mobile-nav') || '[]')
@@ -222,6 +229,17 @@ export function AppShell() {
   const moreStandsIn = currentNav && !mobilePrimary.some(item => item.key === currentNav.key)
     ? currentNav
     : null
+  const contextualGuide = currentNav && !['settings', 'users'].includes(currentNav.key) && !hiddenGuides.includes(currentNav.key)
+    ? currentNav
+    : null
+
+  const hideContextualGuide = (key: string) => {
+    setHiddenGuides(previous => {
+      const next = Array.from(new Set([...previous, key]))
+      localStorage.setItem(guideStorageKey, JSON.stringify(next))
+      return next
+    })
+  }
 
   const toggleMobileKey = (key: string) => {
     setMobileKeys(previous => {
@@ -251,6 +269,17 @@ export function AppShell() {
   useEffect(() => {
     setMoreOpen(false)
   }, [location.pathname, location.search])
+
+  useEffect(() => {
+    const reload = () => {
+      try {
+        const saved = JSON.parse(localStorage.getItem(guideStorageKey) || '[]')
+        setHiddenGuides(Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string') : [])
+      } catch { setHiddenGuides([]) }
+    }
+    window.addEventListener('homestack-guide-preferences', reload)
+    return () => window.removeEventListener('homestack-guide-preferences', reload)
+  }, [guideStorageKey])
 
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
@@ -393,6 +422,16 @@ export function AppShell() {
           </div>
         </header>
         <ConnectionBanner />
+        {contextualGuide && (
+          <div className={`${CONTENT_CONTAINER} pt-2`}>
+            <div className="flex items-center justify-end gap-1 text-[11px] text-muted">
+              <NavLink to={`/settings/guides/${contextualGuide.key}`} className="rounded-lg px-2 py-1 font-semibold hover:bg-sunken hover:text-primary">
+                ⓘ About {contextualGuide.label}
+              </NavLink>
+              <button type="button" onClick={() => hideContextualGuide(contextualGuide.key)} className="grid h-7 w-7 place-items-center rounded-lg hover:bg-sunken hover:text-ink" aria-label={`Hide the ${contextualGuide.label} guide link`} title="Hide this guide link">×</button>
+            </div>
+          </div>
+        )}
         {stacksError && (
           <div className={`${CONTENT_CONTAINER} pt-4`}>
             <InlineAlert message={stacksError} onRetry={refreshStacks} />

@@ -21,6 +21,8 @@ const TravelPage = lazy(() => import('./features/web/pages/TravelPage').then(m =
 const CornerPage = lazy(() => import('./features/web/pages/CornerPage').then(m => ({ default: m.CornerPage })))
 const UsersPage = lazy(() => import('./features/web/pages/UsersPage').then(m => ({ default: m.UsersPage })))
 const SettingsPage = lazy(() => import('./features/web/pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
+const NodeGuidePage = lazy(() => import('./features/web/pages/NodeGuidePage').then(m => ({ default: m.NodeGuidePage })))
+const VersionHistoryPage = lazy(() => import('./features/web/pages/VersionHistoryPage').then(m => ({ default: m.VersionHistoryPage })))
 const KioskApp = lazy(() => import('./features/kiosk/KioskApp').then(m => ({ default: m.KioskApp })))
 
 function RouteFallback() {
@@ -64,6 +66,8 @@ function WebRoutes({ isAdmin }: { isAdmin: boolean }) {
         <Route path="/travel" element={<NodeRoute nodeKey="travel"><Deferred><TravelPage /></Deferred></NodeRoute>} />
         {isAdmin && <Route path="/users" element={<Deferred><UsersPage /></Deferred>} />}
         {isAdmin && <Route path="/settings" element={<Deferred><SettingsPage /></Deferred>} />}
+        <Route path="/settings/guides/:nodeKey" element={<Deferred><NodeGuidePage /></Deferred>} />
+        <Route path="/settings/version-history" element={<Deferred><VersionHistoryPage /></Deferred>} />
         <Route path="*" element={<Navigate to="/hub" replace />} />
       </Route>
     </Routes>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { api } from '../../../api/client'
 import type {
@@ -405,6 +405,8 @@ export function HomesteadRoomPage() {
   const { roomId } = useParams()
   const id = Number(roomId)
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const focusedItemId = Number(searchParams.get('plan_item') || 0)
   const { user } = useAuth()
   const [data, setData] = useState<RoomDetailResponse>(EMPTY_DETAIL)
   const [people, setPeople] = useState<Person[]>([])
@@ -437,6 +439,9 @@ export function HomesteadRoomPage() {
     void load()
     api.getPeople().then(setPeople).catch(() => {})
   }, [id])
+  useEffect(() => {
+    if (!loading && focusedItemId) window.setTimeout(() => document.getElementById(`homestead-plan-item-${focusedItemId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
+  }, [loading, focusedItemId])
 
   const grouped = useMemo(() => {
     const active = data.items.filter(item => item.status === 'planned' || item.status === 'in_progress')
@@ -520,7 +525,7 @@ export function HomesteadRoomPage() {
   const itemCard = (item: RoomPlanItem) => {
     const assigneeName = assigneeLabel(people, item.assigned_to_person_ids)
     return (
-      <div key={item.id} className="group rounded-xl border border-line bg-surface p-3">
+      <div key={item.id} id={`homestead-plan-item-${item.id}`} className={`group rounded-xl border bg-surface p-3 ${focusedItemId === item.id ? 'border-primary ring-2 ring-primary ring-offset-2 ring-offset-paper' : 'border-line'}`}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">

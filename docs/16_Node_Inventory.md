@@ -1,12 +1,16 @@
 # Node Spec — Inventory
 
-> Canonical. **Later node** (post-V1). Global rules from `00_README_and_Changelog.md` apply.
+> Canonical feature scope. **Recommended as an optional Homestead → Stock & storage capability,
+> not a separate top-level node** (owner discussion, 2026-08-11). Global rules from
+> `00_README_and_Changelog.md` apply; see `31_Core_Manage_HomeStack.md`.
 
 ## 1. Purpose & philosophy
 
 Tracks household consumables and stored items so the household knows what's on hand, what's
 low, what's expiring and what to add to shopping. Answers: *"What do we have, where is it, and
-do we need more?"* Not an asset manager — valuable/serviced/warrantied items → Assets.
+do we need more?"* It should appear inside Homestead because rooms/storage locations are its
+natural structure. It remains a bounded data capability so Hearth/Pets/Atlas integrations do not
+depend on Homestead presentation code. Valuable/serviced/warrantied items → Assets & vehicles.
 
 ## 2. Belongs / does not belong
 

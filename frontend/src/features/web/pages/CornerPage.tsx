@@ -32,7 +32,15 @@ function ActivityCard({ row, reacting, onReact }: {
   reacting: string
   onReact: (emoji: string) => void
 }) {
+  const [expanded, setExpanded] = useState(false)
   const groups = new Map(row.reactions.map(group => [group.emoji, group]))
+  const setSummary = (exercise: NonNullable<CornerActivity['detail_summary']>['exercises'][number]) => exercise.sets.map(set => {
+    if (set.weight && set.reps) return `${Number(set.weight)} ${exercise.weight_unit} × ${set.reps}`
+    if (set.reps) return `${set.reps} reps`
+    if (Number(set.distance)) return `${Number(set.distance)} ${exercise.distance_unit}${set.duration_seconds ? ` · ${Math.round(set.duration_seconds / 60)} min` : ''}`
+    if (set.duration_seconds) return `${Math.round(set.duration_seconds / 60)} min`
+    return ''
+  }).filter(Boolean).join(' · ')
   return (
     <article className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
       <div className="flex items-start gap-3">
@@ -42,6 +50,8 @@ function ActivityCard({ row, reacting, onReact }: {
         <div className="min-w-0 flex-1">
           <Link to={row.action_url} className="font-bold text-ink hover:text-primary">{row.title}</Link>
           <p className="mt-0.5 text-xs text-muted">{row.summary} · {when(row.occurred_at)}</p>
+          <div className="mt-2 flex flex-wrap gap-3 text-xs font-bold text-primary"><Link to={row.action_url}>Open →</Link>{row.detail_summary && <button type="button" onClick={() => setExpanded(value => !value)}>{expanded ? 'Hide details' : 'Show details'}</button>}</div>
+          {expanded && row.detail_summary && <div className="mt-3 space-y-2 rounded-xl bg-sunken p-3"><p className="text-xs font-bold text-muted-strong">{Math.round((row.detail_summary.duration_seconds || 0) / 60)} min · {row.detail_summary.total_reps} reps · {Number(row.detail_summary.total_volume).toLocaleString()} kg volume</p>{row.detail_summary.exercises.map((exercise, index) => <div key={`${exercise.name}-${index}`}><p className="text-sm font-bold text-ink">{exercise.name}</p><p className="text-xs text-muted">{setSummary(exercise) || 'No completed sets'}</p></div>)}</div>}
           <div className="mt-3 flex flex-wrap gap-1.5">
             {REACTIONS.map(emoji => {
               const group = groups.get(emoji)
@@ -196,6 +206,7 @@ export function CornerPage() {
   const { user } = useAuth()
   const [tab, setTab] = useUrlTab<CornerTab>('overview', TABS)
   const [people, setPeople] = useState<Person[]>([])
+  const [peopleLoaded, setPeopleLoaded] = useState(false)
   const [corner, setCorner] = useState<CornerResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -212,9 +223,8 @@ export function CornerPage() {
       if (!selectedId) {
         const mine = rows.find(person => person.linked_user_id === user?.id)
         if (mine) navigate(`/corners/${mine.id}`, { replace: true })
-        else if (rows[0]) navigate(`/corners/${rows[0].id}`, { replace: true })
       }
-    }).catch(reason => setError(reason instanceof Error ? reason.message : 'People could not be loaded.'))
+    }).catch(reason => setError(reason instanceof Error ? reason.message : 'People could not be loaded.')).finally(() => setPeopleLoaded(true))
   }, [navigate, selectedId, user?.id])
 
   const load = useCallback(async () => {
@@ -244,6 +254,7 @@ export function CornerPage() {
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'The list could not be created.') }
   }
 
+  if (!selectedId && peopleLoaded) return <EmptyState icon="✨" title="Your Corner is not linked yet" hint="Ask a HomeStack administrator to link this login to your household profile. You can still open another member’s Corner from their avatar elsewhere in HomeStack." />
   if (!selectedId || loading) return <PageSkeleton cards={4} />
   if (!corner) return <InlineAlert message={error || 'This Corner is unavailable.'} onRetry={load} />
   const pageTitle = corner.person.is_me ? 'My Corner' : `${corner.person.name}’s Corner`

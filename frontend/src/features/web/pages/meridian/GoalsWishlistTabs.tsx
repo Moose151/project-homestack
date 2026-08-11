@@ -176,7 +176,7 @@ function NewGoalForm({ onCreated }: { onCreated: () => void }) {
 
 // Wishlist ------------------------------------------------------------------
 
-export function WishlistTab({ canManage, pointsLabel }: { canManage: boolean; pointsLabel: string }) {
+export function WishlistTab({ canManage, pointsLabel, focusedWishId }: { canManage: boolean; pointsLabel: string; focusedWishId?: number }) {
   const [items, setItems] = useState<MeridianWishlistItem[]>([])
   const [requests, setRequests] = useState<MeridianWishlistRequest[]>([])
   const [people, setPeople] = useState<Person[]>([])
@@ -204,6 +204,9 @@ export function WishlistTab({ canManage, pointsLabel }: { canManage: boolean; po
     }
   }
   useEffect(() => { reload() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!loading && focusedWishId) window.setTimeout(() => document.getElementById(`meridian-wish-${focusedWishId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
+  }, [loading, focusedWishId])
 
   const personName = (id: number) => people.find(p => p.id === id)?.display_name || 'Someone'
 
@@ -274,7 +277,7 @@ export function WishlistTab({ canManage, pointsLabel }: { canManage: boolean; po
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {items.map(it => (
-            <Card key={it.id}>
+            <div key={it.id} id={`meridian-wish-${it.id}`} className={focusedWishId === it.id ? 'rounded-2xl ring-2 ring-primary ring-offset-2 ring-offset-paper' : ''}><Card>
               <div className="flex flex-col gap-2">
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-bold text-ink">{it.name} <span className="text-xs text-muted font-normal">· {personName(it.person_id)}</span></h3>
@@ -312,7 +315,7 @@ export function WishlistTab({ canManage, pointsLabel }: { canManage: boolean; po
                   }}>Mark fulfilled</Button>
                 )}
               </div>
-            </Card>
+            </Card></div>
           ))}
         </div>
       )}

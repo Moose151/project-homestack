@@ -8,7 +8,7 @@ def provide(*, user, person, since):
     activity = [{
         "key": f"travel:idea:{row.id}:created", "source_node": "travel", "kind": "destination",
         "title": f"Added {row.title} to To go", "summary": row.destination,
-        "occurred_at": row.created_at.isoformat(), "action_url": "/travel?tab=ideas",
+        "occurred_at": row.created_at.isoformat(), "action_url": f"/travel?tab=ideas&idea={row.id}",
     } for row in ideas]
     trips = apply_visibility(Trip.objects.filter(participants=person).exclude(status__in=["completed", "cancelled"]), user)
     assignments = [{

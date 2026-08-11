@@ -297,7 +297,7 @@ def finish_session(user, session, *, notes=None):
             notifications.create_notification(
                 recipient, title="Workout completed", message=message,
                 level=Notification.Level.SUCCESS, source_node="fitness",
-                action_url=f"/fitness?session={session.id}",
+                action_url=f"/fitness?tab=history&session={session.id}",
             )
     events.session_completed(session.id, session.household_id, session.person_id, len(records))
     return session

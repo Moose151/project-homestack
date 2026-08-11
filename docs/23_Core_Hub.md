@@ -83,8 +83,12 @@ and their own small payload/settings (`settings_json`), no domain data of their 
   caching). Park until that's wanted; respects "no infra before a feature needs it" (D5).
 - **Photo / family slideshow** — rotating household photos via the shared attachment service
   (kiosk-friendly noticeboard feel; permission/sensitivity aware).
-- **Greeting / on-this-day / quote / countdown** — small delight widgets (e.g. "12 sleeps until
-  the holiday").
+- **Greeting / on-this-day / quote / countdown** — small delight widgets. A countdown stores a
+  target date **and time** in Household local time. If only a date is entered, save noon as the
+  explicit default and explain that choice in the editor. At 48 hours remaining it changes from
+  whole days to hours (rounding up while future, so it does not show zero early), then shows
+  reached/elapsed treatment after the target. Existing date-only countdown settings migrate to
+  local noon rather than midnight.
 These follow every Hub rule: seeded catalogue row, permission- and kiosk-filtered, own no domain
 data, write no calendar rows. Most are local/offline; **weather is the exception** (external
 fetch) and is explicitly parked until requested.

@@ -5,9 +5,10 @@
 > source records own their dates (D7), People and Users remain distinct (D12), visibility is
 > resolved centrally (D10), and scheduled work begins as an idempotent management command (D5).
 
-> **Implementation status (v0.32.0):** appointments, Atlas Agenda, automatic dated-item sync,
+> **Implementation status (v0.34.0):** appointments, Atlas Agenda, automatic dated-item sync,
 > Atlas People & birthdays, user-profile birth dates and independent pool schedule editing are
-> shipped. Per-user phone notification preferences/delivery remain pending until the deployment is
+> shipped. Atlas now also has a combined Appointments & events manager and shared in-place editors
+> for standalone schedule entries and Atlas-owned to-dos. Per-user phone notification preferences/delivery remain pending until the deployment is
 > served through HTTPS; the current HTTP installation cannot safely register Web Push.
 
 ## 1. Outcome
@@ -34,8 +35,10 @@ must behave consistently across all of these surfaces.
   the mirror through the shared helper.
 - Completing a dated item removes it from upcoming Agenda views but preserves its source history
   and past calendar context. It is not recreated or copied into an archive table.
-- Projected rows always offer **Open source**. Editing a synced record routes to its owning node;
-  standalone appointments can use the Calendar editor.
+- Projected rows always carry a stable source link. Atlas Agenda provides an in-place edit action
+  for standalone Calendar events/appointments using the shared Calendar form, so ordinary edits
+  do not require a detour to Calendar. For node-owned rows it may embed the owner's supported edit
+  form/action; otherwise it opens the exact source record, never a generic Calendar screen.
 
 ## 3. Appointments
 
@@ -48,8 +51,12 @@ read-only classifications). An appointment supports:
 - attending/assigned People, visibility and colour;
 - one or more reminder lead times using shared notification preferences.
 
-Appointments render normally in Calendar and once in Atlas Agenda. Atlas may filter Agenda by
-person, source/type and date range, but does not own or copy the appointment. Later node-owned
+Appointments render normally in Calendar and once in Atlas Agenda. Add one secondary
+**Appointments & events** view in Atlas rather than two near-duplicate tabs: it defaults to both,
+with clear All / Appointments / Events filter chips plus person and date filters. Agenda remains
+the actionable chronological view; Appointments & events is the browse/manage view and can create
+or edit standalone entries through the shared Calendar form. Atlas does not own or copy the event.
+Later node-owned
 appointments (for example Pets or Health) retain their node as the owner and use the same Agenda
 projection.
 
@@ -64,7 +71,8 @@ Add an **Agenda** tab to Atlas with Today, Upcoming and Overdue groups. It combi
 Birthdays, public holidays and rotating care layers are intentionally excluded. This keeps Atlas
 actionable while Calendar remains the complete household timeline. Rows show time/date, assignee,
 source badge, completion state where applicable and a source deep link. Atlas actions may complete
-Atlas-owned items in place; other source types remain read-only projections.
+Atlas-owned items in place. Standalone events/appointments can be edited inline with the shared
+form; each other provider explicitly declares safe inline actions or supplies an edit route.
 
 ## 5. Birthdays and people directory
 

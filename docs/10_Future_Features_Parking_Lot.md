@@ -25,16 +25,19 @@ These are intentionally not in V1 but the architecture leaves room for them:
 
 **Atlas:** rich text/Markdown, templates, recurring lists, quick capture, voice input, smart
 grocery suggestions. Agenda, appointments and People & birthdays are promoted to Milestone 2.6.
-**Home Wiki:** page templates, version history, linked pages, emergency mode, house-sitter
-mode, procedure blocks.
+**Home Wiki / Household guide:** recommended as an optional Homestead capability rather than a
+separate navigation node. Page templates, page revision history, linked pages, emergency mode,
+house-sitter mode and procedure blocks remain future improvements.
 **Pets:** feeding schedules, food-inventory link, weight graphs, pet insurance, house-sitter
 pet mode, Meridian pet tasks.
 **Education:** study timers, reading logs, grades, term imports, university dashboard,
 Meridian homework tasks.
-**Inventory:** barcode scanning, QR storage labels, expiry dashboard, smart grocery
-suggestions, storage-box tracking.
-**Assets:** odometer reminders, warranty claims, service costs, QR labels, maintenance
-templates, insurance tracking.
+**Inventory / Stock & storage:** recommended as an optional Homestead capability rather than a
+top-level node. Barcode scanning, QR storage labels, expiry dashboard, smart grocery suggestions
+and storage-box tracking remain future scope.
+**Assets & vehicles:** recommended as an optional protected Homestead capability; home appliances
+and warranties already live there. Odometer reminders, warranty claims, service costs, QR labels,
+maintenance templates and insurance tracking remain future scope.
 **Hearth:** recipe import, meal voting, nutrition, leftovers, batch cooking, pantry checks,
 grocery generation.
 **Travel:** the initial Trips/To-go, booking/cost, Calendar/deadline, notification, Corner and
@@ -42,8 +45,9 @@ surprise-visibility slice shipped in v0.33.0; remaining core scope is in spec 19
 itinerary, packing and protected documents remain planned. Maps, weather, live flight status,
 external booking APIs, currency conversion, travel journal, pet-care automation and deep Solace
 travel budgets remain parked.
-**Projects:** Kanban boards, templates, budget links, photo progress, garden templates, large-
-purchase workflow.
+**Projects:** do not add a top-level node yet. Homestead owns home projects, Travel owns trips and
+Atlas covers lightweight general work. Reconsider only for demonstrated cross-domain Kanban,
+dependencies, templates, budget links or photo-progress needs.
 **Health:** prescription tracking, health graphs, provider directory, emergency health card,
 encrypted health attachments, field-level encryption.
 **Meridian:** achievements, streaks, household challenges, task templates, weekly summaries.

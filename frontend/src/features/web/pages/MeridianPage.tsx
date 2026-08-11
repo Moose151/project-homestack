@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '../../../api/client'
 import { useAuth } from '../../auth/AuthContext'
 import { TasksTab } from './meridian/TasksTab'
@@ -19,6 +20,9 @@ export function MeridianPage() {
   const { user } = useAuth()
   const canManage = user?.role === 'admin' || user?.role === 'manager'
   const [tab, setTab] = useUrlTab<Tab>('overview', TAB_KEYS)
+  const [searchParams] = useSearchParams()
+  const focusedTaskId = Number(searchParams.get('task') || 0)
+  const focusedWishId = Number(searchParams.get('wish') || 0)
   const [pointsLabel, setPointsLabel] = useState('points')
   const [query, setQuery] = useUrlQueryState()
 
@@ -53,11 +57,11 @@ export function MeridianPage() {
           onOpenShop={() => setTab('shop')}
         />
       )}
-      {tab === 'tasks' && <TasksTab canManage={canManage} pointsLabel={pointsLabel} searchQuery={query} />}
+      {tab === 'tasks' && <TasksTab canManage={canManage} pointsLabel={pointsLabel} searchQuery={query} focusedTaskId={focusedTaskId || undefined} />}
       {tab === 'routines' && <RoutinesTab canManage={canManage} pointsLabel={pointsLabel} />}
       {tab === 'shop' && <ShopTab canManage={canManage} pointsLabel={pointsLabel} searchQuery={query} />}
       {tab === 'goals' && <GoalsTab canManage={canManage} pointsLabel={pointsLabel} />}
-      {tab === 'wishlist' && <WishlistTab canManage={canManage} pointsLabel={pointsLabel} />}
+      {tab === 'wishlist' && <WishlistTab canManage={canManage} pointsLabel={pointsLabel} focusedWishId={focusedWishId || undefined} />}
       {tab === 'leaderboard' && <LeaderboardTab pointsLabel={pointsLabel} />}
       {tab === 'settings' && canManage && <SettingsTab />}
     </div>

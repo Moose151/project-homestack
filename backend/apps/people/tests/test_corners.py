@@ -42,6 +42,18 @@ class CornerApiTests(TestCase):
         self.assertIn("Completed Upper body", titles)
         self.assertNotIn("Completed Private training", titles)
 
+    def test_fitness_activity_links_to_the_session_and_has_expandable_detail(self):
+        self.client.force_login(self.sam_user)
+        response = self.client.get(reverse("corner-detail", args=[self.alex.id]))
+        row = next(
+            item for item in response.json()["activity"]
+            if item["key"] == f"fitness:session:{self.public_session.id}:completed"
+        )
+        self.assertEqual(row["action_url"], f"/fitness?tab=history&session={self.public_session.id}")
+        self.assertEqual(row["detail_summary"]["duration_seconds"], 1800)
+        self.assertEqual(row["detail_summary"]["total_reps"], 40)
+        self.assertEqual(row["detail_summary"]["exercises"], [])
+
     def test_reaction_toggles_and_is_returned_on_visible_activity(self):
         self.client.force_login(self.sam_user)
         key = f"fitness:session:{self.public_session.id}:completed"

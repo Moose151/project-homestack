@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.33.0**
+> **Current version: 0.34.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,24 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.34 — Discoverability and daily navigation
+
+### 0.34.0 — 2026-08-11 — Personal defaults, inline agenda and in-app guides
+- My Corner and Education Study now resolve the signed-in User's linked Person instead of choosing
+  the first alphabetic household member. Education profiles and courses select saved Institutions,
+  while still offering a direct path to create one.
+- Countdown widgets now store a Household-local target time, default legacy/date-only targets to
+  noon and switch from days to rounded-up hours inside 48 hours. Atlas adds a combined Appointments
+  & events manager and edits standalone Calendar entries or Atlas-owned to-dos through shared forms.
+- Corner activity carries stable source IDs: Atlas items, Education work, Meridian tasks/wishes,
+  Homestead plan items, Travel ideas and Fitness programs/sessions open their source context.
+  Completed Fitness sessions can be expanded safely in Corner and open highlighted workout detail.
+- Manage HomeStack now explains enabled and disabled nodes through accessible summaries and full
+  guides. Every node has a discreet, dismissible guide link; admins can restore hidden links.
+  Version history is available offline from a generated manifest whose check mode detects drift
+  from this canonical file. **815 backend tests green; frontend production build clean;
+  no migration added.**
 
 ## 0.33 — Travel planning
 

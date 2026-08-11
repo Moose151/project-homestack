@@ -64,7 +64,11 @@ Programs and sessions default to household visibility and may be private. Househ
 completed sessions and records appear in permitted history and the recent-training Hub widget.
 Other users with `fitness.view` receive an in-app notification when a household-visible session
 finishes, including the count of new personal records. Private sessions create no social
-notification. Fitness is unavailable on kiosk initially; child accounts are read-only by default.
+notification. Fitness Corner activity and its notification deep-link to that immutable completed
+session. An authorised viewer can expand a compact snapshot of duration, exercises and completed
+sets/reps/weight/time/distance without entering the full Fitness workspace; the detail is resolved
+live so a later privacy change immediately removes access. Fitness is unavailable on kiosk
+initially; child accounts are read-only by default.
 
 ## 8. API and layering
 
@@ -79,4 +83,3 @@ session → history/records loop, sharing/privacy, notifications, seeded data an
 follow-ups: reusable supersets/circuits, rest timer alerts, RPE/RIR, warm-up sets, pace splits,
 weekly schedule/calendar planning, goals and trends, exercise aliases/equipment, CSV export and
 optional integrations with wearables. None should move medical data into this node.
-

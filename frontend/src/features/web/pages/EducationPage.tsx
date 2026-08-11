@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type {
   AcademicProfile, AcademicProfileResponse,
@@ -332,14 +332,15 @@ function AssignmentForm({ courses, people, defaultAssignee, onCreated, onError }
   )
 }
 
-function AssignmentRow({ a, onChange, onDelete, onError }: {
+function AssignmentRow({ a, focused, onChange, onDelete, onError }: {
   a: EducationAssessment
+  focused?: boolean
   onChange: (a: EducationAssessment) => void
   onDelete: (id: number) => void
   onError: (m: string) => void
 }) {
   const [busy, setBusy] = useState(false)
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(Boolean(focused))
   const due = dueLabel(a.due_at, a.is_all_day)
 
   const setStatus = async (status: AssessmentStatus) => {
@@ -353,7 +354,7 @@ function AssignmentRow({ a, onChange, onDelete, onError }: {
   }
 
   return (
-    <li className="py-3 group">
+    <li id={`education-assessment-${a.id}`} className={`rounded-xl py-3 group ${focused ? 'bg-primary-soft px-2 ring-2 ring-primary' : ''}`}>
       <div className="flex items-start gap-3">
         <button
           onClick={() => setStatus(a.is_complete ? 'todo' : 'done')}
@@ -412,20 +413,24 @@ function AssignmentRow({ a, onChange, onDelete, onError }: {
   )
 }
 
-function AssignmentsTab({ courses, people, defaultAssignee, onError }: {
+function AssignmentsTab({ courses, people, defaultAssignee, focusedAssessmentId, onError }: {
   courses: EducationCourse[]
   people: Person[]
   defaultAssignee: number[]
+  focusedAssessmentId?: number
   onError: (m: string) => void
 }) {
   const [assessments, setAssessments] = useState<EducationAssessment[]>([])
-  const [showDone, setShowDone] = useState(false)
+  const [showDone, setShowDone] = useState(Boolean(focusedAssessmentId))
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     api.getAssessments(showDone ? undefined : { open: true })
       .then(setAssessments).catch(e => onError(errMsg(e))).finally(() => setLoading(false))
   }, [showDone, onError])
+  useEffect(() => {
+    if (!loading && focusedAssessmentId) window.setTimeout(() => document.getElementById(`education-assessment-${focusedAssessmentId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
+  }, [loading, focusedAssessmentId])
 
   const upsert = (a: EducationAssessment) =>
     setAssessments(prev => {
@@ -451,7 +456,7 @@ function AssignmentsTab({ courses, people, defaultAssignee, onError }: {
         ) : (
           <ul className="divide-y divide-line">
             {assessments.map(a => (
-              <AssignmentRow key={a.id} a={a} onChange={upsert} onDelete={id => setAssessments(prev => prev.filter(x => x.id !== id))} onError={onError} />
+              <AssignmentRow key={a.id} a={a} focused={a.id === focusedAssessmentId} onChange={upsert} onDelete={id => setAssessments(prev => prev.filter(x => x.id !== id))} onError={onError} />
             ))}
           </ul>
         )}
@@ -464,8 +469,9 @@ function AssignmentsTab({ courses, people, defaultAssignee, onError }: {
 // Courses
 // ===========================================================================
 
-function CoursesTab({ courses, reload, people, onError }: {
-  courses: EducationCourse[]; reload: () => void; people: Person[]; onError: (m: string) => void
+function CoursesTab({ courses, reload, people, institutions, defaultAssignee, onAddInstitution, onError }: {
+  courses: EducationCourse[]; reload: () => void; people: Person[]; institutions: EducationInstitution[]
+  defaultAssignee: number[]; onAddInstitution: () => void; onError: (m: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
@@ -474,8 +480,13 @@ function CoursesTab({ courses, reload, people, onError }: {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [creditValue, setCreditValue] = useState('6')
-  const [studentId, setStudentId] = useState<number[]>([])
+  const [studentId, setStudentId] = useState<number[]>(defaultAssignee)
+  const [institutionId, setInstitutionId] = useState('')
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    setStudentId(current => current.length ? current : defaultAssignee)
+  }, [defaultAssignee[0]])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -487,9 +498,10 @@ function CoursesTab({ courses, reload, people, onError }: {
         start_date: startDate || null, end_date: endDate || null,
         credit_value: Number(creditValue) || 0,
         student_id: studentId[0] ?? null,
+        institution_id: institutionId ? Number(institutionId) : null,
       })
       setName(''); setCode(''); setTeacher(''); setStartDate(''); setEndDate('')
-      setCreditValue('6'); setStudentId([]); setOpen(false); reload()
+      setCreditValue('6'); setStudentId(defaultAssignee); setInstitutionId(''); setOpen(false); reload()
     } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
   const remove = async (c: EducationCourse) => {
@@ -507,6 +519,13 @@ function CoursesTab({ courses, reload, people, onError }: {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input className={inputCls} placeholder="Code (e.g. COMP2041)" value={code} onChange={e => setCode(e.target.value)} />
             <input className={inputCls} placeholder="Lecturer / teacher" value={teacher} onChange={e => setTeacher(e.target.value)} />
+            <label className="text-xs text-muted-strong flex flex-col gap-1">Institution
+              <select className={inputCls} value={institutionId} onChange={e => setInstitutionId(e.target.value)}>
+                <option value="">No institution</option>
+                {institutions.map(institution => <option key={institution.id} value={institution.id}>{institution.name}</option>)}
+              </select>
+              {!institutions.length && <button type="button" onClick={onAddInstitution} className="self-start text-xs font-bold text-primary">Add an institution first →</button>}
+            </label>
             <label className="text-xs text-muted-strong flex flex-col gap-1">Start date
               <input type="date" className={inputCls} value={startDate} onChange={e => setStartDate(e.target.value)} />
             </label>
@@ -871,11 +890,11 @@ function CourseStatusCard({ label, courses, onToggleComplete }: {
   )
 }
 
-function ProfileTab({ people, institutions, onInstitutionCreated, defaultPersonId, onError }: {
+function ProfileTab({ people, institutions, defaultPersonId, onAddInstitution, onError }: {
   people: Person[]
   institutions: EducationInstitution[]
-  onInstitutionCreated: (i: EducationInstitution) => void
   defaultPersonId: number | null
+  onAddInstitution: () => void
   onError: (m: string) => void
 }) {
   const [personId, setPersonId] = useState<number | null>(defaultPersonId)
@@ -883,21 +902,17 @@ function ProfileTab({ people, institutions, onInstitutionCreated, defaultPersonI
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<Partial<AcademicProfile>>({})
-  const [institutionInput, setInstitutionInput] = useState('')
   const [saving, setSaving] = useState(false)
 
-  // The signed-in account may have no Person of its own — an admin who is not a student, or a
-  // partner logging in — and School & study opens on this tab. Without a fallback it opened on
-  // "Select a person" with no selector to do it with.
   useEffect(() => {
-    setPersonId(current => current ?? defaultPersonId ?? people[0]?.id ?? null)
-  }, [defaultPersonId, people])
+    if (defaultPersonId) setPersonId(current => current ?? defaultPersonId)
+  }, [defaultPersonId])
 
   useEffect(() => {
     if (!personId) return
     setLoading(true)
     api.getAcademicProfile(personId)
-      .then(d => { setData(d); setForm(d.profile); setInstitutionInput(d.profile.institution_name ?? '') })
+      .then(d => { setData(d); setForm(d.profile) })
       .catch(e => onError(errMsg(e)))
       .finally(() => setLoading(false))
   }, [personId, onError])
@@ -906,24 +921,8 @@ function ProfileTab({ people, institutions, onInstitutionCreated, defaultPersonI
     if (!personId || !data) return
     setSaving(true)
     try {
-      // Resolve institution name → id (find existing or create new)
-      let institutionId: number | null = form.institution_id ?? null
-      const trimmed = institutionInput.trim()
-      if (trimmed) {
-        const existing = institutions.find(i => i.name.toLowerCase() === trimmed.toLowerCase())
-        if (existing) {
-          institutionId = existing.id
-        } else {
-          const created = await api.createInstitution({ name: trimmed })
-          onInstitutionCreated(created)
-          institutionId = created.id
-        }
-      } else {
-        institutionId = null
-      }
-
       const updated = await api.updateAcademicProfile(personId, {
-        institution_id: institutionId,
+        institution_id: form.institution_id ?? null,
         programme_name: form.programme_name ?? '',
         credits_required: form.credits_required ?? 0,
         credits_per_course_default: form.credits_per_course_default ?? 6,
@@ -931,7 +930,6 @@ function ProfileTab({ people, institutions, onInstitutionCreated, defaultPersonI
         notes: form.notes ?? '',
       })
       setData(prev => prev ? { ...prev, profile: updated } : prev)
-      setInstitutionInput(updated.institution_name ?? '')
       setEditing(false)
     } catch (e) { onError(errMsg(e)) } finally { setSaving(false) }
   }
@@ -1014,19 +1012,11 @@ function ProfileTab({ people, institutions, onInstitutionCreated, defaultPersonI
                   </div>
                   <div>
                     <div className="text-xs text-muted-strong mb-1">Institution</div>
-                    <input
-                      className={inputCls}
-                      list="institution-options"
-                      placeholder="e.g. UNSW"
-                      value={institutionInput}
-                      onChange={e => setInstitutionInput(e.target.value)}
-                    />
-                    <datalist id="institution-options">
-                      {institutions.map(i => <option key={i.id} value={i.name} />)}
-                    </datalist>
-                    {institutionInput.trim() && !institutions.some(i => i.name.toLowerCase() === institutionInput.trim().toLowerCase()) && (
-                      <p className="text-xs text-muted mt-1">New institution "{institutionInput.trim()}" will be created on save.</p>
-                    )}
+                    <select className={inputCls} value={form.institution_id ?? ''} onChange={e => setForm(f => ({ ...f, institution_id: e.target.value ? Number(e.target.value) : null }))}>
+                      <option value="">No institution</option>
+                      {institutions.map(institution => <option key={institution.id} value={institution.id}>{institution.name}</option>)}
+                    </select>
+                    <button type="button" onClick={onAddInstitution} className="mt-1 text-xs font-bold text-primary">+ Add institution</button>
                   </div>
                   <div>
                     <div className="text-xs text-muted-strong mb-1">Credits required to graduate (UOC)</div>
@@ -1218,6 +1208,8 @@ function InstitutionsTab({ institutions, onChange, onError }: {
 export function EducationPage() {
   const { user } = useAuth()
   const [tab, setTab] = useUrlTab<Tab>('profile', TABS.map(item => item.key))
+  const [searchParams] = useSearchParams()
+  const focusedAssessmentId = Number(searchParams.get('assessment') || 0)
   const [courses, setCourses] = useState<EducationCourse[]>([])
   const [people, setPeople] = useState<Person[]>([])
   const [institutions, setInstitutions] = useState<EducationInstitution[]>([])
@@ -1264,9 +1256,9 @@ export function EducationPage() {
         <>
           <Tabs tabs={TABS} active={tab} onChange={setTab} mobileSelectLabel="Education section" />
 
-          {tab === 'profile' && <ProfileTab people={people} institutions={institutions} onInstitutionCreated={i => setInstitutions(prev => [...prev, i])} defaultPersonId={defaultAssignee[0] ?? null} onError={setError} />}
-          {tab === 'assignments' && <AssignmentsTab courses={courses} people={people} defaultAssignee={defaultAssignee} onError={setError} />}
-          {tab === 'courses' && <CoursesTab courses={courses} reload={loadCourses} people={people} onError={setError} />}
+          {tab === 'profile' && <ProfileTab people={people} institutions={institutions} defaultPersonId={defaultAssignee[0] ?? null} onAddInstitution={() => setTab('institutions')} onError={setError} />}
+          {tab === 'assignments' && <AssignmentsTab courses={courses} people={people} defaultAssignee={defaultAssignee} focusedAssessmentId={focusedAssessmentId || undefined} onError={setError} />}
+          {tab === 'courses' && <CoursesTab courses={courses} reload={loadCourses} people={people} institutions={institutions} defaultAssignee={defaultAssignee} onAddInstitution={() => setTab('institutions')} onError={setError} />}
           {tab === 'timetable' && <TimetableTab courses={courses} onError={setError} />}
           {tab === 'events' && <EventsTab courses={courses} people={people} institutions={institutions} defaultAssignee={defaultAssignee} onError={setError} />}
           {tab === 'institutions' && <InstitutionsTab institutions={institutions} onChange={setInstitutions} onError={setError} />}

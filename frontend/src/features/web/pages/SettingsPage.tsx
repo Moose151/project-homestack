@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type { MeridianSettings } from '../../../api/types'
 import { useStacks } from '../../stacks/StacksContext'
 import { useAuth } from '../../auth/AuthContext'
 import { STACK_BY_KEY, softColour } from '../../../config/stacks'
+import { NODE_GUIDE_BY_KEY, fallbackNodeGuide } from '../../../config/nodeGuides'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { PageHeader } from '../../../components/PageHeader'
@@ -48,7 +50,7 @@ export function SettingsPage() {
     api.getMeridianSettings().then(setMeridian).catch(() => {})
   }, [meridianEnabled])
 
-  const buildable = nodes.filter(n => STACK_BY_KEY[n.key]?.isNode)
+  const buildable = nodes
 
   const toggle = async (key: string, enabled: boolean) => {
     setBusy(key); setError(null)
@@ -112,36 +114,72 @@ export function SettingsPage() {
       )}
 
       <Card title="Stacks">
-        <p className="text-sm text-muted mb-3">Turn stacks on or off for the whole household.</p>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-muted">Turn stacks on or off for the whole household. Guides remain available while a node is disabled.</p>
+          <button
+            type="button"
+            onClick={() => {
+              localStorage.removeItem(`hs-hidden-guides-${user?.id ?? 'guest'}`)
+              window.dispatchEvent(new CustomEvent('homestack-guide-preferences'))
+            }}
+            className="text-xs font-bold text-primary hover:underline"
+          >
+            Show in-node guide links
+          </button>
+        </div>
         <ul className="flex flex-col gap-2">
           {buildable.map(n => {
             const def = STACK_BY_KEY[n.key]
+            const guide = NODE_GUIDE_BY_KEY[n.key] ?? fallbackNodeGuide(n)
             const on = n.is_enabled && !n.is_hidden
+            const canToggle = Boolean(def?.isNode)
             return (
               <li key={n.key} className="flex items-center gap-3 py-2">
                 <span
                   className="inline-grid place-items-center w-10 h-10 rounded-xl text-lg flex-shrink-0"
-                  style={{ background: softColour(def.colour, '22'), color: def.colour }}
+                  style={{ background: softColour(guide.colour, '22'), color: guide.colour }}
                 >
-                  {def.icon}
+                  {def?.icon || n.custom_icon || n.icon || guide.icon}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-ink">{def.label}</div>
-                  <div className="text-xs text-muted truncate">{n.description}</div>
+                  <div className="flex items-center gap-1.5">
+                    <Link to={`/settings/guides/${n.key}`} className="font-semibold text-ink hover:text-primary hover:underline">
+                      {n.custom_name || def?.label || n.name}
+                    </Link>
+                    <span className="group relative inline-flex">
+                      <button type="button" className="grid h-6 w-6 place-items-center rounded-full text-xs font-black text-muted hover:bg-sunken hover:text-primary focus:bg-sunken focus:text-primary" aria-label={`About ${guide.label}`}>i</button>
+                      <span role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden w-64 -translate-x-1/2 rounded-xl border border-line bg-surface p-2.5 text-xs font-normal leading-5 text-muted-strong shadow-card group-hover:block group-focus-within:block">
+                        {guide.summary} <span className="font-bold text-primary">Open the title for the full guide.</span>
+                      </span>
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted truncate">{guide.summary}</div>
                 </div>
-                <button
-                  onClick={() => toggle(n.key, on)}
-                  disabled={busy === n.key || !isManager}
-                  role="switch"
-                  aria-checked={on}
-                  className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 disabled:opacity-50 ${on ? 'bg-success' : 'bg-line-strong'}`}
-                >
-                  <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${on ? 'left-6' : 'left-1'}`} />
-                </button>
+                {canToggle ? (
+                  <button
+                    onClick={() => toggle(n.key, on)}
+                    disabled={busy === n.key || !isManager}
+                    role="switch"
+                    aria-checked={on}
+                    className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 disabled:opacity-50 ${on ? 'bg-success' : 'bg-line-strong'}`}
+                  >
+                    <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${on ? 'left-6' : 'left-1'}`} />
+                  </button>
+                ) : <span className="flex-shrink-0 rounded-full bg-sunken px-2.5 py-1 text-[11px] font-bold text-muted">Future</span>}
               </li>
             )
           })}
         </ul>
+      </Card>
+
+      <Card title="About this installation">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-ink">Version history</p>
+            <p className="text-xs text-muted">See the installed version and the major changes delivered over time.</p>
+          </div>
+          <Link to="/settings/version-history" className="flex-shrink-0 text-sm font-bold text-primary hover:underline">View history →</Link>
+        </div>
       </Card>
 
       <Card title="Family colour">

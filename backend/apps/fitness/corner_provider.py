@@ -11,17 +11,34 @@ def provide(*, user, person, since):
     assignments = [{
         "key": f"fitness:program:{row.program_id}", "source_node": "fitness", "kind": "program",
         "title": row.program.name, "summary": "Training program", "due_at": None,
-        "action_url": "/fitness?tab=programs",
+        "action_url": f"/fitness?tab=programs&program={row.program_id}",
     } for row in programs]
     sessions = apply_visibility(
-        WorkoutSession.objects.filter(person=person, status="completed", finished_at__gte=since), user
+        WorkoutSession.objects.filter(person=person, status="completed", finished_at__gte=since)
+        .prefetch_related("exercises__exercise", "exercises__sets"), user
     )
     activity = [{
         "key": f"fitness:session:{row.id}:completed", "source_node": "fitness", "kind": "workout",
         "title": f"Completed {row.name}",
         "summary": f"{row.total_reps} reps · {row.duration_seconds // 60 if row.duration_seconds else 0} min",
         "occurred_at": (row.finished_at or row.started_at).isoformat(),
-        "action_url": "/fitness?tab=history",
+        "action_url": f"/fitness?tab=history&session={row.id}",
+        "detail_summary": {
+            "duration_seconds": row.duration_seconds,
+            "total_reps": row.total_reps,
+            "total_volume": str(row.total_volume),
+            "exercises": [{
+                "name": entry.exercise.name,
+                "weight_unit": entry.exercise.weight_unit,
+                "distance_unit": entry.exercise.distance_unit,
+                "sets": [{
+                    "reps": workout_set.reps,
+                    "weight": None if workout_set.weight is None else str(workout_set.weight),
+                    "duration_seconds": workout_set.duration_seconds,
+                    "distance": str(workout_set.distance),
+                } for workout_set in entry.sets.all() if workout_set.is_completed],
+            } for entry in row.exercises.all() if entry.status == "active"],
+        },
     } for row in sessions]
     visible_session_ids = apply_visibility(
         WorkoutSession.objects.filter(person=person), user,
@@ -33,7 +50,8 @@ def provide(*, user, person, since):
         "key": f"fitness:record:{row.id}:{row.kind}", "source_node": "fitness",
         "kind": "personal_record", "title": f"Set a new {row.get_kind_display().lower()}",
         "summary": f"{row.exercise.name} · {row.value:g} {_record_unit(row)}".strip(),
-        "occurred_at": row.achieved_at.isoformat(), "action_url": "/fitness?tab=records",
+        "occurred_at": row.achieved_at.isoformat(),
+        "action_url": f"/fitness?tab=history&session={row.session_id}",
     } for row in records)
     return {"activity": activity, "assignments": assignments, "collections": []}
 

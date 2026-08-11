@@ -29,7 +29,14 @@ structured rooms/areas and their wanted purchases, maintenance, renovations and 
 **Not:** whole-house budgeting/paydays/savings → **Solace**; heavyweight
 renovations with task boards → **Projects** (an Improvement can link via `project_ref`); how-to
 guides & manuals text → **Home Wiki**; simple to-do lists → **Atlas**; vehicles/tools/non-home
-assets → a future **Assets** node if ever built.
+assets → the proposed optional **Assets & vehicles** Homestead capability.
+
+**Proposed consolidation (owner discussion, 2026-08-11):** do not create Inventory and Assets as
+additional top-level nodes. Add independently enabled **Stock & storage**, **Assets & vehicles**
+and **Household guide** capabilities inside Homestead. This matches the physical place/location
+model and the existing D21 appliance/warranty ownership while preserving stronger permissions for
+vehicle, serial, receipt and insurance details. See `31_Core_Manage_HomeStack.md`; treat this as the
+recommended direction until the owner confirms it as a hard architectural decision.
 
 ## 3. Key features
 

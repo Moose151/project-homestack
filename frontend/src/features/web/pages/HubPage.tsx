@@ -200,7 +200,7 @@ function ClockWidget() {
   )
 }
 
-function CountdownWidget({ title, targetDate }: { title?: string; targetDate?: string }) {
+function CountdownWidget({ title, targetDate, targetTime, targetAt }: { title?: string; targetDate?: string; targetTime?: string; targetAt?: string }) {
   const [now, setNow] = useState(new Date())
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60_000)
@@ -208,29 +208,33 @@ function CountdownWidget({ title, targetDate }: { title?: string; targetDate?: s
   }, [])
 
   if (!title || !targetDate) return <p className="text-sm text-muted">Set a name and date in Tune my Hub.</p>
-  const [year, month, day] = targetDate.split('-').map(Number)
-  const targetUtc = Date.UTC(year, month - 1, day)
-  const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
-  const days = Math.round((targetUtc - todayUtc) / 86_400_000)
+  const target = targetAt ? new Date(targetAt) : new Date(`${targetDate}T${targetTime || '12:00'}:00`)
+  const difference = target.getTime() - now.getTime()
+  const future = difference > 0
+  const absoluteHours = Math.ceil(Math.abs(difference) / 3_600_000)
+  const showHours = future && difference <= 48 * 3_600_000
+  const amount = showHours ? absoluteHours : Math.ceil(Math.abs(difference) / 86_400_000)
   // Match the page header's date format: the year only earns its place when it isn't this one.
-  const target = new Date(year, month - 1, day)
-  const targetLabel = target.toLocaleDateString(undefined, {
+  const targetLabel = target.toLocaleString(undefined, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
-    ...(year === now.getFullYear() ? {} : { year: 'numeric' }),
+    hour: 'numeric', minute: '2-digit',
+    ...(target.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
   })
 
   return (
     <div className="py-2 text-center">
       <p className="text-sm font-bold text-ink">{title}</p>
-      {days === 0 ? (
+      {Math.abs(difference) < 60_000 ? (
         <p className="mt-2 text-4xl font-extrabold text-primary">It’s today! 🎉</p>
       ) : (
         <>
-          <p className="mt-2 text-5xl font-extrabold tabular-nums text-primary">{Math.abs(days)}</p>
+          <p className="mt-2 text-5xl font-extrabold tabular-nums text-primary">{amount}</p>
           <p className="text-sm font-semibold text-muted-strong">
-            {days > 0 ? `day${days === 1 ? '' : 's'} to go` : `day${days === -1 ? '' : 's'} since`}
+            {showHours
+              ? `hour${amount === 1 ? '' : 's'} to go`
+              : `${amount === 1 ? 'day' : 'days'} ${future ? 'to go' : 'since'}`}
           </p>
         </>
       )}
@@ -754,7 +758,7 @@ function renderWidget(w: HubWidget, onChanged: () => void) {
     case 'clock':
       return <ClockWidget />
     case 'countdown':
-      return <CountdownWidget title={w.meta?.title} targetDate={w.meta?.target_date} />
+      return <CountdownWidget title={w.meta?.title} targetDate={w.meta?.target_date} targetTime={w.meta?.target_time} targetAt={w.meta?.target_at} />
     case 'notifications_summary':
       return <NotificationsSummaryWidget items={w.items as AppNotification[]} unread={w.meta?.unread_count} />
     case 'quick_add':

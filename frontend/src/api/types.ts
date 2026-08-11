@@ -112,6 +112,15 @@ export interface CornerActivity {
   summary: string
   occurred_at: string
   action_url: string
+  detail_summary?: {
+    duration_seconds: number | null
+    total_reps: number
+    total_volume: string
+    exercises: Array<{
+      name: string; weight_unit: string; distance_unit: string
+      sets: Array<{ reps: number | null; weight: string | null; duration_seconds: number | null; distance: string }>
+    }>
+  }
   reactions: CornerReactionGroup[]
 }
 
@@ -622,6 +631,8 @@ export interface HubWidget {
     unread_count?: number
     title?: string
     target_date?: string
+    target_time?: string
+    target_at?: string
     /** Upcoming widget: selectable ranges, narrowest first. */
     horizons?: UpcomingHorizon[]
     default_horizon?: string
@@ -654,7 +665,7 @@ export interface HubWidgetConfig {
   size: 'small' | 'medium' | 'large'
   user_hidden: boolean
   user_order: number | null
-  settings: { title?: string; target_date?: string }
+  settings: { title?: string; target_date?: string; target_time?: string }
 }
 
 // ---------------------------------------------------------------------------

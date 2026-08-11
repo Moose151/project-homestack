@@ -123,10 +123,11 @@ function TripDetail({ trip, people, onBack, reload, onError }: { trip: Trip; peo
 }
 
 export function TravelPage() {
-  const [params, setParams] = useSearchParams(); const tab = params.get('tab') === 'ideas' ? 'ideas' : 'trips'; const selectedId = Number(params.get('trip') || 0)
+  const [params, setParams] = useSearchParams(); const tab = params.get('tab') === 'ideas' ? 'ideas' : 'trips'; const selectedId = Number(params.get('trip') || 0); const selectedIdeaId = Number(params.get('idea') || 0)
   const [trips, setTrips] = useState<Trip[]>([]); const [ideas, setIdeas] = useState<TravelIdea[]>([]); const [people, setPeople] = useState<Person[]>([]); const [creating, setCreating] = useState(false); const [editingIdea, setEditingIdea] = useState<TravelIdea | null>(null); const [error, setError] = useState<string | null>(null); const [loading, setLoading] = useState(true)
   const load = async () => { try { const [tripRows, ideaRows, peopleRows] = await Promise.all([api.getTrips(), api.getTravelIdeas(), api.getPeople()]); setTrips(tripRows); setIdeas(ideaRows); setPeople(peopleRows) } catch (e) { setError(errMsg(e)) } finally { setLoading(false) } }
   useEffect(() => { void load() }, [])
+  useEffect(() => { if (selectedIdeaId && ideas.length) setEditingIdea(ideas.find(row => row.id === selectedIdeaId) ?? null) }, [selectedIdeaId, ideas])
   const selected = trips.find(row => row.id === selectedId)
   const setTab = (next: string) => { setParams(next === 'ideas' ? { tab: 'ideas' } : {}); setCreating(false); setEditingIdea(null) }
   if (selected) return <TripDetail trip={selected} people={people} onBack={() => setParams({})} reload={load} onError={setError} />

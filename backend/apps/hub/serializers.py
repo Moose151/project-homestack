@@ -7,6 +7,7 @@ from rest_framework import serializers
 class CountdownSettingsSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=100)
     target_date = serializers.CharField(max_length=10)
+    target_time = serializers.CharField(max_length=5, required=False, default="12:00")
 
     def validate_target_date(self, value: str) -> str:
         from datetime import date
@@ -16,6 +17,15 @@ class CountdownSettingsSerializer(serializers.Serializer):
         except ValueError as exc:
             raise serializers.ValidationError("Use a valid date in YYYY-MM-DD format.") from exc
         return value
+
+    def validate_target_time(self, value: str) -> str:
+        from datetime import time
+
+        try:
+            parsed = time.fromisoformat(value)
+        except ValueError as exc:
+            raise serializers.ValidationError("Use a valid time in HH:MM format.") from exc
+        return parsed.strftime("%H:%M")
 
 
 class HubWidgetConfigSerializer(serializers.Serializer):

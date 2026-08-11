@@ -327,7 +327,7 @@ class HubWidgetConfigTests(TestCase):
             {
                 "is_enabled": True,
                 "size": "small",
-                "settings": {"title": "Our holiday", "target_date": "2030-12-20"},
+                "settings": {"title": "Our holiday", "target_date": "2030-12-20", "target_time": "17:30"},
             },
             content_type="application/json",
         )
@@ -341,6 +341,23 @@ class HubWidgetConfigTests(TestCase):
             if item["key"] == "countdown"
         )
         self.assertEqual(widget["meta"]["target_date"], "2030-12-20")
+        self.assertEqual(widget["meta"]["target_time"], "17:30")
+        self.assertIn("T17:30:00", widget["meta"]["target_at"])
+
+    def test_countdown_defaults_missing_time_to_noon(self):
+        _login(self.client, "admin")
+        resp = self.client.patch(
+            reverse("hub-widget-household", args=["countdown"]),
+            {"settings": {"title": "Holiday", "target_date": "2030-12-20"}},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        widget = next(
+            item for item in self.client.get(reverse("hub")).json()["widgets"]
+            if item["key"] == "countdown"
+        )
+        self.assertEqual(widget["meta"]["target_time"], "12:00")
+        self.assertIn("T12:00:00", widget["meta"]["target_at"])
 
     def test_countdown_rejects_invalid_target_date(self):
         _login(self.client, "admin")

@@ -32,7 +32,17 @@ Children see homework, reading, school events and simple kiosk education cards.
 
 ## 6. Key features
 
+**Student context** — opening the ordinary **Study** page first resolves the `Person` linked to
+the signed-in User and selects that student. It must not default to the first alphabetic Person.
+The visible student switcher can then open another permitted household member. If the User is not
+linked to a Person, keep the switcher usable and show a clear choose/link-profile prompt rather
+than silently presenting somebody else's study data as their own.
+
 **Institutions** — name, type (school, university, TAFE, other), location, contact info, notes.
+Every Study create/edit form that asks for an institution uses a dropdown of these
+saved Institution records, storing the Institution FK rather than another free-text name. The
+selector includes an **Add institution** shortcut which opens Institution management. If none
+exist, show that guided action instead of an empty unexplained dropdown.
 
 **Courses/subjects** — name, code, institution, `person_id` (the student), start/end date,
 teacher/lecturer, description.

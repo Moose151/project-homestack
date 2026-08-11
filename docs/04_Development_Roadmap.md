@@ -158,6 +158,35 @@ and sensitive-payload regressions pass.
 
 ---
 
+## Milestone 2.7 — Discoverability and daily navigation follow-up
+
+> **Status:** the navigation/discoverability package shipped in v0.34.0. The final capability-
+> consolidation bullet remains a future proposal and was not implemented.
+
+Implement the owner-requested core UX refinements recorded across specs 23, 28, 30 and 31:
+
+- Countdown targets gain an optional time (date-only saves local noon) and switch to hours inside
+  48 hours.
+- Atlas gains an Appointments & events browse/manage view with type filters, and Agenda edits
+  standalone Calendar records in place through the shared editor. Node-owned rows expose only
+  source-approved actions or exact deep links.
+- My Corner and Education → Study resolve the current User's linked Person rather than selecting
+  alphabetically. Their visible switchers can then move to another permitted household member.
+  Every Corner activity/notification opens its exact source, with safe expandable Fitness session
+  snapshots.
+- Education Study forms select from saved Institutions through a dropdown, with an
+  Add institution shortcut and no duplicate free-text institution field.
+- Manage HomeStack gains accessible node summaries, detailed in-app guides, contextual guide
+  links/preferences and an offline Version history generated from the canonical release record.
+- **Future proposal:** introduce capability toggles so Stock & storage, Assets & vehicles and Household guide can live
+  inside Homestead without becoming extra top-level nodes or losing their records when hidden.
+
+**Done when:** the workflows pass keyboard/touch tests, source permissions are rechecked before
+inline edit/detail expansion, in-app version history cannot drift in CI, and capability toggles
+preserve data while consistently hiding/restoring navigation, Search and Hub contributions.
+
+---
+
 ## Milestone 3 — Home Wiki, Pets, Education
 
 > **Owner re-prioritisation (2026-07-14, new university term).** Two changes:
@@ -334,8 +363,10 @@ is no duplicated ownership. Phases 5.5.4–5.5.5 remain evidence-driven extensio
 **Fitness & Training shipped as an owner-requested vertical slice (2026-08-10, D24).** It is
 separate from medical Health and includes the exercise/program/live-session/records/social loop.
 
-Each built end-to-end, one at a time, in roughly this order:
-**Inventory → Assets → Hearth → Travel → Projects → Health.**
+Remaining work should follow actual household use, not the old one-domain-one-node list. Travel's
+initial slice is shipped. Build **Hearth → Health** only when wanted; implement Inventory and
+Assets as optional Homestead capabilities per Milestone 2.7/spec 31, and defer a standalone
+Projects node unless a non-home workflow outgrows Atlas/Travel/Homestead.
 
 > **Travel initial slice shipped (v0.33.0, 2026-08-11).** The project-like flow now provides
 > Trips and To go, People assignment, multiple linked images, conditional flights/accommodation,
@@ -346,7 +377,8 @@ Each built end-to-end, one at a time, in roughly this order:
 > documents. Keep phone delivery behind the
 > HTTPS gate and external maps/booking APIs deferred.
 
-- Inventory and Assets pair naturally (consumables vs. owned items).
+- Stock & storage and Assets & vehicles remain distinct data capabilities even though both are
+  presented inside Homestead.
 - Hearth benefits from Inventory existing (pantry checks, grocery generation via Atlas).
 - **Health is last** and only after security maturation is proven (it already is, post-M4);
   all Health data sensitive by default.

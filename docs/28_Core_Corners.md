@@ -1,6 +1,7 @@
 # Core Spec — Household Corners
 
-> **Status:** Initial slice shipped in v0.31.0. Roadmap 8.2. A Corner is a household-facing view of a
+> **Status:** Initial slice shipped in v0.31.0; current-person routing, exact activity deep links
+> and expandable Fitness session summaries shipped in v0.34.0. Roadmap 8.2. A Corner is a household-facing view of a
 > `people.Person`, not the administrator-only account/PIN editor and not a public social profile.
 > Global permission, visibility, source-of-truth and decoupling rules still apply.
 
@@ -17,7 +18,11 @@ The subject is always a `Person`, never directly a login `User` (D12). This incl
 and household members who do not have their own login. `/users` remains the admin-only place for
 roles, PINs, passwords and account linking; `/corners/:personId` is the normal household route.
 The signed-in member sees **My Corner**; other pages use the person's real display name, such as
-**Alex's Corner**. Internal `Person` terminology does not leak into normal navigation.
+**Alex's Corner**. Opening the My Corner navigation entry must resolve the `Person` linked to the
+current User and route directly there—never the first alphabetic household member. From that page,
+a switcher/directory opens other permitted Corners. If the account is not linked to a Person, show
+a clear setup message rather than silently selecting somebody else. Internal `Person` terminology
+does not leak into normal navigation.
 
 ## 2. Experience
 
@@ -57,7 +62,14 @@ providers should include:
 - Homestead room-plan items/products added, chosen, purchased or completed.
 - Later nodes may contribute their own deliberately safe activity summaries.
 
-Every row carries a human verb, timestamp, source node, icon/colour and stable source link. A row
+Every row carries a human verb, timestamp, source node, icon/colour and stable source link. The
+primary action opens the exact source record, not merely the node landing page: a completed Fitness
+session, the relevant list/item, room plan entry, reward or other authoritative detail. Providers
+may also return a bounded, permission-safe expandable summary. For Fitness this is the completed
+session snapshot (workout name, duration, exercises and completed sets/reps/weight/time/distance),
+not the program template, because a live session may have been changed. Notifications generated
+from the same activity carry the same deep link and may expose the same safe expansion after a
+fresh visibility check. A row
 appears only when the viewer can see both the node and its source record. Private Fitness, Health,
 finance, sensitive attachments and protected notes must never become visible merely because the
 subject has a Corner. Source deletion/removal removes the projection.
@@ -142,7 +154,8 @@ get_person_collections(viewer, person)
 ```
 
 Providers return a normalised projection (`key`, `kind`, `title`, `summary`, `occurred_at`,
-`source_node`, `source_record_type`, `source_record_id`, `action_url`, display metadata). The
+`source_node`, `source_record_type`, `source_record_id`, `action_url`, optional `detail_summary`,
+display metadata). The
 source record remains authoritative. Merge/sort/paginate at the aggregation boundary and apply a
 per-provider limit so one noisy node cannot dominate. If durable notification/event history later
 proves insufficient for a desired activity, add a narrowly scoped activity projection consumer;

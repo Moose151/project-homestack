@@ -1,0 +1,234 @@
+{
+  "current_version": "0.34.0",
+  "source_sha256": "609c2b2e2fd1ac2b5d90b736745d7cd70e7abe29b446dd3c973b952304632bbc",
+  "releases": [
+    {
+      "version": "0.34.0",
+      "date": "2026-08-11",
+      "title": "Personal defaults, inline agenda and in-app guides",
+      "changes": [
+        "My Corner and Education Study now resolve the signed-in User's linked Person instead of choosing the first alphabetic household member. Education profiles and courses select saved Institutions, while still offering a direct path to create one.",
+        "Countdown widgets now store a Household-local target time, default legacy/date-only targets to noon and switch from days to rounded-up hours inside 48 hours. Atlas adds a combined Appointments & events manager and edits standalone Calendar entries or Atlas-owned to-dos through shared forms.",
+        "Corner activity carries stable source IDs: Atlas items, Education work, Meridian tasks/wishes, Homestead plan items, Travel ideas and Fitness programs/sessions open their source context. Completed Fitness sessions can be expanded safely in Corner and open highlighted workout detail.",
+        "Manage HomeStack now explains enabled and disabled nodes through accessible summaries and full guides. Every node has a discreet, dismissible guide link; admins can restore hidden links. Version history is available offline from a generated manifest whose check mode detects drift from this canonical file. **815 backend tests green; frontend production build clean; no migration added.**"
+      ]
+    },
+    {
+      "version": "0.33.0",
+      "date": "2026-08-11",
+      "title": "Trips, destination ideas and surprise planning",
+      "changes": [
+        "Added the Travel node with responsive Trips and To go workflows, shared notes, People assignment, multiple linked images, colour/status/date planning and idempotent idea-to-trip conversion. Destination ideas notify permitted household members and appear in their creator's Corner.",
+        "Added editable flight, accommodation and other booking components with whole-party quote/actual totals, booked progress, flight/stay times, references and independent component book-by dates. Trips and timed components mirror to Calendar; booking deadlines appear once as clearly named Travel tasks in Calendar, Atlas Agenda and the Hub, then resolve when booked.",
+        "Added **Keep this a surprise** exclusions for selected linked Users. Hidden plans, bookings and deadlines are filtered from Travel, Calendar list/detail, Agenda, Hub, notifications, Search and Corners even for direct URLs, while the creator remains able to manage the plan. Added Travel, Scheduling and permission migrations. **813 backend tests green; frontend production build clean; no migration drift.**"
+      ]
+    },
+    {
+      "version": "0.32.1",
+      "date": "2026-08-11",
+      "title": "Travel planning specification",
+      "changes": [
+        "Promoted Travel as the next node and expanded its canonical spec into a project-like Trips/To-go workflow: participants, multiple images, conditional flights/accommodation, booked and quoted cost roll-ups, coloured Calendar status, flight times, booking deadlines in Agenda/Hub and destination-added notifications. Documentation only; no migration."
+      ]
+    },
+    {
+      "version": "0.32.0",
+      "date": "2026-08-11",
+      "title": "appointments, Agenda, birthdays and pool schedules",
+      "changes": [
+        "Added explicit Calendar appointments with provider/contact fields. Calendar events now carry a stable kind, and Atlas Agenda projects every permitted upcoming Calendar entry except birthdays and holidays without copying source records.",
+        "Due-dated Atlas list items now automatically create task-classified Calendar mirrors; edits, completion, reopening, deletion and parent-list deletion keep the mirror aligned.",
+        "Added Atlas People & birthdays for external friends/relatives, plus virtual birthday occurrences derived from both contacts and household `Person.date_of_birth`. Calendar shows the calculated turning age; user management exposes household birth dates; no yearly event copies are stored.",
+        "Pool care jobs can be independently rescheduled, changed between weekly/fortnightly/monthly or paused directly in Pool & spa. Existing completion data is preserved because only future schedule fields are updated. **810 backend tests green; frontend production build clean; migrations added for Scheduling and Atlas. Phone Web Push remains held behind the agreed HTTPS prerequisite.**"
+      ]
+    },
+    {
+      "version": "0.31.1",
+      "date": "2026-08-11",
+      "title": "honest partial product previews and coordination roadmap",
+      "changes": [
+        "Product preview now rejects common retailer security/interruption-page titles instead of saving them as product names. Preview actions fill blank fields only, preserving names, images, shops and prices already entered manually; partial responses retain independently valid metadata and clearly identify fields the shop withheld. Added the Harvey Norman interruption regression.",
+        "Added future Milestone 2.6/core spec 30 for appointments and Atlas Agenda, automatic dated Atlas sync, birthdays/people, editable pool-care schedules and per-user/per-device PWA Web Push. **All link-import tests green; frontend production build clean; no migration.**"
+      ]
+    },
+    {
+      "version": "0.31.0",
+      "date": "2026-08-11",
+      "title": "Corners, suggestions, reactions and price-aware links",
+      "changes": [
+        "Added the core **My Corner / [Name]’s Corner** experience with a household switcher and Overview, 30-day Activity, Assigned, and Lists & wishes tabs. Enabled Atlas, Fitness, Meridian, Education and Homestead providers contribute permission-filtered projections while their source records remain authoritative.",
+        "Added personal Atlas wish/shopping lists, household/private visibility, suggestion-only access for other users, owner accept/dismiss review, and grouped toggleable ❤️ 👍 🎉 💪 👏 reactions with bundled notifications.",
+        "Added a bounded server-side product-link previewer with SSRF/DNS/redirect/content/size/time protections and per-user throttling. Confirmed Atlas and Homestead products retain provenance, cache images locally, and can use independent price watches without changing saved costs.",
+        "Added a household-local 09:00 catch-up-safe scheduled watch command, compact observations, 5% meaningful-drop/explicit-sale/target rules, deduplicated alerts, currency protection and a single warning after repeated failures. **Full backend suite and production frontend build validated; migrations added for People, Atlas, Homestead, Link Imports and permissions.**"
+      ]
+    },
+    {
+      "version": "0.30.1",
+      "date": "2026-08-11",
+      "title": "readable plan views and saved room links",
+      "changes": [
+        "Reworked the initial all-in-one drawing into two focused views: a large connected interior plan and a simplified whole-property view. Shared walls, square room boundaries, subtle door/window cues and a dedicated details rail make the plan read like the house rather than a set of cards.",
+        "Every space is selectable by pointer or keyboard and receives a strong filled highlight and glow. The details rail can open a matched room or explicitly link the space to any existing Homestead room; saved links persist in `floorplan_data` and the drawing adopts that room's name, icon and colour. Links can be moved or removed without creating duplicate room records.",
+        "Kept name-based matching as a clearly labelled suggestion for existing data, while explicit links take precedence. **Frontend production build clean; room metadata persistence regression green; no migration.**"
+      ]
+    },
+    {
+      "version": "0.30.0",
+      "date": "2026-08-11",
+      "title": "native interactive floor plan",
+      "changes": [
+        "Added a native SVG redraw of the supplied house plans to Homestead → Rooms. It combines the full property arrangement (pool, cabana, shed and carport) with the detailed internal room divisions and dimensions, without embedding either branded real-estate image.",
+        "The drawing inherits HomeStack paper/surface/border/accent tokens in light and dark modes, includes wet/outdoor visual treatments, zoom controls, keyboard/assistive labels and an explicit approximate-layout note so it reads as part of the app rather than an image pasted in.",
+        "Existing Homestead rooms are matched by tolerant aliases (for example Master/Bedroom 1, Living/Family room and Porch/Verandah). Matched spaces use their saved icon/colour and open the stable room planning page; unmatched spaces remain useful plan references. Rooms now default to Floor plan with a secondary Room list view. **Frontend production build clean; backend unchanged at 794 green tests; no migration.**"
+      ]
+    },
+    {
+      "version": "0.29.7",
+      "date": "2026-08-11",
+      "title": "subscriptions fully absorbed and household-local cycles",
+      "changes": [
+        "Removed the remaining Subscriptions subsection from Money. Subscription-category records now appear directly in Bills with every other bill; old subscription URLs redirect to Bills.",
+        "Fixed the remaining next-cycle leak: Solace now uses the Household timezone, not the Docker server's UTC timezone, for pay-cycle anchors, occurrence boundaries, current-day and overdue comparisons. The Now endpoint also honours its explicit date parameter for deterministic use.",
+        "Regression coverage sets the household to Australia/Brisbane while Django remains UTC and proves a local 12 August bill is excluded from the cycle ending 11 August. **794 backend tests green; frontend production build clean; no migration.**"
+      ]
+    },
+    {
+      "version": "0.29.6",
+      "date": "2026-08-11",
+      "title": "exact pay-cycle boundaries and Solace-owned home bills",
+      "changes": [
+        "Fixed bill occurrence filtering to compare aware Brisbane-local day boundaries rather than database UTC dates. A bill due on 12 August can no longer leak into a cycle ending 11 August; payday-cycle views also use their displayed start/end literally.",
+        "Solace is now the sole financial owner for home insurance and household-service bills. Linked bills remain fully editable/deletable in Solace with occurrences, history, Mark paid, autopay and set-aside behavior; saved values refresh the read-only Homestead cards through D4 events.",
+        "Homestead Costs & cover no longer creates or deletes finance schedules. It displays only bills deliberately organised there, while retaining editable house-specific policy, claims, excess and account metadata plus direct Solace links.",
+        "Migration `homestead.0010` links every existing policy/cost to a Solace bill, creates missing bills for Homestead-only records, and preserves existing links without duplication. Dedicated migration, local-boundary and ownership regressions included. **794 backend tests green; frontend production build clean; no model drift.**"
+      ]
+    },
+    {
+      "version": "0.29.5",
+      "date": "2026-08-11",
+      "title": "subscriptions are bills",
+      "changes": [
+        "Removed the duplicate Subscription model, API, serializer, services, forecast/reminder path, export sheet and frontend state. The Subscriptions section and Hub widget now filter ordinary Bills whose category is Subscription.",
+        "Adding a subscription now uses the full Bill form with its category fixed to Subscription, so every subscription has occurrences and payment history, Mark paid, autopay, pause, set-aside, overdue reconciliation, forecasting, reminders, Calendar, Search and export behaviour.",
+        "Data migration `solace.0010` converts every existing active legacy Subscription into a Bill, preserving its renewal date as First due, recurrence, provider, amount, notes, permissions, timestamps and Calendar link before dropping the old table. Migration behaviour is covered by a dedicated regression. **792 backend tests green; frontend production build clean; no drift.**"
+      ]
+    },
+    {
+      "version": "0.29.4",
+      "date": "2026-08-11",
+      "title": "corrected bill dates clear stale overdue rows",
+      "changes": [
+        "Changing a bill's first due date, recurrence, stop date or active state now rebuilds all unpaid occurrences from the corrected schedule. Amount-only edits retain the existing choice between future and all unpaid amounts.",
+        "Paid and skipped occurrences are historical records and are always preserved.",
+        "Occurrence materialisation now reconciles obsolete unpaid rows as well as creating missing ones. Opening Now automatically repairs stale overdue rows left by older date edits, including rows outside its normal lookback, so the overdue badge and total correct themselves after deployment. **790 backend tests green; frontend production build clean; no migration.**"
+      ]
+    },
+    {
+      "version": "0.29.3",
+      "date": "2026-08-11",
+      "title": "one place for subscriptions",
+      "changes": [
+        "Bills categorised as Subscription now appear in the Subscriptions section instead of the ordinary Bills list. Changing their category moves them back automatically.",
+        "The two underlying record types remain intact: bill-based subscriptions retain payment occurrences, Mark paid, autopay and set-aside planning, while dedicated subscriptions retain renewal-cycle tracking. Both are presented together with their correct edit controls.",
+        "Added a useful combined empty state and explanation of why some subscriptions have payment history. **Frontend production build clean; backend unchanged at 787 tests; no migration.**"
+      ]
+    },
+    {
+      "version": "0.29.2",
+      "date": "2026-08-11",
+      "title": "Solace allocation ceiling",
+      "changes": [
+        "Active percentage bucket rules now have a transaction-safe aggregate ceiling of 100%; create and edit requests that would exceed it return a clear validation error without changing data. Inactive future rules do not consume the available percentage.",
+        "Custom shared-income splits also reject percentage totals above 100% before replacing the saved split. Individual percentage inputs are constrained to 0–100%.",
+        "Bucket and income-split editors show available/allocated percentages and disable invalid saves. **787 backend tests green; frontend production build clean; no migration.**"
+      ]
+    },
+    {
+      "version": "0.29.1",
+      "date": "2026-08-10",
+      "title": "the logo, in the app",
+      "changes": [
+        "**HomeStack has its own face.** The owner's three brand renders are in `brand/` as sources; `scripts/build_brand_assets.py` crops each to its artwork, resizes it and writes the committed web assets to `frontend/public/brand/`. The sources are ~1 MB each of mostly empty canvas — not something to download to draw a 36px logo.",
+        "**Where each one goes:** the **mark** replaces the `◇` placeholder in the sidebar header and names the kiosk ambient screen; the **wordmark** sits beside it there; the **lockup** leads the sign-in page — one per surface, on the screen that introduces the app.",
+        "**Browser tab, home screen and installs**: favicon at 32 and 192, an Apple touch icon drawn on the app's paper colour (iOS fills a transparent icon with black), and light/dark `theme-color`.",
+        "Sizes and alt text live in one `components/Logo.tsx`, which marks the logo `aria-hidden` where the word \"HomeStack\" is already on screen beside it rather than saying the name twice.",
+        "Checked against the warm paper *and* the dark surface at both full size and 36px.",
+        "Documentation-and-assets change: typecheck and production build clean; no backend change, no migration."
+      ]
+    },
+    {
+      "version": "0.29.0",
+      "date": "2026-08-10",
+      "title": "metered water & electricity usage",
+      "changes": [
+        "**Enter a bill, get the graphs.** A new **Power & water** tab in Our home takes a water, electricity, gas or other bill: the period it covers, how much was used (kWh/kL/L/m³/MJ/therms), what it cost in total, the provider, and whether the meter was read or estimated. Everything else is calculated.",
+        "**Comparisons are per day, so they are honest.** Billing periods are not equal lengths; a 92-day quarter beside an 88-day one would read 5% worse before anyone turned anything on. Days billed, usage per day, cost per day and the effective rate per unit are all derived at read time, so correcting a bill corrects every figure and every chart at once.",
+        "**The two comparisons that mean something:** against the previous bill, and against a year ago — matched to the closest period start within 45 days of a year earlier, because utilities are seasonal and billing dates drift. An increase reads as a warning, a decrease as a win, with an arrow and words as well as colour.",
+        "**Charts without a chart library.** One column chart per measure (never two scales in one frame), the latest period emphasised and directly labelled, older periods as context, estimated reads striped and named. Every column is focusable and announces its full figures, and each utility's bills are also a plain table under the charts, where they can be edited or deleted.",
+        "**No password gate here** (owner's call): usage is household-visible like maintenance and the pool, while Costs & cover keeps the account and policy numbers behind re-auth. Nothing reaches the Calendar — a bill that has arrived is not an appointment, and its recurring account already owns the due date.",
+        "Also fixed: `?tab=pool` on Our home silently fell back to Overview, because `pool` was missing from the page's list of valid tab keys.",
+        "**783 backend tests green (17 new); typecheck and production build clean. New migration: `homestead.0009_utility_bills` — run `migrate` after deploying.**"
+      ]
+    },
+    {
+      "version": "0.28.3",
+      "date": "2026-08-10",
+      "title": "handover alignment",
+      "changes": [
+        "Corrected the handover's forward-looking status from the obsolete v0.21/M4 workstream to the shipped v0.28 codebase: Fitness, Pools & spas, completed security maturation, current Solace parity and the actual migration heads are now represented.",
+        "Replaced duplicate “build Home Assistant next” guidance with the operational dependency order: deploy/migrate, real-data Solace cutover, Fitness/pool checks, partner acceptance, then Home Assistant 5.5.0. Historical progress entries remain unchanged.",
+        "Documentation/version metadata only; no runtime or database migration change."
+      ]
+    },
+    {
+      "version": "0.28.2",
+      "date": "2026-08-10",
+      "title": "closing the UI consistency audit",
+      "changes": [
+        "**School & study no longer opens on a dead end.** Reproduced at last: the Profile tab it opens on defaults to the signed-in account's linked Person, and an admin who is not a student — or a partner's login — has none, so it landed on \"Select a person\" *with no selector to do it with*, because the picker only appeared when the household had more than one person. It now falls back to the first person, always shows the student picker so the choice can be changed or recovered, and gives a household with no people an empty state pointing at People & access instead of a \"Loading profile…\" that was never going to resolve.",
+        "**One word for setting a node up.** Tasks & rewards said \"Settings\" where Money said \"Manage\" for the same job in the same position; both now say Manage. Our home is recorded as a different case rather than an inconsistency: its property record is reference content edited in place.",
+        "**One treatment for approving and rejecting.** Tasks & rewards rendered the same decision three ways across two screens — filled warning, outlined warning, and bare underlined text. Approving is now a primary button and rejecting a ghost one, everywhere.",
+        "**The last bare `✕` deletes are gone.** Homestead's six hand-rolled Edit/Delete pairs now use the shared `RowActions`, and the rewards shop's lower-case \"remove\" chip became a Remove action.",
+        "**The top-balance tile is gone from Tasks & rewards** — the Balances card beneath already led with the same figure, and there it comes with everyone else's for comparison.",
+        "**The two-search-boxes question is settled:** both stay, because they answer different questions, and every in-node box names its own scope against the top bar's \"Search anything\".",
+        "`docs/UI_CONSISTENCY_AUDIT.md` now has one item left, the deferred icon-set decision.",
+        "**766 backend tests green; typecheck and production build clean; no migration.**"
+      ]
+    },
+    {
+      "version": "0.28.1",
+      "date": "2026-08-10",
+      "title": "the last three parity gaps",
+      "changes": [
+        "**Cycle history.** Every closed-out pay cycle, newest first, with what was paid, skipped and left outstanding in each. HomeStack had been recording closeouts and then only ever reading the current or next cycle, so past ones were unreachable. The figures are recomputed from the occurrences in each window rather than stored, so correcting a bill later corrects the history.",
+        "**Annual summary.** A calendar or financial year (1 July – 30 June) of bills grouped by category and then by the bills inside it, both ordered by cost, with paid and outstanding totals. Tapping a category opens its bills, which is the question that follows \"why is this one so big\".",
+        "**Purchase completion.** Marking a purchase bought now raises its saved amount to the target, so something bought while part-saved stops reading as short of its goal. A balance already above the target is kept.",
+        "Both new views sit under Insights, and links using the standalone page names land in them.",
+        "**766 backend tests green (11 new); typecheck and production build clean; no migration.**"
+      ]
+    },
+    {
+      "version": "0.25.2",
+      "date": "2026-08-10",
+      "title": "phone navigation follow-up",
+      "changes": [
+        "The bottom bar now answers \"where am I\" from anywhere. A destination without its own slot (Fitness, Books, Money) left nothing in the bar marked; the More button now stands in for the current destination, wearing its icon, colour and name until you open it.",
+        "Money's month calendar fits a phone. It was pinned to 760px, so a phone scrolled a calendar sideways and never saw a week at once. Below `sm` each day carries coloured dots for what falls on it and the month's entries are listed beneath in order; the labelled chips return above `sm`."
+      ]
+    },
+    {
+      "version": "0.25.1",
+      "date": "2026-08-10",
+      "title": "phone interaction pass",
+      "changes": [
+        "Form fields no longer zoom the page. Every control was below 16px, which makes iOS Safari zoom in on focus and never zoom back out, so filling in any form left the app oversized. Touch devices now get a 16px floor; the desktop scale is unchanged.",
+        "Replaced all 43 `window.confirm` and 9 `window.prompt` boxes with in-app dialogs. The native ones are system alerts that name the origin, ignore the theme, cannot carry a danger tone and offer only OK/Cancel — every delete in the app ended in something that looked like a browser error. Confirmations now state the verb (\"Delete pet\"), stack full-width on phones with the destructive action away from the Cancel thumb, and prompts have a real label, placeholder and the numeric keypad where a number is wanted.",
+        "Restored the primary action on phones. `PageHeader` defaulted to hiding itself on mobile, which took the page's own button with it — \"+ Add pet\", \"+ New list\" and \"Add household login\" were simply not reachable from a phone. The heading still steps aside for the shell's title; the actions never do.",
+        "One rule for tabs on phones: up to three fit a row, more become a labelled picker. It used to be each page's choice, so Pets swiped a cramped row while Money got a picker.",
+        "Money's six-column category report becomes per-category cards below `md` instead of a sideways-scrolling table that hid the figures.",
+        "Raised the 9–10px text in the bottom bar and the mobile destination directory to a readable size, and the destination names to `text-sm`.",
+        "**718 backend tests green; typecheck and production build clean; no migration.**"
+      ]
+    }
+  ]
+}

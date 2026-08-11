@@ -1,6 +1,8 @@
 # Node Spec — Assets
 
-> Canonical. **Later node** (post-V1). Global rules from `00_README_and_Changelog.md` apply.
+> Canonical feature scope. **Recommended as an optional Homestead → Assets & vehicles capability,
+> not a separate top-level node** (owner discussion, 2026-08-11). Home appliances/warranties are
+> already implemented in Homestead under D21. See `31_Core_Manage_HomeStack.md`.
 
 ## 1. Purpose & philosophy
 

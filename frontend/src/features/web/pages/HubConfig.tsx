@@ -32,12 +32,14 @@ export function HubConfig({ isAdmin, onChanged }: { isAdmin: boolean; onChanged:
   const [query, setQuery] = useState('')
   const [countdownTitle, setCountdownTitle] = useState('')
   const [countdownDate, setCountdownDate] = useState('')
+  const [countdownTime, setCountdownTime] = useState('12:00')
 
   const load = () => api.getHubWidgetConfig().then(r => {
     setWidgets(r.widgets)
     const countdown = r.widgets.find(widget => widget.key === 'countdown')
     setCountdownTitle(countdown?.settings.title ?? '')
     setCountdownDate(countdown?.settings.target_date ?? '')
+    setCountdownTime(countdown?.settings.target_time ?? '12:00')
   })
   useEffect(() => { load() }, [])
 
@@ -282,19 +284,22 @@ export function HubConfig({ isAdmin, onChanged }: { isAdmin: boolean; onChanged:
         {isAdmin && (
           <section className="border-t border-line pt-4">
             <h3 className="mb-2 text-sm font-bold text-ink">Countdown</h3>
-            <div className="grid gap-2 rounded-xl bg-sunken p-3 sm:grid-cols-[1fr_180px_auto] sm:items-end">
+            <div className="grid gap-2 rounded-xl bg-sunken p-3 sm:grid-cols-[1fr_180px_130px_auto] sm:items-end">
               <Field label="Countdown name">
                 <Input value={countdownTitle} onChange={event => setCountdownTitle(event.target.value)} placeholder="Our holiday" />
               </Field>
               <Field label="Target date">
                 <Input type="date" value={countdownDate} onChange={event => setCountdownDate(event.target.value)} />
               </Field>
+              <Field label="Target time" hint="Defaults to noon.">
+                <Input type="time" value={countdownTime} onChange={event => setCountdownTime(event.target.value)} />
+              </Field>
               <Button
                 size="sm"
                 disabled={busy || !countdownTitle.trim() || !countdownDate}
                 onClick={() => apply(() => api.setHouseholdWidget('countdown', {
                   is_enabled: true,
-                  settings: { title: countdownTitle.trim(), target_date: countdownDate },
+                  settings: { title: countdownTitle.trim(), target_date: countdownDate, target_time: countdownTime || '12:00' },
                 }))}
               >
                 Save &amp; show

@@ -62,17 +62,18 @@ function Badge({ children, className = 'bg-sunken text-muted-strong' }: { childr
   return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${className}`}>{children}</span>
 }
 
-export function TasksTab({ canManage, pointsLabel, searchQuery = '' }: {
+export function TasksTab({ canManage, pointsLabel, searchQuery = '', focusedTaskId }: {
   canManage: boolean
   pointsLabel: string
   searchQuery?: string
+  focusedTaskId?: number
 }) {
   const [tasks, setTasks] = useState<MeridianTask[]>([])
   const [categories, setCategories] = useState<MeridianCategory[]>([])
   const [people, setPeople] = useState<Person[]>([])
   const [completions, setCompletions] = useState<MeridianTaskCompletion[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<TaskFilter>('active')
+  const [filter, setFilter] = useState<TaskFilter>(focusedTaskId ? 'all' : 'active')
   const [categoryId, setCategoryId] = useState('')
   const [personId, setPersonId] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -101,6 +102,9 @@ export function TasksTab({ canManage, pointsLabel, searchQuery = '' }: {
   }
 
   useEffect(() => { reload() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!loading && focusedTaskId && canManage && tasks.some(task => task.id === focusedTaskId)) setEditingId(focusedTaskId)
+  }, [loading, focusedTaskId, canManage, tasks])
 
   const catName = (id: number | null) => categories.find(c => c.id === id)?.name || ''
   // Assignment is a set: name one person, or say how many share it.
