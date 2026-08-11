@@ -9,7 +9,7 @@ from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 
 from apps.solace import selectors
-from apps.solace.bill_schedule import ensure_bill_occurrences
+from apps.solace.bill_schedule import ensure_bill_occurrences, household_timezone
 from apps.solace.budget_engine import build_pay_cycle_plan
 from apps.solace.models import BillOccurrence
 
@@ -45,6 +45,7 @@ def build_balance_forecast(
     *,
     as_of: date | None = None,
     horizon_months: int = 12,
+    reconcile_bills=None,
 ) -> dict:
     """Project the bills account and calculate how much can safely be withdrawn.
 
@@ -52,8 +53,13 @@ def build_balance_forecast(
     the latest known current balance and receives a stale-data warning from Solace health.
     Without a snapshot, the forecast still reports the opening balance required to cover the
     projected low point.
+
+    ``reconcile_bills(bills, start, through)`` lets a caller with request-scoped context (the
+    view) share one occurrence-reconciliation pass with the other bootstrap sub-views instead of
+    materialising the same rows again; standalone callers get the direct per-bill default.
     """
-    as_of = as_of or timezone.localdate()
+    tz = household_timezone(getattr(user, "household", None))
+    as_of = as_of or timezone.localdate(timezone=tz)
     horizon_months = max(1, min(int(horizon_months), 24))
     through = as_of + relativedelta(months=horizon_months)
     latest_balance = selectors.get_latest_balance(user, as_of=as_of)
@@ -77,8 +83,11 @@ def build_balance_forecast(
         for bill in selectors.list_bills(user, active_only=True)
         if bill.include_in_set_aside and bill.due_at
     ]
-    for bill in bills:
-        ensure_bill_occurrences(bill, start, through)
+    if reconcile_bills is not None:
+        reconcile_bills(bills, start, through)
+    else:
+        for bill in bills:
+            ensure_bill_occurrences(bill, start, through)
     occurrences = selectors.list_bill_occurrences(user, start=start, end=through)
     included_bill_ids = {bill.id for bill in bills}
     for occurrence in occurrences:
@@ -88,7 +97,7 @@ def build_balance_forecast(
         ):
             continue
         # A paid occurrence still reduced a balance snapshot that predates it.
-        event_date = timezone.localdate(occurrence.due_at)
+        event_date = timezone.localdate(occurrence.due_at, tz)
         amount = _money(occurrence.amount)
         days[event_date]["bills"] += amount
         days[event_date]["items"].append(

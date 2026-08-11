@@ -74,6 +74,32 @@ def _plan_date(request: Request):
         raise ValidationError({"date": "Use YYYY-MM-DD."}) from exc
 
 
+def _ensure_bills_reconciled(request: Request, bills, start: date, end: date) -> None:
+    """Reconcile bill occurrences at most once per bill per request.
+
+    `SolaceBootstrapView` fans out to many sub-views (bills, health, closeout, forecast) that
+    each independently need occurrence rows materialised over their own window. Without this,
+    one Money page load repeated the same per-bill delete/diff/bulk-create work three or four
+    times over heavily overlapping windows — the dominant cost behind Solace "taking a few
+    seconds to load" (owner report, 2026-08-12). A request-scoped cache of the widest window
+    already reconciled per bill lets a later, narrower call skip the DB work entirely.
+    """
+    from apps.solace.bill_schedule import ensure_bill_occurrences
+
+    cache = getattr(request, "_solace_reconciled_windows", None)
+    if cache is None:
+        cache = {}
+        request._solace_reconciled_windows = cache
+    for bill in bills:
+        covered = cache.get(bill.id)
+        if covered is not None and covered[0] <= start and covered[1] >= end:
+            continue
+        ensure_bill_occurrences(bill, start, end)
+        cache[bill.id] = (
+            (min(covered[0], start), max(covered[1], end)) if covered else (start, end)
+        )
+
+
 class PayCyclePlanView(SolaceAccessMixin, APIView):
     def get(self, request: Request) -> Response:
         return Response(selectors.get_pay_cycle_plan(request.user, as_of=_plan_date(request)))
@@ -213,7 +239,6 @@ class ChecklistPreferenceView(SolaceAccessMixin, APIView):
 
 
 def _cycle_context(request: Request) -> dict:
-    from apps.solace.bill_schedule import ensure_bill_occurrences
     from apps.solace.models import BillOccurrence
 
     plan = selectors.get_pay_cycle_plan(request.user, as_of=_plan_date(request))
@@ -224,8 +249,9 @@ def _cycle_context(request: Request) -> dict:
     # to the cycle that starts that day, never the cycle whose displayed end is the day before.
     bill_start = cycle_start
     bill_end = cycle_end
-    for bill in selectors.list_bills(request.user, active_only=True):
-        ensure_bill_occurrences(bill, bill_start, bill_end)
+    _ensure_bills_reconciled(
+        request, selectors.list_bills(request.user, active_only=True), bill_start, bill_end
+    )
     occurrences = selectors.list_bill_occurrences(
         request.user,
         start=bill_start,
@@ -323,7 +349,6 @@ class CycleCloseoutView(SolaceAccessMixin, APIView):
 
 class SolaceHealthView(SolaceAccessMixin, APIView):
     def get(self, request: Request) -> Response:
-        from apps.solace.bill_schedule import ensure_bill_occurrences
         from apps.solace.models import BudgetBucket
 
         today = _plan_date(request) or timezone.localdate()
@@ -385,8 +410,7 @@ class SolaceHealthView(SolaceAccessMixin, APIView):
                 "code": "no_bills_bucket",
                 "message": "Add a Bills-category bucket so account forecasts include expected transfers.",
             })
-        for bill in bills:
-            ensure_bill_occurrences(bill, today - timedelta(days=365), today)
+        _ensure_bills_reconciled(request, bills, today - timedelta(days=365), today)
         overdue = selectors.list_bill_occurrences(
             request.user,
             start=today - timedelta(days=365),
@@ -492,6 +516,9 @@ class BalanceForecastView(SolaceAccessMixin, APIView):
             request.user,
             as_of=_plan_date(request),
             horizon_months=months,
+            reconcile_bills=lambda bills, start, end: _ensure_bills_reconciled(
+                request, bills, start, end
+            ),
         )
         forecast["latest_balance"] = (
             AccountBalanceSnapshotSerializer(forecast["latest_balance"]).data
@@ -596,18 +623,20 @@ class BillListView(SolaceAccessMixin, APIView):
             upcoming_only=request.query_params.get("upcoming") == "1",
             unpaid_only=request.query_params.get("unpaid") == "1",
         )
-        from apps.solace.bill_schedule import ensure_bill_occurrences
+        from apps.solace.bill_schedule import household_timezone
+        from apps.solace.models import BillOccurrence
 
-        today = date.today()
+        today = timezone.localdate(timezone=household_timezone(request.user.household))
+        start = today - timedelta(days=365)
+        end = today + timedelta(days=550)
+        _ensure_bills_reconciled(request, bills, start, end)
+        occurrences_by_bill: dict[int, list] = {}
+        for row in selectors.list_bill_occurrences(
+            request.user, start=start, end=end, status=BillOccurrence.Status.UPCOMING
+        ):
+            occurrences_by_bill.setdefault(row.bill_id, []).append(row)
         for bill in bills:
-            generated = ensure_bill_occurrences(
-                bill,
-                today - timedelta(days=365),
-                today + timedelta(days=550),
-            )
-            bill.upcoming_occurrences = [
-                row for row in generated if row.status == row.Status.UPCOMING
-            ]
+            bill.upcoming_occurrences = occurrences_by_bill.get(bill.id, [])
         return Response(BillSerializer(bills, many=True).data)
 
     def post(self, request: Request) -> Response:

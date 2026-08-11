@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.34.3**
+> **Current version: 0.34.4**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,22 @@
 ---
 
 ## 0.34 — Discoverability and daily navigation
+
+### 0.34.4 — 2026-08-12 — Household-timezone bill occurrences and a Solace performance pass
+- Fixed a real-use defect: bills due "today" in household-local time (e.g. a utility cost linked
+  from Homestead) could silently not appear in Money → Now. Root cause: occurrence generation in
+  `apps/solace/bill_schedule.py` (plus `forecast.py`/`tasks.py`) compared bills against Django's
+  active timezone, which is UTC inside Docker since nothing activates a request-local one — the
+  same class of defect v0.29.7 fixed for pay-cycle/Now comparisons, but that pass missed the
+  occurrence-generation engine itself. All bill-schedule date math now uses the configured
+  Household timezone directly from the `Bill`/caller, independent of Django's active timezone.
+- Diagnosed and fixed the Solace "takes a few seconds to load" report: `SolaceBootstrapView` fans
+  out to ~14 sub-views in one request, and four of them (Bills, Health, Cycle closeout, Forecast)
+  each independently re-reconciled every active bill's occurrences over heavily overlapping
+  windows — up to 4x redundant delete/diff/bulk-create work per bill on a single Money page load.
+  A request-scoped cache (`_ensure_bills_reconciled`) now reconciles each bill's widest requested
+  window once per request; narrower, already-covered requests from other sub-views are skipped.
+  **820 backend tests green (3 new); no migration; no frontend change.**
 
 ### 0.34.3 — 2026-08-11 — Collapsible book-club settings
 - Book-club name, colour and membership controls now stay collapsed during normal shelf use.

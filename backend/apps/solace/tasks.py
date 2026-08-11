@@ -8,18 +8,20 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from apps.accounts.models import User
+from apps.core.models import get_active_household
 from apps.notifications.models import Notification
 from apps.notifications.services import create_notification
 from apps.permissions.resolver import resolve_permission
 from apps.solace import selectors
-from apps.solace.bill_schedule import ensure_bill_occurrences
+from apps.solace.bill_schedule import ensure_bill_occurrences, household_timezone
 from apps.solace.models import BillOccurrence
 
 
 def send_due_reminders(*, on: date | None = None) -> int:
     from django.utils import timezone
 
-    on = on or timezone.localdate()
+    tz = household_timezone(get_active_household())
+    on = on or timezone.localdate(timezone=tz)
     settings_obj = selectors.get_settings()
     if settings_obj is None or not settings_obj.dashboard_reminders:
         return 0
@@ -41,7 +43,7 @@ def send_due_reminders(*, on: date | None = None) -> int:
     )
     purchase_attention = any(
         row.target_date
-        and on - timedelta(days=365) <= timezone.localdate(row.target_date) <= window_end
+        and on - timedelta(days=365) <= timezone.localdate(row.target_date, tz) <= window_end
         for row in selectors.list_purchases(open_only=True)
     )
     needs_attention = (

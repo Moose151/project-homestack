@@ -1,7 +1,16 @@
 {
-  "current_version": "0.34.3",
-  "source_sha256": "b29b4867a07cce524c7aee110ca233855f16cbd41c39c134002fd22fb9f15315",
+  "current_version": "0.34.4",
+  "source_sha256": "057f112c36e584f356b795361ba8948283f9910c1e2a7e657c1d108d62a51535",
   "releases": [
+    {
+      "version": "0.34.4",
+      "date": "2026-08-12",
+      "title": "Household-timezone bill occurrences and a Solace performance pass",
+      "changes": [
+        "Fixed a real-use defect: bills due \"today\" in household-local time (e.g. a utility cost linked from Homestead) could silently not appear in Money → Now. Root cause: occurrence generation in `apps/solace/bill_schedule.py` (plus `forecast.py`/`tasks.py`) compared bills against Django's active timezone, which is UTC inside Docker since nothing activates a request-local one — the same class of defect v0.29.7 fixed for pay-cycle/Now comparisons, but that pass missed the occurrence-generation engine itself. All bill-schedule date math now uses the configured Household timezone directly from the `Bill`/caller, independent of Django's active timezone.",
+        "Diagnosed and fixed the Solace \"takes a few seconds to load\" report: `SolaceBootstrapView` fans out to ~14 sub-views in one request, and four of them (Bills, Health, Cycle closeout, Forecast) each independently re-reconciled every active bill's occurrences over heavily overlapping windows — up to 4x redundant delete/diff/bulk-create work per bill on a single Money page load. A request-scoped cache (`_ensure_bills_reconciled`) now reconciles each bill's widest requested window once per request; narrower, already-covered requests from other sub-views are skipped. **820 backend tests green (3 new); no migration; no frontend change.**"
+      ]
+    },
     {
       "version": "0.34.3",
       "date": "2026-08-11",

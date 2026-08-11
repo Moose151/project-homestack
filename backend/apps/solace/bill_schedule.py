@@ -9,6 +9,7 @@ from __future__ import annotations
 from calendar import monthrange
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal, ROUND_HALF_UP
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.db import models
 from django.utils import timezone
@@ -16,6 +17,22 @@ from django.utils import timezone
 from apps.solace.models import Bill, BillOccurrence, SolaceSettings
 
 _PENNY = Decimal("0.01")
+
+
+def household_timezone(household) -> ZoneInfo:
+    """Return the configured household zone, falling back safely for old/invalid settings.
+
+    Bills are compared to "today" from the household's point of view (owner, 2026-08-11 —
+    v0.29.7 fixed this for pay-cycle/Now comparisons). Occurrence generation must use the same
+    zone: Django's active timezone is UTC inside Docker and nothing activates a request-local
+    one, so a bill anchored/regenerated against `timezone.get_current_timezone()` here can land
+    on the wrong side of a household-local midnight and silently miss "due today".
+    """
+    name = getattr(household, "timezone", "") or "UTC"
+    try:
+        return ZoneInfo(name)
+    except ZoneInfoNotFoundError:
+        return ZoneInfo("UTC")
 
 
 def _rule_parts(value: str) -> dict[str, str]:
@@ -66,11 +83,11 @@ def occurrence_datetimes(bill: Bill, start: date, end: date) -> list[datetime]:
     """Return bill due datetimes in a date window, clamping month-end dates like legacy Solace."""
     if not bill.is_active or not bill.due_at or end < start:
         return []
+    tz = household_timezone(bill.household)
     anchor = bill.due_at
     if timezone.is_naive(anchor):
-        anchor = timezone.make_aware(anchor, timezone.get_current_timezone())
-    anchor = timezone.localtime(anchor)
-    tz = timezone.get_current_timezone()
+        anchor = timezone.make_aware(anchor, tz)
+    anchor = timezone.localtime(anchor, tz)
     start_at = timezone.make_aware(datetime.combine(start, time.min), tz)
     end_at = timezone.make_aware(datetime.combine(end, time.max), tz)
     if bill.end_date:
@@ -130,9 +147,10 @@ def settle_history_on_entry(bill: Bill) -> int:
     that is the only date the household has told us about.
     """
     now = timezone.now()
+    tz = household_timezone(bill.household)
     started_today = timezone.make_aware(
-        datetime.combine(timezone.localdate(), time.min),
-        timezone.get_current_timezone(),
+        datetime.combine(timezone.localdate(now, tz), time.min),
+        tz,
     )
     return BillOccurrence.objects.filter(
         bill=bill,
@@ -153,7 +171,7 @@ def ensure_bill_occurrences(
     to appear overdue forever. Paid and skipped history is never part of this reconciliation.
     """
     due_values = occurrence_datetimes(bill, start, end)
-    tz = timezone.get_current_timezone()
+    tz = household_timezone(bill.household)
     start_at = timezone.make_aware(datetime.combine(start, time.min), tz)
     end_at = timezone.make_aware(datetime.combine(end, time.max), tz)
     window_rows = BillOccurrence.objects.filter(
@@ -205,7 +223,7 @@ def refresh_unpaid_occurrences(
 ) -> None:
     """Regenerate unpaid rows while always preserving payment history."""
     now = timezone.now()
-    today = timezone.localdate()
+    today = timezone.localdate(now, household_timezone(bill.household))
     # Paid and skipped rows are history. Only genuinely unpaid occurrences may be regenerated.
     rows = BillOccurrence.objects.filter(
         bill=bill,

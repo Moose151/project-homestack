@@ -4,6 +4,7 @@ import sqlite3
 import tempfile
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from django.core.management import CommandError, call_command
@@ -423,6 +424,27 @@ class SolaceCrudAndCalendarTests(TestCase):
 
         self.assertNotIn(bill.id, [row.bill_id for row in current])
         self.assertIn(bill.id, [row.bill_id for row in next_cycle])
+
+    def test_occurrence_generation_uses_household_timezone_not_djangos_active_one(self):
+        """A bill due at household-local midnight must generate as due "today", even though
+        Django's active timezone is never activated per-request in production (it stays UTC
+        inside Docker). Unlike the sibling test above, this one deliberately leaves Django's
+        active timezone at UTC instead of overriding it, reproducing the real deployment: a
+        household-local "due today" bill was silently excluded because occurrence generation
+        compared it against a window boundary mislabelled as UTC instead of as household-local
+        (owner report, 2026-08-12 — utility bills due today missing from Money → Now)."""
+        brisbane = ZoneInfo("Australia/Brisbane")
+        self.admin.household.timezone = "Australia/Brisbane"
+        self.admin.household.save(update_fields=["timezone"])
+        self.assertEqual(str(timezone.get_current_timezone()), "UTC")
+        bill = create_bill(
+            self.admin,
+            name="Electricity",
+            amount="60.00",
+            due_at=datetime(2026, 8, 12, 0, 0, tzinfo=brisbane),
+        )
+        values = occurrence_datetimes(bill, date(2026, 8, 12), date(2026, 8, 12))
+        self.assertEqual(len(values), 1)
 
     def test_bill_stop_after_bounds_occurrences_and_metadata_round_trips(self):
         due_at = timezone.make_aware(datetime(2027, 1, 1, 9))
@@ -1978,3 +2000,50 @@ class PurchaseCompletionTests(TestCase):
         )
         purchase.refresh_from_db()
         self.assertEqual(purchase.saved_amount, Decimal("450.00"))
+
+
+class BillReconciliationCachingTests(TestCase):
+    """Bootstrap fans out to several sub-views that each need bill occurrences materialised.
+
+    Before this cache, one Money page load reconciled every active bill's occurrences three or
+    four times over heavily overlapping windows (owner report, 2026-08-12 — Solace "can take a
+    few seconds to load"). This asserts a later, narrower request for the same bill is a no-op.
+    """
+
+    def test_a_covered_window_is_not_reconciled_twice(self):
+        from apps.solace.views import _ensure_bills_reconciled
+
+        admin = _make_user("reconcileuser", User.Role.ADMIN)
+        bill = create_bill(
+            admin, name="Electricity", amount="60.00", due_at=timezone.now() + timedelta(days=3),
+        )
+
+        class _FakeRequest:
+            pass
+
+        request = _FakeRequest()
+        with patch(
+            "apps.solace.bill_schedule.ensure_bill_occurrences",
+        ) as mock_ensure:
+            _ensure_bills_reconciled(request, [bill], date(2026, 1, 1), date(2026, 12, 31))
+            _ensure_bills_reconciled(request, [bill], date(2026, 3, 1), date(2026, 6, 30))
+            mock_ensure.assert_called_once()
+
+    def test_an_uncovered_window_still_reconciles(self):
+        from apps.solace.views import _ensure_bills_reconciled
+
+        admin = _make_user("reconcileuser2", User.Role.ADMIN)
+        bill = create_bill(
+            admin, name="Water", amount="60.00", due_at=timezone.now() + timedelta(days=3),
+        )
+
+        class _FakeRequest:
+            pass
+
+        request = _FakeRequest()
+        with patch(
+            "apps.solace.bill_schedule.ensure_bill_occurrences",
+        ) as mock_ensure:
+            _ensure_bills_reconciled(request, [bill], date(2026, 3, 1), date(2026, 6, 30))
+            _ensure_bills_reconciled(request, [bill], date(2026, 1, 1), date(2026, 12, 31))
+            self.assertEqual(mock_ensure.call_count, 2)

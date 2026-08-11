@@ -132,10 +132,17 @@ v0.32 adds Calendar appointments, Atlas Agenda, dated to-do sync, birthdays/Peop
 pool-care schedules. v0.33 ships the first useful **Travel** node: Trips/To go, booking and cost
 planning, Calendar/deadline integration, notifications/Corner activity and selected-user surprise
 visibility.
-**The next step is not another broad build:** rebuild/migrate the home
-server, import and verify the real Solace database, complete a real Fitness workout and pool-care
-check, then run the two-account/real-device acceptance pass. Home Assistant M5.5 follows those
-gates. Kiosk refinement remains deferred.**
+**Update, 2026-08-12 (owner report): the home server deploy has happened and the app is in daily
+use.** Owner chose to start Solace from scratch with bills entered manually rather than importing
+the standalone database — the import/verify tooling remains available but is no longer part of
+this household's cutover path. Fitness and the partner/two-account acceptance pass are both done.
+Pool-care band verification is blocked until the household moves into the new house with a pool
+(no longer scheduled work). Home Assistant M5.5 is intentionally on hold until HTTPS and phone
+push notifications are sorted — see the daily-coordination Web Push slice below. Kiosk refinement
+remains deferred. **Current real-use priorities (owner, 2026-08-12):** a Solace performance pass
+(done, v0.34.4 — see Progress Log), a Money → Now timezone bug (fixed, v0.34.4), a Travel
+itinerary + day/multi-day trip type, and a general (non-personal, non-room) household shopping
+list — the natural future home for a grocery list too.
 
 > **Owner direction, 2026-07-29.** Focus on usability, functionality, response time, navigation
 > and layout across the responsive web app. v0.12.0 delivers the shared foundation: route
@@ -338,8 +345,11 @@ gates. Kiosk refinement remains deferred.**
   and rejects old permanent session flags. The generic node lock, machine-readable re-auth
   contract, one-minute kiosk elevation and account/permission audit coverage are shipped. Only
   the pre-remote-access checklist remains, and only if remote access is pursued.
-- [~] **Milestone 5: native Solace — standalone feature parity complete locally (v0.28.1);
-  production cutover validation remains.**
+- [x] **Milestone 5: native Solace — DEPLOYED AND IN USE (2026-08-12).** Owner started fresh
+  with bills entered manually rather than running `import_solace`; standalone Solace is not being
+  cut over from. The importer/`--verify` tooling remains available but is no longer an open task
+  for this household. v0.34.4 fixed a real-use household-timezone bug in occurrence generation
+  and a Bootstrap-request performance issue — see Progress Log.
   Backend `apps/solace` covers bills, paydays, planned purchases, budget buckets/set-asides,
   subscriptions and payday checklist items. All rows default to `visibility="sensitive"` +
   `sensitivity="financial"`. Bills/paydays/subscriptions/planned purchases sync to Calendar via
@@ -391,8 +401,10 @@ gates. Kiosk refinement remains deferred.**
   per-day averages and two comparisons (previous bill, a year ago matched within 45 days). It is
   household-visible with **no re-auth gate** (owner, 2026-08-10) while Costs & cover stays gated,
   and it writes nothing to the Calendar.
-  Real pool-shop guidance still needs to be compared with the defaults; pool-specific FTS remains
-  a small follow-up. Full Projects integration remains future. See spec `25_Node_Homestead.md`.
+  Real pool-shop guidance still needs to be compared with the defaults, but this is **blocked,
+  not scheduled** — the household does not have the pool yet and this is deferred until they
+  move into the new house (owner, 2026-08-12). Pool-specific FTS remains a small follow-up. Full
+  Projects integration remains future. See spec `25_Node_Homestead.md`.
   A general floor-plan authoring tool is deliberately future work under Roadmap 8.1: blank,
   template or uploaded-image tracing; drag/resize/snap areas; real Room links; multiple levels;
   draft/publish and revision history. The current hard-coded geometry is only this installation's
@@ -410,14 +422,16 @@ gates. Kiosk refinement remains deferred.**
   Owner subsequently approved reactions: visible activity rows should accept ❤️/👍 and other
   friendly emoji, group counts by emoji, toggle a person's reaction off, show reactors only to
   authorised viewers and bundle notifications rather than alerting once per tap.
-- [~] **Fitness & Training — SHIPPED LOCALLY (v0.25.0, D24); production acceptance pending.**
+- [x] **Fitness & Training — DEPLOYED AND IN USE (v0.25.0, D24; acceptance done 2026-08-12).**
   Forty-five seeded exercises, searchable custom library, assigned multi-day programs, immutable
   live sessions, previous-performance defaults, editable sets and mid-workout add/drop, strength/
-  running/swimming personal records, notifications, global search and a Hub widget are complete.
-  **Still to do:** deploy/migrate, enable the node and log a complete real phone workout before
-  prioritising rest timers, RPE, pace splits or trend charts. See `docs/27_Node_Fitness.md`.
-- [ ] **Milestone 5.5: Home Assistant bridge — IMPORTANT / PLANNED (D22).** After production
-  deployment, household acceptance and Solace cutover validation: establish the
+  running/swimming personal records, notifications, global search and a Hub widget are complete
+  and in real use. Next possible work (not scheduled): rest timers, RPE, pace splits, trend
+  charts — pick these up only if the owner asks. See `docs/27_Node_Fitness.md`.
+- [ ] **Milestone 5.5: Home Assistant bridge — IMPORTANT / ON HOLD (D22).** Explicitly gated by
+  the owner (2026-08-12) behind HTTPS + working phone push notifications, not by anything else in
+  this list — deploy, Solace, Fitness, pool and acceptance are all already done. Once HTTPS/push
+  land, resume in order: establish the
   backend-only secret/connection and allowlist gate; ship read-only mapped Home Status + Hub
   widget; add safe centrally permissioned/audited controls; then deliver approved HomeStack
   events into Home Assistant automations. WebSocket live state and a custom component remain
@@ -425,14 +439,53 @@ gates. Kiosk refinement remains deferred.**
 - [ ] Milestone 6: Hearth and Health as appetite allows; finish Travel slices. Inventory/Assets are
   proposed Homestead capabilities and standalone Projects is evidence-gated (spec 31).
 
-## 6. Active tasks — deploy, cut over and validate before the next major build
+## 6. Active tasks — real-use fixes and the next owner-requested features
 
-**Current state (2026-08-11):** v0.31.0 has 806 backend tests green, a clean
-frontend production build and no migration drift. The production/home-server deployment and its
-database may still be behind this code. The real-use defects found on v0.23.x have been fixed;
-the remaining work is deployment and acceptance, not another speculative UI pass.
-`docs/PARTNER_PILOT_READINESS.md` remains the two-account/real-device release gate and should be
-extended during acceptance to cover Fitness and Pools & spas.
+**Current state (2026-08-12):** v0.34.4 has 820 backend tests green, a clean frontend production
+build and no migration drift. **Deploy, Solace cutover (manual entry, not import), Fitness and
+the partner acceptance pass are all done** — HomeStack is deployed on the home server and in
+daily use. The active work is now real-use fixes reported from that daily use, plus two
+owner-requested features, in this order:
+
+1. **Solace performance pass — DONE (v0.34.4).** `SolaceBootstrapView` fanned out to ~14
+   sub-views per Money page load; four of them (Bills, Health, Cycle closeout, Forecast) each
+   independently re-reconciled every active bill's occurrences over heavily overlapping windows.
+   A request-scoped cache (`_ensure_bills_reconciled` in `apps/solace/views.py`) now reconciles
+   each bill's widest requested window once per request. If Solace still feels slow after this,
+   profile with the existing `Server-Timing`/slow-request logging (v0.12.0) rather than assuming
+   the cause — this pass fixed the one clearly diagnosed redundant-query source, not necessarily
+   every cost.
+2. **Money → Now timezone bug — DONE (v0.34.4).** Bills due "today" in household-local time
+   (e.g. a utility cost linked from Homestead) could silently not appear in Now. Root cause:
+   `apps/solace/bill_schedule.py` (plus `forecast.py`/`tasks.py`) compared bills against Django's
+   active timezone, which stays UTC inside Docker since nothing activates a request-local one —
+   the same class of bug v0.29.7 fixed for pay-cycle/Now comparisons, but that pass missed the
+   occurrence-generation engine itself. Fixed by reading `Bill.household.timezone` directly,
+   independent of Django's active timezone.
+3. **Travel itinerary + trip type — NOT STARTED (owner request, 2026-08-12).** Add itinerary
+   items to a Trip: each either assigned to a specific day of the trip or left as an unassigned
+   "option to do". Add a Trip `trip_type` of day-trip vs multi-day-trip. See `docs/19_Node_Travel.md`
+   for the existing Trip/component model before adding fields.
+4. **General household shopping list — NOT STARTED (owner request, 2026-08-12).** The owner
+   wants somewhere to put an ordinary household item (e.g. a vacuum cleaner) with a link/price
+   that is neither a personal Corner wish nor tied to a Homestead room project. Owner's own
+   answer: a general household shopping list — likely the same home a future grocery list would
+   use. Atlas already has list types `todo/grocery/shopping/checklist/general` (v0.7.2) and the
+   product-preview/link-import boundary already exists (v0.31.0, used by Corner wishes and
+   Homestead room plan products) — investigate wiring link/price capture onto an Atlas
+   `shopping`/`grocery` list item before inventing a new model.
+
+**Deferred / on hold, not active work right now:**
+- Pool-care band verification against the pool shop's guidance — blocked until the household
+  moves into the new house with a pool.
+- Home Assistant Milestone 5.5 — on hold until HTTPS and phone push notifications are sorted
+  (owner, 2026-08-12: "needs to be sorted soon" — see the pending Web Push slice under Daily
+  Coordination in §5/roadmap).
+- Homestead capability consolidation (Roadmap doc) — explicitly not a priority.
+- Icon system — explicitly not a priority.
+
+`docs/PARTNER_PILOT_READINESS.md` was the two-account/real-device release gate; acceptance is
+done, so treat new findings as ordinary bug reports/feature requests rather than re-running it.
 
 **Milestone 4 is functionally complete (v0.24.1).** The sensitive-node lock is generic
 (`apps/nodes/access.py`), account/permission changes are audited, the locked-state contract is
@@ -441,51 +494,22 @@ and the kiosk's elevation window is a minute against the web's five — a client
 declare its surface gets the cautious one. What remains is the **pre-remote-access checklist in
 `docs/05_Security_Architecture_Document.md` §14**, and only if remote access is ever pursued.
 
-**Priority order:**
-
-1. Rebuild both home-server images, run all migrations and confirm the migration heads below.
-2. Run the Solace dry-run/import/verify sequence against the home server's **real** standalone
-   SQLite database, then compare one full pay cycle and month before retiring standalone.
-3. Enable Fitness and complete one real phone workout, checking previous-weight defaults,
-   mid-session edits, totals, personal records and household/private notifications.
-4. Compare the saltwater-pool target bands and starter care jobs with the pool shop's guidance;
-   adjust `apps/homestead/pool_care.py` only from that evidence.
-5. Complete the partner readiness pass on both adult phones plus desktop. Record task/device
-   friction; do not begin another broad visual rewrite.
-6. After those gates, begin Home Assistant Milestone 5.5.0 with backend reachability, secrets,
-   TLS/timeouts, allowlists and failure/permission tests. Do not start with controls, WebSockets,
-   a custom component or a generic integrations framework. See `docs/26_Node_Home_Assistant.md`.
-
-**Production track (requires the home server):** rebuild both images and run `migrate`. Current
-heads that matter for this deployment are: `atlas.0004`, `scheduling.0003`, `meridian.0013`,
-`education.0006`, `homestead.0010_solace_owns_home_finance`, `fitness.0002_seed_common_exercises`,
-`hub.0015_seed_fitness_widget`, `nodes.0008_seed_fitness_node`,
-`permissions.0021_seed_fitness_permissions`, `solace.0010_consolidate_subscriptions_into_bills` and
-`attachments.0001`. Verify rather than assuming with:
+**Superseded, 2026-08-12 — kept for the deploy mechanics, not the sequencing.** The
+deploy/cutover/Fitness/pool/acceptance/Home-Assistant priority order this block used to give is
+resolved: see the current §6 priority list above. The owner chose to start Solace from bills
+entered manually rather than running `import_solace` against the standalone database, so the
+importer/`--verify` sequence below remains available tooling, not an open task. Deploy mechanics
+that are still accurate whenever a new migration lands: rebuild the backend image (or rely on the
+bind-mounted dev compose, which picks up code changes without a rebuild) and run
+`docker exec homestack-backend python manage.py migrate`. This repo runs on Docker Compose bound
+to `/home/instructor/Documents/new/project-homestack` — `docker-compose.yml` +
+`docker-compose.dev.yml` (`DJANGO_SETTINGS_MODULE=config.settings.dev`, `DEBUG=1`, `runserver`
+with autoreload), so backend source edits take effect immediately; only migrations and frontend
+changes need an explicit rebuild/restart.
 
 ```bash
-docker compose up -d --build
 docker exec homestack-backend python manage.py migrate
 docker exec homestack-backend python manage.py showmigrations
-```
-
-The Solace cutover sequence remains a data/acceptance exercise: dry-run/apply so settings,
-categories, bucket rules and ledger state, historical occurrences, income scope/allocations,
-balances, preferences and closeouts are imported, then run read-only `--verify`. Compare a full
-standalone pay cycle and month against Now, Pay plan, Schedule, cycle history and annual summary:
-bill dates/totals, paid/skipped state, income ownership/dates, shared allocation, transfers,
-month-end bills and closeout. Record a fresh bills-account balance and verify the Forecast event
-trail, lowest balance, shortfall and safe-withdrawal amount against the real account. Retire
-standalone Solace only after the owner accepts those checks on phone and laptop.
-
-Production command sequence (copy the legacy database into the container first because the host
-path is not mounted there):
-
-```bash
-docker cp /path/to/solace.db homestack-backend:/tmp/solace.db
-docker exec homestack-backend python manage.py import_solace --sqlite-db /tmp/solace.db --dry-run
-docker exec homestack-backend python manage.py import_solace --sqlite-db /tmp/solace.db
-docker exec homestack-backend python manage.py import_solace --sqlite-db /tmp/solace.db --verify
 ```
 
 **Working rhythm (proven this milestone):** small workstream → backend (models/migration/services/
@@ -677,6 +701,7 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-08-11 | Assistant | Books + colour UX | **Book URL/ISBN review import and shared colours shipped as v0.34.1.** The existing SSRF-pinned/rate-limited preview boundary now accepts Book previews: public URLs expose Schema.org Book/Product metadata and an ISBN, then user-triggered Open Library lookup fills title/author/publication/pages/subjects/description/cover; bare ISBN works directly and partial metadata stays editable. Books persist publication text and source URL and display cover/date. Replaced every standalone native colour well with one accessible shared 24-swatch palette plus unrestricted custom colour; Calendar explicit colours can still be cleared to inherit Person/family colour. Added `books.0002`. **817 backend tests green; frontend production build clean; no migration drift.** | Rebuild/migrate, paste one retailer book URL and one ISBN into Books, review before saving, and check profile/event/schedule/trip/club/room/Wiki colour selection on phone and desktop. |
 | 2026-08-11 | Assistant | Acceptance fixes | **Trip deletion, linked My Corner resolution and book-club layout fixed as v0.34.2.** Added a confirmed Delete action to trip detail using the existing protected Travel endpoint. Corrected the People read contract from `linked_user` to documented `linked_user_id`, which lets My Corner recognise an already-linked login and restores linked-user consumers such as Travel surprise selection. Reflowed Book club settings so the shared 24-swatch colour picker uses the card width rather than a five-rem column. Added the People API regression. **817 backend tests green; frontend production build clean; no migration drift.** | Rebuild both images and hard-refresh. Open Nick's My Corner, delete the test trip from its detail page, and check Book clubs on phone and desktop. |
 | 2026-08-11 | Assistant | Books UX | **Book-club settings made dismissible as v0.34.3.** Club name, colour and member management are collapsed by default behind Edit club, have an explicit Close action and collapse when the selected club changes. **Frontend production build clean; backend unchanged; no migration.** | Rebuild the frontend and hard-refresh; confirm Edit club/Close on phone and desktop. |
+| 2026-08-12 | Assistant | Real-use fixes | **Status correction + Solace timezone/performance fixes shipped as v0.34.4 (owner report from live daily use).** HomeStack is deployed on the home server and in daily use; the owner started Solace from bills entered manually rather than via `import_solace`, and Fitness/partner acceptance are both done — corrected §5/§6 accordingly, which had gone stale describing an undeployed app. **Bug fix:** bills due "today" in household-local time (e.g. Homestead-linked utility costs) could silently not appear in Money → Now. `apps/solace/bill_schedule.py` (plus `forecast.py`/`tasks.py`) compared occurrence windows against Django's active timezone, which stays UTC inside Docker since nothing activates a request-local one — the same class of bug v0.29.7 fixed for pay-cycle/Now comparisons, but that pass missed the occurrence-generation engine itself (the existing Brisbane-timezone tests all happened to wrap themselves in `timezone.override`, masking the gap). Added `bill_schedule.household_timezone(household)` and read it directly from `Bill.household`/the caller everywhere date math happens. **Performance fix:** diagnosed why Solace "takes a few seconds to load" — `SolaceBootstrapView` fans out to ~14 sub-views per request, and four of them (Bills, Health, Cycle closeout, Forecast) each independently re-ran full per-bill occurrence reconciliation over heavily overlapping windows (up to 4x redundant delete/diff/bulk-create work per bill per page load). Added a request-scoped cache (`_ensure_bills_reconciled` in `views.py`) that reconciles each bill's widest requested window once per request; narrower calls from other sub-views become no-ops. Regenerated the stale `versionHistory.json` manifest. **820 backend tests green (3 new); no migration; no frontend change.** Also retired a stale memory entry ("revisit Atlas + Hub after Meridian") that had already been resolved back in M2.5 (2026-06-25) but was still surfacing in project memory. | Owner-requested and queued, in this order: (1) done — Solace performance + Now timezone; (2) Travel itinerary (day-assignable or unassigned "option to do" items) + day-trip/multi-day-trip type on Trips; (3) a general (non-personal, non-room) household shopping list, likely the future grocery-list home too — Atlas already has `shopping`/`grocery` list types (v0.7.2) and the link/price preview boundary already exists (v0.31.0); investigate wiring it onto an Atlas list item before inventing a new model. HTTPS + phone push notifications ("needs to be sorted soon") remain the gate before Home Assistant M5.5. |
 
 ### Session notes (free-form, optional)
 
