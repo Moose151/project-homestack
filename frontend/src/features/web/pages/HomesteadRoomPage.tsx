@@ -35,7 +35,8 @@ const STATUS_TONE: Record<RoomItemStatus, BadgeTone> = {
 }
 
 const EMPTY_PRODUCT = {
-  title: '', url: '', image_url: '', retailer: '', quantity: '1', unit_cost: '',
+  title: '', url: '', image_url: '', source_image_url: '', retailer: '', quantity: '1', unit_cost: '',
+  currency: 'AUD', cache_image: true, price_watch_enabled: false,
 }
 
 /**
@@ -59,6 +60,7 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState(EMPTY_PRODUCT)
   const [busy, setBusy] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
   // A remote image can 404 or be blocked; remember which ones failed so the card falls back
   // to a placeholder instead of showing a broken-image glyph.
   const [brokenImages, setBrokenImages] = useState<number[]>([])
@@ -87,9 +89,28 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
     setEditingId(productId)
     setForm({
       title: product.title, url: product.url, image_url: product.image_url,
-      retailer: product.retailer, quantity: product.quantity, unit_cost: product.unit_cost,
+      source_image_url: product.source_image_url, retailer: product.retailer,
+      quantity: product.quantity, unit_cost: product.unit_cost, currency: product.currency,
+      cache_image: true, price_watch_enabled: Boolean(product.price_watch?.is_active),
     })
     setAdding(true)
+  }
+
+  const fillFromLink = async () => {
+    if (!form.url.trim()) return
+    setPreviewing(true)
+    try {
+      const preview = await api.previewProductLink(form.url.trim())
+      setForm(current => ({
+        ...current, title: preview.title || current.title, url: preview.source_url,
+        image_url: preview.image_url, source_image_url: preview.image_url,
+        retailer: preview.retailer, unit_cost: preview.price || current.unit_cost,
+        currency: preview.currency || 'AUD', cache_image: true,
+      }))
+      if (preview.warnings.length) onError(preview.warnings.join(' '))
+    } catch (error) {
+      onError(`${errMsg(error)} You can still enter the product manually.`)
+    } finally { setPreviewing(false) }
   }
 
   const save = async (event: React.FormEvent) => {
@@ -199,10 +220,10 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
                         image read as a lost one. A broken link now says so and offers to open
                         the URL, since the usual cause is a shop that refuses hotlinking. */}
                     <div className="grid h-20 w-20 flex-shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-sunken">
-                      {product.image_url && !imageBroken ? (
-                        <a href={product.image_url} target="_blank" rel="noreferrer noopener" className="block h-full w-full">
+                      {(product.cached_image_url || product.image_url || product.source_image_url) && !imageBroken ? (
+                        <a href={product.url || product.source_image_url || product.image_url} target="_blank" rel="noreferrer noopener" className="block h-full w-full">
                           <img
-                            src={product.image_url}
+                            src={product.cached_image_url || product.source_image_url || product.image_url}
                             alt={product.title}
                             loading="lazy"
                             referrerPolicy="no-referrer"
@@ -210,9 +231,9 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
                             className="h-full w-full object-cover"
                           />
                         </a>
-                      ) : product.image_url ? (
+                      ) : product.image_url || product.source_image_url ? (
                         <a
-                          href={product.image_url}
+                          href={product.source_image_url || product.image_url}
                           target="_blank"
                           rel="noreferrer noopener"
                           title="This shop is blocking the picture. Open the image link to check it."
@@ -241,6 +262,7 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
                         {isProject && product.is_purchased && product.actual_cost !== null
                           && ` · paid ${money(product.actual_cost)}`}
                       </p>
+                      {product.price_watch?.is_active && <p className="mt-0.5 text-[10px] font-bold text-success">Watching for a price drop</p>}
                       <div className="mt-1 flex flex-wrap items-center gap-1">
                         {product.url && (
                           <a
@@ -288,19 +310,17 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
                   />
                 </Field>
               </div>
-              <Field label="Link to the item">
-                <Input
-                  type="url"
-                  value={form.url}
-                  onChange={event => setForm(f => ({ ...f, url: event.target.value }))}
-                  placeholder="https://…"
-                />
+              <Field label="Link to the item" hint="Paste a shop link and HomeStack will fill the details it can find.">
+                <div className="flex gap-2">
+                  <Input type="url" value={form.url} onChange={event => setForm(f => ({ ...f, url: event.target.value }))} placeholder="https://…" />
+                  <Button type="button" size="sm" variant="secondary" loading={previewing} disabled={!form.url.trim()} onClick={fillFromLink}>Fill</Button>
+                </div>
               </Field>
               <Field label="Image link" hint="Right-click the product photo → Copy image address">
                 <Input
                   type="url"
                   value={form.image_url}
-                  onChange={event => setForm(f => ({ ...f, image_url: event.target.value }))}
+                  onChange={event => setForm(f => ({ ...f, image_url: event.target.value, source_image_url: event.target.value }))}
                   placeholder="https://…/photo.jpg"
                 />
               </Field>
@@ -347,6 +367,10 @@ function ProductList({ roomId, item, canEdit, canDelete, onChanged, onError }: {
                 >
                   Cancel
                 </Button>
+                <label className="ml-auto flex min-h-10 items-center gap-2 text-xs font-semibold text-muted-strong">
+                  <input type="checkbox" checked={form.price_watch_enabled} onChange={event => setForm(current => ({ ...current, price_watch_enabled: event.target.checked }))} />
+                  Notify me if the price drops
+                </label>
               </div>
             </form>
           )}

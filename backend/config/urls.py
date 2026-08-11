@@ -21,6 +21,7 @@ urlpatterns = [
     path("api/v1/auth/", include("apps.accounts.urls")),
     path("api/v1/users/", include("apps.accounts.user_urls")),
     path("api/v1/people/", include("apps.people.urls")),
+    path("api/v1/corners/", include("apps.people.corner_urls")),
     path("api/v1/household/", include("apps.core.urls")),
     path("api/v1/nodes/", include("apps.nodes.urls")),
     path("api/v1/audit-logs/", include("apps.audit.urls")),
@@ -39,5 +40,6 @@ urlpatterns = [
     path("api/v1/hub/", include("apps.hub.urls")),
     path("api/v1/notifications/", include("apps.notifications.urls")),
     path("api/v1/attachments/", include("apps.attachments.urls")),
+    path("api/v1/link-imports/", include("apps.link_imports.urls")),
     path("api/v1/backups/", include("apps.backups.urls")),
 ]

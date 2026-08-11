@@ -22,6 +22,7 @@ from __future__ import annotations
 # kiosk — the node's whole purpose — without weakening the global child-safety block.
 _CHILD_SAFE_ACTIONS: dict[str, frozenset[str]] = {
     "meridian": frozenset({"complete", "request", "contribute"}),
+    "corners": frozenset({"react"}),
 }
 
 

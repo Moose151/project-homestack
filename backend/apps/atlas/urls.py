@@ -7,6 +7,8 @@ from apps.atlas.views import (
     ListItemDetailView,
     ListItemListView,
     ListItemUncompleteView,
+    ListSuggestionListView,
+    ListSuggestionReviewView,
     ListListView,
     NoteDetailView,
     NoteListView,
@@ -29,6 +31,8 @@ urlpatterns = [
     path("lists/<int:list_id>/items/<int:item_id>/", ListItemDetailView.as_view(), name="atlas-list-item-detail"),
     path("lists/<int:list_id>/items/<int:item_id>/complete/", ListItemCompleteView.as_view(), name="atlas-list-item-complete"),
     path("lists/<int:list_id>/items/<int:item_id>/uncomplete/", ListItemUncompleteView.as_view(), name="atlas-list-item-uncomplete"),
+    path("lists/<int:list_id>/suggestions/", ListSuggestionListView.as_view(), name="atlas-list-suggestion-list"),
+    path("lists/<int:list_id>/suggestions/<int:suggestion_id>/<str:action>/", ListSuggestionReviewView.as_view(), name="atlas-list-suggestion-review"),
 
     # Reminders
     path("reminders/", ReminderListView.as_view(), name="atlas-reminder-list"),

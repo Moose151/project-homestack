@@ -44,6 +44,8 @@ archived/superseded — ignore them.
 - `25_Node_Homestead.md` — home/property source of truth and Solace handoff (D21).
 - `26_Node_Home_Assistant.md` — important dedicated Home Assistant bridge contract (D22/M5.5).
 - `27_Node_Fitness.md` — social training programs, live workouts and personal records (D24).
+- `28_Core_Corners.md` — household Corners: activity, assignments, lists and reactions.
+- `29_Core_Link_Import.md` — shipped product URL preview/watch contract; Hearth recipes remain later.
 - `MILESTONE_1_Checklist.md` / `MILESTONE_2_Checklist.md` / `MILESTONE_2.5_Checklist.md` — the
   per-milestone build checklists. **M4 is functionally complete; production acceptance is active.**
 
@@ -106,7 +108,7 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: v0.30.1 is code-complete locally and awaiting production deployment plus household
+**Phase: v0.31.0 is code-complete locally and awaiting production deployment plus household
 acceptance (2026-08-11).** Since the original v0.21 pilot gate, HomeStack has completed the
 generic sensitive-node lock and audit work (M4), shipped Fitness & Training (v0.25), Pools & spas
 inside Homestead (v0.26), rebuilt Money around daily use and a bucket ledger (v0.27), and closed
@@ -119,7 +121,9 @@ Solace-only financial ownership for every home bill displayed in Homestead, comp
 the leftover Subscriptions subsection, household-timezone-aware cycle boundaries, and a native
 interactive SVG of the real house/property plan in Homestead Rooms. Its focused interior/property
 views now support strong selected-space highlighting and explicit persistent links to existing
-room records, whose saved names, icons and colours are then used on the plan.
+room records, whose saved names, icons and colours are then used on the plan. v0.31 adds normal
+household **Corners** (activity, assignments, personal lists/wishes, suggestions and reactions)
+plus safe product-link enrichment, local confirmed-image caching and optional daily price watches.
 **The next step is not another broad build:** rebuild/migrate the home
 server, import and verify the real Solace database, complete a real Fitness workout and pool-care
 check, then run the two-account/real-device acceptance pass. Home Assistant M5.5 follows those
@@ -381,6 +385,23 @@ gates. Kiosk refinement remains deferred.**
   and it writes nothing to the Calendar.
   Real pool-shop guidance still needs to be compared with the defaults; pool-specific FTS remains
   a small follow-up. Full Projects integration remains future. See spec `25_Node_Homestead.md`.
+  A general floor-plan authoring tool is deliberately future work under Roadmap 8.1: blank,
+  template or uploaded-image tracing; drag/resize/snap areas; real Room links; multiple levels;
+  draft/publish and revision history. The current hard-coded geometry is only this installation's
+  saved-plan migration source, never a default for other households.
+  Two further owner-requested productization features are documented, not built: Roadmap 8.2 adds
+  privacy-aware Corners aggregating activity, active assignments and source-owned personal/
+  room/Meridian lists; Roadmap 8.3 adds safe preview-and-confirm URL enrichment for products and
+  later Hearth recipes. See core specs 28 and 29. Do not implement either as copied cross-node
+  data or an unrestricted server-side scraper.
+  Owner follow-up settled household-visible personal lists, suggestion-only changes by others,
+  30-day initial activity, confirmed local image copies and snapshot pricing. Optional watched
+  wishes run once after ~09:00 Household-local time and notify only on a new sale/drop/target hit.
+  Recommended Corner interactions are reactions, short comments, help offers and watching;
+  gift reservation remains later because it needs hidden-from-recipient privacy.
+  Owner subsequently approved reactions: visible activity rows should accept ❤️/👍 and other
+  friendly emoji, group counts by emoji, toggle a person's reaction off, show reactors only to
+  authorised viewers and bundle notifications rather than alerting once per tap.
 - [~] **Fitness & Training — SHIPPED LOCALLY (v0.25.0, D24); production acceptance pending.**
   Forty-five seeded exercises, searchable custom library, assigned multi-day programs, immutable
   live sessions, previous-performance defaults, editable sets and mid-workout add/drop, strength/
@@ -397,7 +418,7 @@ gates. Kiosk refinement remains deferred.**
 
 ## 6. Active tasks — deploy, cut over and validate before the next major build
 
-**Current state (2026-08-11):** v0.30.1 has 794 backend tests green, a clean
+**Current state (2026-08-11):** v0.31.0 has 806 backend tests green, a clean
 frontend production build and no migration drift. The production/home-server deployment and its
 database may still be behind this code. The real-use defects found on v0.23.x have been fixed;
 the remaining work is deployment and acceptance, not another speculative UI pass.
@@ -632,6 +653,11 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-08-11 | Assistant | Solace follow-up | **Subscriptions fully absorbed and the actual timezone defect fixed as v0.29.7.** The v0.29.6 occurrence bounds still read Django's active timezone, which is UTC inside Docker, rather than the configured Household timezone; a Brisbane-local 12 August midnight could therefore remain 11 August to the backend. Pay-cycle construction, bill bounds, today and overdue comparisons now explicitly use `Household.timezone`, and Now accepts its date parameter. Removed the leftover Subscriptions subsection/filter entirely: subscription-category rows are normal Bills and legacy links land on Bills. The regression deliberately leaves Django in UTC while setting the household to Australia/Brisbane. **794 backend tests green; frontend production build clean; no migration.** | Rebuild both images (a restart of the old baked images is insufficient), confirm Settings → Household timezone is `Australia/Brisbane`, then hard-refresh and recheck Money → Now/Bills. |
 | 2026-08-11 | Assistant | Homestead floor plan | **The real house plan is now a native interactive Homestead surface (v0.30.0, owner request).** Used the supplied full-property plan for pool/cabana/shed/carport placement and the detailed plan for internal rooms/dimensions, but did not ship either branded image. `HomeFloorPlan.tsx` redraws it as responsive SVG using HomeStack light/dark tokens, room colours, zoom, keyboard links and accessible labels. It matches common room-name aliases to existing stable Room pages; unlinked spaces remain plan references. Rooms defaults to Floor plan and retains Room list as a secondary view. **Frontend production build clean; backend unchanged at 794 tests; no migration.** | Rebuild frontend and inspect the plan on phone/desktop. Rename existing Room records to the labels shown (or a supported alias) where a space is not linked; report any physical boundary/label that needs correcting from lived knowledge. |
 | 2026-08-11 | Assistant | Homestead floor plan | **The floor plan was made readable and explicitly linkable (v0.30.1, owner feedback).** Replaced the sparse all-in-one canvas and card-like rounded rooms with a large connected internal plan plus a simplified whole-property view. Shared walls, restrained architectural cues, fit/zoom controls and a side detail rail keep it visually integrated with HomeStack. Clicking or keyboard-selecting a space now gives it a strong filled highlight/glow. Editors can link any plan space to an existing Room; the association persists in `floorplan_data.floorplan_slot`, explicit links win over legacy name suggestions, and the plan adopts the room's saved name/icon/colour. Moving a room clears its old slot, and unlinking preserves all room data. **Frontend production build clean; persistence regression green; no migration.** | Rebuild the frontend, hard-refresh, then use Homestead → Rooms → Floor plan to save the real room associations. Check the interior and whole-property views on phone and laptop; only physical-boundary refinements from lived knowledge remain. |
+| 2026-08-11 | Assistant | Roadmap | **A household-portable floor-plan builder was added as future Roadmap 8.1 (owner request; documentation only).** The current plan is intentionally installation-specific. The future Homestead editor offers blank/template/upload-to-trace onboarding, a desktop/tablet drawing canvas with move/resize/snap, room link-or-create, architectural/outdoor features, multiple levels, undo/redo, drafts/publish and revision restore. Proposed household-scoped `FloorPlan`/`FloorPlanArea`/`FloorPlanFeature` records replace code geometry and use a real Room FK; the existing house migrates into saved data while new installs start empty. The roadmap includes the intended UI, four delivery slices and a clean-install acceptance gate. It explicitly rejects CAD/construction scope and makes later image recognition optional/editable. | Revisit during productization after the current household deployment and acceptance work. Start with rectangle-based core authoring plus reference-image tracing; do not begin with automatic recognition or full CAD behaviour. |
+| 2026-08-11 | Assistant | Roadmap | **Corners and safe URL enrichment were documented as Roadmap 8.2/8.3 (owner request).** Core spec 28 makes the normal household page a Corner backed by `Person`, separate from admin account management, with Overview/Activity/Assigned/Lists & wishes. Nodes provide permission-filtered projections rather than copied data: Atlas owns ordinary personal shopping/wishes, Homestead owns room products, and Meridian keeps the child points workflow. Core spec 29 defines preview-and-confirm extraction of product title/shop/price/currency/image and later Schema.org recipes. It begins with a strict SSRF boundary, handles blocked/partial sites honestly, preserves provenance and never overwrites confirmed user data. | Build order: Corner shell/Assigned → personal lists/projections → activity/reactions; separately safe fetch tests → product preview in Homestead → Atlas → price watches → Hearth later. |
+| 2026-08-11 | Assistant | Roadmap follow-up | **Owner defaults and daily sale watching were added to future specs 28/29 (documentation only).** Personal lists default household-visible; other members submit suggestions for accept/edit/dismiss; Activity opens on 30 days. Confirmed product images copy locally and confirmed prices remain snapshots. Optional watches check public wish URLs once after approximately 09:00 in Household local time via an idempotent catch-up-safe cron command, retain separate compact observations and notify only for a new explicit sale, meaningful drop or target hit. The Person interaction proposal adds bounded reactions, short moderated comments, offer-to-help approval and list watching; no DMs/pokes/engagement ranking, and surprise gift reservation remains later. | Still needed before implementation: representative retailer fixture URLs, confirmation of the recommended 5% meaningful-drop threshold, which proposed interactions should ship initially, and whether hidden-from-recipient gift reservation is worth its special privacy rule. |
+| 2026-08-11 | Assistant | Corner reactions | **Emoji reactions on visible Corner activity were approved and specified.** Activity rows receive a friendly quick set beginning with heart/thumbs-up/celebration/strength/applause, with room for a broader safe picker. Reactions are per Person+emoji, idempotent/toggleable, grouped with counts and visible reactor names only to authorised viewers. They remain attached to source-visible activity, carry no Meridian points/ranking meaning, and notify the activity owner in bundled form. | Initial set: ❤️ 👍 🎉 💪 👏. Comments, offer-to-help and surprise gift reservation remain deferred. |
+| 2026-08-11 | Assistant | Corners + safe link import | **Shipped v0.31.0.** Added My Corner/[Name]’s Corner with household switching, Overview/30-day Activity/Assigned/Lists & wishes, permission-aware node providers, personal Atlas wishlist/shopping ownership, suggestion review and grouped toggleable reactions with bundled notifications. Added SSRF-resistant/rate-limited product previews, editable confirmation in Corners and Homestead room plans, confirmed local image caching, provenance, and optional separate price watches. The hourly-safe scheduled command claims each watch once after 09:00 Household local time, stores observations and deduplicates meaningful-drop/sale/target alerts. The eight supplied retailers were exercised; structured/public pages enrich fully or partially and blocked sites retain manual entry. **806 backend tests green; frontend production build clean; no migration drift.** | Deploy/rebuild and migrate. Add host cron `7 * * * * docker exec homestack-backend python manage.py link_imports_run_scheduled`; its local-time/idempotency gate performs one daily check after 09:00. Then use two accounts to test suggest→accept and reaction visibility, and confirm one imported wish plus one room product caches its image. |
 
 ### Session notes (free-form, optional)
 

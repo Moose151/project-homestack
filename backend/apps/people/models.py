@@ -66,3 +66,29 @@ class Person(HouseholdBaseModel):
     def name(self) -> str:
         """Preferred name if set, otherwise display name."""
         return self.preferred_name or self.display_name
+
+
+class CornerReaction(HouseholdBaseModel):
+    """One household member's emoji reaction to one visible Corner activity projection."""
+
+    activity_key = models.CharField(max_length=255, db_index=True)
+    activity_owner = models.ForeignKey(
+        Person, on_delete=models.CASCADE, related_name="corner_activity_reactions_received"
+    )
+    reactor = models.ForeignKey(
+        Person, on_delete=models.CASCADE, related_name="corner_activity_reactions_made"
+    )
+    emoji = models.CharField(max_length=16)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["household", "activity_key", "reactor", "emoji"],
+                name="people_unique_corner_reaction",
+                condition=models.Q(deleted_at__isnull=True),
+            )
+        ]

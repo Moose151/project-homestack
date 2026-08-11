@@ -4,7 +4,7 @@ from __future__ import annotations
 from django.db import connection
 from django.db.models import Q
 
-from apps.atlas.models import AtlasList, AtlasListItem, AtlasNote, AtlasReminder
+from apps.atlas.models import AtlasList, AtlasListItem, AtlasListSuggestion, AtlasNote, AtlasReminder
 from apps.permissions.visibility import apply_visibility
 
 
@@ -49,8 +49,11 @@ def list_atlas_lists(user=None) -> list[AtlasList]:
     return list(qs)
 
 
-def get_atlas_list(pk: int) -> AtlasList | None:
-    return AtlasList.objects.filter(pk=pk).first()
+def get_atlas_list(pk: int, user=None) -> AtlasList | None:
+    qs = AtlasList.objects.filter(pk=pk)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return qs.first()
 
 
 def list_items_for_list(atlas_list: AtlasList, *, include_complete: bool = True) -> list[AtlasListItem]:
@@ -73,6 +76,14 @@ def list_open_items(user=None, *, limit: int | None = None) -> list[AtlasListIte
 
 def get_list_item(pk: int) -> AtlasListItem | None:
     return AtlasListItem.objects.filter(pk=pk).first()
+
+
+def list_suggestions(atlas_list: AtlasList) -> list[AtlasListSuggestion]:
+    return list(atlas_list.suggestions.select_related("suggested_by_person").all())
+
+
+def get_suggestion(atlas_list: AtlasList, suggestion_id: int) -> AtlasListSuggestion | None:
+    return atlas_list.suggestions.select_related("suggested_by_person", "atlas_list__owner_person").filter(pk=suggestion_id).first()
 
 
 def list_reminders(user=None, *, upcoming_only: bool = False) -> list[AtlasReminder]:

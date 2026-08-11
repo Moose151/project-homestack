@@ -6,5 +6,5 @@ class HomesteadConfig(AppConfig):
     name = "apps.homestead"
 
     def ready(self) -> None:
-        from apps.homestead import handlers
+        from apps.homestead import corner_provider, handlers  # noqa: F401
         handlers.connect()

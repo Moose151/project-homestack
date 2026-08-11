@@ -4,7 +4,7 @@
 `.docx` files in the project, including the previous Doc 00 update pack and the original
 standalone documents. Archive the old files; do not edit them further.
 
-**Last revised:** 2026-08-09
+**Last revised:** 2026-08-11
 **Owner:** Solo developer (single household: two adults, two children)
 **Deployment target:** Always-on home server, self-hosted, Docker Compose.
 
@@ -27,6 +27,7 @@ standalone documents. Archive the old files; do not edit them further.
 | `10_Future_Features_Parking_Lot.md` | Deferred ideas and promotion rules. |
 | `11`–`22`, `25`–`27_Node_*.md` | Per-node specifications, including Homestead, Home Assistant and Fitness. |
 | `23_Core_Hub.md` / `24_Core_Calendar.md` | Core aggregation and scheduling surface specs. |
+| `28_Core_Corners.md` / `29_Core_Link_Import.md` | Household Corners and safe URL-import contracts. |
 | `PARTNER_PILOT_READINESS.md` | Two-adult account setup, per-destination readiness and real-device acceptance gate. |
 
 The node specifications cover Atlas, Home Wiki, Pets, Education, Inventory, Assets, Hearth,
@@ -203,6 +204,8 @@ contract would either leak medical information or make ordinary training unusabl
 
 | Date | Change |
 |------|--------|
+| 2026-08-11 | Shipped v0.31.0: household Corners aggregate permitted activity, assignments and source-owned lists; personal Atlas wish/shopping lists support suggestion review and grouped reactions; safe product-link previews enrich Atlas/Homestead items with local image caching and optional household-local daily price watches. |
+| 2026-08-11 | Added Roadmap 8.2/8.3 and core specs 28/29: privacy-aware **Corners** (My Corner / Alex's Corner) aggregate activity, assignments and source-owned personal/room/Meridian lists; interaction uses suggestions plus bounded encouragement/comments/help offers. A shared preview-and-confirm URL importer enriches products and later Hearth recipes behind an explicit SSRF/security boundary; confirmed images cache locally and optional daily 09:00 household-local watches provide deduplicated sale/drop/target alerts without rewriting saved costs. |
 | 2026-08-10 | Added D24 and shipped the Fitness & Training node: exercise library, multi-day programs, assignment, live editable workout logging, personal records, social notifications/history and responsive web UI. |
 | 2026-08-09 | Prepared v0.21.0 for the controlled partner pilot: explicit per-user Money access during account onboarding; permission-aware node discovery, Hub widgets and Homestead finance actions; consistent mobile page hierarchy; responsive manager reward/allowance/goal/wishlist/routine workflows; labelled and failure-aware Books/Pets/Household guide forms; complete pet treatment/appointment management; and a canonical per-destination readiness/single-entry acceptance document. No database migration. |
 | 2026-08-09 | Continued the UI overhaul in v0.20.4: Meridian manager tasks use responsive cards and inline labelled editing below desktop size instead of a horizontally scrolled table; task creation progressively reveals advanced fields; Atlas list items wrap with grouped assignment/due metadata; quick capture is progressive on phones; and rewards metrics use a more compact mobile hierarchy. No new architectural decision or database migration. |

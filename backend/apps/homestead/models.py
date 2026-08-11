@@ -517,9 +517,8 @@ class RoomPlanProduct(HouseholdBaseModel):
     we were looking at?". Each product is one option: what it is, where to buy it, what it
     costs and what it looks like.
 
-    Images are stored as a URL rather than an upload, so adding an option is a copy-paste from
-    a retailer's page. Note that rendering one makes the viewer's browser request the image
-    from that third-party host.
+    Imported images retain their source URL and normally receive a protected local Attachment
+    copy after confirmation. Manual/failed imports can still use the remote URL fallback.
 
     Marking an option `is_chosen` copies its price onto the parent plan item, so room and
     whole-house estimates reflect the option actually picked. Only one option per item can be
@@ -532,7 +531,14 @@ class RoomPlanProduct(HouseholdBaseModel):
     title = models.CharField(max_length=255)
     url = models.CharField(max_length=500, blank=True, default="")
     image_url = models.CharField(max_length=500, blank=True, default="")
+    source_image_url = models.CharField(max_length=1000, blank=True, default="")
+    image_attachment = models.ForeignKey(
+        "attachments.Attachment", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="homestead_room_products",
+    )
     retailer = models.CharField(max_length=120, blank=True, default="")
+    currency = models.CharField(max_length=3, blank=True, default="AUD")
+    imported_at = models.DateTimeField(null=True, blank=True)
     quantity = models.DecimalField(
         max_digits=10,
         decimal_places=2,

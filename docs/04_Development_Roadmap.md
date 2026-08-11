@@ -346,6 +346,114 @@ Consider:
 - Licensing decision and a public repo/release.
 - Confirm the **self-hosted** model (D2) — no SaaS, no custody of others' data.
 
+### 8.1 — Household-portable floor-plan builder (future Homestead feature)
+
+**Why here:** the current native plan proves the viewing and room-linking experience, but its
+geometry describes one particular house. Another household must be able to create or update its
+own plan without changing source code. This belongs inside Homestead and is an important part of
+making a self-hosted release usable by somebody other than its original household. It is a warm,
+approximate household planner — **not** CAD, a survey tool or a construction drawing.
+
+**What users see:** Homestead → Rooms keeps the calm interactive viewer. Authorised editors gain
+an **Edit floor plan** action that opens a larger desktop/tablet workspace:
+
+```text
+┌──────────────────────────────────────────────┬──────────────────────┐
+│                                              │ Selected area        │
+│               Drawing canvas                │ Name: Kitchen        │
+│                                              │ Linked room: Kitchen │
+│       [Bedroom] [Bathroom]                   │ Width / height       │
+│       [       Living room       ]            │ Colour / icon        │
+│                                              │ Delete / duplicate   │
+├──────────────────────────────────────────────┴──────────────────────┤
+│ Select · Draw room · Door · Window · Undo · Redo · Preview · Save │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+On first use, offer **Blank canvas**, a small set of basic house/apartment shapes, **Upload a plan
+to trace**, or duplicate an existing floor. Users draw, drag and resize areas; snap shared walls;
+add doors/windows/stairs and outdoor areas; then link an area to an existing Homestead room or
+create a room while drawing. A linked area always derives its display name, icon and colour from
+that room. Dimensions are optional labels, not claims of construction accuracy. Phones retain an
+excellent viewer and small corrections; serious drawing is intentionally desktop/tablet-first.
+
+**Storage and ownership:** replace the code-level `AREAS` definition with household-scoped
+`FloorPlan`, `FloorPlanArea` and `FloorPlanFeature` records. A plan stores its name, level, canvas,
+optional tracing image and draft/published state. An area stores rectangle/polygon geometry,
+type, order and a nullable real FK to `RoomArea`. Features store doors, windows, stairs, labels
+and their position/rotation. The room FK replaces `floorplan_data.floorplan_slot` as the durable
+relationship; renaming a room is therefore safe. Convert the current house drawing into the
+first saved plan during migration, while fresh installs begin with onboarding rather than this
+house's geometry. All records remain household-scoped and use existing `homestead.*` permissions.
+
+**Delivery slices:**
+
+1. **Core authoring:** blank canvas, rectangular areas, move/resize, grid snapping/alignment,
+   room link/create, multiple levels, zoom/pan/fit, undo/redo, autosaved draft and explicit
+   publish/preview.
+2. **Trace and describe:** upload/crop/rotate a reference image with adjustable opacity; add
+   polygons, doors, windows, stairs, outdoor areas and reusable starter templates. The source
+   image may be hidden or removed once tracing is complete.
+3. **Confidence and portability:** revision history/restore, duplicate plan/floor, safe deletion
+   of linked areas, accessible keyboard editing, responsive viewer, install/onboarding guidance
+   and import/export of the plan document.
+4. **Optional assistance only after the editor works:** image-to-plan suggestions may propose
+   walls and labels, but never publish automatically. OCR/AI remains outside the core dependency
+   and every suggestion must be editable.
+
+**Gate:** on a clean install, a second household can create a multi-area plan from blank or by
+tracing an upload, link/create rooms, publish it, reload it on phone and laptop, rename a linked
+room without breaking the plan, restore the previous revision and complete the workflow without
+developer assistance or source-code edits.
+
+### 8.2 — Corners: activity, assignments, personal lists and wishes
+
+**Initial slice shipped in v0.31.0.** Remaining polish is pagination/load-more, avatar links from
+every source surface and any later owner-approved interaction types.
+
+Add household-facing `/corners/:personId` pages, distinct from administrator account management.
+The owner sees **My Corner** and other pages use **Alex's Corner**-style real names. Each Corner
+has Overview, Activity, Assigned and Lists & wishes tabs. Enabled nodes contribute
+permission-filtered projections through a registry: completed Fitness sessions/PBs, Meridian
+tasks/rewards/routines, Atlas additions/completions, Homestead room planning and later node work.
+The Assigned tab gathers active work without moving ownership from its source node.
+
+Atlas owns ordinary personal shopping and point-free wish lists; add a Person owner plus a
+wishlist list type. Homestead room products and the existing points-based Meridian child wishlist
+remain in their original nodes and are displayed under clearly labelled sections—never copied.
+New personal lists default household-visible with a Private option, subject to owner confirmation.
+Visibility, enabled-node access and sensitive-node contracts apply before aggregation. Implement
+in the delivery slices and acceptance gate defined in `28_Core_Corners.md`.
+Owner decisions now fix household-visible as the default, a 30-day initial Activity window and a
+suggestion/accept/dismiss workflow instead of direct edits to another person's list. Recommended
+social follow-ups include **owner-approved emoji reactions** (heart, thumbs-up, celebration and
+other friendly emoji), short moderated comments, offer-to-help requests
+that require assignment approval, and optional list watching. Gift reservation is explicitly
+later because hiding it from the recipient adds a special privacy rule.
+
+### 8.3 — Safe shared URL import and enrichment
+
+**Product slice shipped in v0.31.0.** Hearth recipe extraction remains tied to the future Hearth
+schema; retailer-specific adapters are evidence-driven follow-ups, not a headless-browser goal.
+
+Add a backend-only preview service so a pasted public product URL can propose title, shop, price,
+currency and image for Homestead room products and Atlas shopping/wish items. Later, a separate
+Hearth adapter reads Schema.org Recipe data into editable ingredients, ordered method steps,
+times, yield, image and source attribution. Users review and correct every draft before saving;
+manual entry always remains available, and imported values never silently overwrite edits.
+
+This feature starts with its security boundary: block SSRF to localhost/LAN/container/metadata
+addresses across DNS and redirects; cap time/size/content types; rate-limit; never forward cookies
+or credentials; and safely handle image retrieval. Prefer JSON-LD, then Open Graph, then narrow
+fallbacks. JavaScript/authenticated/bot-blocked pages may return partial results rather than adding
+a headless browser. Full UX, provenance, image-cache choice, delivery slices and acceptance tests
+are specified in `29_Core_Link_Import.md`.
+Confirmed images are copied locally through the bounded safe fetch/media path. Imported price is a
+user-confirmed snapshot, while an optional watch stores separate observations. An idempotent cron
+job checks watched wishes once after approximately 09:00 in Household local time and notifies the
+owner/watchers only for a new explicit sale, meaningful drop or target-price hit—never repeatedly
+for the same unchanged offer and never by silently changing a chosen/actual cost.
+
 **Done when:** another household could install and run HomeStack from your docs without you.
 
 ---

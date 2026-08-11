@@ -61,6 +61,7 @@ class AtlasList(HouseholdBaseModel):
         GROCERY = "grocery", "Grocery"
         CHECKLIST = "checklist", "Checklist"
         SHOPPING = "shopping", "Shopping"
+        WISHLIST = "wishlist", "Wish list"
         GENERAL = "general", "General"
 
     title = models.CharField(max_length=255)
@@ -69,6 +70,10 @@ class AtlasList(HouseholdBaseModel):
     )
     visibility = models.CharField(
         max_length=20, choices=Visibility.choices, default=Visibility.HOUSEHOLD
+    )
+    owner_person = models.ForeignKey(
+        "people.Person", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="owned_atlas_lists",
     )
 
     objects = HouseholdManager()
@@ -91,6 +96,16 @@ class AtlasListItem(HouseholdBaseModel):
     title = models.CharField(max_length=255)
     notes = models.TextField(blank=True, default="")
     quantity = models.CharField(max_length=50, blank=True, default="")  # grocery/shopping (e.g. "2", "500g")
+    product_url = models.CharField(max_length=1000, blank=True, default="")
+    source_image_url = models.CharField(max_length=1000, blank=True, default="")
+    image_attachment = models.ForeignKey(
+        "attachments.Attachment", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="atlas_product_items",
+    )
+    retailer = models.CharField(max_length=160, blank=True, default="")
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    currency = models.CharField(max_length=3, blank=True, default="AUD")
+    imported_at = models.DateTimeField(null=True, blank=True)
     position = models.PositiveIntegerField(default=0)
     due_at = models.DateTimeField(null=True, blank=True)
     assigned_to_people = models.ManyToManyField(
@@ -124,6 +139,41 @@ class AtlasListItem(HouseholdBaseModel):
     @property
     def is_complete(self) -> bool:
         return self.completed_at is not None
+
+
+class AtlasListSuggestion(HouseholdBaseModel):
+    """A proposed item another member may accept into an owned personal list."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACCEPTED = "accepted", "Accepted"
+        DISMISSED = "dismissed", "Dismissed"
+
+    atlas_list = models.ForeignKey(AtlasList, on_delete=models.CASCADE, related_name="suggestions")
+    suggested_by_person = models.ForeignKey(
+        "people.Person", on_delete=models.CASCADE, related_name="atlas_list_suggestions"
+    )
+    title = models.CharField(max_length=255)
+    notes = models.TextField(blank=True, default="")
+    product_url = models.CharField(max_length=1000, blank=True, default="")
+    source_image_url = models.CharField(max_length=1000, blank=True, default="")
+    retailer = models.CharField(max_length=160, blank=True, default="")
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    currency = models.CharField(max_length=3, blank=True, default="AUD")
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    accepted_item = models.ForeignKey(
+        AtlasListItem, null=True, blank=True, on_delete=models.SET_NULL, related_name="accepted_suggestion"
+    )
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
 
 
 class AtlasReminder(CalendarSyncMixin, HouseholdBaseModel):

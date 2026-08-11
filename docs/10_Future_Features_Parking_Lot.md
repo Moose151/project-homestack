@@ -46,12 +46,30 @@ encrypted health attachments, field-level encryption.
 **Meridian:** achievements, streaks, household challenges, task templates, weekly summaries.
 **Solace:** subscriptions (richer), travel/grocery/asset-purchase budget integration, reports,
 exports, encrypted finance fields.
+**Homestead:** a household-portable visual floor-plan builder: blank/template/image-tracing
+onboarding, drag/resize/snap rooms, optional polygons and architectural features, multi-level
+plans, draft/publish and revision history. Areas link to real Homestead rooms and inherit their
+name/icon/colour. Promoted to Roadmap 8.1 for productization; it remains a friendly approximate
+planner rather than CAD.
+**People / shared core:** household **Corners** aggregating meaningful visible activity,
+active assignments, personal Atlas shopping/wish lists, Homestead room products and Meridian
+child wishes without duplicating source records. Household interaction is suggestion-first, with
+approved grouped emoji reactions plus optional comments/help offers that re-check source
+visibility. The initial Corner/list/suggestion/reaction slice shipped in v0.31.0; see core spec 28
+for remaining polish.
 
 ## 4. Future platform features
 
 PWA · native Android/iOS · desktop app · offline mode · push/email notifications · external
 calendar sync · plugin architecture · general-purpose webhooks/automation · AI-assisted search ·
 OCR · semantic search.
+
+**Safe link import/enrichment** — the product preview/cache/watch slice for Homestead/Atlas
+shipped in v0.31.0; Schema.org Recipe data for Hearth remains later. Roadmap 8.3/core spec 29
+defines this bounded shared
+service with SSRF protection and user confirmation, not a general scraper or automatic AI import.
+Confirmed images are cached locally; watched wishes may receive one household-local 09:00 daily
+price observation and deduplicated sale/drop/target notification without changing saved costs.
 
 > **Promoted from the parking lot (2026-08-09):** the dedicated **Home Assistant bridge** is now
 > important Roadmap Milestone 5.5 (D22; `26_Node_Home_Assistant.md`). General plugins, arbitrary

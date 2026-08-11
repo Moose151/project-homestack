@@ -111,6 +111,10 @@ estimated unit cost, optional actual total cost, reference link and notes. Activ
 grouped by type; completed and archived records stay visible and can be restored. Room and
 household totals count active estimates plus completed actual cost (falling back to estimate)
 and exclude archived items.
+Roadmap 8.2 will project assigned room-plan items/products into each Corner without moving
+or copying them. Roadmap 8.3/core spec 29 will let a pasted public product link preview its title,
+retailer, price and image before the user confirms a `RoomPlanProduct`; manual fields remain the
+source of truth after confirmation.
 
 ## 4. Permissions
 
@@ -186,7 +190,11 @@ for home-specific policy/account metadata. Bill CRUD, payment history and autopa
 Solace bill creation/edit can hand home insurance, household services and paid maintenance into
 these workspaces without re-entry; Homestead maintenance can create the same protected financial
 record in the other direction. Linked cards deep-link between their owning workspaces.
-Future: drag/edit floor-plan geometry, Projects linking, meter readings entered as counter
-values (usage is entered directly today), tying a utility bill to its `HouseholdCost` account,
+Future: the household-portable floor-plan builder specified in Roadmap 8.1 replaces hard-coded
+geometry with household-scoped plans/areas/features, blank/template/image-tracing onboarding,
+drag/resize/snap editing, room creation/linking, multiple levels, drafts and revision history.
+The current plan must migrate into saved records; new installs must never inherit this household's
+shape. Also future: Projects linking, meter readings entered as counter values (usage is entered
+directly today), tying a utility bill to its `HouseholdCost` account,
 utility usage in FTS and a Hub widget, document attachments,
 seasonal maintenance templates, kiosk safe view, assignment/overdue notifications.

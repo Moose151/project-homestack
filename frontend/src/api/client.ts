@@ -1,13 +1,13 @@
 import type {
   AcademicProfile, AcademicProfileResponse, AdminUser, Appliance, AssessmentFile,
-  AssessmentNote, AtlasList, AtlasListItem, AtlasNote, AtlasReminder, AtlasSearchResults,
+  AssessmentNote, AtlasList, AtlasListItem, AtlasListSuggestion, AtlasNote, AtlasReminder, AtlasSearchResults,
   Attachment, AttachmentSensitivity, AttachmentVisibility, AuthUser, Badge, Book, BookClub,
   BookRating, BookShelfStatus, BooksUser, CalendarEvent, CalendarEventWrite, ClubBookEntry,
-  ClubQueueItem, EducationAssessment, EducationClassSession, EducationCourse, EducationEvent,
+  ClubQueueItem, CornerResponse, EducationAssessment, EducationClassSession, EducationCourse, EducationEvent,
   EducationInstitution, FitnessExercise, FitnessProgram, FitnessRecord, FitnessSession,
   FitnessSessionExercise, FitnessSessionSet, GlobalSearchResponse, HomesteadSearchResults,
   Household, HouseholdCost, HubResponse, HubWidgetConfig, Improvement, InsurancePolicy,
-  KioskMeridian, KioskUser, MaintenanceTask, MeridianAllowanceRow, MeridianCategory,
+  KioskMeridian, KioskUser, LinkPreview, LinkWatch, MaintenanceTask, MeridianAllowanceRow, MeridianCategory,
   MeridianGoal, MeridianPointsResponse, MeridianReports, MeridianReward, MeridianRewardRequest,
   MeridianRoutine, MeridianSettings, MeridianTask, MeridianTaskCompletion,
   MeridianWishlistItem, MeridianWishlistRequest, NodeInfo, NotificationList, Person,
@@ -152,9 +152,9 @@ type RoomItemWrite = Partial<{
 }>
 
 type RoomProductWrite = Partial<{
-  title: string; url: string; image_url: string; retailer: string
+  title: string; url: string; image_url: string; source_image_url: string; retailer: string; currency: string
   quantity: string; unit_cost: string; is_chosen: boolean; is_purchased: boolean
-  actual_cost: string | null; notes: string; position: number
+  actual_cost: string | null; notes: string; position: number; cache_image: boolean; price_watch_enabled: boolean
 }>
 
 type SolaceBillWrite = Partial<{
@@ -218,6 +218,8 @@ type InstitutionWrite = Partial<{
 type ItemWrite = Partial<{
   title: string; notes: string; quantity: string; position: number
   due_at: string | null; assigned_to_person_ids: number[]
+  product_url: string; source_image_url: string; retailer: string; unit_price: string | null
+  currency: string; cache_image: boolean; price_watch_enabled: boolean
 }>
 
 type UserWrite = Partial<{
@@ -386,6 +388,19 @@ export const api = {
   // --- People ---
   getPeople: (): Promise<Person[]> => cachedGet('/people/'),
 
+  // --- Household Corners ---
+  getCorner: (personId: number, days = 30): Promise<CornerResponse> =>
+    _fetch(`/corners/${personId}/?days=${days}`),
+  toggleCornerReaction: (personId: number, activityKey: string, emoji: string): Promise<{ active: boolean; corner: CornerResponse }> =>
+    _fetch(`/corners/${personId}/reactions/`, { method: 'POST', body: JSON.stringify({ activity_key: activityKey, emoji }) }),
+
+  // --- Safe link previews and price watches ---
+  previewProductLink: (url: string): Promise<LinkPreview> =>
+    _fetch('/link-imports/preview/', { method: 'POST', body: JSON.stringify({ url, kind: 'product' }) }),
+  getLinkWatches: (): Promise<LinkWatch[]> => _fetch('/link-imports/watches/'),
+  updateLinkWatch: (id: number, data: Partial<Pick<LinkWatch, 'is_active' | 'rule' | 'threshold_percent' | 'target_price'>>): Promise<LinkWatch> =>
+    _fetch(`/link-imports/watches/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+
   // --- Shared attachments (permission-checked; storage paths are never public) ---
   getAttachments: (filters?: Partial<{
     linked_node: number; linked_record_type: string; linked_record_id: number
@@ -441,7 +456,7 @@ export const api = {
   // --- Atlas lists ---
   getLists: (): Promise<AtlasList[]> => _fetch('/atlas/lists/'),
   getList: (id: number): Promise<AtlasList> => _fetch(`/atlas/lists/${id}/`),
-  createList: (data: { title: string; list_type: string; visibility?: string }): Promise<AtlasList> =>
+  createList: (data: { title: string; list_type: string; visibility?: string; owner_person?: number | null }): Promise<AtlasList> =>
     _fetch('/atlas/lists/', { method: 'POST', body: JSON.stringify(data) }),
   deleteList: (id: number): Promise<void> => _fetch(`/atlas/lists/${id}/`, { method: 'DELETE' }),
 
@@ -456,6 +471,12 @@ export const api = {
     _fetch(`/atlas/lists/${listId}/items/${itemId}/uncomplete/`, { method: 'POST' }),
   deleteItem: (listId: number, itemId: number): Promise<void> =>
     _fetch(`/atlas/lists/${listId}/items/${itemId}/`, { method: 'DELETE' }),
+  getListSuggestions: (listId: number): Promise<AtlasListSuggestion[]> =>
+    _fetch(`/atlas/lists/${listId}/suggestions/`),
+  suggestListItem: (listId: number, data: ItemWrite): Promise<AtlasListSuggestion> =>
+    _fetch(`/atlas/lists/${listId}/suggestions/`, { method: 'POST', body: JSON.stringify(data) }),
+  reviewListSuggestion: (listId: number, suggestionId: number, action: 'accept' | 'dismiss'): Promise<AtlasListSuggestion> =>
+    _fetch(`/atlas/lists/${listId}/suggestions/${suggestionId}/${action}/`, { method: 'POST' }),
 
   // --- Atlas search ---
   searchAtlas: (q: string): Promise<AtlasSearchResults> =>

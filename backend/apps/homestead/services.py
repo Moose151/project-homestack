@@ -519,7 +519,7 @@ def delete_room_item(acting_user: User, obj: RoomPlanItem) -> None:
 # ---------------------------------------------------------------------------
 
 _ROOM_PRODUCT_FIELDS = {
-    "title", "url", "image_url", "retailer", "quantity", "unit_cost",
+    "title", "url", "image_url", "source_image_url", "retailer", "currency", "quantity", "unit_cost",
     "is_chosen", "is_purchased", "actual_cost", "notes", "position",
 }
 
@@ -549,6 +549,10 @@ def _apply_chosen_product(acting_user: User, product: RoomPlanProduct) -> None:
 def create_room_product(
     acting_user: User, item: RoomPlanItem, **data
 ) -> RoomPlanProduct:
+    cache_image = data.pop("cache_image", False)
+    watch_enabled = data.pop("price_watch_enabled", False)
+    if data.get("url"):
+        data["imported_at"] = timezone.now()
     obj = RoomPlanProduct(
         household=get_active_household(),
         plan_item=item,
@@ -557,6 +561,24 @@ def create_room_product(
         **data,
     )
     obj.save()
+    image_url = data.get("source_image_url") or data.get("image_url")
+    if cache_image and image_url:
+        from apps.attachments.services import delete_attachment
+        from apps.link_imports.fetch import LinkFetchError
+        from apps.link_imports.services import cache_remote_image
+        try:
+            previous_attachment = obj.image_attachment
+            obj.image_attachment = cache_remote_image(
+                acting_user=acting_user, image_url=image_url, source_node="homestead",
+                record_type="RoomPlanProduct", record_id=obj.id,
+                visibility=obj.plan_item.visibility,
+            )
+            obj.save(update_fields=["image_attachment", "updated_at"])
+            if previous_attachment and previous_attachment.id != obj.image_attachment_id:
+                delete_attachment(previous_attachment, acting_user=acting_user)
+        except LinkFetchError:
+            pass
+    _sync_room_product_watch(acting_user, obj, watch_enabled)
     if obj.is_chosen:
         _apply_chosen_product(acting_user, obj)
     return obj
@@ -565,19 +587,62 @@ def create_room_product(
 def update_room_product(
     acting_user: User, obj: RoomPlanProduct, **data
 ) -> RoomPlanProduct:
+    cache_image = data.pop("cache_image", False)
+    watch_enabled = data.pop("price_watch_enabled", None)
     became_chosen = data.get("is_chosen") and not obj.is_chosen
     for key, value in data.items():
         if key in _ROOM_PRODUCT_FIELDS:
             setattr(obj, key, value)
     obj.updated_by = acting_user
     obj.save()
+    image_url = data.get("source_image_url") or data.get("image_url")
+    if cache_image and image_url:
+        from apps.attachments.services import delete_attachment
+        from apps.link_imports.fetch import LinkFetchError
+        from apps.link_imports.services import cache_remote_image
+        try:
+            previous_attachment = obj.image_attachment
+            obj.image_attachment = cache_remote_image(
+                acting_user=acting_user, image_url=image_url, source_node="homestead",
+                record_type="RoomPlanProduct", record_id=obj.id,
+                visibility=obj.plan_item.visibility,
+            )
+            obj.save(update_fields=["image_attachment", "updated_at"])
+            if previous_attachment and previous_attachment.id != obj.image_attachment_id:
+                delete_attachment(previous_attachment, acting_user=acting_user)
+        except LinkFetchError:
+            pass
+    if watch_enabled is not None:
+        _sync_room_product_watch(acting_user, obj, watch_enabled)
     # Also re-apply when the chosen option's own price changes, so the estimate stays true.
     if obj.is_chosen and (became_chosen or "unit_cost" in data or "quantity" in data):
         _apply_chosen_product(acting_user, obj)
     return obj
 
 
+def _sync_room_product_watch(acting_user: User, obj: RoomPlanProduct, enabled: bool) -> None:
+    if not obj.url or obj.unit_cost <= 0:
+        return
+    from apps.people.selectors import person_for_user
+    owner = person_for_user(acting_user) or obj.plan_item.assigned_to_people.first()
+    if owner is None:
+        return
+    from apps.link_imports.services import sync_watch
+    sync_watch(
+        acting_user=acting_user, owner_person=owner, source_node="homestead",
+        record_type="RoomPlanProduct", record_id=obj.id, url=obj.url, title=obj.title,
+        retailer=obj.retailer, currency=obj.currency, price=obj.unit_cost, enabled=enabled,
+    )
+
+
 def delete_room_product(acting_user: User, obj: RoomPlanProduct) -> None:
+    from apps.attachments.services import delete_attachment
+    from apps.link_imports.models import LinkWatch
+    LinkWatch.objects.filter(
+        source_node="homestead", source_record_type="RoomPlanProduct", source_record_id=obj.id,
+    ).update(is_active=False, updated_by=acting_user)
+    if obj.image_attachment:
+        delete_attachment(obj.image_attachment, acting_user=acting_user)
     obj.updated_by = acting_user
     obj.save(update_fields=["updated_by", "updated_at"])
     obj.soft_delete()

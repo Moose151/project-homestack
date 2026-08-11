@@ -17,6 +17,7 @@ const HomesteadPage = lazy(() => import('./features/web/pages/HomesteadPage').th
 const HomesteadRoomPage = lazy(() => import('./features/web/pages/HomesteadRoomPage').then(m => ({ default: m.HomesteadRoomPage })))
 const SolacePage = lazy(() => import('./features/web/pages/SolacePage').then(m => ({ default: m.SolacePage })))
 const FitnessPage = lazy(() => import('./features/web/pages/FitnessPage').then(m => ({ default: m.FitnessPage })))
+const CornerPage = lazy(() => import('./features/web/pages/CornerPage').then(m => ({ default: m.CornerPage })))
 const UsersPage = lazy(() => import('./features/web/pages/UsersPage').then(m => ({ default: m.UsersPage })))
 const SettingsPage = lazy(() => import('./features/web/pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
 const KioskApp = lazy(() => import('./features/kiosk/KioskApp').then(m => ({ default: m.KioskApp })))
@@ -47,6 +48,8 @@ function WebRoutes({ isAdmin }: { isAdmin: boolean }) {
         <Route path="/" element={<Navigate to="/hub" replace />} />
         <Route path="/hub" element={<Deferred><HubPage /></Deferred>} />
         <Route path="/calendar" element={<Deferred><CalendarPage /></Deferred>} />
+        <Route path="/corners" element={<Deferred><CornerPage /></Deferred>} />
+        <Route path="/corners/:personId" element={<Deferred><CornerPage /></Deferred>} />
         <Route path="/atlas" element={<NodeRoute nodeKey="atlas"><Deferred><AtlasPage /></Deferred></NodeRoute>} />
         <Route path="/meridian" element={<NodeRoute nodeKey="meridian"><Deferred><MeridianPage /></Deferred></NodeRoute>} />
         <Route path="/education" element={<NodeRoute nodeKey="education"><Deferred><EducationPage /></Deferred></NodeRoute>} />

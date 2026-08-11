@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.30.1**
+> **Current version: 0.31.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,24 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.31 — Household Corners and smart product links
+
+### 0.31.0 — 2026-08-11 — Corners, suggestions, reactions and price-aware links
+- Added the core **My Corner / [Name]’s Corner** experience with a household switcher and
+  Overview, 30-day Activity, Assigned, and Lists & wishes tabs. Enabled Atlas, Fitness,
+  Meridian, Education and Homestead providers contribute permission-filtered projections while
+  their source records remain authoritative.
+- Added personal Atlas wish/shopping lists, household/private visibility, suggestion-only access
+  for other users, owner accept/dismiss review, and grouped toggleable ❤️ 👍 🎉 💪 👏 reactions
+  with bundled notifications.
+- Added a bounded server-side product-link previewer with SSRF/DNS/redirect/content/size/time
+  protections and per-user throttling. Confirmed Atlas and Homestead products retain provenance,
+  cache images locally, and can use independent price watches without changing saved costs.
+- Added a household-local 09:00 catch-up-safe scheduled watch command, compact observations,
+  5% meaningful-drop/explicit-sale/target rules, deduplicated alerts, currency protection and a
+  single warning after repeated failures. **Full backend suite and production frontend build
+  validated; migrations added for People, Atlas, Homestead, Link Imports and permissions.**
 
 ## 0.30 — The house as a place
 

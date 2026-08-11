@@ -176,15 +176,21 @@ class RoomAreaSerializer(serializers.ModelSerializer):
 class RoomPlanProductSerializer(serializers.ModelSerializer):
     plan_item_id = serializers.IntegerField(read_only=True)
     total_cost = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    cached_image_url = serializers.SerializerMethodField()
+    price_watch = serializers.SerializerMethodField()
+    cache_image = serializers.BooleanField(write_only=True, required=False, default=False)
+    price_watch_enabled = serializers.BooleanField(write_only=True, required=False, default=False)
 
     class Meta:
         model = RoomPlanProduct
         fields = [
-            "id", "plan_item_id", "title", "url", "image_url", "retailer",
+            "id", "plan_item_id", "title", "url", "image_url", "source_image_url",
+            "cached_image_url", "image_attachment_id", "retailer", "currency", "imported_at", "price_watch",
+            "cache_image", "price_watch_enabled",
             "quantity", "unit_cost", "total_cost", "is_chosen", "is_purchased",
             "actual_cost", "notes", "position", "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "plan_item_id", "total_cost", "created_at", "updated_at"]
+        read_only_fields = ["id", "plan_item_id", "cached_image_url", "image_attachment_id", "imported_at", "price_watch", "total_cost", "created_at", "updated_at"]
 
     def validate_title(self, value: str) -> str:
         return _non_blank(value)
@@ -194,6 +200,16 @@ class RoomPlanProductSerializer(serializers.ModelSerializer):
 
     def validate_image_url(self, value: str) -> str:
         return _web_url(value)
+
+    def get_cached_image_url(self, obj):
+        return f"/api/v1/attachments/{obj.image_attachment_id}/download/" if obj.image_attachment_id else ""
+
+    def get_price_watch(self, obj):
+        from apps.link_imports.models import LinkWatch
+        from apps.link_imports.services import serialize_watch
+        return serialize_watch(LinkWatch.objects.filter(
+            source_node="homestead", source_record_type="RoomPlanProduct", source_record_id=obj.id,
+        ).first())
 
 
 class RoomPlanItemSerializer(AssigneeSerializerMixin, serializers.ModelSerializer):

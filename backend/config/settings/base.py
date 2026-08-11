@@ -54,6 +54,7 @@ LOCAL_APPS = [
     "apps.scheduling",  # calendar app is named `scheduling`, not `calendar` (D16)
     "apps.notifications",
     "apps.attachments",
+    "apps.link_imports",
     "apps.audit",
     "apps.search",
     "apps.backups",
@@ -159,6 +160,9 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
     ],
+    "DEFAULT_THROTTLE_RATES": {
+        "link_import_preview": "10/minute",
+    },
 }
 
 # --- I18N / TZ ---

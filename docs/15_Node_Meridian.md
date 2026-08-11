@@ -87,6 +87,9 @@ state, contribution ledger (refundable). Toggle: `group_goals_enabled`.
 **Wishlist** — a person requests an item (`WishlistRequest`); admin approves it into a
 `WishlistItem` with a point cost; the person contributes points over time
 (`WishlistContribution`) until funded/fulfilled. Toggle: `wishlist_requests_enabled`.
+Roadmap 8.2 will project these same records into that person's Lists & wishes view; it must not
+copy or convert them into Atlas personal wishes. Product URLs may later use the shared preview
+service in Roadmap 8.3/core spec 29 while approval and points remain Meridian-owned.
 
 **Achievements / badges** — see §6. Cross-node per the owner's call (D20).
 

@@ -54,6 +54,15 @@ export interface AtlasListItem {
   quantity: string
   position: number
   due_at: string | null
+  product_url: string
+  source_image_url: string
+  cached_image_url: string
+  image_attachment_id: number | null
+  retailer: string
+  unit_price: string | null
+  currency: string
+  imported_at: string | null
+  price_watch: LinkWatch | null
   assigned_to_person_ids: number[]
   completed_at: string | null
   completed_by_id: number | null
@@ -72,11 +81,122 @@ export interface AtlasSearchResults {
 export interface AtlasList {
   id: number
   title: string
-  list_type: 'todo' | 'grocery' | 'checklist' | 'shopping' | 'general'
+  list_type: 'todo' | 'grocery' | 'checklist' | 'shopping' | 'wishlist' | 'general'
   visibility: string
+  owner_person_id: number | null
   items: AtlasListItem[]
   created_at: string
   updated_at: string
+}
+
+export interface CornerReactionPerson {
+  person_id: number
+  name: string
+  mine: boolean
+}
+
+export interface CornerReactionGroup {
+  emoji: string
+  count: number
+  mine: boolean
+  people: CornerReactionPerson[]
+}
+
+export interface CornerActivity {
+  key: string
+  source_node: string
+  kind: string
+  title: string
+  summary: string
+  occurred_at: string
+  action_url: string
+  reactions: CornerReactionGroup[]
+}
+
+export interface CornerAssignment {
+  key: string
+  source_node: string
+  kind: string
+  title: string
+  summary: string
+  due_at: string | null
+  action_url: string
+}
+
+export interface CornerCollection {
+  key: string
+  source_node: string
+  kind: string
+  title: string
+  summary: string
+  action_url: string
+  list_id?: number
+  visibility?: string
+  items?: AtlasListItem[]
+  suggestions?: AtlasListSuggestion[]
+}
+
+export interface CornerResponse {
+  person: Person & { name: string; is_me: boolean }
+  summary: { activity_count: number; assignment_count: number; collection_count: number }
+  activity: CornerActivity[]
+  assignments: CornerAssignment[]
+  collections: CornerCollection[]
+}
+
+export interface LinkPreview {
+  kind: 'product'
+  source_url: string
+  source_site: string
+  title: string
+  retailer: string
+  image_url: string
+  price: string | null
+  list_price: string | null
+  currency: string
+  is_sale: boolean
+  warnings: string[]
+}
+
+export interface LinkWatch {
+  id: number
+  source_node: string
+  source_record_type: string
+  source_record_id: number
+  owner_person_id: number
+  url: string
+  title: string
+  retailer: string
+  currency: string
+  baseline_price: string
+  current_price: string
+  lowest_price: string
+  rule: 'meaningful_drop' | 'target' | 'explicit_sale'
+  threshold_percent: string
+  target_price: string | null
+  is_active: boolean
+  last_checked_at: string | null
+  last_succeeded_at: string | null
+  consecutive_failures: number
+  last_error: string
+}
+
+export interface AtlasListSuggestion {
+  id: number
+  atlas_list_id: number
+  suggested_by_person_id: number
+  suggested_by_name: string
+  title: string
+  notes: string
+  product_url: string
+  source_image_url: string
+  retailer: string
+  unit_price: string | null
+  currency: string
+  status: 'pending' | 'accepted' | 'dismissed'
+  accepted_item_id: number | null
+  created_at: string
+  reviewed_at: string | null
 }
 
 export interface AtlasNote {
@@ -962,7 +1082,13 @@ export interface RoomPlanProduct {
   title: string
   url: string
   image_url: string
+  source_image_url: string
+  cached_image_url: string
+  image_attachment_id: number | null
   retailer: string
+  currency: string
+  imported_at: string | null
+  price_watch: LinkWatch | null
   quantity: string
   unit_cost: string
   total_cost: string

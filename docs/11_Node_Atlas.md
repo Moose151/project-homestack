@@ -50,6 +50,15 @@ is a **user**, `created_by` is a **user**.
 assigned shopper (person), category sort, kiosk-friendly ticking, mobile shopping view. May
 receive items from Hearth/Inventory later via signals.
 
+**Future personal lists (Roadmap 8.2)** — add optional `owner_person` to a list and a `wishlist`
+list type. This supplies ordinary personal shopping and point-free wishes to each Corner.
+Household-visible is the proposed default, with Private available; a child's points-based wishlist
+continues to live in Meridian. Product-like items may use the shared safe URL preview from Roadmap
+8.3/core spec 29 rather than implementing an Atlas-specific scraper. Other people submit visible
+suggestions for the owner to accept/edit/dismiss rather than directly changing a personal list.
+Imported wishes may opt into the shared daily price watch and receive source-linked alerts without
+changing the list item's confirmed price snapshot.
+
 **Checklists** — reusable lists for repeated routines (camping, school morning, leaving the
 house, weekly reset, pet-sitter). Templates/reset/duplicate/recurring parked.
 

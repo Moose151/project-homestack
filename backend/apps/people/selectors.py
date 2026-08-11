@@ -22,3 +22,10 @@ def get_person_by_id(person_id: int) -> Person | None:
         return Person.objects.get(pk=person_id)
     except Person.DoesNotExist:
         return None
+
+
+def person_for_user(user) -> Person | None:
+    """Return the active Person linked to ``user`` without reverse-O2O exceptions."""
+    if user is None or not getattr(user, "is_authenticated", False):
+        return None
+    return Person.objects.filter(linked_user=user).first()

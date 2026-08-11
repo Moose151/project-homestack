@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from rest_framework import status
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -12,6 +12,7 @@ from apps.atlas.serializers import (
     AtlasListItemSerializer,
     AtlasListItemWriteSerializer,
     AtlasListSerializer,
+    AtlasListSuggestionSerializer,
     AtlasListWriteSerializer,
     AtlasNoteSerializer,
     AtlasReminderSerializer,
@@ -104,31 +105,42 @@ class ListListView(APIView):
     def post(self, request: Request) -> Response:
         serializer = AtlasListWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        atlas_list = services.create_atlas_list(request.user, **serializer.validated_data)
+        try:
+            atlas_list = services.create_atlas_list(request.user, **serializer.validated_data)
+        except PermissionError as exc:
+            raise PermissionDenied(str(exc)) from exc
         return Response(AtlasListSerializer(atlas_list).data, status=status.HTTP_201_CREATED)
 
 
 class ListDetailView(APIView):
     permission_classes = [_AtlasPerm]
 
-    def _get(self, pk: int):
-        obj = selectors.get_atlas_list(pk)
+    def _get(self, request: Request, pk: int):
+        obj = selectors.get_atlas_list(pk, request.user)
         if obj is None:
             raise NotFound()
         return obj
 
     def get(self, request: Request, list_id: int) -> Response:
-        return Response(AtlasListSerializer(self._get(list_id)).data)
+        return Response(AtlasListSerializer(self._get(request, list_id)).data)
 
     def patch(self, request: Request, list_id: int) -> Response:
-        atlas_list = self._get(list_id)
+        atlas_list = self._get(request, list_id)
+        if not services.can_manage_personal_list(request.user, atlas_list):
+            raise PermissionDenied("Suggest items from their Corner instead of editing this personal list.")
         serializer = AtlasListWriteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        atlas_list = services.update_atlas_list(request.user, atlas_list, **serializer.validated_data)
+        try:
+            atlas_list = services.update_atlas_list(request.user, atlas_list, **serializer.validated_data)
+        except PermissionError as exc:
+            raise PermissionDenied(str(exc)) from exc
         return Response(AtlasListSerializer(atlas_list).data)
 
     def delete(self, request: Request, list_id: int) -> Response:
-        services.delete_atlas_list(request.user, self._get(list_id))
+        atlas_list = self._get(request, list_id)
+        if not services.can_manage_personal_list(request.user, atlas_list):
+            raise PermissionDenied("Only the list owner or a household manager can delete this list.")
+        services.delete_atlas_list(request.user, atlas_list)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -139,19 +151,21 @@ class ListDetailView(APIView):
 class ListItemListView(APIView):
     permission_classes = [_AtlasPerm]
 
-    def _get_list(self, list_id: int):
-        obj = selectors.get_atlas_list(list_id)
+    def _get_list(self, request: Request, list_id: int):
+        obj = selectors.get_atlas_list(list_id, request.user)
         if obj is None:
             raise NotFound()
         return obj
 
     def get(self, request: Request, list_id: int) -> Response:
-        atlas_list = self._get_list(list_id)
+        atlas_list = self._get_list(request, list_id)
         items = selectors.list_items_for_list(atlas_list)
         return Response(AtlasListItemSerializer(items, many=True).data)
 
     def post(self, request: Request, list_id: int) -> Response:
-        atlas_list = self._get_list(list_id)
+        atlas_list = self._get_list(request, list_id)
+        if not services.can_manage_personal_list(request.user, atlas_list):
+            raise PermissionDenied("Suggest items from their Corner instead of editing this personal list.")
         serializer = AtlasListItemWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = services.create_list_item(request.user, atlas_list, **serializer.validated_data)
@@ -161,21 +175,28 @@ class ListItemListView(APIView):
 class ListItemDetailView(APIView):
     permission_classes = [_AtlasPerm]
 
-    def _get_item(self, list_id: int, item_id: int):
+    def _get_item(self, request: Request, list_id: int, item_id: int):
+        atlas_list = selectors.get_atlas_list(list_id, request.user)
+        if atlas_list is None:
+            raise NotFound()
         item = selectors.get_list_item(item_id)
         if item is None or item.atlas_list_id != list_id:
             raise NotFound()
         return item
 
     def patch(self, request: Request, list_id: int, item_id: int) -> Response:
-        item = self._get_item(list_id, item_id)
+        item = self._get_item(request, list_id, item_id)
+        if not services.can_manage_personal_list(request.user, item.atlas_list):
+            raise PermissionDenied("Suggest items from their Corner instead of editing this personal list.")
         serializer = AtlasListItemWriteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         item = services.update_list_item(request.user, item, **serializer.validated_data)
         return Response(AtlasListItemSerializer(item).data)
 
     def delete(self, request: Request, list_id: int, item_id: int) -> Response:
-        item = self._get_item(list_id, item_id)
+        item = self._get_item(request, list_id, item_id)
+        if not services.can_manage_personal_list(request.user, item.atlas_list):
+            raise PermissionDenied("Only the list owner or a household manager can delete this item.")
         services.delete_list_item(request.user, item)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -185,6 +206,11 @@ class ListItemCompleteView(APIView):
     permission_action = "edit"
 
     def post(self, request: Request, list_id: int, item_id: int) -> Response:
+        atlas_list = selectors.get_atlas_list(list_id, request.user)
+        if atlas_list is None:
+            raise NotFound()
+        if not services.can_manage_personal_list(request.user, atlas_list):
+            raise PermissionDenied("Only the list owner can complete this item.")
         item = selectors.get_list_item(item_id)
         if item is None or item.atlas_list_id != list_id:
             raise NotFound()
@@ -197,11 +223,68 @@ class ListItemUncompleteView(APIView):
     permission_action = "edit"
 
     def post(self, request: Request, list_id: int, item_id: int) -> Response:
+        atlas_list = selectors.get_atlas_list(list_id, request.user)
+        if atlas_list is None:
+            raise NotFound()
+        if not services.can_manage_personal_list(request.user, atlas_list):
+            raise PermissionDenied("Only the list owner can reopen this item.")
         item = selectors.get_list_item(item_id)
         if item is None or item.atlas_list_id != list_id:
             raise NotFound()
         item = services.uncomplete_list_item(request.user, item)
         return Response(AtlasListItemSerializer(item).data)
+
+
+class ListSuggestionListView(APIView):
+    permission_classes = [_AtlasPerm]
+
+    def _list(self, request: Request, list_id: int):
+        obj = selectors.get_atlas_list(list_id, request.user)
+        if obj is None:
+            raise NotFound()
+        return obj
+
+    def get(self, request: Request, list_id: int) -> Response:
+        atlas_list = self._list(request, list_id)
+        if not services.can_manage_personal_list(request.user, atlas_list):
+            raise PermissionDenied("Only the list owner or a household manager can review suggestions.")
+        return Response(AtlasListSuggestionSerializer(
+            selectors.list_suggestions(atlas_list), many=True
+        ).data)
+
+    def post(self, request: Request, list_id: int) -> Response:
+        serializer = AtlasListSuggestionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            row = services.create_list_suggestion(
+                request.user, self._list(request, list_id), **serializer.validated_data
+            )
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
+        return Response(AtlasListSuggestionSerializer(row).data, status=status.HTTP_201_CREATED)
+
+
+class ListSuggestionReviewView(APIView):
+    permission_classes = [_AtlasPerm]
+    permission_action = "edit"
+
+    def post(self, request: Request, list_id: int, suggestion_id: int, action: str) -> Response:
+        atlas_list = selectors.get_atlas_list(list_id, request.user)
+        if atlas_list is None:
+            raise NotFound()
+        suggestion = selectors.get_suggestion(atlas_list, suggestion_id)
+        if suggestion is None:
+            raise NotFound()
+        try:
+            if action == "accept":
+                suggestion = services.accept_list_suggestion(request.user, suggestion)
+            elif action == "dismiss":
+                suggestion = services.dismiss_list_suggestion(request.user, suggestion)
+            else:
+                raise NotFound()
+        except PermissionError as exc:
+            raise PermissionDenied(str(exc)) from exc
+        return Response(AtlasListSuggestionSerializer(suggestion).data)
 
 
 # ---------------------------------------------------------------------------
