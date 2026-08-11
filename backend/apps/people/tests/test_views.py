@@ -58,14 +58,19 @@ class PeopleListViewTests(TestCase):
         self.assertEqual(resp.json(), [])
 
     def test_authenticated_list_returns_people(self):
-        _make_person(self.user, display_name="Alice")
+        _make_person(self.user, display_name="Alice", linked_user=self.user)
         _make_person(self.user, display_name="Bob")
         _login(self.client)
         resp = self.client.get(self.url)
         self.assertEqual(resp.status_code, 200)
-        names = [p["display_name"] for p in resp.json()]
+        rows = resp.json()
+        names = [p["display_name"] for p in rows]
         self.assertIn("Alice", names)
         self.assertIn("Bob", names)
+        alice = next(person for person in rows if person["display_name"] == "Alice")
+        bob = next(person for person in rows if person["display_name"] == "Bob")
+        self.assertEqual(alice["linked_user_id"], self.user.id)
+        self.assertIsNone(bob["linked_user_id"])
 
     def test_post_creates_person(self):
         _login(self.client)

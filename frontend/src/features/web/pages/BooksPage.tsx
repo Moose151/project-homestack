@@ -486,16 +486,18 @@ function ClubSettings({ club, users, onChanged }: {
   return (
     <div className="space-y-3 rounded-xl bg-sunken p-3">
       {error && <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
-      <div className="grid sm:grid-cols-[minmax(0,1fr)_5rem_auto] gap-2 items-end">
-        <Field label="Club name">
-          <input className={inputCls} value={name} onChange={e => setName(e.target.value)} />
-        </Field>
+      <div className="space-y-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <Field label="Club name" className="min-w-0 flex-1">
+            <input className={inputCls} value={name} onChange={e => setName(e.target.value)} />
+          </Field>
+          <Button type="button" variant="secondary" loading={busy} disabled={!name.trim()} onClick={() => act(async () => { await api.updateBookClub(club.id, { name: name.trim(), colour }); await onChanged() })}>
+            Save club
+          </Button>
+        </div>
         <Field label="Colour">
           <ColourPicker value={colour} onChange={setColour} ariaLabel="Book club colour" />
         </Field>
-        <Button type="button" variant="secondary" loading={busy} disabled={!name.trim()} onClick={() => act(async () => { await api.updateBookClub(club.id, { name: name.trim(), colour }); await onChanged() })}>
-          Save club
-        </Button>
       </div>
       <div className="flex flex-wrap gap-2 items-center">
         {club.memberships.map(m => (

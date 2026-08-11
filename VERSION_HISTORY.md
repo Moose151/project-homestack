@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.34.1**
+> **Current version: 0.34.2**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,16 @@
 ---
 
 ## 0.34 — Discoverability and daily navigation
+
+### 0.34.2 — 2026-08-11 — Acceptance fixes for trips, Corners and book clubs
+- Trips now have an explicit Delete action on their detail screen, with an in-app confirmation
+  that explains the associated bookings, deadlines and Calendar entries will be removed.
+- Corrected the People API to expose its documented `linked_user_id`. My Corner now recognises
+  the signed-in login's existing Person link; the same fix restores linked-account choices in
+  Travel and personal defaults elsewhere in the app.
+- Reflowed book-club settings around the shared 24-colour picker so the palette uses the available
+  width instead of forcing the editor into a tall two-swatch column. Frontend production build
+  clean; **817 backend tests green; no migration drift.**
 
 ### 0.34.1 — 2026-08-11 — Book autofill and a shared colour palette
 - Books now accepts a public retailer/catalogue URL or ISBN-10/ISBN-13, safely extracts embedded

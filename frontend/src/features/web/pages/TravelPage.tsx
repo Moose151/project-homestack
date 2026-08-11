@@ -10,7 +10,7 @@ import { Card } from '../../../components/Card'
 import { EmptyState } from '../../../components/EmptyState'
 import { Field, Input, Select, Textarea } from '../../../components/Field'
 import { PageHeader } from '../../../components/PageHeader'
-import { DeleteAction, EditAction } from '../../../components/RowActions'
+import { DeleteAction, EditAction, RowActions } from '../../../components/RowActions'
 import { ColourPicker } from '../../../components/ColourPicker'
 import { Tabs } from '../../../components/Tabs'
 import { confirmDialog } from '../../../components/Dialogs'
@@ -107,14 +107,21 @@ function BookingForm({ trip, initialKind, existing, onSaved, onCancel, onError }
   </form></Card>
 }
 
-function TripDetail({ trip, people, onBack, reload, onError }: { trip: Trip; people: Person[]; onBack: () => void; reload: () => void; onError: (m: string) => void }) {
-  const [editing, setEditing] = useState(false); const [bookingKind, setBookingKind] = useState<TravelBooking['kind'] | null>(null); const [editingBooking, setEditingBooking] = useState<TravelBooking | null>(null)
+function TripDetail({ trip, people, onBack, onDeleted, reload, onError }: { trip: Trip; people: Person[]; onBack: () => void; onDeleted: () => Promise<void>; reload: () => void; onError: (m: string) => void }) {
+  const [editing, setEditing] = useState(false); const [deleting, setDeleting] = useState(false); const [bookingKind, setBookingKind] = useState<TravelBooking['kind'] | null>(null); const [editingBooking, setEditingBooking] = useState<TravelBooking | null>(null)
   const requiredDone = trip.booking_progress.required_types.every(kind => trip.booking_progress.booked_required_types.includes(kind))
   const setBooked = async (booking: TravelBooking) => { try { await api.updateTravelBooking(booking.id, { status: booking.status === 'booked' ? 'planned' : 'booked', booked_amount: booking.booked_amount || booking.quoted_amount }); reload() } catch (error) { onError(errMsg(error)) } }
+  const deleteTrip = async () => {
+    if (!(await confirmDialog({ title: `Delete ${trip.title}?`, message: 'This removes the trip, its bookings, deadlines and Calendar entries.', confirmLabel: 'Delete trip' }))) return
+    setDeleting(true)
+    try { await api.deleteTrip(trip.id); await onDeleted() }
+    catch (error) { onError(errMsg(error)) }
+    finally { setDeleting(false) }
+  }
   if (editing) return <PlanForm kind="trip" people={people} existing={trip} onCancel={() => setEditing(false)} onSaved={() => { setEditing(false); reload() }} onError={onError} />
   return <div className="flex flex-col gap-4"><button onClick={onBack} className="self-start text-sm text-muted hover:text-primary">← All trips</button>
     {trip.images.length > 0 && <div className="grid grid-cols-2 gap-2 overflow-hidden rounded-2xl sm:grid-cols-4">{trip.images.slice(0, 4).map((image, index) => <img key={image.id} src={image.image_url} alt={image.caption || ''} className={`h-40 w-full object-cover ${index === 0 ? 'col-span-2 sm:h-52' : 'sm:h-52'}`} />)}</div>}
-    <Card><div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><span className="h-4 w-4 rounded-full" style={{ backgroundColor: trip.colour }} /><h1 className="text-xl font-black text-ink">{trip.title}</h1><Badge tone={trip.status === 'booked' ? 'success' : 'neutral'}>{trip.status.replace(/_/g, ' ')}</Badge></div><p className="mt-1 text-muted">{trip.destination} · {dateLabel(trip.start_date)}{trip.end_date ? ` – ${dateLabel(trip.end_date)}` : ''}</p></div><EditAction onClick={() => setEditing(true)} label={trip.title} /></div>{trip.notes && <p className="mt-4 whitespace-pre-wrap text-sm text-muted-strong">{trip.notes}</p>}</Card>
+    <Card><div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><span className="h-4 w-4 rounded-full" style={{ backgroundColor: trip.colour }} /><h1 className="text-xl font-black text-ink">{trip.title}</h1><Badge tone={trip.status === 'booked' ? 'success' : 'neutral'}>{trip.status.replace(/_/g, ' ')}</Badge></div><p className="mt-1 text-muted">{trip.destination} · {dateLabel(trip.start_date)}{trip.end_date ? ` – ${dateLabel(trip.end_date)}` : ''}</p></div><RowActions><EditAction onClick={() => setEditing(true)} label={trip.title} disabled={deleting} /><DeleteAction onClick={deleteTrip} label={trip.title} disabled={deleting} /></RowActions></div>{trip.notes && <p className="mt-4 whitespace-pre-wrap text-sm text-muted-strong">{trip.notes}</p>}</Card>
     <div className="grid gap-3 sm:grid-cols-3"><Card><p className="text-xs font-bold uppercase text-muted">Bookings</p><p className="mt-1 text-2xl font-black">{trip.booking_progress.booked_count}/{trip.booking_progress.component_count}</p><p className="text-xs text-muted">{requiredDone ? 'Required travel covered' : 'Still needs booking'}</p></Card>{trip.cost_summary.map(row => <Card key={row.currency}><p className="text-xs font-bold uppercase text-muted">Expected · {row.currency}</p><p className="mt-1 text-2xl font-black">{money(row.quoted, row.currency)}</p><p className="text-xs text-muted">{money(row.booked, row.currency)} booked</p></Card>)}</div>
     {(bookingKind || editingBooking) && <BookingForm trip={trip} initialKind={bookingKind || editingBooking!.kind} existing={editingBooking} onCancel={() => { setBookingKind(null); setEditingBooking(null) }} onSaved={() => { setBookingKind(null); setEditingBooking(null); reload() }} onError={onError} />}
     <Card title="Travel & stays"><div className="mb-3 flex flex-wrap gap-2">{trip.flights_required && <Button size="sm" variant="secondary" onClick={() => setBookingKind('flight')}>+ Flight</Button>}{trip.accommodation_required && <Button size="sm" variant="secondary" onClick={() => setBookingKind('accommodation')}>+ Accommodation</Button>}<Button size="sm" variant="ghost" onClick={() => setBookingKind('activity')}>+ Other booking</Button></div>
@@ -131,7 +138,7 @@ export function TravelPage() {
   useEffect(() => { if (selectedIdeaId && ideas.length) setEditingIdea(ideas.find(row => row.id === selectedIdeaId) ?? null) }, [selectedIdeaId, ideas])
   const selected = trips.find(row => row.id === selectedId)
   const setTab = (next: string) => { setParams(next === 'ideas' ? { tab: 'ideas' } : {}); setCreating(false); setEditingIdea(null) }
-  if (selected) return <TripDetail trip={selected} people={people} onBack={() => setParams({})} reload={load} onError={setError} />
+  if (selected) return <TripDetail trip={selected} people={people} onBack={() => setParams({})} onDeleted={async () => { setParams({}); await load() }} reload={load} onError={setError} />
   return <div className="flex flex-col gap-4"><PageHeader title="Trips & holidays" icon="✈️" subtitle="From somewhere you would love to go through to fully booked." actions={<Button size="sm" onClick={() => setCreating(true)}>+ {tab === 'ideas' ? 'Destination' : 'Trip'}</Button>} />
     <Tabs tabs={[{ key: 'trips', label: 'Trips', badge: trips.length || undefined }, { key: 'ideas', label: 'To go', badge: ideas.filter(row => row.status === 'active').length || undefined }]} active={tab} onChange={setTab} />
     {error && <div className="rounded-xl bg-danger-soft p-3 text-sm text-danger">{error}</div>}

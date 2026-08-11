@@ -9,11 +9,16 @@ from apps.people.models import Person
 class PersonSerializer(serializers.ModelSerializer):
     """Read-only output representation of a Person."""
 
+    # Keep the API's foreign-key representation explicit. The web app (and the
+    # canonical data contract) use ``linked_user_id`` to distinguish the login
+    # from the Person who represents them around the household.
+    linked_user_id = serializers.IntegerField(read_only=True, allow_null=True)
+
     class Meta:
         model = Person
         fields = [
             "id",
-            "linked_user",
+            "linked_user_id",
             "display_name",
             "preferred_name",
             "avatar",
