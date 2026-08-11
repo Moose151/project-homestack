@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from decimal import Decimal, ROUND_HALF_UP
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.db import connection
 from django.db.models import Max, Prefetch, Q
@@ -23,6 +24,15 @@ from apps.solace.models import (
     PlannedPurchase,
     SolaceSettings,
 )
+
+
+def _household_timezone(user):
+    """Return the configured household zone, falling back safely for old/invalid settings."""
+    name = getattr(getattr(user, "household", None), "timezone", "") or "UTC"
+    try:
+        return ZoneInfo(name)
+    except ZoneInfoNotFoundError:
+        return ZoneInfo("UTC")
 
 
 def _search(qs, query: str, fields: list[str]):
@@ -96,7 +106,7 @@ def list_bill_occurrences(user, *, start, end, status: str = ""):
     # transform can evaluate in UTC, which made local midnight on the first day of the next
     # cycle look like the final UTC date of the current cycle (e.g. 12 Aug AEST → 11 Aug UTC).
     qs = BillOccurrence.objects.select_related("bill").filter(bill__deleted_at__isnull=True)
-    tz = timezone.get_current_timezone()
+    tz = _household_timezone(user)
     if start != date.min:
         qs = qs.filter(due_at__gte=timezone.make_aware(datetime.combine(start, time.min), tz))
     if end != date.max:
@@ -260,6 +270,14 @@ def get_cycle_closeout(cycle_start: date) -> CycleCloseout | None:
 
 
 def get_pay_cycle_plan(user, *, as_of=None) -> dict:
+    # The budget engine uses Django's active timezone for payday dates and RRULE bounds.
+    # Activate the household's configured zone for the entire calculation instead of relying
+    # on the server default (UTC).
+    with timezone.override(_household_timezone(user)):
+        return _get_pay_cycle_plan(user, as_of=as_of)
+
+
+def _get_pay_cycle_plan(user, *, as_of=None) -> dict:
     from apps.solace.budget_engine import build_pay_cycle_plan
     from apps.solace.bill_schedule import fortnightly_cost
 
@@ -348,7 +366,12 @@ def get_now_summary(user, *, as_of=None) -> dict:
     plan = get_pay_cycle_plan(user, as_of=as_of)
     cycle_start = date.fromisoformat(plan["cycle_start"])
     cycle_end = date.fromisoformat(plan["cycle_end"])
-    today = timezone.localdate(as_of) if as_of else timezone.localdate()
+    tz = _household_timezone(user)
+    today = (
+        as_of
+        if isinstance(as_of, date) and not isinstance(as_of, datetime)
+        else timezone.localdate(as_of, timezone=tz)
+    )
 
     # Anything still unpaid up to the end of the cycle, including what fell due earlier and was
     # never marked off — an overdue bill belongs on this list more than anything else does.
@@ -362,7 +385,11 @@ def get_now_summary(user, *, as_of=None) -> dict:
         for occurrence in list_bill_occurrences(user, start=cycle_start, end=cycle_end)
         if occurrence.status == BillOccurrence.Status.PAID
     ]
-    overdue = [occurrence for occurrence in due if timezone.localdate(occurrence.due_at) < today]
+    overdue = [
+        occurrence
+        for occurrence in due
+        if timezone.localdate(occurrence.due_at, timezone=tz) < today
+    ]
     total = lambda rows: f"{sum((Decimal(row.amount) for row in rows), Decimal('0.00')):.2f}"
 
     buckets = list_buckets(user, active_only=True)

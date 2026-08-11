@@ -73,7 +73,7 @@ const dayAfter = (dateValue: string) => {
  * what do I owe now, what goes out, how is pay divided, how are we tracking, and setup.
  */
 type Tab = 'now' | 'bills' | 'plan' | 'insights' | 'manage'
-type BillsSection = 'bills' | 'subscriptions' | 'schedule'
+type BillsSection = 'bills' | 'schedule'
 type PlanSection = 'payplan' | 'buckets' | 'paydays' | 'purchases'
 type InsightsSection = 'forecast' | 'closeout' | 'history' | 'annual'
 
@@ -86,7 +86,6 @@ const SOLACE_TABS = [
 ]
 const BILLS_SECTIONS = [
   { key: 'bills' as const, label: 'Bills' },
-  { key: 'subscriptions' as const, label: 'Subscriptions' },
   { key: 'schedule' as const, label: 'Calendar' },
 ]
 const PLAN_SECTIONS = [
@@ -105,7 +104,7 @@ const INSIGHTS_SECTIONS = [
 /** Links and bookmarks made before the regrouping still land in the right place. */
 const LEGACY_TABS: Record<string, [Tab, string | null]> = {
   overview: ['now', null], checklist: ['now', null],
-  bills: ['bills', 'bills'], subscriptions: ['bills', 'subscriptions'], schedule: ['bills', 'schedule'],
+  bills: ['bills', 'bills'], subscriptions: ['bills', 'bills'], schedule: ['bills', 'schedule'],
   plan: ['plan', 'payplan'], buckets: ['plan', 'buckets'], paydays: ['plan', 'paydays'],
   purchases: ['plan', 'purchases'],
   forecast: ['insights', 'forecast'], closeout: ['insights', 'closeout'],
@@ -114,9 +113,6 @@ const LEGACY_TABS: Record<string, [Tab, string | null]> = {
 }
 
 const BILL_CATS = ['mortgage', 'utilities', 'insurance', 'council', 'debt', 'subscription', 'childcare', 'other']
-const isSubscriptionBill = (bill: SolaceBill) => ['subscription', 'subscriptions'].includes(
-  bill.category.trim().toLowerCase(),
-)
 type HomeDestination = '' | 'insurance_policy' | 'household_cost' | 'maintenance'
 const homeDestinationForCategory = (category: string): HomeDestination => {
   const normalised = category.toLowerCase()
@@ -932,76 +928,6 @@ function BucketsTab({ buckets, reload, onError }: {
             </Card>
           ))}
         </div>
-      )}
-    </div>
-  )
-}
-
-function SubscriptionsTab({ bills, categories, reload, onOccurrence, onError }: {
-  bills: SolaceBill[]
-  categories: string[]
-  reload: () => void
-  onOccurrence: (id: number, action: 'paid' | 'unpaid' | 'skip') => Promise<SolaceBillOccurrence>
-  onError: (message: string) => void
-}) {
-  const [undoOccurrence, setUndoOccurrence] = useState<{ id: number; name: string } | null>(null)
-  const [paying, setPaying] = useState<number | null>(null)
-  const pay = async (bill: SolaceBill) => {
-    if (!bill.next_occurrence_id) return
-    setPaying(bill.next_occurrence_id)
-    try {
-      const updated = await onOccurrence(bill.next_occurrence_id, 'paid')
-      setUndoOccurrence({ id: updated.id, name: bill.name })
-    } catch (error) {
-      onError(errMsg(error))
-    } finally {
-      setPaying(null)
-    }
-  }
-  const undo = async () => {
-    if (!undoOccurrence) return
-    const previous = undoOccurrence
-    setUndoOccurrence(null)
-    try {
-      await onOccurrence(previous.id, 'unpaid')
-    } catch (error) {
-      onError(errMsg(error))
-    }
-  }
-  return (
-    <div className="flex flex-col gap-4">
-      <CreatePanel label="Add subscription">
-        {close => (
-          <BillForm
-            categories={categories}
-            initialCategory="subscription"
-            categoryLocked
-            nameLabel="Subscription"
-            submitLabel="Add subscription"
-            onCreated={() => { reload(); close() }}
-            onError={onError}
-          />
-        )}
-      </CreatePanel>
-      <p className="text-sm text-muted">
-        Subscriptions are recurring bills, with the same payment history, Mark paid, autopay and set-aside controls.
-      </p>
-      {bills.length === 0 ? (
-        <EmptyState icon="🔁" title="No subscriptions yet" hint="Add one here, or categorise any bill as Subscription." />
-      ) : <div className="grid gap-3 lg:grid-cols-2">
-        {bills.map(bill => (
-          <BillCard
-            key={`bill-${bill.id}`} bill={bill} categories={categories} reload={reload}
-            onError={onError} onPay={pay} paying={paying}
-          />
-        ))}
-      </div>}
-      {undoOccurrence && (
-        <UndoToast
-          message={`${undoOccurrence.name} marked paid`}
-          onUndo={undo}
-          onDismiss={() => setUndoOccurrence(null)}
-        />
       )}
     </div>
   )
@@ -1858,7 +1784,7 @@ function ForecastTab({ initial, onManage, onError }: {
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Card contentClassName="p-3"><p className="text-lg font-bold text-success">+{money(forecast.total_contributions)}</p><p className="text-xs text-muted">Expected Bills-bucket transfers</p></Card>
-        <Card contentClassName="p-3"><p className="text-lg font-bold text-ink">−{money(forecast.total_bills)}</p><p className="text-xs text-muted">Included bills + subscriptions due</p></Card>
+        <Card contentClassName="p-3"><p className="text-lg font-bold text-ink">−{money(forecast.total_bills)}</p><p className="text-xs text-muted">Included bills due</p></Card>
         <Card contentClassName="p-3"><p className="text-lg font-bold text-ink">{money(forecast.required_opening_balance)}</p><p className="text-xs text-muted">Minimum opening balance required</p></Card>
       </div>
 
@@ -2458,10 +2384,6 @@ export function SolacePage() {
       .map(category => category.name)
     return names.length ? names : BILL_CATS
   }, [categories])
-  const subscriptionBills = useMemo(() => bills.filter(isSubscriptionBill), [bills])
-  const nonSubscriptionBills = useMemo(() => bills.filter(bill => !isSubscriptionBill(bill)), [bills])
-
-
   useEffect(() => {
     if (!requiresPasswordUnlock) setUnlocked(true)
   }, [requiresPasswordUnlock])
@@ -2606,16 +2528,7 @@ export function SolacePage() {
           <Tabs tabs={BILLS_SECTIONS} active={billsSection} onChange={setBillsSection} variant="secondary" />
           {billsSection === 'bills' && (
             <BillsTab
-              bills={nonSubscriptionBills}
-              categories={billCategoryNames}
-              reload={load}
-              onOccurrence={updateOccurrence}
-              onError={setError}
-            />
-          )}
-          {billsSection === 'subscriptions' && (
-            <SubscriptionsTab
-              bills={subscriptionBills}
+              bills={bills}
               categories={billCategoryNames}
               reload={load}
               onOccurrence={updateOccurrence}

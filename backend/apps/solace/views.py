@@ -844,7 +844,8 @@ class SolaceNowView(SolaceAccessMixin, APIView):
         from apps.solace.bill_schedule import ensure_bill_occurrences
         from apps.solace.models import BillOccurrence
 
-        summary = selectors.get_now_summary(request.user)
+        as_of = _plan_date(request)
+        summary = selectors.get_now_summary(request.user, as_of=as_of)
         # Occurrences are materialised lazily, so make sure this cycle exists before reading it —
         # otherwise a bill that has never been viewed on the Schedule tab is silently missing.
         # Look back beyond the cycle as well: an occurrence that fell due before this cycle and
@@ -859,7 +860,9 @@ class SolaceNowView(SolaceAccessMixin, APIView):
             # Reconcile from the earliest unpaid row so opening Now repairs those records too.
             bill_start = min(start, timezone.localdate(earliest_unpaid)) if earliest_unpaid else start
             ensure_bill_occurrences(bill, bill_start, end)
-        return Response(SolaceNowSerializer(selectors.get_now_summary(request.user)).data)
+        return Response(
+            SolaceNowSerializer(selectors.get_now_summary(request.user, as_of=as_of)).data
+        )
 
 
 class BucketEntryListView(SolaceAccessMixin, APIView):

@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.29.6**
+> **Current version: 0.29.7**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,16 @@
 ---
 
 ## 0.29 — What the house actually uses
+
+### 0.29.7 — 2026-08-11 — subscriptions fully absorbed and household-local cycles
+- Removed the remaining Subscriptions subsection from Money. Subscription-category records now
+  appear directly in Bills with every other bill; old subscription URLs redirect to Bills.
+- Fixed the remaining next-cycle leak: Solace now uses the Household timezone, not the Docker
+  server's UTC timezone, for pay-cycle anchors, occurrence boundaries, current-day and overdue
+  comparisons. The Now endpoint also honours its explicit date parameter for deterministic use.
+- Regression coverage sets the household to Australia/Brisbane while Django remains UTC and
+  proves a local 12 August bill is excluded from the cycle ending 11 August. **794 backend tests
+  green; frontend production build clean; no migration.**
 
 ### 0.29.6 — 2026-08-11 — exact pay-cycle boundaries and Solace-owned home bills
 - Fixed bill occurrence filtering to compare aware Brisbane-local day boundaries rather than

@@ -401,6 +401,8 @@ class SolaceCrudAndCalendarTests(TestCase):
         from apps.solace.selectors import list_bill_occurrences
 
         brisbane = ZoneInfo("Australia/Brisbane")
+        self.admin.household.timezone = "Australia/Brisbane"
+        self.admin.household.save(update_fields=["timezone"])
         with timezone.override(brisbane):
             bill = create_bill(
                 self.admin,
@@ -1586,6 +1588,8 @@ class SolaceNowTests(TestCase):
 
     def test_bill_due_on_next_payday_is_not_in_cycle_ending_day_before(self):
         brisbane = ZoneInfo("Australia/Brisbane")
+        self.admin.household.timezone = "Australia/Brisbane"
+        self.admin.household.save(update_fields=["timezone"])
         with timezone.override(brisbane):
             Payday.objects.all().delete()
             create_payday(
