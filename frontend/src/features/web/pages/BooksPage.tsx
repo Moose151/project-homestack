@@ -457,6 +457,7 @@ function ClubSettings({ club, users, onChanged }: {
   users: BooksUser[]
   onChanged: () => Promise<void>
 }) {
+  const [open, setOpen] = useState(false)
   const [name, setName] = useState(club.name)
   const [colour, setColour] = useState(club.colour)
   const [memberId, setMemberId] = useState<number | ''>('')
@@ -467,6 +468,7 @@ function ClubSettings({ club, users, onChanged }: {
     setName(club.name)
     setColour(club.colour)
   }, [club.id, club.name, club.colour])
+  useEffect(() => setOpen(false), [club.id])
 
   const memberIds = new Set(club.memberships.map(m => m.user_id))
   const availableUsers = users.filter(u => !memberIds.has(u.id))
@@ -483,8 +485,24 @@ function ClubSettings({ club, users, onChanged }: {
     }
   }
 
+  if (!open) {
+    return (
+      <div className="flex justify-end">
+        <Button type="button" size="sm" variant="ghost" aria-expanded={false} onClick={() => setOpen(true)}>
+          Edit club
+        </Button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-3 rounded-xl bg-sunken p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-bold text-ink">Club settings</p>
+        <Button type="button" size="sm" variant="ghost" aria-expanded={true} onClick={() => setOpen(false)}>
+          Close
+        </Button>
+      </div>
       {error && <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
       <div className="space-y-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">

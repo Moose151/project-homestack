@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.34.2**
+> **Current version: 0.34.3**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,11 @@
 ---
 
 ## 0.34 — Discoverability and daily navigation
+
+### 0.34.3 — 2026-08-11 — Collapsible book-club settings
+- Book-club name, colour and membership controls now stay collapsed during normal shelf use.
+  **Edit club** opens them, **Close** dismisses them, and selecting another club collapses the
+  editor automatically. Frontend production build clean; no backend or migration change.
 
 ### 0.34.2 — 2026-08-11 — Acceptance fixes for trips, Corners and book clubs
 - Trips now have an explicit Delete action on their detail screen, with an in-app confirmation
