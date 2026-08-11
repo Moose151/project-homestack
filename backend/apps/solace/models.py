@@ -409,55 +409,6 @@ class BucketEntry(HouseholdBaseModel):
         return -amount if self.kind == self.Kind.WITHDRAWAL else amount
 
 
-class Subscription(CalendarSyncMixin, HouseholdBaseModel):
-    class BillingCycle(models.TextChoices):
-        WEEKLY = "weekly", "Weekly"
-        FORTNIGHTLY = "fortnightly", "Fortnightly"
-        MONTHLY = "monthly", "Monthly"
-        QUARTERLY = "quarterly", "Quarterly"
-        YEARLY = "yearly", "Yearly"
-        OTHER = "other", "Other"
-
-    name = models.CharField(max_length=200)
-    provider = models.CharField(max_length=200, blank=True, default="")
-    amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
-    billing_cycle = models.CharField(max_length=20, choices=BillingCycle.choices, default=BillingCycle.MONTHLY)
-    next_renewal_at = models.DateTimeField(null=True, blank=True)
-    is_all_day = models.BooleanField(default=True)
-    recurrence_rule = models.CharField(max_length=512, blank=True, default="")
-    is_active = models.BooleanField(default=True)
-    notes = models.TextField(blank=True, default="")
-    calendar_event_id = models.PositiveBigIntegerField(null=True, blank=True)
-    visibility = models.CharField(max_length=20, choices=Visibility.choices, default=Visibility.SENSITIVE)
-    sensitivity = models.CharField(max_length=20, choices=Sensitivity.choices, default=Sensitivity.FINANCIAL)
-
-    objects = HouseholdManager()
-    all_objects = AllObjectsManager()
-
-    class Meta:
-        ordering = ["next_renewal_at", "name"]
-
-    def __str__(self) -> str:
-        return self.name
-
-    def get_calendar_data(self) -> dict | None:
-        if not self.next_renewal_at or not self.is_active:
-            return None
-        return {
-            "title": f"Subscription: {self.name}",
-            "start_at": self.next_renewal_at,
-            "is_all_day": self.is_all_day,
-            "description": self.notes,
-            "recurrence_rule": self.recurrence_rule,
-            "visibility": self.visibility,
-            "sensitivity": self.sensitivity,
-            "colour": "#426e9b",
-        }
-
-    def get_calendar_node_key(self) -> str:
-        return "solace"
-
-
 class PaydayChecklistItem(HouseholdBaseModel):
     title = models.CharField(max_length=200)
     cycle_start = models.DateField(null=True, blank=True)

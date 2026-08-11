@@ -6,8 +6,7 @@ import type {
   SolaceBillOccurrence, SolaceBillTimeline, SolaceBucket, SolaceBucketEntry,
   SolaceBucketPurpose, SolaceCategory, SolaceCategoryReport, SolaceChecklistItem,
   SolaceChecklistPreference, SolaceCloseoutResponse, SolaceCycleHistoryRow, SolaceHealth,
-  SolaceNow, SolacePayCyclePlan, SolacePayday, SolacePurchase, SolaceSchedule, SolaceSettings,
-  SolaceSubscription
+  SolaceNow, SolacePayCyclePlan, SolacePayday, SolacePurchase, SolaceSchedule, SolaceSettings
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
@@ -136,14 +135,6 @@ const RECURRENCE = [
   { label: 'Six-monthly', value: 'FREQ=MONTHLY;INTERVAL=6' },
   { label: 'Yearly', value: 'FREQ=YEARLY' },
 ]
-const subscriptionRecurrence = (cycle: string, fallback = '') => ({
-  weekly: 'FREQ=WEEKLY',
-  fortnightly: 'FREQ=WEEKLY;INTERVAL=2',
-  monthly: 'FREQ=MONTHLY',
-  quarterly: 'FREQ=MONTHLY;INTERVAL=3',
-  yearly: 'FREQ=YEARLY',
-} as Record<string, string>)[cycle] || fallback
-
 function DueBadge({ iso, paid }: { iso: string | null; paid?: boolean }) {
   if (paid) return <Badge tone="success">Paid</Badge>
   if (!iso) return <Badge tone="neutral">No date</Badge>
@@ -179,10 +170,16 @@ function CreatePanel({ label, children }: {
   )
 }
 
-function BillForm({ categories, onCreated, onError }: {
-  categories: string[]; onCreated: () => void; onError: (message: string) => void
+function BillForm({ categories, initialCategory, categoryLocked = false, nameLabel = 'Bill', submitLabel = 'Add bill', onCreated, onError }: {
+  categories: string[]
+  initialCategory?: string
+  categoryLocked?: boolean
+  nameLabel?: string
+  submitLabel?: string
+  onCreated: () => void
+  onError: (message: string) => void
 }) {
-  const startingCategory = categories[0] || 'other'
+  const startingCategory = initialCategory || categories[0] || 'other'
   const [f, setF] = useState({
     name: '', category: startingCategory, provider: '', amount: '', due_at: '',
     recurrence_rule: '', end_date: '', is_autopay: false, include_in_set_aside: true,
@@ -218,10 +215,10 @@ function BillForm({ categories, onCreated, onError }: {
         <p className="mt-0.5 text-muted-strong">Choose a Homestead destination below and this bill will appear in the right home workspace automatically.</p>
       </div>
       <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <Field label="Bill"><Input value={f.name} onChange={e => set('name', e.target.value)} placeholder="Electricity" /></Field>
+        <Field label={nameLabel}><Input value={f.name} onChange={e => set('name', e.target.value)} placeholder={nameLabel === 'Subscription' ? 'Streaming service' : 'Electricity'} /></Field>
         <Field label="Provider"><Input value={f.provider} onChange={e => set('provider', e.target.value)} /></Field>
         <Field label="Amount"><Input type="number" step="0.01" value={f.amount} onChange={e => set('amount', e.target.value)} /></Field>
-        <Field label="Category"><Select value={f.category} onChange={e => setF(prev => ({ ...prev, category: e.target.value, home_destination: homeDestinationForCategory(e.target.value) }))}>{categories.map(c => <option key={c} value={c}>{cap(c)}</option>)}</Select></Field>
+        <Field label="Category"><Select disabled={categoryLocked} value={f.category} onChange={e => setF(prev => ({ ...prev, category: e.target.value, home_destination: homeDestinationForCategory(e.target.value) }))}>{!categories.includes(f.category) && <option value={f.category}>{cap(f.category)}</option>}{categories.map(c => <option key={c} value={c}>{cap(c)}</option>)}</Select></Field>
         <Field label="First due"><input type="date" className={fieldClass} value={f.due_at} onChange={e => set('due_at', e.target.value)} /></Field>
         <Field label="Repeats"><Select value={f.recurrence_rule} onChange={e => set('recurrence_rule', e.target.value)}>{RECURRENCE.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}</Select></Field>
         <Field label="Organise in Homestead" hint="Homestead becomes the place for home details; Solace keeps the amount and payment schedule." className="sm:col-span-2 xl:col-span-3">
@@ -249,7 +246,7 @@ function BillForm({ categories, onCreated, onError }: {
           />
           Include in set-aside planning
         </label>
-        <Button onClick={save} loading={saving} disabled={!f.name.trim()} className="w-full sm:col-span-2 xl:col-span-1 xl:w-auto">Add bill</Button>
+        <Button onClick={save} loading={saving} disabled={!f.name.trim()} className="w-full sm:col-span-2 xl:col-span-1 xl:w-auto">{submitLabel}</Button>
       </div>
     </Card>
   )
@@ -941,103 +938,7 @@ function BucketsTab({ buckets, reload, onError }: {
   )
 }
 
-function SubscriptionForm({ onCreated, onError }: {
-  onCreated: () => void; onError: (message: string) => void
-}) {
-  const [f, setF] = useState({ name: '', provider: '', amount: '', billing_cycle: 'monthly', next_renewal_at: '' })
-  const [saving, setSaving] = useState(false)
-  const set = (k: string, v: string) => setF(prev => ({ ...prev, [k]: v }))
-  const save = async () => {
-    setSaving(true)
-    try {
-      await api.createSolaceSubscription({ ...f, amount: f.amount || '0.00', next_renewal_at: fromLocalDateInput(f.next_renewal_at), recurrence_rule: subscriptionRecurrence(f.billing_cycle), is_all_day: true, is_active: true })
-      setF({ name: '', provider: '', amount: '', billing_cycle: 'monthly', next_renewal_at: '' })
-      onCreated()
-    } catch (error) {
-      onError(errMsg(error))
-    } finally { setSaving(false) }
-  }
-  return (
-    <Card contentClassName="p-4">
-      <div className="grid gap-3 lg:grid-cols-[1.3fr_1fr_0.7fr_1fr_1fr_auto]">
-        <Field label="Subscription"><Input value={f.name} onChange={e => set('name', e.target.value)} /></Field>
-        <Field label="Provider"><Input value={f.provider} onChange={e => set('provider', e.target.value)} /></Field>
-        <Field label="Amount"><Input type="number" step="0.01" value={f.amount} onChange={e => set('amount', e.target.value)} /></Field>
-        <Field label="Cycle"><Select value={f.billing_cycle} onChange={e => set('billing_cycle', e.target.value)}>{['weekly', 'fortnightly', 'monthly', 'quarterly', 'yearly', 'other'].map(c => <option key={c} value={c}>{cap(c)}</option>)}</Select></Field>
-        <Field label="Renewal"><input type="date" className={fieldClass} value={f.next_renewal_at} onChange={e => set('next_renewal_at', e.target.value)} /></Field>
-        <div className="flex items-end"><Button onClick={save} loading={saving} disabled={!f.name.trim()} className="w-full">Add</Button></div>
-      </div>
-    </Card>
-  )
-}
-
-function SubscriptionEditor({ subscription, reload, onError }: {
-  subscription: SolaceSubscription; reload: () => void; onError: (message: string) => void
-}) {
-  const [f, setF] = useState({
-    name: subscription.name,
-    provider: subscription.provider,
-    amount: subscription.amount,
-    billing_cycle: subscription.billing_cycle,
-    next_renewal_at: toLocalDateInput(subscription.next_renewal_at),
-    is_active: subscription.is_active,
-    notes: subscription.notes,
-  })
-  const [saving, setSaving] = useState(false)
-  const set = (key: string, value: string | boolean) => setF(previous => ({ ...previous, [key]: value }))
-  const save = async () => {
-    setSaving(true)
-    try {
-      await api.updateSolaceSubscription(subscription.id, {
-        ...f,
-        amount: f.amount || '0.00',
-        next_renewal_at: fromLocalDateInput(f.next_renewal_at),
-        recurrence_rule: subscriptionRecurrence(f.billing_cycle, subscription.recurrence_rule),
-      })
-      reload()
-    } catch (error) {
-      onError(errMsg(error))
-    } finally {
-      setSaving(false)
-    }
-  }
-  const remove = async () => {
-    if (!(await confirmDialog({ title: `Delete ${subscription.name}?`, confirmLabel: 'Delete' }))) return
-    setSaving(true)
-    try {
-      await api.deleteSolaceSubscription(subscription.id)
-      reload()
-    } catch (error) {
-      onError(errMsg(error))
-    } finally {
-      setSaving(false)
-    }
-  }
-  return (
-    <details className="mt-3 border-t border-line pt-3">
-      <summary className="cursor-pointer text-sm font-medium text-primary">Edit subscription</summary>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <Field label="Name"><Input value={f.name} onChange={event => set('name', event.target.value)} /></Field>
-        <Field label="Provider"><Input value={f.provider} onChange={event => set('provider', event.target.value)} /></Field>
-        <Field label="Amount"><Input type="number" step="0.01" value={f.amount} onChange={event => set('amount', event.target.value)} /></Field>
-        <Field label="Cycle"><Select value={f.billing_cycle} onChange={event => set('billing_cycle', event.target.value)}>{['weekly', 'fortnightly', 'monthly', 'quarterly', 'yearly', 'other'].map(cycle => <option key={cycle} value={cycle}>{cap(cycle)}</option>)}</Select></Field>
-        <Field label="Renewal"><input type="date" className={fieldClass} value={f.next_renewal_at} onChange={event => set('next_renewal_at', event.target.value)} /></Field>
-        <Field label="Notes"><Input value={f.notes} onChange={event => set('notes', event.target.value)} /></Field>
-      </div>
-      <label className="mt-3 flex items-center gap-2 text-sm text-muted">
-        <input type="checkbox" checked={f.is_active} onChange={event => set('is_active', event.target.checked)} />
-        Active
-      </label>
-      <div className="mt-3 flex gap-2">
-        <Button size="sm" onClick={save} loading={saving} disabled={!f.name.trim()}>Save</Button>
-        <Button size="sm" variant="danger" onClick={remove} disabled={saving}>Delete</Button>
-      </div>
-    </details>
-  )
-}
-
-function SubscriptionsTab({ subscriptions, bills, categories, reload, onOccurrence, onError }: {
-  subscriptions: SolaceSubscription[]
+function SubscriptionsTab({ bills, categories, reload, onOccurrence, onError }: {
   bills: SolaceBill[]
   categories: string[]
   reload: () => void
@@ -1071,31 +972,29 @@ function SubscriptionsTab({ subscriptions, bills, categories, reload, onOccurren
   return (
     <div className="flex flex-col gap-4">
       <CreatePanel label="Add subscription">
-        {close => <SubscriptionForm onCreated={() => { reload(); close() }} onError={onError} />}
+        {close => (
+          <BillForm
+            categories={categories}
+            initialCategory="subscription"
+            categoryLocked
+            nameLabel="Subscription"
+            submitLabel="Add subscription"
+            onCreated={() => { reload(); close() }}
+            onError={onError}
+          />
+        )}
       </CreatePanel>
-      {bills.length > 0 && (
-        <p className="text-sm text-muted">
-          Subscription-category bills keep their payment history and set-aside planning here alongside renewal-based subscriptions.
-        </p>
-      )}
-      {bills.length === 0 && subscriptions.length === 0 ? (
-        <EmptyState icon="🔁" title="No subscriptions yet" hint="Add a subscription here, or categorise a bill as Subscription." />
+      <p className="text-sm text-muted">
+        Subscriptions are recurring bills, with the same payment history, Mark paid, autopay and set-aside controls.
+      </p>
+      {bills.length === 0 ? (
+        <EmptyState icon="🔁" title="No subscriptions yet" hint="Add one here, or categorise any bill as Subscription." />
       ) : <div className="grid gap-3 lg:grid-cols-2">
         {bills.map(bill => (
           <BillCard
             key={`bill-${bill.id}`} bill={bill} categories={categories} reload={reload}
             onError={onError} onPay={pay} paying={paying}
           />
-        ))}
-        {subscriptions.map(s => (
-          <Card key={`subscription-${s.id}`} contentClassName="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div><h3 className="font-semibold text-ink">{s.name}</h3><p className="text-sm text-muted">{s.provider || cap(s.billing_cycle)} · {money(s.amount)}</p></div>
-              <DueBadge iso={s.next_renewal_at} />
-            </div>
-            {!s.is_active && <div className="mt-2"><Badge tone="neutral">Paused</Badge></div>}
-            <SubscriptionEditor subscription={s} reload={reload} onError={onError} />
-          </Card>
         ))}
       </div>}
       {undoOccurrence && (
@@ -1984,7 +1883,7 @@ function ForecastTab({ initial, onManage, onError }: {
                 <div className="mt-3 space-y-1 border-t border-line pt-2 text-sm">
                   {row.items.map((item, index) => (
                     <div key={`${item.kind}-${item.record_id}-${index}`} className="flex justify-between gap-3">
-                      <span className="text-muted">{item.kind === 'contribution' ? 'Transfer from' : item.kind === 'subscription' ? 'Subscription' : 'Bill'} · {item.name}</span>
+                      <span className="text-muted">{item.kind === 'contribution' ? 'Transfer from' : 'Bill'} · {item.name}</span>
                       <span className={item.kind === 'contribution' ? 'font-medium text-success' : 'font-medium text-ink'}>
                         {item.kind === 'contribution' ? '+' : '−'}{money(item.amount)}
                       </span>
@@ -2538,7 +2437,6 @@ export function SolacePage() {
   const [paydays, setPaydays] = useState<SolacePayday[]>([])
   const [purchases, setPurchases] = useState<SolacePurchase[]>([])
   const [buckets, setBuckets] = useState<SolaceBucket[]>([])
-  const [subscriptions, setSubscriptions] = useState<SolaceSubscription[]>([])
   const [checklist, setChecklist] = useState<SolaceChecklistItem[]>([])
   const [checklistPreferences, setChecklistPreferences] = useState<SolaceChecklistPreference[]>([])
   const [plan, setPlan] = useState<SolacePayCyclePlan | null>(null)
@@ -2587,7 +2485,7 @@ export function SolacePage() {
       const data = await api.getSolaceBootstrap()
       setSolaceCurrencySymbol(data.settings.currency_symbol)
       setBills(data.bills); setPaydays(data.paydays); setPurchases(data.purchases)
-      setBuckets(data.buckets); setSubscriptions(data.subscriptions); setChecklist(data.checklist)
+      setBuckets(data.buckets); setChecklist(data.checklist)
       setPlan(data.plan); setSettings(data.settings); setCategories(data.categories)
       setBalances(data.balances); setHealth(data.health); setCategoryReport(data.category_report)
       setCloseout(data.closeout); setForecast(data.forecast)
@@ -2618,7 +2516,7 @@ export function SolacePage() {
       api.searchSolace(term)
         .then(r => {
           setBills(r.bills); setPaydays(r.paydays); setPurchases(r.purchases)
-          setBuckets(r.buckets); setSubscriptions(r.subscriptions); setChecklist(r.checklist)
+          setBuckets(r.buckets); setChecklist(r.checklist)
         })
         .catch(e => setError(errMsg(e)))
     }, 300)
@@ -2718,7 +2616,6 @@ export function SolacePage() {
           )}
           {billsSection === 'subscriptions' && (
             <SubscriptionsTab
-              subscriptions={subscriptions}
               bills={subscriptionBills}
               categories={billCategoryNames}
               reload={load}

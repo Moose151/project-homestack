@@ -20,7 +20,6 @@ from apps.solace.models import (
     PaydayChecklistPreference,
     PlannedPurchase,
     SolaceSettings,
-    Subscription,
 )
 
 
@@ -261,20 +260,6 @@ class BudgetBucketSerializer(serializers.ModelSerializer):
         if value <= 0:
             raise serializers.ValidationError("Rounding increment must be greater than zero.")
         return value
-
-
-class SubscriptionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Subscription
-        fields = [
-            "id", "name", "provider", "amount", "billing_cycle", "next_renewal_at",
-            "is_all_day", "recurrence_rule", "is_active", "notes", "calendar_event_id",
-            "visibility", "sensitivity", "created_at", "updated_at",
-        ]
-        read_only_fields = ["id", "calendar_event_id", "created_at", "updated_at"]
-
-    def validate_name(self, value: str) -> str:
-        return _non_blank(value)
 
 
 class PaydayChecklistItemSerializer(serializers.ModelSerializer):

@@ -39,11 +39,6 @@ def send_due_reminders(*, on: date | None = None) -> int:
         payday_occurrences(payday, on, window_end)
         for payday in selectors.list_paydays(active_only=True)
     )
-    subscription_attention = any(
-        row.next_renewal_at
-        and on - timedelta(days=365) <= timezone.localdate(row.next_renewal_at) <= window_end
-        for row in selectors.list_subscriptions(active_only=True)
-    )
     purchase_attention = any(
         row.target_date
         and on - timedelta(days=365) <= timezone.localdate(row.target_date) <= window_end
@@ -52,7 +47,6 @@ def send_due_reminders(*, on: date | None = None) -> int:
     needs_attention = (
         bill_attention
         or payday_attention
-        or subscription_attention
         or purchase_attention
     )
     if not needs_attention:

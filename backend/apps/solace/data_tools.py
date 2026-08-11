@@ -18,7 +18,6 @@ from apps.solace.serializers import (
     FinanceCategorySerializer,
     PaydayChecklistItemSerializer,
     SolaceSettingsSerializer,
-    SubscriptionSerializer,
 )
 
 
@@ -109,7 +108,6 @@ def export_sheets(user) -> list[tuple[str, list[dict]]]:
         ("Planned Purchases", purchase_rows(user)),
         ("Income Sources", income_rows(user)),
         ("Buckets", bucket_rows(user)),
-        ("Subscriptions", list(SubscriptionSerializer(selectors.list_subscriptions(user), many=True).data)),
         ("Account Balances", list(AccountBalanceSnapshotSerializer(selectors.list_balance_snapshots(user), many=True).data)),
         ("Categories", list(FinanceCategorySerializer(selectors.list_categories(user), many=True).data)),
         ("Checklist", list(PaydayChecklistItemSerializer(selectors.list_checklist_items(user), many=True).data)),

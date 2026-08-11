@@ -26,7 +26,6 @@ from apps.solace.models import (
     PaydayChecklistPreference,
     PlannedPurchase,
     SolaceSettings,
-    Subscription,
 )
 
 
@@ -49,10 +48,6 @@ _BUCKET_FIELDS = {
     "name", "purpose", "category", "target_amount", "current_amount", "allocation_method",
     "allocation_value", "rounding_increment", "cap_to_remaining", "is_active", "position",
     "notes", "visibility", "sensitivity",
-}
-_SUBSCRIPTION_FIELDS = {
-    "name", "provider", "amount", "billing_cycle", "next_renewal_at", "is_all_day",
-    "recurrence_rule", "is_active", "notes", "visibility", "sensitivity",
 }
 _CHECKLIST_FIELDS = {
     "title", "cycle_start", "source_key", "bucket_id", "bill_id", "amount_hint", "position",
@@ -544,33 +539,6 @@ def delete_bucket_entry(acting_user: User, entry: BucketEntry) -> None:
     entry.updated_by = acting_user
     entry.save(update_fields=["updated_by", "updated_at"])
     entry.soft_delete()
-
-
-def create_subscription(acting_user: User, **data) -> Subscription:
-    obj = Subscription(
-        household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
-    )
-    obj.save()
-    sync_event_for(obj)
-    events.subscription_created(obj.id, obj.household_id)
-    return obj
-
-
-def update_subscription(acting_user: User, obj: Subscription, **data) -> Subscription:
-    for key, val in data.items():
-        if key in _SUBSCRIPTION_FIELDS:
-            setattr(obj, key, val)
-    obj.updated_by = acting_user
-    obj.save()
-    sync_event_for(obj)
-    return obj
-
-
-def delete_subscription(acting_user: User, obj: Subscription) -> None:
-    delete_event_for(obj)
-    obj.updated_by = acting_user
-    obj.save(update_fields=["updated_by", "updated_at"])
-    obj.soft_delete()
 
 
 def create_checklist_item(acting_user: User, **data) -> PaydayChecklistItem:

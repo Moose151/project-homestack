@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.29.4**
+> **Current version: 0.29.5**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,18 @@
 ---
 
 ## 0.29 — What the house actually uses
+
+### 0.29.5 — 2026-08-11 — subscriptions are bills
+- Removed the duplicate Subscription model, API, serializer, services, forecast/reminder path,
+  export sheet and frontend state. The Subscriptions section and Hub widget now filter ordinary
+  Bills whose category is Subscription.
+- Adding a subscription now uses the full Bill form with its category fixed to Subscription, so
+  every subscription has occurrences and payment history, Mark paid, autopay, pause, set-aside,
+  overdue reconciliation, forecasting, reminders, Calendar, Search and export behaviour.
+- Data migration `solace.0010` converts every existing active legacy Subscription into a Bill,
+  preserving its renewal date as First due, recurrence, provider, amount, notes, permissions,
+  timestamps and Calendar link before dropping the old table. Migration behaviour is covered by
+  a dedicated regression. **792 backend tests green; frontend production build clean; no drift.**
 
 ### 0.29.4 — 2026-08-11 — corrected bill dates clear stale overdue rows
 - Changing a bill's first due date, recurrence, stop date or active state now rebuilds all unpaid

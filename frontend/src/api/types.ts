@@ -442,7 +442,7 @@ export interface HubWidget {
   name: string
   size: string
   supports_kiosk: boolean
-  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | PetTreatment[] | PetAppointment[] | MaintenanceTask[] | Appliance[] | Improvement[] | SolaceBill[] | SolaceSubscription[] | SolacePurchase[] | FitnessSession[] | AppNotification[]
+  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | PetTreatment[] | PetAppointment[] | MaintenanceTask[] | Appliance[] | Improvement[] | SolaceBill[] | SolacePurchase[] | FitnessSession[] | AppNotification[]
   meta?: {
     unread_count?: number
     title?: string
@@ -1357,24 +1357,6 @@ export interface SolaceBucket {
   updated_at: string
 }
 
-export interface SolaceSubscription {
-  id: number
-  name: string
-  provider: string
-  amount: string
-  billing_cycle: string
-  next_renewal_at: string | null
-  is_all_day: boolean
-  recurrence_rule: string
-  is_active: boolean
-  notes: string
-  calendar_event_id: number | null
-  visibility: string
-  sensitivity: string
-  created_at: string
-  updated_at: string
-}
-
 export interface SolaceChecklistItem {
   id: number
   title: string
@@ -1398,7 +1380,6 @@ export interface SolaceSearchResults {
   paydays: SolacePayday[]
   purchases: SolacePurchase[]
   buckets: SolaceBucket[]
-  subscriptions: SolaceSubscription[]
   checklist: SolaceChecklistItem[]
 }
 
@@ -1537,7 +1518,7 @@ export interface SolaceBalanceSnapshot {
 }
 
 export interface SolaceBalanceForecastItem {
-  kind: 'bill' | 'subscription' | 'contribution'
+  kind: 'bill' | 'contribution'
   name: string
   amount: string
   record_id: number
@@ -1652,7 +1633,6 @@ export interface SolaceBootstrap {
   paydays: SolacePayday[]
   purchases: SolacePurchase[]
   buckets: SolaceBucket[]
-  subscriptions: SolaceSubscription[]
   checklist: SolaceChecklistItem[]
   plan: SolacePayCyclePlan
   settings: SolaceSettings

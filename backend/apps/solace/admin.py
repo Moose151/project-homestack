@@ -12,7 +12,6 @@ from apps.solace.models import (
     PaydayChecklistPreference,
     PlannedPurchase,
     SolaceSettings,
-    Subscription,
 )
 
 @admin.register(Bill)
@@ -29,7 +28,6 @@ admin.site.register(Payday)
 admin.site.register(BillOccurrence)
 admin.site.register(PlannedPurchase)
 admin.site.register(BudgetBucket)
-admin.site.register(Subscription)
 admin.site.register(PaydayChecklistItem)
 admin.site.register(SolaceSettings)
 admin.site.register(FinanceCategory)

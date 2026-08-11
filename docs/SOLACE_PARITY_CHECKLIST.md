@@ -38,14 +38,15 @@
 - [x] Cycle-specific, idempotent payday checklist generation and completion, including
   current/next navigation and confirm-income/review-bills/record-balance workflow steps.
 - [x] Planned purchases with targets, savings progress, priority, dates and capped quick-add.
-- [x] Subscription tracking and renewal dates.
+- [x] Subscription tracking and renewal dates through Subscription-category recurring bills,
+  with the same occurrence history, Mark paid, autopay and set-aside behaviour as every bill.
 - [x] Native overview plus permission-controlled Solace Hub widgets.
 - [x] Pay-cycle closeout with notes, closed/reopened state, current/next cycle navigation,
   checklist progress and paid/skipped/unpaid reconciliation.
 - [x] Manual bills-account balance snapshots, history editing and projected balance after the
   cycle.
 - [x] Auditable 3–24 month bills-account forecast combining expected Bills-bucket transfers,
-  included bill occurrences and active subscriptions; lowest balance, first risk date,
+  included bill occurrences (including subscriptions); lowest balance, first risk date,
   shortfall, required opening balance, bills-only surplus and buffer-preserving withdrawal.
 - [x] Setup/data health checks with actionable income, bill-date, allocation, overdue and
   balance-age warnings.
@@ -53,7 +54,7 @@
 ## Management depth
 
 - [x] Bill create/edit/pause/delete UI and protected API.
-- [x] Purchase, payday, bucket and subscription create/edit/pause/status/delete workflows,
+- [x] Purchase, payday, bucket and subscription-as-bill create/edit/pause/status/delete workflows,
   including purchase completion and one-remainder-bucket enforcement.
 - [x] User-managed bill/purchase categories, safe rename/delete handling and filterable weekly,
   fortnightly, monthly and yearly category cost overview.
@@ -80,7 +81,7 @@
   human-readable category report.
 - [x] Preview/confirm/cancel import for ad-hoc bill CSV/XLSX files, with per-row errors and file
   limits.
-- [x] Idempotent daily bill due/overdue, payday, subscription and planned-purchase reminders.
+- [x] Idempotent daily bill/subscription due/overdue, payday and planned-purchase reminders.
   Notification text stays generic until password re-authentication.
 - [x] Finance documents use HomeStack's shared attachment/document direction; the standalone
   reference app has no bill-attachment workflow to port.

@@ -37,7 +37,6 @@ from apps.solace.serializers import (
     PlannedPurchaseSerializer,
     PurchaseSavingsSerializer,
     SolaceSettingsSerializer,
-    SubscriptionSerializer,
 )
 
 _Perm = HomeStackPermission.for_resource("solace")
@@ -52,7 +51,7 @@ class SolaceAccessMixin(sensitive_node_access("solace")):
 class SolaceSearchView(SolaceAccessMixin, APIView):
     def get(self, request: Request) -> Response:
         query = (request.query_params.get("q") or "").strip()
-        empty = {"bills": [], "paydays": [], "purchases": [], "buckets": [], "subscriptions": [], "checklist": []}
+        empty = {"bills": [], "paydays": [], "purchases": [], "buckets": [], "checklist": []}
         if not query:
             return Response(empty)
         r = selectors.search_solace(request.user, query)
@@ -61,7 +60,6 @@ class SolaceSearchView(SolaceAccessMixin, APIView):
             "paydays": PaydaySerializer(r["paydays"], many=True).data,
             "purchases": PlannedPurchaseSerializer(r["purchases"], many=True).data,
             "buckets": BudgetBucketSerializer(r["buckets"], many=True).data,
-            "subscriptions": SubscriptionSerializer(r["subscriptions"], many=True).data,
             "checklist": PaydayChecklistItemSerializer(r["checklist"], many=True).data,
         })
 
@@ -379,7 +377,7 @@ class SolaceHealthView(SolaceAccessMixin, APIView):
             row.allocation_method == BudgetBucket.AllocationMethod.FIXED for row in buckets
         ):
             issues.append({"level": "warning", "code": "allocation_empty", "message": "Active buckets do not allocate any income."})
-        if (bills or selectors.list_subscriptions(request.user, active_only=True)) and not any(
+        if bills and not any(
             "bill" in (row.category or "").casefold()
             for row in buckets
         ):
@@ -933,34 +931,6 @@ class BucketDetailView(SolaceAccessMixin, APIView):
         return Response(status=204)
 
 
-class SubscriptionListView(SolaceAccessMixin, APIView):
-    def get(self, request: Request) -> Response:
-        subscriptions = selectors.list_subscriptions(request.user, active_only=request.query_params.get("active") == "1")
-        return Response(SubscriptionSerializer(subscriptions, many=True).data)
-
-    def post(self, request: Request) -> Response:
-        serializer = SubscriptionSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        return Response(SubscriptionSerializer(services.create_subscription(request.user, **serializer.validated_data)).data, status=201)
-
-
-class SubscriptionDetailView(SolaceAccessMixin, APIView):
-    def _get(self, pk: int):
-        obj = selectors.get_subscription(pk)
-        if obj is None:
-            raise NotFound()
-        return obj
-
-    def patch(self, request: Request, subscription_id: int) -> Response:
-        serializer = SubscriptionSerializer(data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        return Response(SubscriptionSerializer(services.update_subscription(request.user, self._get(subscription_id), **serializer.validated_data)).data)
-
-    def delete(self, request: Request, subscription_id: int) -> Response:
-        services.delete_subscription(request.user, self._get(subscription_id))
-        return Response(status=204)
-
-
 class ChecklistListView(SolaceAccessMixin, APIView):
     def get(self, request: Request) -> Response:
         plan_date = _plan_date(request)
@@ -1012,7 +982,6 @@ class SolaceBootstrapView(SolaceAccessMixin, APIView):
                 "paydays": PaydayListView().get(request).data,
                 "purchases": PurchaseListView().get(request).data,
                 "buckets": BucketListView().get(request).data,
-                "subscriptions": SubscriptionListView().get(request).data,
                 "checklist": ChecklistListView().get(request).data,
                 "plan": PayCyclePlanView().get(request).data,
                 "settings": SolaceSettingsView().get(request).data,

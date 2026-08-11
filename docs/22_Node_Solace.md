@@ -34,7 +34,7 @@ payday checklist, calendar/list views, categories, authentication, backups.
 - Uses shared Users/People, attachments and permissions.
 - `sensitivity = financial`; sensitive-node locking and re-auth via the central resolver.
 - Financial calendar events via the scheduling helper; `recurrence_rule` for recurring bills.
-- Permission-controlled Hub finance widgets; subscription tracking; attachment support.
+- Permission-controlled Hub finance widgets; subscriptions as recurring Bills; attachment support.
 - Native pay-cycle planning: recurring paydays feed percentage/fixed bucket allocation rules,
   fixed household amounts split proportionally by income, with one-click cycle checklist creation.
 - Recurring bills materialise independent due-date occurrences. Each occurrence can be paid,
@@ -45,7 +45,7 @@ payday checklist, calendar/list views, categories, authentication, backups.
   closeout, required set-aside/shortfall reporting, hidden checklist preferences and complete
   edit/delete workflows.
 - Bills-account cash-flow forecast over 3–24 months: expected Bills-bucket transfers less
-  included bill occurrences and active subscriptions, with a dated running balance, lowest
+  included bill occurrences (including Subscription-category bills), with a dated running balance, lowest
   point, first risk date, required opening balance and safe-to-withdraw values both before and
   after the configured buffer. A balance recorded today is treated as an end-of-day value;
   otherwise the latest snapshot is the current known opening balance and Finance Health warns
@@ -70,14 +70,14 @@ Hub, Calendar, Search or kiosk views.
 
 Widgets (permission-controlled, never for children/unauthorised): bills due · payday upcoming ·
 planned-purchase reminder · subscription renewal · set-aside summary. Calendar (via helper):
-bills due, paydays, subscription renewals, planned-purchase dates, savings milestones — hidden
+bills due (including subscriptions), paydays, planned-purchase dates, savings milestones — hidden
 from unauthorised users. Notifications to authorised users: bill due/overdue · payday ·
 subscription renewal · planned purchase approaching. Run the idempotent reminder command daily:
 `docker exec homestack-backend python manage.py solace_run_scheduled`.
 
 ## 7. Events (signals)
 
-Publishes: `bill_due`, `bill_paid`, `payday_due`, `planned_purchase_due`, `subscription_due`,
+Publishes: `bill_due`, `bill_paid`, `payday_due`, `planned_purchase_due`,
 `budget_threshold_reached`, `homestead_record_requested`.
 Consumes: `homestead.insurance_policy_saved`, `homestead.household_cost_saved`,
 `homestead.maintenance_cost_requested`, `homestead.maintenance_saved/deleted`,
@@ -106,7 +106,7 @@ and a short timeout are required.
 
 `solace_bills` (`recurrence_rule`, `calendar_event_id`), `solace_bill_occurrences`,
 `solace_paydays`,
-`solace_planned_purchases`, `solace_buckets`, `solace_subscriptions`,
+`solace_planned_purchases`, `solace_buckets`,
 `solace_payday_checklist_items`, `solace_settings`, `solace_finance_categories`,
 `solace_account_balance_snapshots`, `solace_payday_checklist_preferences`,
 `solace_cycle_closeouts`. Inherit `HouseholdBaseModel`; all financial records use
@@ -118,7 +118,7 @@ are idempotent.
 ## 11. Scope & completion
 
 Native: bills and occurrence history · bills-account forecast · paydays · planned purchases · buckets/set-asides ·
-subscriptions · payday checklist/preferences · closeout and balance projection · categories and
+subscriptions represented as recurring bills · payday checklist/preferences · closeout and balance projection · categories and
 reports · settings and health checks · CSV/XLSX tools · permission-controlled
 Hub/Calendar/notifications · re-auth · audit · imported data.
 Complete when only authorised users access Solace through HomeStack, re-auth works, finance

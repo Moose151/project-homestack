@@ -16,7 +16,6 @@ const SOLACE_TABS: Record<string, string> = {
   BillOccurrence: 'bills',
   Payday: 'paydays',
   PlannedPurchase: 'purchases',
-  Subscription: 'subscriptions',
 }
 
 /** Deep link back to the record that owns this date, or null for a standalone event. */

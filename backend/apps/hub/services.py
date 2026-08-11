@@ -393,7 +393,6 @@ def _solace_widget_content(key: str, user) -> list:
     from apps.solace.serializers import (
         BillSerializer,
         PlannedPurchaseSerializer,
-        SubscriptionSerializer,
     )
 
     if not resolve_permission(user, "view", "solace"):
@@ -420,9 +419,12 @@ def _solace_widget_content(key: str, user) -> list:
         return BillSerializer(bills[:8], many=True).data
 
     if key == "solace_subscriptions":
-        return SubscriptionSerializer(
-            s.list_subscriptions(user, active_only=True, limit=8), many=True
-        ).data
+        subscriptions = [
+            bill
+            for bill in s.list_bills(user, active_only=True)
+            if (bill.category or "").strip().casefold() in {"subscription", "subscriptions"}
+        ]
+        return BillSerializer(subscriptions[:8], many=True).data
 
     if key == "solace_planned_purchases":
         return PlannedPurchaseSerializer(

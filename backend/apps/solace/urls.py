@@ -41,8 +41,6 @@ from apps.solace.views import (
     SolaceSettingsView,
     SolaceCsvExportView,
     SolaceXlsxExportView,
-    SubscriptionDetailView,
-    SubscriptionListView,
 )
 
 urlpatterns = [
@@ -95,8 +93,6 @@ urlpatterns = [
         BucketEntryDetailView.as_view(),
         name="solace-bucket-entry-detail",
     ),
-    path("subscriptions/", SubscriptionListView.as_view(), name="solace-subscription-list"),
-    path("subscriptions/<int:subscription_id>/", SubscriptionDetailView.as_view(), name="solace-subscription-detail"),
     path("checklist/", ChecklistListView.as_view(), name="solace-checklist-list"),
     path("checklist/<int:item_id>/", ChecklistDetailView.as_view(), name="solace-checklist-detail"),
     path("checklist/preferences/", ChecklistPreferenceView.as_view(), name="solace-checklist-preferences"),

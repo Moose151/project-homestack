@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 from dateutil.relativedelta import relativedelta
@@ -38,31 +38,6 @@ def _split_amount(amount: Decimal, count: int) -> list[Decimal]:
         Decimal(quotient + (1 if index < remainder else 0)) / Decimal("100")
         for index in range(count)
     ]
-
-
-def _scheduled_dates(anchor: datetime | None, rule_value: str, start: date, end: date) -> list[date]:
-    if anchor is None:
-        return []
-    if timezone.is_naive(anchor):
-        anchor = timezone.make_aware(anchor, timezone.get_current_timezone())
-    tz = timezone.get_current_timezone()
-    start_at = timezone.make_aware(datetime.combine(start, time.min), tz)
-    end_at = timezone.make_aware(datetime.combine(end, time.max), tz)
-    if not rule_value:
-        return [timezone.localdate(anchor)] if start_at <= anchor <= end_at else []
-    try:
-        from dateutil.rrule import rrulestr
-
-        return [
-            timezone.localdate(value)
-            for value in rrulestr(rule_value, dtstart=anchor).between(
-                start_at,
-                end_at,
-                inc=True,
-            )
-        ]
-    except (TypeError, ValueError):
-        return [timezone.localdate(anchor)] if start_at <= anchor <= end_at else []
 
 
 def build_balance_forecast(
@@ -125,25 +100,6 @@ def build_balance_forecast(
                 "status": occurrence.status,
             }
         )
-
-    for subscription in selectors.list_subscriptions(user, active_only=True):
-        for event_date in _scheduled_dates(
-            subscription.next_renewal_at,
-            subscription.recurrence_rule,
-            start,
-            through,
-        ):
-            amount = _money(subscription.amount)
-            days[event_date]["bills"] += amount
-            days[event_date]["items"].append(
-                {
-                    "kind": "subscription",
-                    "name": subscription.name,
-                    "amount": _money_string(amount),
-                    "record_id": subscription.id,
-                    "status": "expected",
-                }
-            )
 
     settings_obj = selectors.get_settings()
     paydays = selectors.list_paydays(user, active_only=True)

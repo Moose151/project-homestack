@@ -23,7 +23,6 @@ from apps.solace.services import (
     create_bucket,
     create_payday,
     create_purchase,
-    create_subscription,
     delete_bill,
     mark_bill_paid,
 )
@@ -40,7 +39,6 @@ from apps.solace.models import (
     PaydayChecklistPreference,
     PlannedPurchase,
     SolaceSettings,
-    Subscription,
 )
 from apps.solace.services import update_bill
 from apps.solace.tasks import send_due_reminders
@@ -315,11 +313,50 @@ class SolaceCrudAndCalendarTests(TestCase):
         purchase = create_purchase(self.admin, name="Sofa", target_amount="800.00", saved_amount="200.00")
         self.assertEqual(purchase.remaining_amount, 600)
 
-    def test_subscription_creates_financial_event(self):
-        sub = create_subscription(self.admin, name="Streaming", amount="12.99", next_renewal_at=_future())
-        event = CalendarEvent.objects.get(pk=sub.calendar_event_id)
+    def test_subscription_category_bill_creates_financial_event(self):
+        subscription = create_bill(
+            self.admin,
+            name="Streaming",
+            category="subscription",
+            amount="12.99",
+            due_at=_future(),
+            recurrence_rule="FREQ=MONTHLY",
+        )
+        event = CalendarEvent.objects.get(pk=subscription.calendar_event_id)
         self.assertEqual(event.source_node.key, "solace")
         self.assertEqual(event.sensitivity, "financial")
+
+    def test_subscription_category_uses_bill_payment_history_and_autopay(self):
+        response = self.client.post(
+            reverse("solace-bill-list"),
+            {
+                "name": "Music",
+                "category": "subscription",
+                "amount": "14.99",
+                "due_at": _future().isoformat(),
+                "recurrence_rule": "FREQ=MONTHLY",
+                "is_autopay": True,
+                "include_in_set_aside": True,
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201, response.json())
+        self.assertTrue(response.json()["is_autopay"])
+        occurrence_id = response.json()["next_occurrence_id"]
+
+        paid = self.client.post(
+            reverse("solace-occurrence-action", args=[occurrence_id, "paid"]),
+            {},
+            content_type="application/json",
+        )
+        self.assertEqual(paid.status_code, 200, paid.json())
+        self.assertEqual(paid.json()["status"], BillOccurrence.Status.PAID)
+        timeline = self.client.get(
+            reverse("solace-bill-occurrences", args=[response.json()["id"]])
+        ).json()
+        timeline_rows = timeline["upcoming"] + timeline["history"]
+        recorded = next(row for row in timeline_rows if row["id"] == occurrence_id)
+        self.assertEqual(recorded["status"], BillOccurrence.Status.PAID)
 
     def test_payday_exposes_known_anchor_and_calculated_upcoming_date(self):
         anchor = _future(2)
@@ -899,11 +936,12 @@ class SolaceManagementTests(TestCase):
             due_at=timezone.make_aware(datetime(2026, 8, 10, 9)),
             recurrence_rule="FREQ=MONTHLY",
         )
-        create_subscription(
+        create_bill(
             self.admin,
             name="Streaming",
+            category="subscription",
             amount="50.00",
-            next_renewal_at=timezone.make_aware(datetime(2026, 8, 20, 9)),
+            due_at=timezone.make_aware(datetime(2026, 8, 20, 9)),
             recurrence_rule="FREQ=MONTHLY",
         )
         self.client.post(
@@ -1072,7 +1110,7 @@ class SolaceManagementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             {
-                "bills", "paydays", "purchases", "buckets", "subscriptions",
+                "bills", "paydays", "purchases", "buckets",
                 "checklist", "plan", "settings", "categories", "balances",
                 "health", "category_report", "closeout", "forecast",
                 "checklist_preferences",
@@ -1297,14 +1335,12 @@ class SolaceImportTests(TestCase):
         call_command("import_solace", "--sqlite-db", db_path, "--dry-run", stdout=out)
         self.assertIn("DRY-RUN", out.getvalue())
         self.assertEqual(Bill.objects.count(), 0)
-        self.assertEqual(Subscription.objects.count(), 0)
 
     def test_import_solace_applies_and_is_idempotent(self):
         db_path = _make_legacy_solace_db()
         out = io.StringIO()
         call_command("import_solace", "--sqlite-db", db_path, stdout=out)
         self.assertEqual(Bill.objects.count(), 2)
-        self.assertEqual(Subscription.objects.count(), 0)
         self.assertEqual(Payday.objects.count(), 1)
         self.assertEqual(PlannedPurchase.objects.count(), 1)
         self.assertEqual(BudgetBucket.objects.count(), 1)
@@ -1335,7 +1371,6 @@ class SolaceImportTests(TestCase):
         call_command("import_solace", "--sqlite-db", db_path, stdout=out)
         self.assertIn("bills: 0", out.getvalue())
         self.assertEqual(Bill.objects.count(), 2)
-        self.assertEqual(Subscription.objects.count(), 0)
         self.assertEqual(BillOccurrence.objects.count(), occurrence_count)
 
         streaming = Bill.objects.get(name="Streaming")

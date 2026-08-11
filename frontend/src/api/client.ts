@@ -21,7 +21,7 @@ import type {
   SolaceCategoryReport, SolaceChecklistItem, SolaceChecklistPreference, SolaceCloseoutResponse,
   SolaceCycleCloseout, SolaceCycleHistoryRow, SolaceHealth, SolaceIncomeAllocation,
   SolaceIncomeAllocationWrite, SolaceNow, SolacePayCyclePlan, SolacePayday, SolacePurchase,
-  SolaceSchedule, SolaceSearchResults, SolaceSettings, SolaceSubscription, UtilityBill,
+  SolaceSchedule, SolaceSearchResults, SolaceSettings, UtilityBill,
   UtilityBillWrite, UtilityType, UtilityUsageResponse, WaterTest,
   WaterTestWrite, WikiCategory, WikiPage
 } from './types'
@@ -188,12 +188,6 @@ type SolaceBucketWrite = Partial<{
   allocation_method: 'percentage' | 'fixed'; allocation_value: string
   rounding_increment: string; cap_to_remaining: boolean; is_active: boolean; position: number
   notes: string; visibility: string; sensitivity: string
-}>
-
-type SolaceSubscriptionWrite = Partial<{
-  name: string; provider: string; amount: string; billing_cycle: string
-  next_renewal_at: string | null; is_all_day: boolean; recurrence_rule: string
-  is_active: boolean; notes: string; visibility: string; sensitivity: string
 }>
 
 type SolaceChecklistWrite = Partial<{
@@ -1068,14 +1062,6 @@ export const api = {
     _fetch(`/solace/buckets/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteSolaceBucket: (id: number): Promise<void> =>
     _fetch(`/solace/buckets/${id}/`, { method: 'DELETE' }),
-  getSolaceSubscriptions: (active = false): Promise<SolaceSubscription[]> =>
-    _fetch(`/solace/subscriptions/${active ? '?active=1' : ''}`),
-  createSolaceSubscription: (data: SolaceSubscriptionWrite): Promise<SolaceSubscription> =>
-    _fetch('/solace/subscriptions/', { method: 'POST', body: JSON.stringify(data) }),
-  updateSolaceSubscription: (id: number, data: SolaceSubscriptionWrite): Promise<SolaceSubscription> =>
-    _fetch(`/solace/subscriptions/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
-  deleteSolaceSubscription: (id: number): Promise<void> =>
-    _fetch(`/solace/subscriptions/${id}/`, { method: 'DELETE' }),
   getSolaceChecklist: (options: {
     incomplete?: boolean
     latest?: boolean

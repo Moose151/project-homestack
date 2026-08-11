@@ -22,7 +22,6 @@ from apps.solace.models import (
     PaydayChecklistPreference,
     PlannedPurchase,
     SolaceSettings,
-    Subscription,
 )
 
 
@@ -165,21 +164,6 @@ def list_buckets(user=None, *, active_only: bool = False, limit: int | None = No
 
 def get_bucket(pk: int) -> BudgetBucket | None:
     return BudgetBucket.objects.filter(pk=pk).first()
-
-
-def list_subscriptions(user=None, *, active_only: bool = False, limit: int | None = None):
-    qs = Subscription.objects.order_by("next_renewal_at", "name")
-    if active_only:
-        qs = qs.filter(is_active=True)
-    if user is not None:
-        qs = apply_visibility(qs, user)
-    if limit is not None:
-        qs = qs[:limit]
-    return list(qs)
-
-
-def get_subscription(pk: int) -> Subscription | None:
-    return Subscription.objects.filter(pk=pk).first()
 
 
 def list_checklist_items(
@@ -400,21 +384,18 @@ def search_solace(user, query: str) -> dict:
     paydays = _search(Payday.objects.all(), query, ["title", "notes"])
     purchases = _search(PlannedPurchase.objects.all(), query, ["name", "category", "notes"])
     buckets = _search(BudgetBucket.objects.all(), query, ["name", "category", "notes"])
-    subscriptions = _search(Subscription.objects.all(), query, ["name", "provider", "notes"])
     checklist = _search(PaydayChecklistItem.objects.all(), query, ["title", "notes"])
     if user is not None:
         bills = apply_visibility(bills, user)
         paydays = apply_visibility(paydays, user)
         purchases = apply_visibility(purchases, user)
         buckets = apply_visibility(buckets, user)
-        subscriptions = apply_visibility(subscriptions, user)
         checklist = apply_visibility(checklist, user)
     return {
         "bills": list(bills.order_by("due_at", "name")),
         "paydays": list(paydays.order_by("pay_at", "title")),
         "purchases": list(purchases.order_by("target_date", "-updated_at")),
         "buckets": list(buckets.order_by("name")),
-        "subscriptions": list(subscriptions.order_by("next_renewal_at", "name")),
         "checklist": list(checklist.order_by("is_complete", "position", "title")),
     }
 

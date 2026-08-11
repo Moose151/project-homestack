@@ -23,7 +23,6 @@ import type {
   AppNotification,
   SolaceBill,
   SolacePurchase,
-  SolaceSubscription,
   UpcomingHorizon,
   FitnessSession,
 } from '../../../api/types'
@@ -581,7 +580,7 @@ function SolaceBillsWidget({ items }: { items: SolaceBill[] }) {
   )
 }
 
-function SolaceSubscriptionsWidget({ items }: { items: SolaceSubscription[] }) {
+function SolaceSubscriptionsWidget({ items }: { items: SolaceBill[] }) {
   if (!items.length) return <p className="text-sm text-muted">No active subscriptions</p>
   return (
     <ul className="space-y-2.5">
@@ -589,10 +588,10 @@ function SolaceSubscriptionsWidget({ items }: { items: SolaceSubscription[] }) {
         <li key={item.id} className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-ink">{item.name}</p>
-            <p className="text-xs text-muted">{moneyLabel(item.amount)} · {item.billing_cycle}</p>
+            <p className="text-xs text-muted">{moneyLabel(item.amount)}</p>
           </div>
           <Link to="/solace?tab=subscriptions" className="shrink-0 text-xs text-primary hover:underline">
-            {formatDue(item.next_renewal_at)}
+            {formatDue(item.next_due_at || item.due_at)}
           </Link>
         </li>
       ))}
@@ -803,7 +802,7 @@ function renderWidget(w: HubWidget, onChanged: () => void) {
     case 'solace_bills_due':
       return <SolaceBillsWidget items={w.items as SolaceBill[]} />
     case 'solace_subscriptions':
-      return <SolaceSubscriptionsWidget items={w.items as SolaceSubscription[]} />
+      return <SolaceSubscriptionsWidget items={w.items as SolaceBill[]} />
     case 'solace_planned_purchases':
       return <SolacePurchasesWidget items={w.items as SolacePurchase[]} />
     case 'fitness_recent':

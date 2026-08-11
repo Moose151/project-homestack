@@ -142,11 +142,20 @@ def search_all(request, query: str, *, per_node_limit: int = 8) -> dict:
                 metadata={"node": "solace", "path": request.path, "method": request.method},
             )
             add_node([
-                *[_result("solace", "bill", row, row.name, "Bill", f"/solace?tab=bills&q={encoded}") for row in found["bills"]],
+                *[
+                    _result(
+                        "solace",
+                        "bill",
+                        row,
+                        row.name,
+                        "Subscription" if (row.category or "").casefold() == "subscription" else "Bill",
+                        f"/solace?tab={'subscriptions' if (row.category or '').casefold() == 'subscription' else 'bills'}&q={encoded}",
+                    )
+                    for row in found["bills"]
+                ],
                 *[_result("solace", "payday", row, row.title, "Payday", f"/solace?tab=paydays&q={encoded}") for row in found["paydays"]],
                 *[_result("solace", "purchase", row, row.name, "Purchase", f"/solace?tab=purchases&q={encoded}") for row in found["purchases"]],
                 *[_result("solace", "bucket", row, row.name, "Bucket", f"/solace?tab=buckets&q={encoded}") for row in found["buckets"]],
-                *[_result("solace", "subscription", row, row.name, "Subscription", f"/solace?tab=subscriptions&q={encoded}") for row in found["subscriptions"]],
                 *[_result("solace", "checklist", row, row.title, "Checklist", f"/solace?tab=checklist&q={encoded}") for row in found["checklist"]],
             ])
 
