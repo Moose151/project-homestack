@@ -23,8 +23,6 @@ from apps.homestead.services import (
     create_maintenance,
     create_property,
     create_provider,
-    create_household_cost,
-    create_insurance_policy,
     create_room,
     create_room_item,
     create_room_product,
@@ -32,9 +30,10 @@ from apps.homestead.services import (
     update_maintenance,
     update_improvement,
 )
-from apps.homestead.models import MaintenanceTask
+from apps.homestead.models import HouseholdCost, InsurancePolicy, MaintenanceTask
 from apps.scheduling.models import CalendarEvent
 from apps.solace.models import Bill
+from apps.solace.services import create_bill, organise_bill_in_homestead, update_bill
 
 
 def _make_user(username, role=User.Role.ADMIN, is_child=False) -> User:
@@ -776,102 +775,50 @@ class HomesteadFinanceSyncTests(TestCase):
         _login(self.client, "home_finance_admin")
         _reauth(self.client)
 
-    def test_insurance_policy_crud_syncs_linked_solace_bill(self):
-        renewal = _future().isoformat()
+    def test_home_finance_must_be_created_and_deleted_in_solace(self):
         resp = self.client.post(
             reverse("homestead-insurance-list"),
-            {
-                "name": "Home and contents",
-                "policy_type": "building_contents",
-                "provider": "Cover Co",
-                "policy_number": "POL-123",
-                "premium_amount": "1450.25",
-                "billing_cycle": "yearly",
-                "next_renewal_at": renewal,
-                "standard_excess": "750.00",
-                "additional_excesses": "Flood: $1,500",
-            },
+            {"name": "Home and contents"},
             content_type="application/json",
         )
-        self.assertEqual(resp.status_code, 201)
-        policy_id = resp.json()["id"]
-        bill = Bill.objects.get(
-            source_node="homestead",
-            source_record_type="insurance_policy",
-            source_record_id=policy_id,
+        self.assertEqual(resp.status_code, 400)
+
+        bill = create_bill(
+            self.admin, name="Home and contents", category="insurance",
+            provider="Cover Co", amount="1450.25", due_at=_future(),
+            recurrence_rule="FREQ=YEARLY",
         )
-        self.assertEqual(str(bill.amount), "1450.25")
-        self.assertEqual(bill.category, "insurance")
-        self.assertEqual(bill.recurrence_rule, "FREQ=YEARLY")
-        self.assertEqual(resp.json()["solace_bill_ref"], bill.id)
+        organise_bill_in_homestead(self.admin, bill, "insurance_policy")
+        policy = InsurancePolicy.objects.get(solace_bill_ref=bill.id)
 
         resp = self.client.patch(
-            reverse("homestead-insurance-detail", args=[policy_id]),
-            {"premium_amount": "1525.00"},
+            reverse("homestead-insurance-detail", args=[policy.id]),
+            {"premium_amount": "1525.00", "policy_number": "POL-123"},
             content_type="application/json",
         )
         self.assertEqual(resp.status_code, 200)
         bill.refresh_from_db()
-        self.assertEqual(str(bill.amount), "1525.00")
+        self.assertEqual(str(bill.amount), "1450.25")
+        self.assertEqual(resp.json()["policy_number"], "POL-123")
 
-        resp = self.client.patch(
-            reverse("homestead-insurance-detail", args=[policy_id]),
-            {"is_active": False},
-            content_type="application/json",
+        resp = self.client.delete(
+            reverse("homestead-insurance-detail", args=[policy.id])
         )
-        self.assertEqual(resp.status_code, 200)
-        self.assertIsNone(resp.json()["solace_bill_ref"])
-        self.assertFalse(Bill.objects.filter(pk=bill.id).exists())
-
-        resp = self.client.patch(
-            reverse("homestead-insurance-detail", args=[policy_id]),
-            {"is_active": True},
-            content_type="application/json",
-        )
-        self.assertEqual(resp.json()["solace_bill_ref"], bill.id)
+        self.assertEqual(resp.status_code, 400)
         self.assertTrue(Bill.objects.filter(pk=bill.id).exists())
 
-        resp = self.client.delete(reverse("homestead-insurance-detail", args=[policy_id]))
-        self.assertEqual(resp.status_code, 204)
-        self.assertFalse(Bill.objects.filter(pk=bill.id).exists())
-
-    def test_rates_water_and_gas_map_to_solace_categories(self):
-        cases = [
-            ("rates", "Council rates", "council"),
-            ("water", "Water", "utilities"),
-            ("gas", "Gas", "utilities"),
-        ]
-        for cost_type, name, expected_category in cases:
-            with self.subTest(cost_type=cost_type):
-                cost = create_household_cost(
-                    self.admin,
-                    name=name,
-                    cost_type=cost_type,
-                    amount="240.00",
-                    billing_cycle="quarterly",
-                    next_due_at=_future(),
-                )
-                bill = Bill.objects.get(
-                    source_node="homestead",
-                    source_record_type="household_cost",
-                    source_record_id=cost.id,
-                )
-                self.assertEqual(bill.category, expected_category)
-                self.assertEqual(bill.recurrence_rule, "FREQ=MONTHLY;INTERVAL=3")
-                self.assertEqual(cost.solace_bill_ref, bill.id)
-
-    def test_policy_service_creates_financial_calendar_event_only_in_solace(self):
-        policy = create_insurance_policy(
-            self.admin,
-            name="Building insurance",
-            premium_amount="900.00",
-            next_renewal_at=_future(),
-            billing_cycle="yearly",
+    def test_solace_changes_refresh_linked_household_cost_display(self):
+        bill = create_bill(
+            self.admin, name="Electricity", category="utilities", provider="Energy Co",
+            amount="240.00", due_at=_future(), recurrence_rule="FREQ=MONTHLY;INTERVAL=3",
         )
-        bill = Bill.objects.get(pk=policy.solace_bill_ref)
-        event = CalendarEvent.objects.get(pk=bill.calendar_event_id)
-        self.assertEqual(event.source_node.key, "solace")
-        self.assertEqual(event.sensitivity, "financial")
+        organise_bill_in_homestead(self.admin, bill, "household_cost")
+        cost = HouseholdCost.objects.get(solace_bill_ref=bill.id)
+        self.assertEqual(cost.cost_type, "electricity")
+        update_bill(self.admin, bill, amount="275.00", provider="New Energy")
+        cost.refresh_from_db()
+        self.assertEqual(str(cost.amount), "275.00")
+        self.assertEqual(cost.provider, "New Energy")
 
     def test_homestead_maintenance_can_create_and_update_its_solace_cost(self):
         task = create_maintenance(

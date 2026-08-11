@@ -109,13 +109,15 @@ def _link_homestead_record(sender, *, payload: dict, **kwargs) -> None:
     ).first()
     if user is None or bill is None:
         return
-    services.update_bill(
-        user,
-        bill,
-        source_node="homestead",
-        source_record_type=payload["source_record_type"],
-        source_record_id=payload["source_record_id"],
-    )
+    # The source fields are a navigation/display link only. Avoid the normal bill-save event
+    # here because Homestead has just supplied this link and does not need its projection echoed.
+    bill.source_node = "homestead"
+    bill.source_record_type = payload["source_record_type"]
+    bill.source_record_id = payload["source_record_id"]
+    bill.updated_by = user
+    bill.save(update_fields=[
+        "source_node", "source_record_type", "source_record_id", "updated_by", "updated_at"
+    ])
 
 
 def _sync_home_maintenance_bill(sender, *, payload: dict, **kwargs) -> None:
@@ -153,9 +155,8 @@ def connect() -> None:
     global _connected
     if _connected:
         return
-    subscribe("homestead.insurance_policy_saved", _sync_home_bill)
-    subscribe("homestead.household_cost_saved", _sync_home_bill)
-    subscribe("homestead.home_finance_record_deleted", _delete_home_bill)
+    # Costs & Cover is now a Solace-owned projection. The remaining Homestead-originated
+    # finance events are maintenance-specific workflows.
     subscribe("homestead.solace_bill_linked", _link_homestead_record)
     subscribe("homestead.maintenance_saved", _sync_home_maintenance_bill)
     subscribe("homestead.maintenance_deleted", _delete_home_maintenance_bill)

@@ -39,10 +39,29 @@ def _organise_solace_bill(sender, *, payload: dict, **kwargs) -> None:
     )
 
 
+def _refresh_solace_bill(sender, *, payload: dict, **kwargs) -> None:
+    user = User.objects.filter(pk=payload.get("acting_user_id")).first()
+    if user is None:
+        # Saved events normally originate from an authenticated write. Creation can also emit
+        # before Homestead is linked, so there is nothing to refresh in that case.
+        return
+    bill = dict(payload)
+    bill["due_at"] = parse_datetime(payload["due_at"]) if payload.get("due_at") else None
+    services.refresh_solace_bill_projection(user, bill=bill)
+
+
+def _delete_solace_bill(sender, *, payload: dict, **kwargs) -> None:
+    services.remove_solace_bill_projection(
+        bill_id=payload["bill_id"], household_id=payload["household_id"]
+    )
+
+
 def connect() -> None:
     global _connected
     if _connected:
         return
     subscribe("solace.home_bill_synced", _bill_synced)
     subscribe("solace.homestead_record_requested", _organise_solace_bill)
+    subscribe("solace.bill_saved", _refresh_solace_bill)
+    subscribe("solace.bill_deleted", _delete_solace_bill)
     _connected = True

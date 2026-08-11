@@ -3,7 +3,7 @@
 > Canonical. Shipped V1 (2026-07-21, v0.10.0); costs & cover added in v0.11.2;
 > room/area planning added in v0.18.0; single-entry Solace handoff added in v0.19.2;
 > maintenance-to-Solace cost creation added in v0.19.3; pools & spas added in v0.26.0;
-> metered utility usage added in v0.29.0.
+> metered utility usage added in v0.29.0; Solace-only bill ownership adopted in v0.29.6.
 > Global rules from `00_README_and_Changelog.md`
 > apply. See **D21** for why this node exists and how it relates to Assets / Projects / Solace.
 
@@ -12,8 +12,9 @@
 The household's **home/property hub**. Answers: *"What does our home need, what's in it, who do
 we call, and what do we want to improve?"* Built when the owner bought a house (2026-07-21). Folds
 the **home scope of the planned Assets node** into one warm, house-focused surface, and is designed
-to be an **aggregating hub** — home policies/accounts are managed here and their costs mirror to
-Solace; future renovations come from Projects. Cross-node flow always uses the events bus (D4).
+to be an **aggregating hub** — home policies/accounts are displayed here while every financial
+schedule is managed in Solace; future renovations come from Projects. Cross-node flow always
+uses the events bus (D4).
 
 ## 2. Belongs / does not belong
 
@@ -44,12 +45,12 @@ Homestead owns task details while Solace retains amount, schedule and payment hi
 **Service providers** — name, trade, company, phone/email/website, last used, notes.
 **Improvements** — title, status (idea→planned→in-progress→on-hold→done/cancelled), priority, room,
 optional target date (→ Calendar), assignee, `project_ref` (dormant link to a future Project).
-**Insurance** — type, provider, policy number, premium/cycle, renewal, standard and additional
-excesses, coverage summary, claims contact/portal, active status. The premium mirrors to a linked
-Solace insurance bill.
-**Household costs** — rates, water, gas, electricity, mortgage/rent, strata/body corporate,
-waste, internet or other; provider/account number, expected/latest amount, billing cycle and next
-due date. Each active record mirrors to one linked Solace bill.
+**Insurance** — Solace owns name, provider, premium/cycle, renewal, recurrence, active state and
+finance notes. Homestead displays those values and owns only home-specific policy type/number,
+excesses, coverage summary and claims contact/portal.
+**Household costs** — Solace owns rates, water, gas, electricity, mortgage/rent, strata/body
+corporate, waste and internet bill names, providers, amounts, cycles, due dates, recurrence and
+active state. Homestead displays linked bills and owns only the home classification/account number.
 **Pools & spas** — a pool, spa, swim spa or plunge pool, with how it is sanitised (saltwater,
 manually chlorinated, mineral, bromine), surface, filter type, volume and equipment notes.
 Two things follow from those choices rather than being asked for again:
@@ -76,8 +77,8 @@ from whose pool it is.
 
 **Utility usage** — one `UtilityBill` per arrived bill: which utility, the period it covers, how
 much was used and in what unit, what it cost in total, and whether the meter was read or
-estimated. `HouseholdCost` still owns the recurring account and when the next bill is due; this
-owns what actually happened.
+estimated. The linked Solace Bill owns the recurring account and when the next bill is due; this
+usage record owns what actually happened.
 
 Everything derived is calculated at read time and per day — `days` (both end dates included),
 `daily_usage`, `daily_cost` and the effective `unit_cost`. Billing periods are not equal lengths,
@@ -128,11 +129,10 @@ Notifications: assignment/overdue reminders are a later slice.
 Publishes (D4): `homestead.property_created`, `homestead.maintenance_completed`,
 `homestead.appliance_added`, `homestead.improvement_created`, `homestead.improvement_completed`,
 `homestead.room_created`, `homestead.room_item_created`, `homestead.room_item_completed`,
-`homestead.insurance_policy_saved`, `homestead.household_cost_saved`,
 `homestead.maintenance_cost_requested`, `homestead.pool_saved`, `homestead.pool_deleted`,
-`homestead.water_test_logged`, `homestead.utility_bill_logged`, and
-`homestead.home_finance_record_deleted`. Solace consumes the finance events and publishes
-`solace.home_bill_synced`; Homestead stores only that lightweight bill reference. Future
+`homestead.water_test_logged` and `homestead.utility_bill_logged`.
+Solace publishes `solace.bill_saved`/`solace.bill_deleted`; Homestead refreshes or removes its
+linked Costs & cover display record and stores only that lightweight bill reference. Future
 `project_*` events link house projects to Improvements. Nodes never import each other's models.
 Solace can also publish `solace.homestead_record_requested` for an explicitly classified bill;
 Homestead idempotently creates the correct policy, cost or maintenance record and publishes the
@@ -156,8 +156,9 @@ kept out of the ordinary Homestead search response.
 `Improvement` (CalendarSyncMixin), `RoomArea`, `RoomPlanItem`, `InsurancePolicy`, `HouseholdCost`,
 `Pool`, `WaterTest`, `UtilityBill`. All inherit
 `HouseholdBaseModel`. No per-item `property` FK in V1 (single home; avoids the
-`property`/`@property` clash and is YAGNI). `InsurancePolicy`/`HouseholdCost` own the home-context
-fields and keep `solace_bill_ref`; the linked `Solace.Bill` owns the financial Calendar mirror.
+`property`/`@property` clash and is YAGNI). `InsurancePolicy`/`HouseholdCost` own only home-specific
+metadata and keep `solace_bill_ref`; the linked `Solace.Bill` owns every financial field, its
+occurrences/payment history and the financial Calendar mirror.
 Solace-funded `MaintenanceTask` rows also keep only `solace_bill_ref` and suppress their ordinary
 Homestead Calendar mirror so the shared timeline remains single-entry.
 `Improvement.project_ref` is the forward hook to the Projects node.
@@ -172,7 +173,8 @@ care schedule · metered utility usage with per-day comparison charts · FTS · 
 (Overview/Rooms/Maintenance/Appliances/Pool & spa/Power & water/Improvements/Contacts/
 Costs & cover), dedicated
 `/homestead/rooms/:roomId` pages, search and Hub renderers.
-Costs & cover includes annualised summaries, protected search, full CRUD and Solace sync.
+Costs & cover includes annualised summaries, protected search, read-through bill cards and editing
+for home-specific policy/account metadata. Bill CRUD, payment history and autopay live in Solace.
 Solace bill creation/edit can hand home insurance, household services and paid maintenance into
 these workspaces without re-entry; Homestead maintenance can create the same protected financial
 record in the other direction. Linked cards deep-link between their owning workspaces.

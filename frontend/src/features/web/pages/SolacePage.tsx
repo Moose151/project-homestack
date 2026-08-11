@@ -453,7 +453,7 @@ function BillCard({ bill, categories, reload, onError, onPay, paying }: {
           {bill.is_active && bill.include_in_set_aside && (
             <p className="text-xs text-muted">{money(bill.fortnightly_amount)}/fortnight · {money(bill.annual_amount)}/year</p>
           )}
-          {bill.source_node === 'homestead' && <div className="mt-1"><Badge tone="success">Managed in Homestead</Badge></div>}
+          {bill.source_node === 'homestead' && <div className="mt-1"><Badge tone="success">Shown in Homestead</Badge></div>}
         </div>
         <DueBadge iso={bill.next_due_at || bill.due_at} paid={bill.is_paid && !bill.recurrence_rule} />
       </div>
@@ -474,11 +474,10 @@ function BillCard({ bill, categories, reload, onError, onPay, paying }: {
         )}
       </div>
       <BillDetails bill={bill} />
-      {bill.source_node
-        ? bill.source_node === 'homestead'
-          ? <Link to={homeDestinationPath(bill.source_record_type)} className="mt-3 flex min-h-11 items-center justify-between gap-3 border-t border-line pt-3 text-sm font-semibold text-primary">View and edit in Homestead <span aria-hidden>→</span></Link>
-          : <p className="mt-3 border-t border-line pt-3 text-xs text-muted">Edit this linked bill from {cap(bill.source_node)}.</p>
-        : <BillEditor bill={bill} categories={categories} reload={reload} onError={onError} />}
+      {bill.source_node === 'homestead' && (
+        <Link to={homeDestinationPath(bill.source_record_type)} className="mt-3 flex min-h-11 items-center justify-between gap-3 border-t border-line pt-3 text-sm font-semibold text-primary">View home details in Homestead <span aria-hidden>→</span></Link>
+      )}
+      <BillEditor bill={bill} categories={categories} reload={reload} onError={onError} />
     </Card>
   )
 }

@@ -579,12 +579,7 @@ class RoomPlanProduct(HouseholdBaseModel):
 
 
 class InsurancePolicy(HouseholdBaseModel):
-    """Home-related cover, mirrored into Solace as a linked recurring bill.
-
-    Homestead owns the policy details and renewal workflow. Solace receives the premium,
-    provider and renewal date through the event boundary so it can include the cost in the
-    household budget without either node importing the other's models (D4).
-    """
+    """Home-specific insurance details plus a display projection of a Solace-owned bill."""
 
     class PolicyType(models.TextChoices):
         BUILDING = "building", "Building"
@@ -644,7 +639,7 @@ class InsurancePolicy(HouseholdBaseModel):
 
 
 class HouseholdCost(HouseholdBaseModel):
-    """A recurring home cost/account, mirrored into a linked Solace bill."""
+    """Home account metadata plus a display projection of a Solace-owned bill."""
 
     class CostType(models.TextChoices):
         RATES = "rates", "Council rates"

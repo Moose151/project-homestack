@@ -106,15 +106,16 @@ before any remote access). Redis/Celery and the mobile/desktop tech choice are d
 
 ## 5. Current status
 
-**Phase: v0.29.5 is code-complete locally and awaiting production deployment plus household
+**Phase: v0.29.6 is code-complete locally and awaiting production deployment plus household
 acceptance (2026-08-11).** Since the original v0.21 pilot gate, HomeStack has completed the
 generic sensitive-node lock and audit work (M4), shipped Fitness & Training (v0.25), Pools & spas
 inside Homestead (v0.26), rebuilt Money around daily use and a bucket ledger (v0.27), and closed
 the known behavioural gaps against standalone Solace including income allocation, cycle history
 and annual summaries (v0.28.0–0.28.1). The phone interaction and UI consistency passes are also
 complete through v0.28.2; v0.29 adds metered water/electricity usage, the HomeStack brand, a
-strict 100% ceiling for Solace percentage allocations, consolidated subscriptions into Bills
-and self-repairing bill occurrence schedules after date corrections.
+strict 100% ceiling for Solace percentage allocations, consolidated subscriptions into Bills,
+self-repairing bill occurrence schedules after date corrections, exact local pay-cycle boundaries,
+and Solace-only financial ownership for every home bill displayed in Homestead.
 **The next step is not another broad build:** rebuild/migrate the home
 server, import and verify the real Solace database, complete a real Fitness workout and pool-care
 check, then run the two-account/real-device acceptance pass. Home Assistant M5.5 follows those
@@ -221,11 +222,11 @@ gates. Kiosk refinement remains deferred.**
   doubled card padding; hover-only actions remain visible to touch users; Homestead maintenance
   rows stack cleanly; node search results navigate to useful destinations; and the Hub offers a
   household-configured countdown widget for a named target date.
-- [x] **Inter-node single entry + fast Hub arranging (v0.19.2, 2026-08-09).** New or existing
+- [x] **Inter-node single entry + fast Hub arranging (v0.19.2, ownership corrected v0.29.6).** New or existing
   Solace bills can be organised as Homestead insurance, household services/costs or paid home
-  maintenance without re-entry. Homestead owns descriptive edits, Solace retains financial
-  occurrences/payment history, direct linked-bill divergence is blocked and the Calendar stays
-  single-entry. Desktop Hub cards and configuration rows now drag-and-drop; arrow moves are
+  maintenance without re-entry. Solace now owns every insurance/service bill field and its
+  occurrences/payment history; Homestead is a read-through with only house-specific policy and
+  account metadata editable there. The Calendar stays single-entry. Desktop Hub cards and configuration rows now drag-and-drop; arrow moves are
   optimistic and persist the complete order in one batch request instead of N sequential calls.
 - [x] **Bidirectional interaction + responsive follow-up (v0.19.3, 2026-08-09).** Homestead
   maintenance can create/update its single protected Solace cost after password re-auth, while
@@ -391,7 +392,7 @@ gates. Kiosk refinement remains deferred.**
 
 ## 6. Active tasks — deploy, cut over and validate before the next major build
 
-**Current state (2026-08-11):** v0.29.5 has 792 backend tests green, a clean
+**Current state (2026-08-11):** v0.29.6 has 794 backend tests green, a clean
 frontend production build and no migration drift. The production/home-server deployment and its
 database may still be behind this code. The real-use defects found on v0.23.x have been fixed;
 the remaining work is deployment and acceptance, not another speculative UI pass.
@@ -422,7 +423,7 @@ declare its surface gets the cautious one. What remains is the **pre-remote-acce
 
 **Production track (requires the home server):** rebuild both images and run `migrate`. Current
 heads that matter for this deployment are: `atlas.0004`, `scheduling.0003`, `meridian.0013`,
-`education.0006`, `homestead.0009_utility_bills`, `fitness.0002_seed_common_exercises`,
+`education.0006`, `homestead.0010_solace_owns_home_finance`, `fitness.0002_seed_common_exercises`,
 `hub.0015_seed_fitness_widget`, `nodes.0008_seed_fitness_node`,
 `permissions.0021_seed_fitness_permissions`, `solace.0010_consolidate_subscriptions_into_bills` and
 `attachments.0001`. Verify rather than assuming with:
@@ -622,6 +623,7 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-08-11 | Assistant | Solace | **Subscription presentation unified as v0.29.3.** A Bill whose category is Subscription is filtered out of the ordinary Bills section and presented beside dedicated Subscription records. It remains a Bill underneath, preserving occurrence/payment history, Mark paid, autopay and set-aside behaviour; dedicated Subscription records retain their renewal-cycle editor. Recategorising moves the record between sections on reload. Added a combined empty state and short in-product explanation. **Frontend production build clean; backend unchanged at 787 tests; no migration.** | Deploy/rebuild and confirm both an existing Subscription-category bill and a dedicated subscription appear together, with their respective edit/payment controls. |
 | 2026-08-11 | Assistant | Solace | **Stale overdue occurrences fixed as v0.29.4.** Root cause: Bill edit defaulted to `future_unpaid`, so moving First due forward regenerated future rows but deliberately stranded the old overdue row; Now then correctly counted that stale row forever. Schedule-field changes now rebuild all unpaid dates automatically, while amount-only edits keep their selectable scope. Paid and skipped history is preserved. `ensure_bill_occurrences` now reconciles obsolete upcoming rows inside its window, and opening Now starts at each bill's earliest unpaid row, automatically repairing old data even beyond the normal 90-day lookback. The editor relabels the scope as Amount updates and explains the schedule rule. **790 backend tests green; frontend production build clean; no migration.** | Deploy/rebuild, open Money → Now once to trigger reconciliation, and confirm the seven obsolete overdue notices disappear while genuine missed bills remain. |
 | 2026-08-11 | Assistant | Solace | **Subscriptions consolidated into Bills as v0.29.5 (owner request).** Removed the duplicate runtime model/API/UI path. Add subscription now opens the full Bill form with category fixed to Subscription; every subscription therefore gets Bill occurrences/history, Mark paid, autopay, set-aside, pause/delete, overdue reconciliation, forecast/reminder/export/Search/Calendar and Hub behaviour. `solace.0010` converts every live legacy Subscription before deleting its table, retaining renewal date → First due, recurrence, provider, amount, notes, active state, visibility/sensitivity, timestamps and the existing Calendar link; a MigrationExecutor regression proves the conversion. Standalone import already produced Subscription-category Bills and remains idempotent. **792 backend tests green; frontend production build clean; no migration drift.** | Deploy/rebuild and run `migrate` through `solace.0010`; then open Subscriptions, inspect each converted renewal/recurrence, mark one occurrence paid and confirm history/Now/forecast. |
+| 2026-08-11 | Assistant | Solace + Homestead | **Exact cycle boundaries and one bill owner shipped as v0.29.6 (owner request).** Fixed the local-date/UTC leak that put 12 August occurrences into the cycle displayed as ending 11 August, and made cycle windows use their literal displayed dates. Solace now owns all insurance and household-service financial fields and retains full edit/delete, occurrence history, Mark paid and autopay behavior even while a bill is shown in Homestead. Costs & cover is a protected read-through: its cards update from Solace events, link back to Solace, and edit only policy/excess/claims/account metadata. Creation/deletion there directs users to Solace. `homestead.0010` preserves valid links and creates a linked Solace bill for every existing Homestead-only policy/cost. Migration and ownership regressions added. **794 backend tests green; frontend production build clean; no model drift.** | Deploy/rebuild and migrate through `homestead.0010`; open Money → Now and confirm 12 August bills appear only in the new cycle, then inspect Electricity and every Costs & cover card in Solace. |
 
 ### Session notes (free-form, optional)
 

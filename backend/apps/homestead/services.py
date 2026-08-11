@@ -278,7 +278,7 @@ def _cost_type(category: str, name: str) -> str:
 
 
 def organise_solace_bill(acting_user: User, *, destination: str, bill: dict):
-    """Idempotently turn one Solace entry into its Homestead-owned record (D4)."""
+    """Idempotently create or refresh Homestead's display/details record for a Solace bill."""
     bill_id = bill["bill_id"]
     household = get_active_household()
     shared = {
@@ -360,6 +360,26 @@ def organise_solace_bill(acting_user: User, *, destination: str, bill: dict):
         acting_user_id=acting_user.id,
     )
     return obj
+
+
+def refresh_solace_bill_projection(acting_user: User, *, bill: dict) -> None:
+    """Copy Solace-owned display values onto an existing Homestead details record."""
+    bill_id = bill["bill_id"]
+    if InsurancePolicy.all_objects.filter(solace_bill_ref=bill_id).exists():
+        organise_solace_bill(acting_user, destination="insurance_policy", bill=bill)
+    if HouseholdCost.all_objects.filter(solace_bill_ref=bill_id).exists():
+        organise_solace_bill(acting_user, destination="household_cost", bill=bill)
+
+
+def remove_solace_bill_projection(*, bill_id: int, household_id: int) -> None:
+    """Hide Homestead details when their owning Solace bill is deleted."""
+    deleted_at = timezone.now()
+    InsurancePolicy.all_objects.filter(
+        solace_bill_ref=bill_id, household_id=household_id, deleted_at__isnull=True
+    ).update(deleted_at=deleted_at)
+    HouseholdCost.all_objects.filter(
+        solace_bill_ref=bill_id, household_id=household_id, deleted_at__isnull=True
+    ).update(deleted_at=deleted_at)
 
 
 # ---------------------------------------------------------------------------
@@ -568,10 +588,8 @@ def delete_room_product(acting_user: User, obj: RoomPlanProduct) -> None:
 # ---------------------------------------------------------------------------
 
 _POLICY_FIELDS = {
-    "name", "policy_type", "provider", "policy_number", "premium_amount",
-    "billing_cycle", "next_renewal_at", "recurrence_rule", "standard_excess",
-    "additional_excesses", "coverage_summary", "contact_phone", "portal_url",
-    "is_active", "notes", "visibility",
+    "policy_type", "policy_number", "standard_excess", "additional_excesses",
+    "coverage_summary", "contact_phone", "portal_url",
 }
 
 
@@ -580,7 +598,6 @@ def create_insurance_policy(acting_user: User, **data) -> InsurancePolicy:
         household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
     )
     obj.save()
-    events.insurance_policy_saved(obj, acting_user.id)
     obj.refresh_from_db()
     return obj
 
@@ -593,15 +610,11 @@ def update_insurance_policy(
             setattr(obj, key, val)
     obj.updated_by = acting_user
     obj.save()
-    events.insurance_policy_saved(obj, acting_user.id)
     obj.refresh_from_db()
     return obj
 
 
 def delete_insurance_policy(acting_user: User, obj: InsurancePolicy) -> None:
-    events.home_finance_record_deleted(
-        "insurance_policy", obj.id, obj.household_id, acting_user.id
-    )
     obj.updated_by = acting_user
     obj.save(update_fields=["updated_by", "updated_at"])
     obj.soft_delete()
@@ -612,8 +625,7 @@ def delete_insurance_policy(acting_user: User, obj: InsurancePolicy) -> None:
 # ---------------------------------------------------------------------------
 
 _COST_FIELDS = {
-    "name", "cost_type", "provider", "account_number", "amount", "billing_cycle",
-    "next_due_at", "recurrence_rule", "is_active", "notes", "visibility",
+    "cost_type", "account_number",
 }
 
 
@@ -622,7 +634,6 @@ def create_household_cost(acting_user: User, **data) -> HouseholdCost:
         household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
     )
     obj.save()
-    events.household_cost_saved(obj, acting_user.id)
     obj.refresh_from_db()
     return obj
 
@@ -635,15 +646,11 @@ def update_household_cost(
             setattr(obj, key, val)
     obj.updated_by = acting_user
     obj.save()
-    events.household_cost_saved(obj, acting_user.id)
     obj.refresh_from_db()
     return obj
 
 
 def delete_household_cost(acting_user: User, obj: HouseholdCost) -> None:
-    events.home_finance_record_deleted(
-        "household_cost", obj.id, obj.household_id, acting_user.id
-    )
     obj.updated_by = acting_user
     obj.save(update_fields=["updated_by", "updated_at"])
     obj.soft_delete()

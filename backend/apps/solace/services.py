@@ -256,20 +256,21 @@ def create_bill(acting_user: User, **data) -> Bill:
     ensure_bill_occurrences(obj, today - timedelta(days=90), today + timedelta(days=550))
     settle_history_on_entry(obj)
     events.bill_created(obj.id, obj.household_id)
+    events.bill_saved(obj, acting_user.id if acting_user else None)
     return obj
 
 
 def organise_bill_in_homestead(
     acting_user: User, obj: Bill, destination: str
 ) -> Bill:
-    """Ask Homestead to claim a finance entry as its richer source record (D4)."""
+    """Ask Homestead to create a linked display/details record for this Solace bill."""
     if not destination:
         return obj
     if obj.source_node and obj.source_node != "homestead":
-        raise ValueError("This bill is already managed by another node.")
+        raise ValueError("This bill is already linked to another node.")
     if obj.source_node == "homestead":
         if obj.source_record_type != destination:
-            raise ValueError("This bill is already organised in a different Homestead area.")
+            raise ValueError("This bill is already shown in a different Homestead area.")
         return obj
     events.homestead_record_requested(obj, acting_user.id, destination)
     obj.refresh_from_db()
@@ -304,6 +305,7 @@ def update_bill(
         # should not disappear merely because its expected amount changed.
         effective_scope = "all_unpaid" if changed_fields & schedule_fields else occurrence_scope
         refresh_unpaid_occurrences(obj, scope=effective_scope)
+    events.bill_saved(obj, acting_user.id if acting_user else None)
     return obj
 
 
@@ -332,6 +334,7 @@ def delete_bill(acting_user: User, obj: Bill) -> None:
     obj.updated_by = acting_user
     obj.save(update_fields=["updated_by", "updated_at"])
     obj.soft_delete()
+    events.bill_deleted(obj.id, obj.household_id)
 
 
 def mark_occurrence_paid(acting_user: User, obj: BillOccurrence) -> BillOccurrence:

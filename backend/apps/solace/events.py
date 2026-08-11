@@ -8,6 +8,30 @@ def bill_created(record_id: int, household_id: int) -> None:
     publish("solace.bill_created", payload={"record_id": record_id, "household_id": household_id})
 
 
+def bill_saved(obj, acting_user_id: int | None) -> None:
+    """Refresh any Homestead display record without transferring bill ownership."""
+    publish("solace.bill_saved", payload={
+        "bill_id": obj.id,
+        "household_id": obj.household_id,
+        "acting_user_id": acting_user_id,
+        "name": obj.name,
+        "category": obj.category,
+        "provider": obj.provider,
+        "amount": str(obj.amount),
+        "due_at": obj.due_at.isoformat() if obj.due_at else None,
+        "recurrence_rule": obj.recurrence_rule,
+        "is_active": obj.is_active,
+        "notes": obj.notes,
+    })
+
+
+def bill_deleted(record_id: int, household_id: int) -> None:
+    publish("solace.bill_deleted", payload={
+        "bill_id": record_id,
+        "household_id": household_id,
+    })
+
+
 def bill_paid(record_id: int, household_id: int) -> None:
     publish("solace.bill_paid", payload={"record_id": record_id, "household_id": household_id})
 

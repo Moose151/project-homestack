@@ -82,9 +82,6 @@ const money = (v: string | number) =>
   Number(v || 0).toLocaleString(undefined, { style: 'currency', currency: 'AUD' })
 const POLICY_TYPES = ['building', 'contents', 'building_contents', 'landlord', 'mortgage_protection', 'other']
 const COST_TYPES = ['rates', 'water', 'gas', 'electricity', 'mortgage', 'body_corporate', 'waste', 'internet', 'other']
-const BILLING_CYCLES = [
-  'weekly', 'fortnightly', 'monthly', 'quarterly', 'half_yearly', 'yearly', 'variable', 'other',
-]
 
 // ---------------------------------------------------------------------------
 // Overview tab — the property record + emergency info + at-a-glance
@@ -1775,20 +1772,17 @@ function UtilitiesTab({ onError, canEdit }: { onError: (m: string) => void; canE
 }
 
 // ---------------------------------------------------------------------------
-// Costs & cover — password protected, mirrored to Solace through backend events
+// Costs & cover — password protected Homestead details for Solace-owned bills
 // ---------------------------------------------------------------------------
 
 const EMPTY_POLICY = {
-  name: '', policy_type: 'building_contents', provider: '', policy_number: '',
-  premium_amount: '', billing_cycle: 'yearly', next_renewal_at: null as string | null,
+  policy_type: 'building_contents', policy_number: '',
   standard_excess: '', additional_excesses: '', coverage_summary: '',
-  contact_phone: '', portal_url: '', is_active: true, notes: '',
+  contact_phone: '', portal_url: '',
 }
 
 const EMPTY_COST = {
-  name: '', cost_type: 'rates', provider: '', account_number: '', amount: '',
-  billing_cycle: 'quarterly', next_due_at: null as string | null,
-  is_active: true, notes: '',
+  cost_type: 'rates', account_number: '',
 }
 
 function FinanceTab({ onError }: { onError: (m: string) => void }) {
@@ -1827,37 +1821,27 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
     )
   }
 
-  const startPolicy = (policy?: InsurancePolicy) => {
-    if (policy) {
-      setPolicyEdit(policy.id)
-      setPolicyForm({
-        name: policy.name, policy_type: policy.policy_type, provider: policy.provider,
-        policy_number: policy.policy_number, premium_amount: policy.premium_amount,
-        billing_cycle: policy.billing_cycle, next_renewal_at: policy.next_renewal_at,
-        standard_excess: policy.standard_excess, additional_excesses: policy.additional_excesses,
-        coverage_summary: policy.coverage_summary, contact_phone: policy.contact_phone,
-        portal_url: policy.portal_url, is_active: policy.is_active, notes: policy.notes,
-      })
-    } else {
-      setPolicyEdit(null)
-      setPolicyForm(EMPTY_POLICY)
-    }
+  const startPolicy = (policy: InsurancePolicy) => {
+    setPolicyEdit(policy.id)
+    setPolicyForm({
+      policy_type: policy.policy_type, policy_number: policy.policy_number,
+      standard_excess: policy.standard_excess, additional_excesses: policy.additional_excesses,
+      coverage_summary: policy.coverage_summary, contact_phone: policy.contact_phone,
+      portal_url: policy.portal_url,
+    })
     setShowPolicyForm(true)
   }
 
   const savePolicy = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!policyForm.name.trim()) return
+    if (!policyEdit) return
     setSaving(true)
     const payload = {
       ...policyForm,
-      name: policyForm.name.trim(),
-      premium_amount: policyForm.premium_amount || '0.00',
       standard_excess: policyForm.standard_excess || '0.00',
     }
     try {
-      if (policyEdit) await api.updateInsurancePolicy(policyEdit, payload)
-      else await api.createInsurancePolicy(payload)
+      await api.updateInsurancePolicy(policyEdit, payload)
       setShowPolicyForm(false)
       await load()
     } catch (e) {
@@ -1867,60 +1851,24 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
     }
   }
 
-  const removePolicy = async (policy: InsurancePolicy) => {
-    if (!(await confirmDialog({ title: `Delete insurance policy "${policy.name}"?`, message: 'Its linked Solace bill will also be removed.', confirmLabel: 'Delete' }))) return
-    try {
-      await api.deleteInsurancePolicy(policy.id)
-      await load()
-    } catch (e) {
-      onError(errMsg(e))
-    }
-  }
-
-  const startCost = (cost?: HouseholdCost) => {
-    if (cost) {
-      setCostEdit(cost.id)
-      setCostForm({
-        name: cost.name, cost_type: cost.cost_type, provider: cost.provider,
-        account_number: cost.account_number, amount: cost.amount,
-        billing_cycle: cost.billing_cycle, next_due_at: cost.next_due_at,
-        is_active: cost.is_active, notes: cost.notes,
-      })
-    } else {
-      setCostEdit(null)
-      setCostForm(EMPTY_COST)
-    }
+  const startCost = (cost: HouseholdCost) => {
+    setCostEdit(cost.id)
+    setCostForm({ cost_type: cost.cost_type, account_number: cost.account_number })
     setShowCostForm(true)
   }
 
   const saveCost = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!costForm.name.trim()) return
+    if (!costEdit) return
     setSaving(true)
-    const payload = {
-      ...costForm,
-      name: costForm.name.trim(),
-      amount: costForm.amount || '0.00',
-    }
     try {
-      if (costEdit) await api.updateHouseholdCost(costEdit, payload)
-      else await api.createHouseholdCost(payload)
+      await api.updateHouseholdCost(costEdit, costForm)
       setShowCostForm(false)
       await load()
     } catch (e) {
       onError(errMsg(e))
     } finally {
       setSaving(false)
-    }
-  }
-
-  const removeCost = async (cost: HouseholdCost) => {
-    if (!(await confirmDialog({ title: `Delete "${cost.name}"?`, message: 'Its linked Solace bill will also be removed.', confirmLabel: 'Delete' }))) return
-    try {
-      await api.deleteHouseholdCost(cost.id)
-      await load()
-    } catch (e) {
-      onError(errMsg(e))
     }
   }
 
@@ -1951,8 +1899,8 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 rounded-xl bg-primary-soft px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="font-semibold text-ink">One home record, one finance schedule</p>
-          <p className="mt-0.5 text-muted-strong">Add details here and Solace updates automatically, or organise an existing Solace bill into Homestead without entering it again.</p>
+          <p className="font-semibold text-ink">Bills are managed in Solace</p>
+          <p className="mt-0.5 text-muted-strong">This page shows home-related bills. Change amounts, dates, recurrence, payment status and autopay in Solace; Homestead keeps only policy and account details.</p>
         </div>
         <Link to="/solace?tab=bills" className="flex min-h-11 flex-shrink-0 items-center font-semibold text-primary">Open Solace bills →</Link>
       </div>
@@ -1976,42 +1924,32 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold text-ink">Insurance</h2>
-            <p className="text-sm text-muted">Policy details, premiums, excesses and renewals.</p>
+            <p className="text-sm text-muted">Solace supplies premiums and renewals; policy details stay here.</p>
           </div>
-          {!showPolicyForm && <Button size="sm" onClick={() => startPolicy()}>+ Policy</Button>}
         </div>
 
         {showPolicyForm && (
-          <Card title={policyEdit ? 'Edit insurance policy' : 'New insurance policy'}>
+          <Card title="Edit policy details">
             <form onSubmit={savePolicy} className="flex flex-col gap-3">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <Field label="Policy name"><Input value={policyForm.name} onChange={e => setPolicy('name', e.target.value)} placeholder="Home & contents" autoFocus /></Field>
-                <Field label="Policy type"><Select value={policyForm.policy_type} onChange={e => setPolicy('policy_type', e.target.value)}>{POLICY_TYPES.map(v => <option key={v} value={v}>{cap(v)}</option>)}</Select></Field>
-                <Field label="Insurer"><Input value={policyForm.provider} onChange={e => setPolicy('provider', e.target.value)} /></Field>
+                <Field label="Policy type"><Select autoFocus value={policyForm.policy_type} onChange={e => setPolicy('policy_type', e.target.value)}>{POLICY_TYPES.map(v => <option key={v} value={v}>{cap(v)}</option>)}</Select></Field>
                 <Field label="Policy number"><Input value={policyForm.policy_number} onChange={e => setPolicy('policy_number', e.target.value)} autoComplete="off" /></Field>
-                <Field label="Premium"><Input type="number" min="0" step="0.01" value={policyForm.premium_amount} onChange={e => setPolicy('premium_amount', e.target.value)} /></Field>
-                <Field label="Billing cycle"><Select value={policyForm.billing_cycle} onChange={e => setPolicy('billing_cycle', e.target.value)}>{BILLING_CYCLES.filter(v => v !== 'variable').map(v => <option key={v} value={v}>{cap(v)}</option>)}</Select></Field>
-                <Field label="Next renewal"><DateTimeField value={policyForm.next_renewal_at} allDay onChange={({ value }) => setPolicy('next_renewal_at', value)} /></Field>
                 <Field label="Standard excess"><Input type="number" min="0" step="0.01" value={policyForm.standard_excess} onChange={e => setPolicy('standard_excess', e.target.value)} /></Field>
                 <Field label="Claims phone"><Input type="tel" value={policyForm.contact_phone} onChange={e => setPolicy('contact_phone', e.target.value)} /></Field>
               </div>
               <Field label="Other excesses" hint="For example: flood $1,500; accidental damage $500."><Textarea rows={2} value={policyForm.additional_excesses} onChange={e => setPolicy('additional_excesses', e.target.value)} /></Field>
               <Field label="Coverage summary"><Textarea rows={2} value={policyForm.coverage_summary} onChange={e => setPolicy('coverage_summary', e.target.value)} /></Field>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Policy portal"><Input type="url" value={policyForm.portal_url} onChange={e => setPolicy('portal_url', e.target.value)} placeholder="https://…" /></Field>
-                <Field label="Notes"><Textarea rows={2} value={policyForm.notes} onChange={e => setPolicy('notes', e.target.value)} /></Field>
-              </div>
-              <label className="flex min-h-[44px] items-center gap-2 text-sm text-ink"><input type="checkbox" checked={policyForm.is_active} onChange={e => setPolicy('is_active', e.target.checked)} /> Active policy</label>
+              <Field label="Policy portal"><Input type="url" value={policyForm.portal_url} onChange={e => setPolicy('portal_url', e.target.value)} placeholder="https://…" /></Field>
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="ghost" size="sm" onClick={() => setShowPolicyForm(false)}>Cancel</Button>
-                <Button type="submit" size="sm" loading={saving} disabled={!policyForm.name.trim()}>Save &amp; sync</Button>
+                <Button type="submit" size="sm" loading={saving}>Save details</Button>
               </div>
             </form>
           </Card>
         )}
 
         {shownPolicies.length === 0 ? (
-          <EmptyState icon="🛡️" title={q ? 'No matching policies' : 'No insurance policies yet'} hint={q ? 'Try a different search.' : 'Add your building, contents or combined cover so renewal and excess details are easy to find.'} />
+          <EmptyState icon="🛡️" title={q ? 'No matching policies' : 'No home insurance bills yet'} hint={q ? 'Try a different search.' : 'Create an insurance bill in Solace and choose “Home insurance / cover”.'} />
         ) : (
           <div className="grid gap-3 lg:grid-cols-2">
             {shownPolicies.map(policy => {
@@ -2026,7 +1964,7 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
                         {!policy.is_active && <Badge tone="neutral">Inactive</Badge>}
                         {policy.solace_bill_ref && (
                           <Link to={`/solace?tab=bills&q=${encodeURIComponent(policy.name)}`} aria-label={`Open ${policy.name} in Solace`}>
-                            <Badge tone="success">Synced to Solace →</Badge>
+                            <Badge tone="success">Managed in Solace →</Badge>
                           </Link>
                         )}
                       </div>
@@ -2045,7 +1983,6 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
                     </div>
                     <div className="flex flex-shrink-0 justify-end gap-1 border-t border-line pt-2 sm:border-0 sm:pt-0">
                       <EditAction onClick={() => startPolicy(policy)} label={policy.name} />
-                      <DeleteAction onClick={() => removePolicy(policy)} label={policy.name} />
                     </div>
                   </div>
                 </Card>
@@ -2059,35 +1996,27 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold text-ink">Rates &amp; household services</h2>
-            <p className="text-sm text-muted">Water, gas, electricity, rates and other recurring home costs.</p>
+            <p className="text-sm text-muted">A read-through of home-related Solace bills, with optional account details.</p>
           </div>
-          {!showCostForm && <Button size="sm" onClick={() => startCost()}>+ Cost</Button>}
         </div>
 
         {showCostForm && (
-          <Card title={costEdit ? 'Edit household cost' : 'New household cost'}>
+          <Card title="Edit home account details">
             <form onSubmit={saveCost} className="flex flex-col gap-3">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <Field label="Name"><Input value={costForm.name} onChange={e => setCost('name', e.target.value)} placeholder="Council rates" autoFocus /></Field>
-                <Field label="Type"><Select value={costForm.cost_type} onChange={e => setCost('cost_type', e.target.value)}>{COST_TYPES.map(v => <option key={v} value={v}>{cap(v)}</option>)}</Select></Field>
-                <Field label="Provider"><Input value={costForm.provider} onChange={e => setCost('provider', e.target.value)} /></Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Home cost type"><Select autoFocus value={costForm.cost_type} onChange={e => setCost('cost_type', e.target.value)}>{COST_TYPES.map(v => <option key={v} value={v}>{cap(v)}</option>)}</Select></Field>
                 <Field label="Account number"><Input value={costForm.account_number} onChange={e => setCost('account_number', e.target.value)} autoComplete="off" /></Field>
-                <Field label="Expected / latest amount"><Input type="number" min="0" step="0.01" value={costForm.amount} onChange={e => setCost('amount', e.target.value)} /></Field>
-                <Field label="Billing cycle"><Select value={costForm.billing_cycle} onChange={e => setCost('billing_cycle', e.target.value)}>{BILLING_CYCLES.map(v => <option key={v} value={v}>{cap(v)}</option>)}</Select></Field>
-                <Field label="Next due"><DateTimeField value={costForm.next_due_at} allDay onChange={({ value }) => setCost('next_due_at', value)} /></Field>
-                <Field label="Notes" className="sm:col-span-2"><Textarea rows={2} value={costForm.notes} onChange={e => setCost('notes', e.target.value)} /></Field>
               </div>
-              <label className="flex min-h-[44px] items-center gap-2 text-sm text-ink"><input type="checkbox" checked={costForm.is_active} onChange={e => setCost('is_active', e.target.checked)} /> Active cost</label>
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="ghost" size="sm" onClick={() => setShowCostForm(false)}>Cancel</Button>
-                <Button type="submit" size="sm" loading={saving} disabled={!costForm.name.trim()}>Save &amp; sync</Button>
+                <Button type="submit" size="sm" loading={saving}>Save details</Button>
               </div>
             </form>
           </Card>
         )}
 
         {shownCosts.length === 0 ? (
-          <EmptyState icon="🧾" title={q ? 'No matching household costs' : 'No household costs yet'} hint={q ? 'Try a different search.' : 'Add rates, water, gas and other services. Each one is mirrored into Solace automatically.'} />
+          <EmptyState icon="🧾" title={q ? 'No matching household costs' : 'No home-related bills yet'} hint={q ? 'Try a different search.' : 'Create the bill in Solace and organise it as a home cost.'} />
         ) : (
           <div className="grid gap-3 lg:grid-cols-2">
             {shownCosts.map(cost => {
@@ -2102,7 +2031,7 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
                         {!cost.is_active && <Badge tone="neutral">Inactive</Badge>}
                         {cost.solace_bill_ref && (
                           <Link to={`/solace?tab=bills&q=${encodeURIComponent(cost.name)}`} aria-label={`Open ${cost.name} in Solace`}>
-                            <Badge tone="success">Synced to Solace →</Badge>
+                            <Badge tone="success">Managed in Solace →</Badge>
                           </Link>
                         )}
                       </div>
@@ -2113,7 +2042,6 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
                     </div>
                     <div className="flex flex-shrink-0 justify-end gap-1 border-t border-line pt-2 sm:border-0 sm:pt-0">
                       <EditAction onClick={() => startCost(cost)} label={cost.name} />
-                      <DeleteAction onClick={() => removeCost(cost)} label={cost.name} />
                     </div>
                   </div>
                 </Card>

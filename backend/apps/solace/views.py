@@ -214,17 +214,16 @@ class ChecklistPreferenceView(SolaceAccessMixin, APIView):
 
 def _cycle_context(request: Request) -> dict:
     from apps.solace.bill_schedule import ensure_bill_occurrences
-    from apps.solace.models import BillOccurrence, SolaceSettings
+    from apps.solace.models import BillOccurrence
 
     plan = selectors.get_pay_cycle_plan(request.user, as_of=_plan_date(request))
     cycle_start = date.fromisoformat(plan["cycle_start"])
     cycle_end = date.fromisoformat(plan["cycle_end"])
     settings_obj = selectors.get_settings() or services.get_or_create_settings(request.user)
-    previous_cycle = (
-        settings_obj.payday_bill_handling == SolaceSettings.PaydayBillHandling.PREVIOUS_CYCLE
-    )
-    bill_start = cycle_start + timedelta(days=1) if previous_cycle else cycle_start
-    bill_end = cycle_end + timedelta(days=1) if previous_cycle else cycle_end
+    # Cycle boundaries are literal local calendar dates. A bill due on the next payday belongs
+    # to the cycle that starts that day, never the cycle whose displayed end is the day before.
+    bill_start = cycle_start
+    bill_end = cycle_end
     for bill in selectors.list_bills(request.user, active_only=True):
         ensure_bill_occurrences(bill, bill_start, bill_end)
     occurrences = selectors.list_bill_occurrences(
@@ -632,10 +631,6 @@ class BillDetailView(SolaceAccessMixin, APIView):
     def patch(self, request: Request, bill_id: int) -> Response:
         existing = self._get(bill_id)
         payload = request.data.copy()
-        if existing.source_node and set(payload) - {"home_destination"}:
-            raise ValidationError({
-                "detail": f"Edit this linked bill from {existing.source_node.title()}."
-            })
         occurrence_scope = payload.pop("occurrence_update_scope", "future_unpaid")
         if isinstance(occurrence_scope, list):
             occurrence_scope = occurrence_scope[-1] if occurrence_scope else "future_unpaid"
@@ -664,10 +659,6 @@ class BillDetailView(SolaceAccessMixin, APIView):
 
     def delete(self, request: Request, bill_id: int) -> Response:
         existing = self._get(bill_id)
-        if existing.source_node:
-            raise ValidationError({
-                "detail": f"Delete this linked bill from {existing.source_node.title()}."
-            })
         services.delete_bill(request.user, existing)
         return Response(status=status.HTTP_204_NO_CONTENT)
 

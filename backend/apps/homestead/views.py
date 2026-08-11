@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from rest_framework import status
-from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -500,10 +500,9 @@ class InsurancePolicyListView(HomesteadFinanceAccessMixin, APIView):
         return Response(InsurancePolicySerializer(rows, many=True).data)
 
     def post(self, request: Request) -> Response:
-        serializer = InsurancePolicySerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        obj = services.create_insurance_policy(request.user, **serializer.validated_data)
-        return Response(InsurancePolicySerializer(obj).data, status=status.HTTP_201_CREATED)
+        raise ValidationError({
+            "detail": "Create the insurance bill in Solace, then organise it in Homestead."
+        })
 
 
 class InsurancePolicyDetailView(HomesteadFinanceAccessMixin, APIView):
@@ -522,10 +521,7 @@ class InsurancePolicyDetailView(HomesteadFinanceAccessMixin, APIView):
         return Response(InsurancePolicySerializer(obj).data)
 
     def delete(self, request: Request, policy_id: int) -> Response:
-        services.delete_insurance_policy(
-            request.user, self._get(policy_id, request.user)
-        )
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        raise ValidationError({"detail": "Delete this bill from Solace."})
 
 
 class HouseholdCostListView(HomesteadFinanceAccessMixin, APIView):
@@ -536,10 +532,9 @@ class HouseholdCostListView(HomesteadFinanceAccessMixin, APIView):
         return Response(HouseholdCostSerializer(rows, many=True).data)
 
     def post(self, request: Request) -> Response:
-        serializer = HouseholdCostSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        obj = services.create_household_cost(request.user, **serializer.validated_data)
-        return Response(HouseholdCostSerializer(obj).data, status=status.HTTP_201_CREATED)
+        raise ValidationError({
+            "detail": "Create the household bill in Solace, then organise it in Homestead."
+        })
 
 
 class HouseholdCostDetailView(HomesteadFinanceAccessMixin, APIView):
@@ -558,8 +553,7 @@ class HouseholdCostDetailView(HomesteadFinanceAccessMixin, APIView):
         return Response(HouseholdCostSerializer(obj).data)
 
     def delete(self, request: Request, cost_id: int) -> Response:
-        services.delete_household_cost(request.user, self._get(cost_id, request.user))
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        raise ValidationError({"detail": "Delete this bill from Solace."})
 
 
 # ---------------------------------------------------------------------------

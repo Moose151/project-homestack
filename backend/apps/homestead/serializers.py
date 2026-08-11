@@ -235,7 +235,11 @@ class InsurancePolicySerializer(serializers.ModelSerializer):
             "contact_phone", "portal_url", "is_active", "solace_bill_ref",
             "notes", "visibility", "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "solace_bill_ref", "created_at", "updated_at"]
+        read_only_fields = [
+            "id", "name", "provider", "premium_amount", "billing_cycle",
+            "next_renewal_at", "recurrence_rule", "is_active", "notes", "visibility",
+            "solace_bill_ref", "created_at", "updated_at",
+        ]
 
     def validate_name(self, value: str) -> str:
         return _non_blank(value)
@@ -249,7 +253,11 @@ class HouseholdCostSerializer(serializers.ModelSerializer):
             "billing_cycle", "next_due_at", "recurrence_rule", "is_active",
             "solace_bill_ref", "notes", "visibility", "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "solace_bill_ref", "created_at", "updated_at"]
+        read_only_fields = [
+            "id", "name", "provider", "amount", "billing_cycle", "next_due_at",
+            "recurrence_rule", "is_active", "notes", "visibility", "solace_bill_ref",
+            "created_at", "updated_at",
+        ]
 
     def validate_name(self, value: str) -> str:
         return _non_blank(value)

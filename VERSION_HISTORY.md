@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.29.5**
+> **Current version: 0.29.6**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,21 @@
 ---
 
 ## 0.29 — What the house actually uses
+
+### 0.29.6 — 2026-08-11 — exact pay-cycle boundaries and Solace-owned home bills
+- Fixed bill occurrence filtering to compare aware Brisbane-local day boundaries rather than
+  database UTC dates. A bill due on 12 August can no longer leak into a cycle ending 11 August;
+  payday-cycle views also use their displayed start/end literally.
+- Solace is now the sole financial owner for home insurance and household-service bills. Linked
+  bills remain fully editable/deletable in Solace with occurrences, history, Mark paid, autopay
+  and set-aside behavior; saved values refresh the read-only Homestead cards through D4 events.
+- Homestead Costs & cover no longer creates or deletes finance schedules. It displays only bills
+  deliberately organised there, while retaining editable house-specific policy, claims, excess
+  and account metadata plus direct Solace links.
+- Migration `homestead.0010` links every existing policy/cost to a Solace bill, creates missing
+  bills for Homestead-only records, and preserves existing links without duplication. Dedicated
+  migration, local-boundary and ownership regressions included. **794 backend tests green;
+  frontend production build clean; no model drift.**
 
 ### 0.29.5 — 2026-08-11 — subscriptions are bills
 - Removed the duplicate Subscription model, API, serializer, services, forecast/reminder path,

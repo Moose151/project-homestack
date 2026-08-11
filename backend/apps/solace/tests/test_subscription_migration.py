@@ -26,7 +26,7 @@ class SubscriptionConsolidationMigrationTests(TransactionTestCase):
         CalendarEvent = old_apps.get_model("scheduling", "CalendarEvent")
         Subscription = old_apps.get_model("solace", "Subscription")
 
-        household = Household.objects.first()
+        household = Household.objects.first() or Household.objects.create(name="Home")
         renewal = timezone.make_aware(datetime(2026, 9, 15, 9))
         event = CalendarEvent.objects.create(
             household_id=household.pk,

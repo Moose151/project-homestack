@@ -351,10 +351,9 @@ export function ManagementTab({ settings, categories, balances, report, health, 
               <Input type="number" step="0.01" value={settingsForm.default_buffer_amount} onChange={event => setSettingsForm(previous => ({ ...previous, default_buffer_amount: event.target.value }))} />
             </Field>
             <Field label="Bills due on payday">
-              <Select value={settingsForm.payday_bill_handling} onChange={event => setSettingsForm(previous => ({ ...previous, payday_bill_handling: event.target.value as SolaceSettings['payday_bill_handling'] }))}>
-                <option value="new_cycle">Start the new cycle</option>
-                <option value="previous_cycle">Finish the previous cycle</option>
-              </Select>
+              <div className="flex min-h-11 items-center rounded-lg border border-line bg-sunken px-3 text-sm text-ink">
+                Start the new cycle
+              </div>
             </Field>
             <Field label="Reminder window">
               <Select value={settingsForm.due_soon_days} onChange={event => setSettingsForm(previous => ({ ...previous, due_soon_days: event.target.value }))}>

@@ -1,7 +1,7 @@
 """solace selectors — read-only finance queries (D9)."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, time
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import connection
@@ -92,11 +92,15 @@ def get_bill_occurrence_timeline(
 
 
 def list_bill_occurrences(user, *, start, end, status: str = ""):
-    qs = BillOccurrence.objects.select_related("bill").filter(
-        bill__deleted_at__isnull=True,
-        due_at__date__gte=start,
-        due_at__date__lte=end,
-    )
+    # Compare aware instants at the household-local day boundaries. PostgreSQL's `__date`
+    # transform can evaluate in UTC, which made local midnight on the first day of the next
+    # cycle look like the final UTC date of the current cycle (e.g. 12 Aug AEST → 11 Aug UTC).
+    qs = BillOccurrence.objects.select_related("bill").filter(bill__deleted_at__isnull=True)
+    tz = timezone.get_current_timezone()
+    if start != date.min:
+        qs = qs.filter(due_at__gte=timezone.make_aware(datetime.combine(start, time.min), tz))
+    if end != date.max:
+        qs = qs.filter(due_at__lte=timezone.make_aware(datetime.combine(end, time.max), tz))
     if status:
         qs = qs.filter(status=status)
     return list(apply_visibility(qs, user).order_by("due_at", "bill__name"))

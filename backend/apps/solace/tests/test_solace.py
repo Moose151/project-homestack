@@ -4,6 +4,7 @@ import sqlite3
 import tempfile
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from django.core.management import CommandError, call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -266,7 +267,7 @@ class SolaceCrudAndCalendarTests(TestCase):
         self.assertEqual(HouseholdCost.objects.count(), 1)
         self.assertEqual(bill.source_record_id, cost.id)
 
-    def test_linked_bill_details_cannot_diverge_from_homestead(self):
+    def test_linked_bill_is_edited_and_deleted_in_solace_and_refreshes_homestead(self):
         created = self.client.post(
             reverse("solace-bill-list"),
             {
@@ -284,14 +285,16 @@ class SolaceCrudAndCalendarTests(TestCase):
             {"amount": "1.00"},
             content_type="application/json",
         )
-        removed = self.client.delete(url)
-        self.assertEqual(changed.status_code, 400)
-        self.assertEqual(removed.status_code, 400)
-        self.assertEqual(str(Bill.objects.get(pk=bill_id).amount), "900.00")
+        self.assertEqual(changed.status_code, 200)
+        self.assertEqual(str(Bill.objects.get(pk=bill_id).amount), "1.00")
         self.assertEqual(
             str(InsurancePolicy.objects.get(solace_bill_ref=bill_id).premium_amount),
-            "900.00",
+            "1.00",
         )
+        removed = self.client.delete(url)
+        self.assertEqual(removed.status_code, 204)
+        self.assertFalse(Bill.objects.filter(pk=bill_id).exists())
+        self.assertFalse(InsurancePolicy.objects.filter(solace_bill_ref=bill_id).exists())
 
     def test_mark_bill_paid_removes_calendar_event(self):
         bill = create_bill(self.admin, name="Rates", amount="900.00", due_at=_future())
@@ -393,6 +396,31 @@ class SolaceCrudAndCalendarTests(TestCase):
         )
         self.assertEqual(annual_cost(bill), 1200)
         self.assertEqual(str(fortnightly_cost(bill)), "46.15")
+
+    def test_occurrence_on_local_first_day_of_next_cycle_is_not_in_current_cycle(self):
+        from apps.solace.selectors import list_bill_occurrences
+
+        brisbane = ZoneInfo("Australia/Brisbane")
+        with timezone.override(brisbane):
+            bill = create_bill(
+                self.admin,
+                name="Next cycle electricity",
+                amount="60.00",
+                due_at=datetime(2026, 8, 12, 0, 0, tzinfo=brisbane),
+            )
+            current = list_bill_occurrences(
+                self.admin,
+                start=date(2026, 7, 29),
+                end=date(2026, 8, 11),
+            )
+            next_cycle = list_bill_occurrences(
+                self.admin,
+                start=date(2026, 8, 12),
+                end=date(2026, 8, 25),
+            )
+
+        self.assertNotIn(bill.id, [row.bill_id for row in current])
+        self.assertIn(bill.id, [row.bill_id for row in next_cycle])
 
     def test_bill_stop_after_bounds_occurrences_and_metadata_round_trips(self):
         due_at = timezone.make_aware(datetime(2027, 1, 1, 9))
@@ -1555,6 +1583,38 @@ class SolaceNowTests(TestCase):
         data = self._now()
         self.assertEqual([row["bill_name"] for row in data["due"]], ["Electricity"])
         self.assertEqual(data["due_total"], "120.50")
+
+    def test_bill_due_on_next_payday_is_not_in_cycle_ending_day_before(self):
+        brisbane = ZoneInfo("Australia/Brisbane")
+        with timezone.override(brisbane):
+            Payday.objects.all().delete()
+            create_payday(
+                self.admin,
+                title="Pay",
+                expected_amount="2000.00",
+                pay_at=timezone.make_aware(datetime(2026, 8, 12, 9), brisbane),
+                recurrence_rule="FREQ=WEEKLY;INTERVAL=2",
+            )
+            settings = self.client.get(reverse("solace-settings"))
+            self.assertEqual(settings.status_code, 200)
+            self.client.patch(
+                reverse("solace-settings"),
+                {"payday_bill_handling": "previous_cycle"},
+                content_type="application/json",
+            )
+            create_bill(
+                self.admin,
+                name="Electricity",
+                amount="60.00",
+                due_at=timezone.make_aware(datetime(2026, 8, 12, 0), brisbane),
+            )
+
+            response = self.client.get(reverse("solace-now"), {"date": "2026-08-11"})
+            self.assertEqual(response.status_code, 200, response.json())
+            data = response.json()
+            self.assertEqual(data["cycle_start"], "2026-07-29")
+            self.assertEqual(data["cycle_end"], "2026-08-11")
+            self.assertNotIn("Electricity", [row["bill_name"] for row in data["due"]])
 
     def test_an_overdue_bill_is_still_owed_and_is_counted_separately(self):
         # A bill entered with a past due date is settled as paid on entry by design, so the way
