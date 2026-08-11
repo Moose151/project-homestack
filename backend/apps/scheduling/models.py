@@ -36,7 +36,15 @@ class CalendarEvent(HouseholdBaseModel):
     Never: CalendarEvent.objects.create() from a node service directly.
     """
 
+    class EventKind(models.TextChoices):
+        EVENT = "event", "Event"
+        APPOINTMENT = "appointment", "Appointment"
+        BIRTHDAY = "birthday", "Birthday"
+        HOLIDAY = "holiday", "Holiday"
+        TASK = "task", "Task / deadline"
+
     title = models.CharField(max_length=255)
+    event_kind = models.CharField(max_length=16, choices=EventKind.choices, default=EventKind.EVENT)
     description = models.TextField(blank=True, default="")
     start_at = models.DateTimeField()
     end_at = models.DateTimeField(null=True, blank=True)
@@ -66,6 +74,8 @@ class CalendarEvent(HouseholdBaseModel):
     )
     colour = models.CharField(max_length=7, blank=True, default="")
     location = models.CharField(max_length=255, blank=True, default="")
+    provider = models.CharField(max_length=160, blank=True, default="")
+    contact = models.CharField(max_length=255, blank=True, default="")
 
     visibility = models.CharField(
         max_length=20,

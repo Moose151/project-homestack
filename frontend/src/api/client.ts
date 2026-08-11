@@ -387,6 +387,9 @@ export const api = {
 
   // --- People ---
   getPeople: (): Promise<Person[]> => cachedGet('/people/'),
+  updatePerson: (id: number, data: Partial<Person>): Promise<Person> =>
+    _fetch<Person>(`/people/${id}/`, { method: 'PATCH', body: JSON.stringify(data) })
+      .then(value => { clearSharedCache('/people/'); return value }),
 
   // --- Household Corners ---
   getCorner: (personId: number, days = 30): Promise<CornerResponse> =>
@@ -498,16 +501,25 @@ export const api = {
   deleteReminder: (id: number): Promise<void> => _fetch(`/atlas/reminders/${id}/`, { method: 'DELETE' }),
 
   // --- Calendar ---
-  getEvents: (params?: { start?: string; end?: string; node?: string; person?: number; upcoming?: boolean }): Promise<CalendarEvent[]> => {
+  getEvents: (params?: { start?: string; end?: string; node?: string; person?: number; upcoming?: boolean; agenda?: boolean }): Promise<CalendarEvent[]> => {
     const q = new URLSearchParams()
     if (params?.start) q.set('start', params.start)
     if (params?.end) q.set('end', params.end)
     if (params?.node) q.set('node', params.node)
     if (params?.person) q.set('person', String(params.person))
     if (params?.upcoming) q.set('upcoming', '1')
+    if (params?.agenda) q.set('agenda', '1')
     const s = q.toString()
     return _fetch(`/calendar/events/${s ? `?${s}` : ''}`)
   },
+  getAtlasContacts: (): Promise<import('./types').AtlasContact[]> => _fetch('/atlas/contacts/'),
+  createAtlasContact: (data: Partial<import('./types').AtlasContact>): Promise<import('./types').AtlasContact> =>
+    _fetch('/atlas/contacts/', { method: 'POST', body: JSON.stringify(data) }),
+  updateAtlasContact: (id: number, data: Partial<import('./types').AtlasContact>): Promise<import('./types').AtlasContact> =>
+    _fetch(`/atlas/contacts/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteAtlasContact: (id: number): Promise<void> => _fetch(`/atlas/contacts/${id}/`, { method: 'DELETE' }),
+  getBirthdayOccurrences: (start: string, end: string): Promise<import('./types').BirthdayOccurrence[]> =>
+    _fetch(`/atlas/birthday-occurrences/?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`),
   createEvent: (data: CalendarEventWrite): Promise<CalendarEvent> =>
     _fetch('/calendar/events/', { method: 'POST', body: JSON.stringify(data) }),
   updateEvent: (id: number, data: Partial<CalendarEventWrite>): Promise<CalendarEvent> =>

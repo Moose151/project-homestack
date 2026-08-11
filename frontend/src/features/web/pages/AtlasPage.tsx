@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../../api/client'
-import type { AtlasList, AtlasListItem, AtlasNote, AtlasReminder, AtlasSearchResults, Person } from '../../../api/types'
+import type { AtlasContact, AtlasList, AtlasListItem, AtlasNote, AtlasReminder, AtlasSearchResults, CalendarEvent, Person } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
-import { Input, SearchField, Textarea, Select } from '../../../components/Field'
+import { Field, Input, SearchField, Textarea, Select } from '../../../components/Field'
 import { Tabs } from '../../../components/Tabs'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
@@ -688,14 +688,47 @@ function SearchResults({ results }: { results: AtlasSearchResults }) {
 // Atlas page
 // ---------------------------------------------------------------------------
 
-type Tab = 'lists' | 'notes' | 'reminders'
-const TAB_KEYS: Tab[] = ['lists', 'notes', 'reminders']
+function AgendaTab({ onError }: { onError: (message: string) => void }) {
+  const [events, setEvents] = useState<CalendarEvent[]>([])
+  useEffect(() => { api.getEvents({ upcoming: true, agenda: true }).then(setEvents).catch(e => onError(errMsg(e))) }, [onError])
+  if (!events.length) return <EmptyState icon="📅" title="Nothing upcoming" hint="Appointments and anything with a due date will appear here automatically." />
+  return <div className="grid gap-3 lg:grid-cols-2">{events.slice(0, 50).map(event => <Card key={event.id}>
+    <Link to={calendarDayHref(event.start_at)} className="block">
+      <div className="flex items-start gap-3"><span className="text-xl">{event.event_kind === 'appointment' ? '🩺' : event.event_kind === 'task' ? '✓' : '📅'}</span>
+        <div><h3 className="font-bold text-ink">{event.title}</h3><p className="text-sm text-muted">{new Date(event.start_at).toLocaleString()} · {event.source_node || event.event_kind}</p></div>
+      </div>
+    </Link>
+  </Card>)}</div>
+}
+
+function PeopleBirthdaysTab({ people, onError }: { people: Person[]; onError: (message: string) => void }) {
+  const [contacts, setContacts] = useState<AtlasContact[]>([])
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState(''); const [dob, setDob] = useState(''); const [relationship, setRelationship] = useState('')
+  const load = () => api.getAtlasContacts().then(setContacts).catch(e => onError(errMsg(e)))
+  useEffect(() => { void load() }, [onError])
+  const save = async (event: React.FormEvent) => { event.preventDefault(); if (!name.trim() || !dob) return
+    try { await api.createAtlasContact({ name: name.trim(), date_of_birth: dob, relationship, visibility: 'household' }); setName(''); setDob(''); setRelationship(''); setOpen(false); load() }
+    catch (e) { onError(errMsg(e)) }
+  }
+  const remove = async (contact: AtlasContact) => { if (!(await confirmDialog({ title: `Delete ${contact.name}?`, confirmLabel: 'Delete' }))) return; try { await api.deleteAtlasContact(contact.id); load() } catch (e) { onError(errMsg(e)) } }
+  const rows = [...people.filter(p => p.date_of_birth).map(p => ({ id: `p-${p.id}`, name: p.display_name, dob: p.date_of_birth!, relationship: 'Household member', contact: null as AtlasContact | null })),
+    ...contacts.filter(c => !c.linked_person_id).map(c => ({ id: `c-${c.id}`, name: c.name, dob: c.date_of_birth, relationship: c.relationship, contact: c }))]
+  return <div className="flex flex-col gap-4">
+    {open ? <Card title="Add a person"><form onSubmit={save} className="grid gap-3 sm:grid-cols-3"><Field label="Name"><Input value={name} onChange={e => setName(e.target.value)} autoFocus /></Field><Field label="Date of birth"><Input type="date" value={dob} onChange={e => setDob(e.target.value)} /></Field><Field label="Relationship"><Input value={relationship} onChange={e => setRelationship(e.target.value)} placeholder="Friend, aunt…" /></Field><div className="flex gap-2 sm:col-span-3 sm:justify-end"><Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" disabled={!name.trim() || !dob}>Save person</Button></div></form></Card>
+      : <Button size="sm" className="self-start" onClick={() => setOpen(true)}>+ Add person</Button>}
+    {!rows.length ? <EmptyState icon="🎂" title="No birthdays yet" hint="Add friends and relatives here, or add a household member's birth date in user management." /> : <div className="grid gap-3 lg:grid-cols-2">{rows.map(row => <Card key={row.id}><div className="flex items-center justify-between gap-3"><div><h3 className="font-bold text-ink">{row.name}</h3><p className="text-sm text-muted">🎂 {new Date(`${row.dob}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}{row.relationship ? ` · ${row.relationship}` : ''}</p></div>{row.contact && <DeleteAction onClick={() => remove(row.contact!)} label={row.name} />}</div></Card>)}</div>}
+  </div>
+}
+
+type Tab = 'agenda' | 'lists' | 'notes' | 'reminders' | 'people'
+const TAB_KEYS: Tab[] = ['agenda', 'lists', 'notes', 'reminders', 'people']
 
 const LIST_TYPES = Object.entries(LIST_TYPE_META).map(([key, m]) => ({ key, label: m.label, icon: m.icon }))
 
 export function AtlasPage() {
   const { user } = useAuth()
-  const [tab, setTab] = useUrlTab<Tab>('lists', TAB_KEYS)
+  const [tab, setTab] = useUrlTab<Tab>('agenda', TAB_KEYS)
   const [lists, setLists] = useState<AtlasList[]>([])
   const [people, setPeople] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
@@ -801,16 +834,18 @@ export function AtlasPage() {
           {/* Tabs */}
           <Tabs
             tabs={[
+              { key: 'agenda', label: 'agenda' },
               { key: 'lists', label: 'lists', badge: lists.length || undefined },
               { key: 'notes', label: 'notes' },
               { key: 'reminders', label: 'reminders' },
+              { key: 'people', label: 'people & birthdays' },
             ]}
             active={tab}
             onChange={setTab}
             className="w-fit"
           />
 
-          {tab === 'lists' ? (
+          {tab === 'agenda' ? <AgendaTab onError={setError} /> : tab === 'lists' ? (
             <div className="flex flex-col gap-4">
               {creatingList ? (
                 <form onSubmit={createList} className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-3 sm:flex-row">
@@ -861,8 +896,10 @@ export function AtlasPage() {
             </div>
           ) : tab === 'notes' ? (
             <NotesTab key={`notes-${captureTick}`} onError={setError} />
-          ) : (
+          ) : tab === 'reminders' ? (
             <RemindersTab key={`reminders-${captureTick}`} onError={setError} />
+          ) : (
+            <PeopleBirthdaysTab people={people} onError={setError} />
           )}
         </>
       )}

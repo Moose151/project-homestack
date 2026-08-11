@@ -5,6 +5,11 @@
 > source records own their dates (D7), People and Users remain distinct (D12), visibility is
 > resolved centrally (D10), and scheduled work begins as an idempotent management command (D5).
 
+> **Implementation status (v0.32.0):** appointments, Atlas Agenda, automatic dated-item sync,
+> Atlas People & birthdays, user-profile birth dates and independent pool schedule editing are
+> shipped. Per-user phone notification preferences/delivery remain pending until the deployment is
+> served through HTTPS; the current HTTP installation cannot safely register Web Push.
+
 ## 1. Outcome
 
 HomeStack should give each person one dependable view of what is coming up and notify them in the

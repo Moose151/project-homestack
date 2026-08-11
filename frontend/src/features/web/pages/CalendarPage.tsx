@@ -85,10 +85,13 @@ function EventModal({
   const base = event ? new Date(event.start_at) : (defaultDate ?? new Date())
   const [f, setF] = useState({
     title: event?.title ?? '',
+    event_kind: event?.event_kind === 'appointment' ? 'appointment' : 'event',
     start_at: base.toISOString(),
     end_at: event?.end_at ?? '',
     is_all_day: event?.is_all_day ?? false,
     location: event?.location ?? '',
+    provider: event?.provider ?? '',
+    contact: event?.contact ?? '',
     colour: event?.colour ?? '',
     assigned_to_person_ids: event ? event.assigned_to_person_ids : defaultAssignee,
     visibility: event?.visibility ?? 'household',
@@ -106,10 +109,13 @@ function EventModal({
     try {
       const payload: CalendarEventWrite = {
         title: f.title.trim(),
+        event_kind: f.event_kind as 'event' | 'appointment',
         start_at: new Date(f.start_at).toISOString(),
         end_at: f.end_at ? new Date(f.end_at).toISOString() : null,
         is_all_day: f.is_all_day,
         location: f.location,
+        provider: f.provider,
+        contact: f.contact,
         colour: f.colour,
         assigned_to_person_ids: f.assigned_to_person_ids,
         visibility: f.visibility,
@@ -169,6 +175,12 @@ function EventModal({
       }
     >
       <div className="flex flex-col gap-3">
+        <Field label="Type">
+          <Select value={f.event_kind} onChange={e => set('event_kind', e.target.value)}>
+            <option value="event">Event</option>
+            <option value="appointment">Appointment</option>
+          </Select>
+        </Field>
         <Input placeholder="Title" value={f.title} onChange={e => set('title', e.target.value)} autoFocus />
         <Field label="Start">
           <DateTimeField
@@ -199,6 +211,10 @@ function EventModal({
             <Field label="Location (optional)">
               <Input placeholder="Where" value={f.location} onChange={e => set('location', e.target.value)} />
             </Field>
+            {f.event_kind === 'appointment' && <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Provider (optional)"><Input placeholder="Doctor, salon, business…" value={f.provider} onChange={e => set('provider', e.target.value)} /></Field>
+              <Field label="Contact (optional)"><Input placeholder="Phone, email or booking reference" value={f.contact} onChange={e => set('contact', e.target.value)} /></Field>
+            </div>}
             <div className="grid grid-cols-2 gap-2">
               <Field label="Assigned to">
                 <AssigneeSelect people={people}
@@ -703,9 +719,18 @@ export function CalendarPage() {
       }),
       api.getRotatingSchedules(),
       api.getRotatingScheduleOccurrences(dateKey(start), dateKey(end)),
+      api.getBirthdayOccurrences(dateKey(start), dateKey(end)),
     ])
-      .then(([nextEvents, nextSchedules, nextRotations]) => {
-        setEvents(nextEvents)
+      .then(([nextEvents, nextSchedules, nextRotations, birthdays]) => {
+        const birthdayEvents: CalendarEvent[] = birthdays.map((birthday, index) => ({
+          id: -1000000 - index, title: birthday.title, event_kind: 'birthday', description: '',
+          start_at: `${birthday.date}T00:00:00`, end_at: null, is_all_day: true, timezone: '',
+          recurrence_rule: '', source_node: null, source_record_type: 'BirthdayOccurrence',
+          source_record_id: birthday.contact_id || birthday.person_id, assigned_to_person_ids: birthday.person_id ? [birthday.person_id] : [],
+          colour: '#C46A4A', location: '', provider: '', contact: '', visibility: 'household',
+          sensitivity: 'normal', is_synced: true, created_at: '', updated_at: '',
+        }))
+        setEvents([...nextEvents, ...birthdayEvents])
         setRotatingSchedules(nextSchedules)
         setRotations(nextRotations)
       })

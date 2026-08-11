@@ -87,7 +87,7 @@ class AtlasList(HouseholdBaseModel):
         return self.title
 
 
-class AtlasListItem(HouseholdBaseModel):
+class AtlasListItem(CalendarSyncMixin, HouseholdBaseModel):
     """An item within an AtlasList, optionally assigned and completable."""
 
     atlas_list = models.ForeignKey(
@@ -108,6 +108,7 @@ class AtlasListItem(HouseholdBaseModel):
     imported_at = models.DateTimeField(null=True, blank=True)
     position = models.PositiveIntegerField(default=0)
     due_at = models.DateTimeField(null=True, blank=True)
+    calendar_event_id = models.PositiveBigIntegerField(null=True, blank=True)
     assigned_to_people = models.ManyToManyField(
         "people.Person",
         blank=True,
@@ -139,6 +140,22 @@ class AtlasListItem(HouseholdBaseModel):
     @property
     def is_complete(self) -> bool:
         return self.completed_at is not None
+
+    def get_calendar_data(self) -> dict | None:
+        if not self.due_at or self.completed_at:
+            return None
+        return {
+            "title": self.title,
+            "start_at": self.due_at,
+            "description": self.notes,
+            "event_kind": "task",
+            "visibility": self.atlas_list.visibility,
+            "sensitivity": "normal",
+            "assigned_to_person_ids": list(self.assigned_to_people.values_list("id", flat=True)),
+        }
+
+    def get_calendar_node_key(self) -> str:
+        return "atlas"
 
 
 class AtlasListSuggestion(HouseholdBaseModel):
@@ -219,3 +236,26 @@ class AtlasReminder(CalendarSyncMixin, HouseholdBaseModel):
 
     def get_calendar_node_key(self) -> str:
         return "atlas"
+
+
+class AtlasContact(HouseholdBaseModel):
+    """A friend/relative kept without manufacturing a login-backed Person."""
+
+    name = models.CharField(max_length=255)
+    date_of_birth = models.DateField()
+    relationship = models.CharField(max_length=120, blank=True, default="")
+    notes = models.TextField(blank=True, default="")
+    linked_person = models.OneToOneField(
+        "people.Person", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="atlas_contact",
+    )
+    visibility = models.CharField(max_length=20, choices=Visibility.choices, default=Visibility.HOUSEHOLD)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name

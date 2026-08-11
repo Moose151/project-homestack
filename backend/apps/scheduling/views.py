@@ -54,6 +54,7 @@ class CalendarEventListView(APIView):
             node=params.get("node") or None,
             person=int(person) if person and person.isdigit() else None,
             sensitive_unlocked=is_reauthed(request._request),
+            agenda_only=params.get("agenda") == "1",
         )
         return Response(CalendarEventSerializer(events, many=True).data)
 

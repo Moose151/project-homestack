@@ -5,7 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.accounts.models import User
-from apps.atlas.models import AtlasList, AtlasListItem, AtlasListSuggestion, AtlasNote, AtlasReminder
+from apps.atlas.models import AtlasContact, AtlasList, AtlasListItem, AtlasListSuggestion, AtlasNote, AtlasReminder
 from apps.core.assignment import apply_assignees, pop_assignees
 from apps.core.models import get_active_household
 from apps.people.selectors import person_for_user
@@ -80,6 +80,8 @@ def can_manage_personal_list(acting_user: User, atlas_list: AtlasList) -> bool:
 
 
 def delete_atlas_list(acting_user: User, atlas_list: AtlasList) -> None:
+    for item in atlas_list.items.all():
+        delete_event_for(item)
     atlas_list.updated_by = acting_user
     atlas_list.save(update_fields=["updated_by", "updated_at"])
     atlas_list.soft_delete()
@@ -109,6 +111,7 @@ def create_list_item(acting_user: User, atlas_list: AtlasList, **data) -> AtlasL
     )
     item.save()
     apply_assignees(item, people)
+    sync_event_for(item)
     _finish_product_item(acting_user, item, cache_image=cache_image, watch_enabled=watch_enabled)
     return item
 
@@ -127,6 +130,7 @@ def update_list_item(acting_user: User, item: AtlasListItem, **data) -> AtlasLis
     item.updated_by = acting_user
     item.save()
     apply_assignees(item, people)
+    sync_event_for(item)
     _finish_product_item(acting_user, item, cache_image=cache_image, watch_enabled=watch_enabled)
     return item
 
@@ -166,6 +170,7 @@ def complete_list_item(acting_user: User, item: AtlasListItem) -> AtlasListItem:
         item.completed_by = acting_user
         item.updated_by = acting_user
         item.save()
+        sync_event_for(item)
     return item
 
 
@@ -175,6 +180,7 @@ def uncomplete_list_item(acting_user: User, item: AtlasListItem) -> AtlasListIte
         item.completed_by = None
         item.updated_by = acting_user
         item.save()
+        sync_event_for(item)
     return item
 
 
@@ -182,6 +188,7 @@ def delete_list_item(acting_user: User, item: AtlasListItem) -> None:
     from apps.attachments.services import delete_attachment
     from apps.link_imports.models import LinkWatch
 
+    delete_event_for(item)
     LinkWatch.objects.filter(
         source_node="atlas", source_record_type="AtlasListItem", source_record_id=item.id,
     ).update(is_active=False, updated_by=acting_user)
@@ -190,6 +197,27 @@ def delete_list_item(acting_user: User, item: AtlasListItem) -> None:
     item.updated_by = acting_user
     item.save(update_fields=["updated_by", "updated_at"])
     item.soft_delete()
+
+
+def create_contact(acting_user: User, **data) -> AtlasContact:
+    return AtlasContact.objects.create(
+        household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data
+    )
+
+
+def update_contact(acting_user: User, contact: AtlasContact, **data) -> AtlasContact:
+    for field in {"name", "date_of_birth", "relationship", "notes", "linked_person", "visibility"}:
+        if field in data:
+            setattr(contact, field, data[field])
+    contact.updated_by = acting_user
+    contact.save()
+    return contact
+
+
+def delete_contact(acting_user: User, contact: AtlasContact) -> None:
+    contact.updated_by = acting_user
+    contact.save(update_fields=["updated_by", "updated_at"])
+    contact.soft_delete()
 
 
 def create_list_suggestion(acting_user: User, atlas_list: AtlasList, **data) -> AtlasListSuggestion:

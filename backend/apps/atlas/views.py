@@ -1,6 +1,10 @@
 """atlas views — thin wrappers over selectors/services (Coding Standards §6)."""
 from __future__ import annotations
 
+from datetime import date, timedelta
+
+from django.utils.dateparse import parse_date
+
 from rest_framework import status
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.request import Request
@@ -10,6 +14,7 @@ from rest_framework.views import APIView
 from apps.atlas import selectors, services
 from apps.atlas.serializers import (
     AtlasListItemSerializer,
+    AtlasContactSerializer,
     AtlasListItemWriteSerializer,
     AtlasListSerializer,
     AtlasListSuggestionSerializer,
@@ -20,6 +25,80 @@ from apps.atlas.serializers import (
 from apps.permissions.drf import HomeStackPermission
 
 _AtlasPerm = HomeStackPermission.for_resource("atlas")
+
+
+class ContactListView(APIView):
+    permission_classes = [_AtlasPerm]
+
+    def get(self, request: Request) -> Response:
+        return Response(AtlasContactSerializer(selectors.list_contacts(request.user), many=True).data)
+
+    def post(self, request: Request) -> Response:
+        serializer = AtlasContactSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        contact = services.create_contact(request.user, **serializer.validated_data)
+        return Response(AtlasContactSerializer(contact).data, status=status.HTTP_201_CREATED)
+
+
+class ContactDetailView(APIView):
+    permission_classes = [_AtlasPerm]
+
+    def _get(self, request, contact_id):
+        contact = selectors.get_contact(contact_id, request.user)
+        if contact is None:
+            raise NotFound()
+        return contact
+
+    def get(self, request: Request, contact_id: int) -> Response:
+        return Response(AtlasContactSerializer(self._get(request, contact_id)).data)
+
+    def patch(self, request: Request, contact_id: int) -> Response:
+        contact = self._get(request, contact_id)
+        serializer = AtlasContactSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        return Response(AtlasContactSerializer(services.update_contact(request.user, contact, **serializer.validated_data)).data)
+
+    def delete(self, request: Request, contact_id: int) -> Response:
+        services.delete_contact(request.user, self._get(request, contact_id))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _birthday_in_year(born: date, year: int) -> date:
+    try:
+        return born.replace(year=year)
+    except ValueError:  # 29 February follows the documented 28 February policy.
+        return date(year, 2, 28)
+
+
+class BirthdayOccurrenceView(APIView):
+    permission_classes = [_AtlasPerm]
+
+    def get(self, request: Request) -> Response:
+        start = parse_date(request.query_params.get("start") or "") or date.today()
+        end = parse_date(request.query_params.get("end") or "") or (start + timedelta(days=366))
+        if end <= start or (end - start).days > 732:
+            raise ValidationError("Choose an end date after start, within two years.")
+        from apps.people.selectors import list_people
+        sources = [
+            (f"person-{person.id}", person.name, person.date_of_birth, person.id, None)
+            for person in list_people(request.user) if person.date_of_birth
+        ]
+        sources += [
+            (f"contact-{contact.id}", contact.name, contact.date_of_birth, None, contact.id)
+            for contact in selectors.list_contacts(request.user) if not contact.linked_person_id
+        ]
+        rows = []
+        for source_id, name, born, person_id, contact_id in sources:
+            for year in range(start.year, end.year + 1):
+                occurrence = _birthday_in_year(born, year)
+                if start <= occurrence < end:
+                    age = year - born.year
+                    rows.append({
+                        "id": f"birthday-{source_id}-{year}", "date": occurrence.isoformat(),
+                        "title": f"{name} turns {age}", "name": name, "age": age,
+                        "person_id": person_id, "contact_id": contact_id, "event_kind": "birthday",
+                    })
+        return Response(sorted(rows, key=lambda row: (row["date"], row["name"])))
 
 
 # ---------------------------------------------------------------------------

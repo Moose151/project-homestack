@@ -16,6 +16,7 @@ export interface Person {
   colour: string
   profile_type: 'adult' | 'child' | 'other'
   linked_user_id: number | null
+  date_of_birth: string | null
 }
 
 export interface AdminUser {
@@ -54,6 +55,7 @@ export interface AtlasListItem {
   quantity: string
   position: number
   due_at: string | null
+  calendar_event_id: number | null
   product_url: string
   source_image_url: string
   cached_image_url: string
@@ -226,6 +228,7 @@ export interface AtlasReminder {
 export interface CalendarEvent {
   id: number
   title: string
+  event_kind: 'event' | 'appointment' | 'birthday' | 'holiday' | 'task'
   description: string
   start_at: string
   end_at: string | null
@@ -238,6 +241,8 @@ export interface CalendarEvent {
   assigned_to_person_ids: number[]
   colour: string
   location: string
+  provider: string
+  contact: string
   visibility: string
   sensitivity: string
   is_synced: boolean
@@ -247,6 +252,7 @@ export interface CalendarEvent {
 
 export interface CalendarEventWrite {
   title: string
+  event_kind?: 'event' | 'appointment'
   description?: string
   start_at: string
   end_at?: string | null
@@ -255,7 +261,30 @@ export interface CalendarEventWrite {
   assigned_to_person_ids?: number[]
   colour?: string
   location?: string
+  provider?: string
+  contact?: string
   visibility?: string
+}
+
+export interface AtlasContact {
+  id: number
+  name: string
+  date_of_birth: string
+  relationship: string
+  notes: string
+  linked_person_id: number | null
+  visibility: string
+}
+
+export interface BirthdayOccurrence {
+  id: string
+  date: string
+  title: string
+  name: string
+  age: number
+  person_id: number | null
+  contact_id: number | null
+  event_kind: 'birthday'
 }
 
 export interface RotatingSchedulePerson {

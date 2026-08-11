@@ -975,6 +975,9 @@ function PoolTab({ onError, canEdit }: { onError: (message: string) => void; can
   const [editing, setEditing] = useState(false)
   const [testing, setTesting] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [editingCare, setEditingCare] = useState<MaintenanceTask | null>(null)
+  const [careDate, setCareDate] = useState<string | null>(null)
+  const [careRule, setCareRule] = useState('')
 
   const pool = pools.find(row => row.id === selectedId) ?? null
 
@@ -1153,11 +1156,14 @@ function PoolTab({ onError, canEdit }: { onError: (message: string) => void; can
                     </p>
                   </div>
                   {canEdit && (
-                    <Button size="sm" variant="secondary" disabled={busy} onClick={() => act(() => api.completeMaintenance(task.id))}>
-                      Done
-                    </Button>
+                    <div className="flex gap-2"><Button size="sm" variant="ghost" disabled={busy} onClick={() => { setEditingCare(task); setCareDate(task.next_due_at); setCareRule(task.recurrence_rule) }}>Edit schedule</Button><Button size="sm" variant="secondary" disabled={busy} onClick={() => act(() => api.completeMaintenance(task.id))}>Done</Button></div>
                   )}
                 </div>
+                {editingCare?.id === task.id && <div className="mt-3 grid gap-3 border-t border-line pt-3 sm:grid-cols-2">
+                  <Field label="Next occurrence"><DateTimeField value={careDate} allDay onChange={({ value }) => setCareDate(value)} /></Field>
+                  <Field label="Repeats"><Select value={careRule} onChange={event => setCareRule(event.target.value)}><option value="">Does not repeat</option><option value="FREQ=WEEKLY">Weekly</option><option value="FREQ=WEEKLY;INTERVAL=2">Fortnightly</option><option value="FREQ=MONTHLY">Monthly</option></Select></Field>
+                  <div className="flex gap-2 sm:col-span-2 sm:justify-end"><Button size="sm" variant="ghost" onClick={() => setEditingCare(null)}>Cancel</Button><Button size="sm" variant="secondary" onClick={() => { setCareDate(null); setCareRule('') }}>Pause</Button><Button size="sm" disabled={busy} onClick={() => act(async () => { await api.updateMaintenance(task.id, { next_due_at: careDate, recurrence_rule: careRule }); setEditingCare(null) })}>Save schedule</Button></div>
+                </div>}
                 {task.notes && <p className="mt-2 text-sm leading-relaxed text-muted">{task.notes}</p>}
               </li>
             ))}

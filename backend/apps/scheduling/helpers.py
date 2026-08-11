@@ -44,6 +44,7 @@ def sync_event_for(record) -> None:
     event_fields = {
         "household": record.household,
         "title": data.get("title", ""),
+        "event_kind": data.get("event_kind", "event"),
         "description": data.get("description", ""),
         "start_at": data["start_at"],
         "end_at": data.get("end_at"),
@@ -52,6 +53,9 @@ def sync_event_for(record) -> None:
         "visibility": data.get("visibility", "household"),
         "sensitivity": data.get("sensitivity", "normal"),
         "colour": data.get("colour", ""),
+        "location": data.get("location", ""),
+        "provider": data.get("provider", ""),
+        "contact": data.get("contact", ""),
         "source_node": node,
         "source_record_type": type(record).__name__,
         "source_record_id": record.pk,

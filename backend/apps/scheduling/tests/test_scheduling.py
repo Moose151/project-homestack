@@ -153,6 +153,18 @@ class CalendarEventCRUDTests(TestCase):
         self.assertEqual(data["title"], "New event")
         self.assertFalse(data["is_synced"])
 
+    def test_create_appointment_and_exclude_birthday_from_agenda(self):
+        appointment = self.client.post(self.list_url, {
+            "title": "Dentist", "event_kind": "appointment", "start_at": _future(hours=3),
+            "provider": "Newtown Dental", "contact": "07 3000 0000",
+        }, content_type="application/json")
+        self.assertEqual(appointment.status_code, 201)
+        self.assertEqual(appointment.json()["event_kind"], "appointment")
+        self.assertEqual(appointment.json()["provider"], "Newtown Dental")
+        create_event(self.admin, title="Birthday", event_kind="birthday", start_at=_future(hours=4))
+        agenda = self.client.get(f"{self.list_url}?agenda=1").json()
+        self.assertEqual([row["title"] for row in agenda], ["Dentist"])
+
     def test_list_returns_events(self):
         create_event(self.admin, title="Ev1", start_at=timezone.now())
         create_event(self.admin, title="Ev2", start_at=timezone.now())

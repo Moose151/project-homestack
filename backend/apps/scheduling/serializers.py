@@ -18,6 +18,7 @@ class CalendarEventSerializer(AssigneeSerializerMixin, serializers.ModelSerializ
         fields = [
             "id",
             "title",
+            "event_kind",
             "description",
             "start_at",
             "end_at",
@@ -31,6 +32,8 @@ class CalendarEventSerializer(AssigneeSerializerMixin, serializers.ModelSerializ
             "assigned_to_person_ids",
             "colour",
             "location",
+            "provider",
+            "contact",
             "visibility",
             "sensitivity",
             "is_synced",
@@ -60,6 +63,7 @@ class CalendarEventWriteSerializer(AssigneeSerializerMixin, serializers.ModelSer
         model = CalendarEvent
         fields = [
             "title",
+            "event_kind",
             "description",
             "start_at",
             "end_at",
@@ -69,6 +73,8 @@ class CalendarEventWriteSerializer(AssigneeSerializerMixin, serializers.ModelSer
             "assigned_to_person_ids",
             "colour",
             "location",
+            "provider",
+            "contact",
             "visibility",
             "sensitivity",
         ]

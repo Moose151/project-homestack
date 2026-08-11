@@ -5,7 +5,7 @@ from rest_framework import serializers
 
 from apps.core.serializers import AssigneeSerializerMixin
 
-from apps.atlas.models import AtlasList, AtlasListItem, AtlasListSuggestion, AtlasNote, AtlasReminder
+from apps.atlas.models import AtlasContact, AtlasList, AtlasListItem, AtlasListSuggestion, AtlasNote, AtlasReminder
 
 
 class AtlasNoteSerializer(serializers.ModelSerializer):
@@ -33,7 +33,7 @@ class AtlasListItemSerializer(AssigneeSerializerMixin, serializers.ModelSerializ
     class Meta:
         model = AtlasListItem
         fields = [
-            "id", "atlas_list_id", "title", "notes", "quantity", "position", "due_at",
+            "id", "atlas_list_id", "title", "notes", "quantity", "position", "due_at", "calendar_event_id",
             "product_url", "source_image_url", "cached_image_url", "image_attachment_id",
             "retailer", "unit_price", "currency", "imported_at",
             "price_watch", "cache_image", "price_watch_enabled",
@@ -41,7 +41,7 @@ class AtlasListItemSerializer(AssigneeSerializerMixin, serializers.ModelSerializ
             "completed_at", "completed_by_id", "is_complete",
             "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "atlas_list_id", "cached_image_url", "image_attachment_id", "imported_at", "price_watch", "completed_at", "completed_by_id", "is_complete", "created_at", "updated_at"]
+        read_only_fields = ["id", "atlas_list_id", "calendar_event_id", "cached_image_url", "image_attachment_id", "imported_at", "price_watch", "completed_at", "completed_by_id", "is_complete", "created_at", "updated_at"]
 
     def get_cached_image_url(self, obj):
         return f"/api/v1/attachments/{obj.image_attachment_id}/download/" if obj.image_attachment_id else ""
@@ -134,3 +134,15 @@ class AtlasReminderSerializer(serializers.ModelSerializer):
         if not value.strip():
             raise serializers.ValidationError("Title may not be blank.")
         return value
+
+
+class AtlasContactSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AtlasContact
+        fields = ["id", "name", "date_of_birth", "relationship", "notes", "linked_person_id", "visibility", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate_name(self, value: str) -> str:
+        if not value.strip():
+            raise serializers.ValidationError("Name may not be blank.")
+        return value.strip()

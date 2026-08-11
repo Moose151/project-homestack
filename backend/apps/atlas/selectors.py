@@ -4,7 +4,7 @@ from __future__ import annotations
 from django.db import connection
 from django.db.models import Q
 
-from apps.atlas.models import AtlasList, AtlasListItem, AtlasListSuggestion, AtlasNote, AtlasReminder
+from apps.atlas.models import AtlasContact, AtlasList, AtlasListItem, AtlasListSuggestion, AtlasNote, AtlasReminder
 from apps.permissions.visibility import apply_visibility
 
 
@@ -98,6 +98,20 @@ def list_reminders(user=None, *, upcoming_only: bool = False) -> list[AtlasRemin
 
 def get_reminder(pk: int) -> AtlasReminder | None:
     return AtlasReminder.objects.filter(pk=pk).first()
+
+
+def list_contacts(user=None) -> list[AtlasContact]:
+    qs = AtlasContact.objects.select_related("linked_person").order_by("name")
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return list(qs)
+
+
+def get_contact(pk: int, user=None) -> AtlasContact | None:
+    qs = AtlasContact.objects.filter(pk=pk)
+    if user is not None:
+        qs = apply_visibility(qs, user)
+    return qs.first()
 
 
 def search_atlas(user, query: str) -> dict:

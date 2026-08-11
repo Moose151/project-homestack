@@ -154,7 +154,7 @@ export function UsersPage() {
               </div>
             </div>
             {editing === u.id && (
-              <EditUser u={u} onError={setErr} onSaved={() => { setEditing(null); reload() }} />
+              <EditUser u={u} person={people.find(p => p.id === u.linked_person_id) ?? null} onError={setErr} onSaved={() => { setEditing(null); reload() }} />
             )}
           </Card>
         ))}
@@ -281,13 +281,14 @@ function UserForm({ people, onSaved, onError }: { people: Person[]; onSaved: () 
   )
 }
 
-function EditUser({ u, onSaved, onError }: { u: AdminUser; onSaved: () => void; onError: (s: string | null) => void }) {
+function EditUser({ u, person, onSaved, onError }: { u: AdminUser; person: Person | null; onSaved: () => void; onError: (s: string | null) => void }) {
   const [f, setF] = useState({
     display_name: u.display_name,
     role: u.role,
     solace_access: u.solace_access,
     colour: u.colour || '#4A90E2',
     avatar: u.avatar || '',
+    date_of_birth: person?.date_of_birth || '',
     pin: '', pin_confirm: '', password: '', password_confirm: '',
   })
   const [saving, setSaving] = useState(false)
@@ -304,6 +305,7 @@ function EditUser({ u, onSaved, onError }: { u: AdminUser; onSaved: () => void; 
         display_name: f.display_name, role: f.role, colour: f.colour, avatar: f.avatar,
         pin: f.pin || undefined, password: f.password || undefined, solace_access: f.solace_access,
       })
+      if (person) await api.updatePerson(person.id, { date_of_birth: f.date_of_birth || null })
       onSaved()
     } catch (e) {
       onError(e instanceof Error ? cleanErr(e.message) : 'Could not save.')
@@ -321,6 +323,10 @@ function EditUser({ u, onSaved, onError }: { u: AdminUser; onSaved: () => void; 
         </select>
         <span className="font-normal normal-case text-muted">{ROLE_HELP[f.role as (typeof ROLES)[number]]}</span>
       </label>
+      {person && <label className="flex flex-col gap-1 text-xs font-semibold text-muted">Date of birth
+        <input className={input} type="date" value={f.date_of_birth} onChange={e => set('date_of_birth', e.target.value)} />
+        <span className="font-normal text-muted">Used for their birthday and turning age in Calendar.</span>
+      </label>}
       <label className="flex items-center gap-3 rounded-xl border border-line p-3 sm:col-span-2">
         <input
           type="checkbox"

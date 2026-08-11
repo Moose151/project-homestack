@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.31.1**
+> **Current version: 0.32.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,22 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.32 — Daily coordination
+
+### 0.32.0 — 2026-08-11 — appointments, Agenda, birthdays and pool schedules
+- Added explicit Calendar appointments with provider/contact fields. Calendar events now carry a
+  stable kind, and Atlas Agenda projects every permitted upcoming Calendar entry except birthdays
+  and holidays without copying source records.
+- Due-dated Atlas list items now automatically create task-classified Calendar mirrors; edits,
+  completion, reopening, deletion and parent-list deletion keep the mirror aligned.
+- Added Atlas People & birthdays for external friends/relatives, plus virtual birthday occurrences
+  derived from both contacts and household `Person.date_of_birth`. Calendar shows the calculated
+  turning age; user management exposes household birth dates; no yearly event copies are stored.
+- Pool care jobs can be independently rescheduled, changed between weekly/fortnightly/monthly or
+  paused directly in Pool & spa. Existing completion data is preserved because only future schedule
+  fields are updated. **810 backend tests green; frontend production build clean; migrations added
+  for Scheduling and Atlas. Phone Web Push remains held behind the agreed HTTPS prerequisite.**
 
 ## 0.31 — Household Corners and smart product links
 

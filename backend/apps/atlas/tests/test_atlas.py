@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.atlas.models import AtlasList, AtlasNote, AtlasReminder
+from apps.people.models import Person
 from apps.atlas.services import (
     create_atlas_list,
     create_list_item,
@@ -21,6 +22,7 @@ from apps.atlas.services import (
     update_reminder,
 )
 from apps.scheduling.models import CalendarEvent
+from apps.core.models import get_active_household
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +52,36 @@ def _login(client, username, pin="1234"):
 
 def _future(hours=24):
     return timezone.now() + timezone.timedelta(hours=hours)
+
+
+class DailyCoordinationTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("coordadmin")
+        _login(self.client, "coordadmin")
+
+    def test_dated_list_item_syncs_and_completion_removes_calendar_mirror(self):
+        atlas_list = create_atlas_list(self.admin, title="Jobs", list_type="todo")
+        item = create_list_item(self.admin, atlas_list, title="Call plumber", due_at=_future())
+        item.refresh_from_db()
+        self.assertIsNotNone(item.calendar_event_id)
+        event = CalendarEvent.objects.get(pk=item.calendar_event_id)
+        self.assertEqual(event.event_kind, "task")
+        response = self.client.post(f"/api/v1/atlas/lists/{atlas_list.id}/items/{item.id}/complete/")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(CalendarEvent.objects.filter(pk=event.id).exists())
+
+    def test_external_and_household_birthdays_are_projected_without_duplication(self):
+        person = Person.objects.create(
+            household=get_active_household(), linked_user=self.admin, display_name="Alex",
+            date_of_birth=timezone.datetime(1990, 8, 12).date(), created_by=self.admin, updated_by=self.admin,
+        )
+        response = self.client.post("/api/v1/atlas/contacts/", {
+            "name": "Jamie", "date_of_birth": "1985-08-13", "relationship": "Friend",
+        }, content_type="application/json")
+        self.assertEqual(response.status_code, 201, response.data)
+        birthdays = self.client.get("/api/v1/atlas/birthday-occurrences/?start=2026-08-11&end=2026-08-15").json()
+        self.assertEqual([row["title"] for row in birthdays], ["Alex turns 36", "Jamie turns 41"])
+        self.assertEqual(sum(row["person_id"] == person.id for row in birthdays), 1)
 
 
 # ---------------------------------------------------------------------------

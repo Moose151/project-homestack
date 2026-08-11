@@ -2,6 +2,9 @@ from django.urls import path
 
 from apps.atlas.views import (
     AtlasSearchView,
+    BirthdayOccurrenceView,
+    ContactDetailView,
+    ContactListView,
     ListDetailView,
     ListItemCompleteView,
     ListItemDetailView,
@@ -17,6 +20,9 @@ from apps.atlas.views import (
 )
 
 urlpatterns = [
+    path("contacts/", ContactListView.as_view(), name="atlas-contact-list"),
+    path("contacts/<int:contact_id>/", ContactDetailView.as_view(), name="atlas-contact-detail"),
+    path("birthday-occurrences/", BirthdayOccurrenceView.as_view(), name="atlas-birthday-occurrences"),
     # Search
     path("search/", AtlasSearchView.as_view(), name="atlas-search"),
 
