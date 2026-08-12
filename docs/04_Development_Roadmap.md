@@ -28,11 +28,12 @@ The following roadmap stages are **complete** and should not be treated as activ
 | M2 Meridian | Complete / in daily use | Native Meridian source of truth, adult cockpit, kid workflows, rewards/points/approvals. |
 | M2.5 Core surfaces | Complete | Functional responsive Hub, Atlas and Calendar with FTS, widgets, views and shared scheduling. |
 | M3 Education/Home Wiki/Pets | Complete | All three nodes shipped end-to-end. |
+| Books | Complete | Shared Book catalogue, personal Want to Read/Reading/Read shelves, User ratings/notes, shared Book Clubs/up-next queue and safe URL/ISBN enrichment. |
 | M4 Security maturation | Functionally complete | Generic sensitive-node re-auth/locks, permission-aware attachments, audit coverage and kiosk-safe sensitive access. |
 | M5 Solace | Complete / in daily use | Native Money/Solace feature set; household chose fresh manual bill entry rather than legacy data import. |
 | Homestead expansion | Complete baseline | Property, maintenance, appliances, cover/costs, rooms/plans, pools/spas, utilities and interactive floor plan. |
 | Fitness & Training | Complete / in use | D24 social training node separate from medical Health. |
-| Corners + safe link import | Complete baseline | Person-centred summaries, lists/wishes/reactions and bounded URL preview/cache/watch capability. |
+| Corners + safe link import | Complete baseline | Person-centred summaries, lists/wishes/reactions and bounded URL/ISBN/product preview/cache/watch capability. |
 | Daily coordination | Complete except push | Appointments, Agenda, dated Atlas sync, birthdays/People and editable pool schedules shipped. |
 | Travel baseline | Complete | Trips/ideas, booking/cost planning, itinerary/Things to do, Calendar/notification/Corner integration. |
 | Grocery + Shopping | Complete | Dedicated shared Atlas Grocery and Shopping surfaces. |
@@ -263,6 +264,10 @@ implemented fact. Revisit only after current navigation/domain use shows that se
 future Inventory or future Assets would actually create clutter.
 
 No data should be moved or schemas merged merely to reduce menu entries.
+
+Books is already a valid independent shipped node; do not merge its personal shelves, Book Clubs,
+queue and ratings into Atlas/Education solely to reduce navigation without a specific later product
+decision and data-preserving migration plan.
 
 ## 9. Health milestone — deliberately later
 
