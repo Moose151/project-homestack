@@ -41,6 +41,7 @@ Top-level route groups map to the owning core service or domain, for example:
 /api/v1/education/
 /api/v1/wiki/
 /api/v1/pets/
+/api/v1/books/
 /api/v1/homestead/
 /api/v1/solace/
 /api/v1/fitness/
@@ -103,6 +104,9 @@ Every protected request is subject to the applicable combination of:
 List endpoints must filter inaccessible records in selectors/querysets rather than serialize them
 and remove them later.
 
+Domain membership/ownership can add an extra constraint. For example, Books personal shelf entries
+are scoped to the authenticated User and Book Club data is filtered to clubs the User belongs to.
+
 For sensitive resources, returning 404 instead of confirming an inaccessible record's existence may
 be appropriate where the existing contract uses that behaviour.
 
@@ -114,7 +118,8 @@ Person linkage.
 People routes own household profiles used as record subjects/assignees.
 
 Do not use User IDs as a substitute for Person IDs in domain APIs simply because most current
-household members have both (D12).
+household members have both (D12). Conversely, genuinely login-personal state such as one User's
+Books shelf/rating may correctly be User-scoped.
 
 ## 7. Nodes / Manage HomeStack
 
@@ -175,12 +180,15 @@ service.
 Every download is permission checked. Sensitive downloads are audited. An attachment path/storage
 URL is never treated as authorization.
 
-## 12. Search
+## 12. Search and shared link import
 
 Global search is permission-aware and aggregates results from owning domain selectors/querysets.
 
 Query strings do not bypass source permissions and snippets must not be built from inaccessible
 records.
+
+Safe URL/ISBN/product preview/enrichment uses the bounded shared Link Import API/service rather than
+arbitrary node-specific fetch proxies. After review/save, the owning domain record is authoritative.
 
 ## 13. Audit and backups
 
@@ -239,7 +247,31 @@ Pets APIs own pet profiles, treatment/care schedules and appointments. Treatment
 or clears future due state according to the owning recurrence rules and keeps Calendar projection in
 sync.
 
-## 19. Homestead
+## 19. Books
+
+Books is a shipped opt-in domain with its own API namespace. Current route families cover:
+
+- available active HomeStack Users used by Book Club membership UI;
+- Book catalogue list/create/detail/update/delete;
+- rating/notes upsert;
+- personal shelf list/create/update/delete;
+- Book Club list/create/detail/update/delete;
+- club membership add/remove;
+- club-book list/add/update/remove;
+- ordered club queue list/add/reorder/remove.
+
+Important security/ownership rules:
+
+- `PersonalBookEntry` reads/writes are scoped to the authenticated User;
+- each User has one `BookRating` per Book, shared across personal and club presentation;
+- club list/detail/book/queue selectors return clubs the authenticated User belongs to;
+- knowing a Book Club/member/queue ID does not bypass membership plus central Books permission;
+- exact current paths are defined by `backend/apps/books/urls.py` and tests.
+
+Book metadata enrichment from a URL or ISBN uses the shared safe Link Import boundary; Books does
+not expose a generic scraper/fetch endpoint.
+
+## 20. Homestead
 
 Homestead APIs own property/room/area planning, maintenance, appliances, providers, cover/context,
 pools/spas, utilities and floor-plan associations as implemented.
@@ -247,7 +279,7 @@ pools/spas, utilities and floor-plan associations as implemented.
 Protected finance-related Homestead actions must preserve the Solace permission/re-auth boundary
 when they read or create Solace-owned financial records.
 
-## 20. Solace / Money
+## 21. Solace / Money
 
 Solace APIs own the current native finance model: bills/occurrences, pay-cycle/Now/forecast/bucket
 and other implemented Money workflows.
@@ -259,7 +291,7 @@ because an older API document listed them.
 All sensitive finance endpoints are permission/re-auth protected and must not leak content through
 error messages, Hub, Calendar, Search or notifications.
 
-## 21. Fitness & Training (D24)
+## 22. Fitness & Training (D24)
 
 Fitness APIs own:
 
@@ -272,7 +304,7 @@ Fitness APIs own:
 Private/visible session rules are enforced on the backend. Fitness APIs must not become a medical
 Health API.
 
-## 22. Travel
+## 23. Travel
 
 Travel APIs own:
 
@@ -286,7 +318,7 @@ Travel APIs own:
 Dated/book-by itinerary/booking/trip elements follow the shared Calendar ownership rules. Hidden
 Users must not recover surprise trip details by guessing IDs or using Calendar/search projections.
 
-## 23. Home Assistant (planned, D22)
+## 24. Home Assistant (planned, D22)
 
 When implemented, Home Assistant APIs are backend-mediated and bounded. Candidate route families
 include:
@@ -301,7 +333,7 @@ include:
 The browser never receives the HA long-lived token and never submits arbitrary domain/service/entity
 calls as a generic proxy.
 
-## 24. Standard request/response behaviour
+## 25. Standard request/response behaviour
 
 Use consistent status/error behaviour across domains.
 
@@ -319,7 +351,7 @@ Expected broad semantics:
 Validation responses should identify actionable fields without returning stack traces or secret
 configuration.
 
-## 25. Mutation rules
+## 26. Mutation rules
 
 - PUT/PATCH semantics must be explicit per endpoint; partial updates should not accidentally apply
   create-only required-field validation.
@@ -328,7 +360,7 @@ configuration.
 - Idempotent actions/import/conversion operations should remain idempotent when retried.
 - Soft-delete/restore rules follow the owning model/service rather than generic client assumptions.
 
-## 26. API evolution rule
+## 27. API evolution rule
 
 The API is allowed to evolve while HomeStack is pre-1.0 and household-owned, but changes must stay
 coherent:
@@ -338,6 +370,3 @@ coherent:
 3. update frontend client/types in the same feature change;
 4. update this document only when a cross-cutting convention or major route family changes;
 5. remove obsolete endpoints from docs rather than preserving misleading compatibility prose.
-
-This keeps this specification useful as an architectural API contract while code/tests remain the
-precise executable route catalogue.
