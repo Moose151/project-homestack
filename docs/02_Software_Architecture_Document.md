@@ -60,11 +60,12 @@ Django / DRF modular monolith
   Core services
     accounts, people, permissions, nodes, hub, scheduling,
     notifications, attachments, audit, search, backups, events
-  Domain apps
-    atlas, meridian, education, home_wiki, pets, homestead,
-    solace, fitness, travel
-  Planned/deferred domain apps/specs
-    hearth, health, home_assistant, inventory/assets/projects as evidence requires
+  Current domain apps
+    atlas, meridian, education, home_wiki, pets, books,
+    homestead, solace, fitness, travel
+  Planned/deferred domains
+    hearth, health, home_assistant,
+    inventory/assets/projects only if evidence justifies them
         |
         v
 PostgreSQL + protected media + backup storage
@@ -80,7 +81,7 @@ product status.
 
 - `core` — household/settings foundation.
 - `accounts` — authentication Users and login/admin account flows.
-- `people` — household Person profiles.
+- `people` — household Person profiles and Corners/person-centred shared flows.
 - `permissions` — central role/per-user resolution and visibility rules.
 - `nodes` — node/capability registry and household enablement.
 - `hub` — configurable daily aggregation widgets.
@@ -101,10 +102,14 @@ product status.
 - `education`
 - `home_wiki`
 - `pets`
+- `books`
 - `homestead`
 - `solace`
 - `fitness`
 - `travel`
+
+Books is a genuine current domain, not a UI-only feature: it owns a shared Book catalogue,
+per-User reading shelves/ratings and shared Book Clubs/queue.
 
 Home Assistant is a deliberate dedicated bridge when implemented; Hearth and Health are future
 major domains. Inventory/Assets/Projects remain evidence/capability-gated rather than automatic
@@ -132,27 +137,14 @@ Do not move business logic into React or duplicate permission logic in individua
 User-facing domain records use the shared household-scoped base-model convention: household,
 created/updated timestamps, created/updated Users and soft-delete support.
 
-Conceptually:
-
-```python
-class HouseholdBaseModel(models.Model):
-    household = models.ForeignKey("core.Household", on_delete=models.PROTECT)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey("accounts.User", null=True, related_name="+", ...)
-    updated_by = models.ForeignKey("accounts.User", null=True, related_name="+", ...)
-    deleted_at = models.DateTimeField(null=True, blank=True)
-
-    objects = HouseholdManager()
-
-    class Meta:
-        abstract = True
-```
-
 `created_by`/`updated_by`/audit actors are Users. Record subjects/assignees are People (D12).
 
 The household column is retained even though runtime behaviour is one household per installation;
 it is not permission to implement SaaS tenancy.
+
+Books is a useful example of this distinction: personal shelves/ratings are keyed to Users because
+they are login-specific personal reading state, while domains that assign household work/subjects
+normally use People.
 
 ## 6. Permissions architecture (D10)
 
@@ -172,6 +164,10 @@ Selectors apply visibility before serialization. Derived services (Hub/Search/Ca
 notifications) must use the same source permission boundary rather than aggregate first and filter
 later.
 
+Domain-specific membership is an additional source constraint when applicable. For example, Books
+club selectors filter club details/books/queue to clubs the User belongs to; knowing an ID does not
+bypass that membership boundary.
+
 Permission/security tests precede feature behaviour where access boundaries change.
 
 ## 7. Scheduling / Calendar (D7, D8, D23)
@@ -190,7 +186,10 @@ window. They do not materialise endless daily `CalendarEvent` rows.
 
 Standalone Calendar-owned appointments/events remain valid owning records in `scheduling`.
 
-## 8. Hub, Search, Corners and notifications are projections
+Domains such as Books do not need Calendar integration merely because they are nodes; add dated
+projections only when a real Books workflow later owns a meaningful date.
+
+## 8. Shared projections are not owners
 
 These shared surfaces improve discoverability but do not own the underlying domain fact.
 
@@ -201,6 +200,7 @@ These shared surfaces improve discoverability but do not own the underlying doma
   visibility/deep-link boundaries.
 - **Notifications** — notification records/delivery link to source meaning but cannot bypass its
   permissions; Web Push payloads stay sparse for sensitive content.
+- **Calendar** — projects source dates while source records retain semantic ownership.
 
 Deleting/locking/changing visibility on a source record must not leave a derived surface that still
 reveals it.
@@ -210,10 +210,12 @@ reveals it.
 Use PostgreSQL full-text search where appropriate over each domain's permission-filtered queryset,
 with SQLite/test-safe fallbacks where required by the test strategy.
 
+Books currently uses this pattern for title, author, genre, ISBN and description.
+
 Do not maintain a separately synchronized universal `search_index` table. OCR/semantic search are
 future optional enrichments, not replacements for source permissions.
 
-## 10. Attachments (D11)
+## 10. Attachments and safe link import
 
 Files use the shared attachment service and visibility/sensitivity permission model.
 
@@ -223,6 +225,9 @@ Files use the shared attachment service and visibility/sensitivity permission mo
 - node/domain records link to attachments rather than inventing independent file-security models.
 
 A per-file ACL system is deferred unless real requirements outgrow the shared contract.
+
+Public URL/ISBN/product enrichment uses the bounded shared Link Import capability rather than each
+domain implementing its own scraper. Books is one current consumer of that shared enrichment path.
 
 ## 11. Internal events interface (D4)
 
@@ -277,6 +282,9 @@ ambient -> avatar -> PIN -> personal/kiosk dashboard -> permitted workflow -> ti
 
 Kiosk-safe APIs/widgets are deliberately constrained. Sensitive nodes are hidden by default and
 remain backend-locked even if UI navigation is manipulated.
+
+Books currently declares `supports_kiosk=False`; do not invent a kiosk Books experience unless a
+real household workflow later justifies one.
 
 ## 15. Current deployment architecture
 
@@ -345,9 +353,10 @@ No generic `integrations` app, iframe or arbitrary HA service-call proxy is auth
 
 ## 19. Architecture evolution rule
 
-Before introducing a new infrastructure component or boundary, identify the concrete failure mode
-in the current architecture that it solves. Prefer strengthening the existing modular-monolith,
-permissions, scheduling, events and deployment contracts over adding parallel systems.
+Before introducing a new infrastructure component or domain boundary, identify the concrete
+failure mode/problem in the current architecture that it solves. Prefer strengthening the existing
+modular-monolith, permissions, scheduling, events and deployment contracts over adding parallel
+systems.
 
 Current architectural priorities are operational maturity (production serving/network/deploy/
 backup), Web Push delivery and then the bounded Home Assistant bridge — not a microservice rewrite.
