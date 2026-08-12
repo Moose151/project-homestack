@@ -67,6 +67,10 @@ Rules:
 - do not replace Person relationships with Users merely because current household members happen
   to have accounts.
 
+Some genuinely login-personal records can correctly reference a User rather than a Person. Books is
+an example: `PersonalBookEntry` and `BookRating` represent one login User's own reading state/rating,
+while household work/subject records continue to use People.
+
 ## 5. Visibility and sensitivity
 
 Domain records that can be restricted use the shared visibility/sensitivity model defined by the
@@ -78,6 +82,9 @@ Derived records/surfaces must not weaken this boundary. In particular:
 - attachment access is permission-checked at download time;
 - Search/Hub/Corners/notifications query the owning data through permission-aware selectors;
 - sensitive derived content is not duplicated into an easier-to-access table.
+
+Membership/relationship constraints can add to the central permission boundary. For example, Books
+club records are query-filtered to clubs the current User belongs to.
 
 ## 6. Calendar/source ownership (D7/D8/D23)
 
@@ -102,6 +109,9 @@ General recurrence uses the established RRULE-style `recurrence_rule` representa
 
 Generic two-state alternating schedules are calculated from one anchored cycle plus sparse
 exceptions. They do not materialize one database row per future day.
+
+Not every node needs Calendar data. Books, for example, currently owns reading state and club
+queues without inventing dates merely to appear on Calendar.
 
 ## 7. Core data families
 
@@ -153,6 +163,21 @@ history remains future unless/until implemented in migrations.
 Owns pet profiles, treatments/care schedules, appointments and pet-specific records. Recurring due
 work remains Pet-owned and syncs to Calendar rather than Calendar becoming the pet-treatment store.
 
+### Books
+
+Owns the shared household Book catalogue and reading/club state:
+
+- `Book` — shared catalogue metadata;
+- `BookRating` — unique User + Book rating/notes;
+- `PersonalBookEntry` — unique User + Book personal reading state (Want to Read / Reading / Read);
+- `BookClub` and `BookClubMembership` — shared clubs and explicit membership;
+- `BookClubBook` — one Book's state/position within a club;
+- `BookClubQueueItem` — ordered up-next queue over club-book entries.
+
+Personal and club views intentionally reuse the same Book and User+Book rating rather than store
+parallel metadata/ratings. Club selectors enforce membership. URL/ISBN enrichment comes through the
+shared Link Import capability; it is not another durable book-catalogue source of truth.
+
 ### Homestead
 
 Owns the home/property domain: property/rooms/areas, room plans, maintenance, appliances, service
@@ -199,7 +224,7 @@ Do not create large new schema families merely because old design documents prop
 current status is capability/evidence-gated by the MSS/Roadmap. Add migrations only after the domain
 boundary is approved by real product need.
 
-## 10. Attachments (D11)
+## 10. Attachments and external enrichment
 
 Attachments use the shared file/security capability rather than a unique attachment table per
 node.
@@ -212,6 +237,10 @@ Important database rules:
 - do not add an `attachment_permissions` ACL table unless the shared model proves insufficient;
 - physical file storage is not made public merely because an attachment row exists.
 
+External metadata preview/cache/watch records remain shared Link Import infrastructure. Once a User
+confirms Book/product fields, the owning Books/Atlas/Homestead/etc. record becomes the durable source
+of truth rather than continuously mirroring the external page.
+
 ## 11. Search (D9)
 
 There is no separately synchronized universal `search_index` source of truth. Search is built from
@@ -219,7 +248,8 @@ permission-filtered live domain querysets, using PostgreSQL FTS where appropriat
 fallbacks where required.
 
 Domain-specific FTS indexes/generated vectors may exist as implementation details; they do not
-change record ownership.
+change record ownership. Books currently follows this pattern for title, author, genre, ISBN and
+description.
 
 ## 12. Events (D4)
 
