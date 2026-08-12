@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.34.7**
+> **Current version: 0.34.8**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,15 @@
 ---
 
 ## 0.34 — Discoverability and daily navigation
+
+### 0.34.8 — 2026-08-12 — LAN-trusted HTTPS confirmed live (documentation only)
+- Owner completed the Nginx Proxy Manager + Pi-hole setup: proxy host live, Let's Encrypt
+  certificate issued via Cloudflare DNS Challenge, local DNS resolving, `/api` routed to the
+  backend. Backend health endpoint confirmed returning 200 over
+  `https://homestack.moosesoftwares.com`. `docs/05_Security_Architecture_Document.md` §14 and
+  `HANDOVER.md` updated from "prepared" to done. Still worth confirming: the `config.settings.prod`
+  switch was actually applied, and a real login/write action (not just the health check) works
+  over the new HTTPS origin. No code changed in this entry.
 
 ### 0.34.7 — 2026-08-12 — LAN-trusted HTTPS via Nginx Proxy Manager + Cloudflare DNS Challenge
 - `homestack.moosesoftwares.com` gets a real Let's Encrypt certificate through the home server's

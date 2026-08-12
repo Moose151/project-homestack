@@ -142,15 +142,17 @@ HTTPS configured · reverse proxy in place · 2FA available · rate limiting act
 protected · strong admin passwords · sensitive-node locking implemented. This checklist also
 gates any future self-hosted release where buyers might expose their instance.
 
-**HTTPS configured, LAN-only, in progress 2026-08-12.** The home server already runs **Nginx
-Proxy Manager** (reverse proxy/TLS termination, ports 80/81/443) and **Pi-hole** (local DNS).
-NPM requests a real Let's Encrypt certificate for `homestack.moosesoftwares.com` via its DNS
-Challenge (Cloudflare), so no router port forwarding is ever needed to issue or renew it; a
-Pi-hole local DNS record points that hostname at the server's LAN IP so it never resolves
-publicly. NPM proxies the hostname straight to the frontend container — no path-splitting is
-needed since the frontend's own dev-server proxy already forwards `/api` to the backend
-internally (`frontend/vite.config.ts`). Outside this repo/compose file entirely: no HomeStack
-service (Caddy or otherwise) handles TLS. This is deliberately **not** the "reverse proxy in
+**HTTPS configured, LAN-only — DONE and confirmed live (2026-08-12).** The home server runs
+**Nginx Proxy Manager** (reverse proxy/TLS termination, ports 80/81/443) and **Pi-hole** (local
+DNS). NPM holds a real Let's Encrypt certificate for `homestack.moosesoftwares.com` via its DNS
+Challenge (Cloudflare), so no router port forwarding was ever needed to issue or renew it; a
+Pi-hole local DNS record points that hostname at the server's LAN IP (`192.168.1.125`) so it
+never resolves publicly. NPM proxies the hostname to the frontend container (`:5173`) with a
+second custom location routing `/api` to the backend (`:8000`) directly — the frontend's own
+dev-server proxy would also have forwarded `/api` internally, but routing it in NPM works
+identically and is one less hop. Outside this repo/compose file entirely: no HomeStack service
+(Caddy or otherwise) handles TLS. Confirmed: the backend health endpoint returns 200 over
+`https://homestack.moosesoftwares.com`. This is deliberately **not** the "reverse proxy in
 place" box above being ticked for public exposure — HomeStack remains reachable only from the
 home network (plus the existing VPN), with a real trusted certificate instead of a plain-HTTP or
 self-signed one. Public exposure via Cloudflare Tunnel or VPN-only access remains a separate,

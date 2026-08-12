@@ -1,7 +1,15 @@
 {
-  "current_version": "0.34.7",
-  "source_sha256": "ee35a018156c7cf7f8977aca958ac93e07b7868c5b4dc29c2d36a38548250821",
+  "current_version": "0.34.8",
+  "source_sha256": "c8f5635f32abadf4016fc37cbe587750f5ffdfd74cf0050338a38b2c5423e74b",
   "releases": [
+    {
+      "version": "0.34.8",
+      "date": "2026-08-12",
+      "title": "LAN-trusted HTTPS confirmed live (documentation only)",
+      "changes": [
+        "Owner completed the Nginx Proxy Manager + Pi-hole setup: proxy host live, Let's Encrypt certificate issued via Cloudflare DNS Challenge, local DNS resolving, `/api` routed to the backend. Backend health endpoint confirmed returning 200 over `https://homestack.moosesoftwares.com`. `docs/05_Security_Architecture_Document.md` §14 and `HANDOVER.md` updated from \"prepared\" to done. Still worth confirming: the `config.settings.prod` switch was actually applied, and a real login/write action (not just the health check) works over the new HTTPS origin. No code changed in this entry."
+      ]
+    },
     {
       "version": "0.34.7",
       "date": "2026-08-12",

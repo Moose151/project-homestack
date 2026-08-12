@@ -444,9 +444,10 @@ list — the natural future home for a grocery list too.
 **Current state (2026-08-12):** v0.34.7 has 826 backend tests green, a clean frontend production
 build and no migration drift. **Deploy, Solace cutover (manual entry, not import), Fitness and
 the partner acceptance pass are all done** — HomeStack is deployed on the home server and in
-daily use. Every app-feature item the owner queued in the 2026-08-12 real-use-feedback session is
-done (list below, kept for context); HTTPS infrastructure is built and validated but **not yet
-live** — see item 5 and §14 below — which is what gates Home Assistant M5.5 next:
+daily use. Every item the owner queued in the 2026-08-12 real-use-feedback session is now done,
+**including HTTPS** (list below, kept for context). Phone push notifications (VAPID keys, device
+registration, service worker, preferences) are the natural next slice now that a trusted HTTPS
+context exists, and are what gates Home Assistant M5.5 next:
 
 1. **Solace performance pass — DONE (v0.34.4).** `SolaceBootstrapView` fanned out to ~14
    sub-views per Money page load; four of them (Bills, Health, Cycle closeout, Forecast) each
@@ -480,29 +481,28 @@ live** — see item 5 and §14 below — which is what gates Home Assistant M5.5
    carry `trip_type` (`day_trip`/`multi_day`); choosing day-trip locks the stored end date to the
    start date on create and edit. `docs/19_Node_Travel.md` §14 slice 4 updated — itinerary is
    shipped, packing/protected documents remain a future slice if the owner wants it next.
-5. **HTTPS on the LAN via the existing Nginx Proxy Manager + Pi-hole — IN PROGRESS, NOT LIVE
-   (v0.34.7, 2026-08-12).** Owner registered `moosesoftwares.com` through Cloudflare. The home
-   server already runs Nginx Proxy Manager (80/81/443) and Pi-hole (local DNS), so no new
-   HomeStack service is needed for TLS — NPM requests the Let's Encrypt cert via its own DNS
-   Challenge (Cloudflare) and proxies straight to the frontend container; Pi-hole resolves the
-   hostname locally. No path-splitting/custom locations are needed in NPM: the frontend's own
-   dev-server proxy already forwards `/api` to the backend internally
-   (`frontend/vite.config.ts`), same as it does for direct-IP access today. `.env.example`
-   documents `HOMESTACK_PUBLIC_HOSTNAME` and recommends switching the live server to
-   `config.settings.prod` (already has the right `SECURE_PROXY_SSL_HEADER`/secure-cookie
-   handling, just unused while running `dev`) — noted a real side effect of that switch: Django
-   admin's CSS only auto-serves under `DEBUG=1`, so `/admin/` goes unstyled after the switch
-   unless static serving is added; flagged for the owner, not fixed (Django admin isn't part of
-   normal HomeStack use). See `docs/05_Security_Architecture_Document.md` §14. **Blocked on the
-   owner:** the NPM proxy host + SSL DNS Challenge config and the Pi-hole DNS record, both
-   outside this repo, then `.env` updates (`DJANGO_ALLOWED_HOSTS`/`DJANGO_CSRF_TRUSTED_ORIGINS`/
-   `DJANGO_SETTINGS_MODULE`) and a rebuild. Exact steps handed to the owner outside this file.
+5. **HTTPS on the LAN via the existing Nginx Proxy Manager + Pi-hole — DONE and confirmed live
+   (v0.34.7, 2026-08-12).** Owner registered `moosesoftwares.com` through Cloudflare; the home
+   server's existing Nginx Proxy Manager (80/81/443) holds a Let's Encrypt cert for
+   `homestack.moosesoftwares.com` via its own DNS Challenge (Cloudflare) — no new HomeStack
+   service handles TLS. NPM proxies the hostname to the frontend (`:5173`) with a second custom
+   location routing `/api` straight to the backend (`:8000`); Pi-hole resolves the hostname to
+   `192.168.1.125` locally. `HOMESTACK_PUBLIC_HOSTNAME` in `.env` lets Vite's dev server accept
+   the hostname (`frontend/vite.config.ts`). **Owner-confirmed working:** the backend health
+   endpoint returns 200 over `https://homestack.moosesoftwares.com`. See
+   `docs/05_Security_Architecture_Document.md` §14. **Still open, not blocking:** whether the
+   live server has actually switched `DJANGO_SETTINGS_MODULE` to `config.settings.prod` (as
+   recommended — it already has the right `SECURE_PROXY_SSL_HEADER`/secure-cookie handling,
+   currently unused under `dev`) hasn't been confirmed, nor has a real login/write action (not
+   just the health check) been verified over the new HTTPS origin. Worth doing both before
+   treating this as fully hardened. Django admin's CSS going unstyled once `DEBUG=0` remains a
+   known, deliberately-unfixed side effect (admin isn't part of normal HomeStack use).
 
 **Deferred / on hold, not active work right now:**
 - Pool-care band verification against the pool shop's guidance — blocked until the household
   moves into the new house with a pool.
-- Home Assistant Milestone 5.5 — on hold until HTTPS (in progress, item 5 above) and phone push
-  notifications are sorted.
+- Home Assistant Milestone 5.5 — on hold until phone push notifications are built (HTTPS is now
+  live, so this is the remaining blocker).
 - Homestead capability consolidation (Roadmap doc) — explicitly not a priority.
 - Icon system — explicitly not a priority.
 
@@ -727,6 +727,7 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-08-12 | Assistant | Atlas | **Dedicated Grocery and Shopping tabs shipped as v0.34.5 (owner request — Atlas work prioritised ahead of Travel itinerary).** Split Atlas' generic Lists tab: existing/new `grocery`- and `shopping`-typed lists now render under their own tabs (client-side filter by `list_type`, no data migration needed) instead of being mixed into the generic Lists tab, which now keeps to-do/checklist/general/wishlist. **Grocery** stays deliberately simple (name/quantity/assignee, reusing the existing `ListCard`) so a future Hearth/meal-planning pass can populate it from a meal plan's ingredient list, matching the handoff `docs/11_Node_Atlas.md` already anticipated. **Shopping** gets the room-project shopping-list treatment in a new `pages/atlas/ShoppingTab.tsx`: paste-a-link "Fill" import through the existing safe link-import boundary (`api.previewProductLink`, already used by Corners/Homestead room products), image, shop, price, quantity, a new `AtlasListItem.priority` field (low/medium/high, blank by default, migration `atlas.0007`; only the Shopping UI sets it) with a high-priority badge, inline edit and an optional price-drop watch. Search results and quick-capture's todo-list picker now exclude/route around grocery+shopping so links don't land on a tab that no longer shows the match. **822 backend tests green (2 new); frontend typecheck and production build clean; migration applied to the live dev database.** Not yet verified in a live browser (no browser tool available this session) — worth a click-through before relying on it daily. | Give the new tabs a look in-browser. Then continue the owner's queue: Travel itinerary (day-assignable or unassigned "option to do" items) + day-trip/multi-day-trip type on Trips. HTTPS + phone push notifications ("needs to be sorted soon") remain the gate before Home Assistant M5.5. |
 | 2026-08-12 | Assistant | Travel | **Trip itinerary and day-trip/multi-day-trip type shipped as v0.34.6 (owner request, completing the 2026-08-12 real-use-feedback queue).** New `TravelItineraryItem` model (migration `travel.0003`) mirrors the existing `TravelBooking` pattern: title/location/notes, an optional link to a booking, and either `scheduled_date`/`scheduled_time` (a day of the trip) or neither (an unscheduled "option to do"). Dated items sync to Calendar through the existing helper (D7), inheriting the trip's colour/visibility/`hidden_from_users` surprise exclusions exactly like bookings and the trip itself; clearing the day removes the Calendar mirror. `Trip.trip_type` (`day_trip`/`multi_day`) locks the stored `end_date` to `start_date` on both create and update when set to day-trip, so downstream day-range logic (the itinerary's day picker) never needs a special case; a "Day trip" badge shows on the trip card and detail header. New `POST /travel/trips/<id>/itinerary/` + `PATCH/DELETE /travel/itinerary/<id>/`, nested read-only under `TripSerializer.itinerary_items`. Frontend: `TripDetail` gained a "Things to do" card grouping items by trip day (falling back to an "Options to do" bucket, plus an orphaned-date bucket if a scheduled item's date falls outside the trip's current range after an edit) with add/edit/delete, and `PlanForm` gained the trip-type picker that hides the Ends field for day trips. `docs/19_Node_Travel.md` updated (banner + §14 slice 4: itinerary shipped, packing/documents still open). **826 backend tests green (4 new); frontend typecheck and production build clean; migration applied to the live dev database.** Not yet verified in a live browser (no browser tool available this session). | Give the new itinerary UI a look in-browser on a real trip. This closes the owner's 2026-08-12 queue — HTTPS + phone push notifications ("needs to be sorted soon") remain the only open item, gating Home Assistant M5.5. Packing/protected documents (Travel spec §14 slice 4) are a natural next Travel slice if wanted. |
 | 2026-08-12 | Assistant | Infra | **HTTPS-on-LAN prepared as v0.34.7 around the existing Nginx Proxy Manager + Pi-hole (owner registered `moosesoftwares.com` mid-session; owner clarified NPM/Pi-hole already run on the home server, so no new HomeStack service handles TLS).** Entered plan mode given the live-server/secrets stakes; owner confirmed switching the live server to `config.settings.prod` as part of this work (found it already has the right `SECURE_PROXY_SSL_HEADER`/secure-cookie handling, just sitting unused while the server runs `dev`). NPM requests the Let's Encrypt certificate via its own DNS Challenge (Cloudflare) and proxies `homestack.moosesoftwares.com` straight to the frontend container; Pi-hole resolves it locally. Confirmed no NPM path-splitting/custom locations are needed: the frontend's own dev-server proxy already forwards `/api` to the backend internally (`frontend/vite.config.ts`), same as it does for direct-IP access today; `/media/` has no route to proxy (removed in v0.17.0); `/admin/` is reachable directly at `:8000` today and would need its own NPM custom location if the owner wants it on the new hostname too. `.env.example` documents `HOMESTACK_PUBLIC_HOSTNAME` and the `dev`→`prod` switch. `frontend/vite.config.ts`'s `allowedHosts` now includes the public hostname via `process.env.HOMESTACK_PUBLIC_HOSTNAME`. Flagged a real side effect of the `prod` switch: Django admin's CSS/JS only auto-serves under `DEBUG=1`, so `/admin/` renders unstyled afterward unless static serving (e.g. whitenoise) is added — left for the owner to decide since Django admin isn't part of normal HomeStack use. `docs/05_Security_Architecture_Document.md` §14 updated. **Not yet live** — blocked on the owner's NPM proxy host/SSL config and Pi-hole DNS record, both outside this repo. | Owner: create the NPM proxy host (`homestack.moosesoftwares.com` → `192.168.1.125:5173`) with SSL via DNS Challenge/Cloudflare, add the Pi-hole local DNS record, then update `.env` (`DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `DJANGO_SETTINGS_MODULE=config.settings.prod`) and rebuild. Check login/CSRF/session over `https://homestack.moosesoftwares.com`, and check whether Django admin still needs to look right, before treating this as done. Push notification backend/frontend work (VAPID keys, device registration, service worker) is a separate follow-up once HTTPS is confirmed live. |
+| 2026-08-12 | Assistant | Infra | **HTTPS-on-LAN confirmed live as v0.34.8 (owner report).** Owner finished the NPM/Pi-hole side: proxy host live, Let's Encrypt cert issued via Cloudflare DNS Challenge, Pi-hole record resolving, `/api` custom location routing straight to the backend (their choice over relying on Vite's internal proxy — functionally identical, one fewer hop), `HOMESTACK_PUBLIC_HOSTNAME` set and frontend rebuilt. Owner-confirmed: backend health endpoint returns 200 over `https://homestack.moosesoftwares.com`. Updated `docs/05_Security_Architecture_Document.md` §14 and HANDOVER §5/§6 from "prepared, not live" to done — no code changed this entry, documentation only. **Not independently verified this session:** whether the live server actually switched `DJANGO_SETTINGS_MODULE` to `config.settings.prod`, and whether a real login/write action (not just the health check) works over the new HTTPS origin — worth confirming both since the health endpoint is an easy pass that doesn't exercise CSRF/session cookie behaviour. | Confirm login + a save action (e.g. an Atlas to-do) works over `https://homestack.moosesoftwares.com`, and confirm/apply the `config.settings.prod` switch if not already done. Then the natural next slice is Web Push: VAPID keys, a `notification_devices` model/registration endpoint, a service worker, and adult self-serve + admin/parent-managed child notification preferences — see `docs/30_Core_Daily_Coordination.md` for the preferences shape already specified. That closes the remaining Home Assistant M5.5 gate. |
 
 ### Session notes (free-form, optional)
 
