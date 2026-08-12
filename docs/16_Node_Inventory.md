@@ -1,67 +1,172 @@
-# Node Spec — Inventory
+# Capability Spec — Stock & Storage (former Inventory plan)
 
-> Canonical feature scope. **Recommended as an optional Homestead → Stock & storage capability,
-> not a separate top-level node** (owner discussion, 2026-08-11). Global rules from
-> `00_README_and_Changelog.md` apply; see `31_Core_Manage_HomeStack.md`.
+> **Status:** future proposal, not implemented. The preferred direction is an optional
+> **Homestead → Stock & storage** capability rather than a separate top-level Inventory node.
+> This document preserves the possible domain contract without implying that its models/routes/
+> widgets already exist.
 
-## 1. Purpose & philosophy
+## 1. Purpose
 
-Tracks household consumables and stored items so the household knows what's on hand, what's
-low, what's expiring and what to add to shopping. Answers: *"What do we have, where is it, and
-do we need more?"* It should appear inside Homestead because rooms/storage locations are its
-natural structure. It remains a bounded data capability so Hearth/Pets/Atlas integrations do not
-depend on Homestead presentation code. Valuable/serviced/warrantied items → Assets & vehicles.
+Stock & storage would help the household answer:
 
-## 2. Belongs / does not belong
+- What consumables/items do we have?
+- Where are they stored?
+- What is low or expiring?
+- What should be added to the household Grocery/Shopping list?
 
-**Belongs:** pantry/fridge/freezer items, cleaning supplies, toiletries, pet food, consumables,
-storage-box contents, low-stock alerts, expiry reminders, location tracking.
-**Not:** vehicles/appliances/tools → Assets; recipes → Hearth; shopping lists → Atlas;
-warranties/documents → Assets/Documents; large projects → Projects.
+It should remain optional. HomeStack must continue to work well for households that do not want to
+maintain stock quantities.
 
-## 3. Key features
+## 2. Ownership boundaries
 
-**Locations** — pantry, fridge, freezer, bathroom, laundry, garage, shed, storage, other.
-**Items** — name, location, quantity, unit, `low_stock_threshold`, `expiry_date`, category,
-notes, photo/attachment; `updated_by` = user.
-**Actions** — add, use, mark low, mark empty, move, update quantity, add to shopping list.
+**Potential Stock & storage ownership:**
 
-## 4. Permissions
+- pantry/fridge/freezer stock;
+- cleaning supplies/toiletries/household consumables;
+- pet food and other ordinary stored consumables;
+- storage locations/boxes;
+- quantity/unit/low-stock threshold;
+- expiry/best-before information;
+- stock adjustment/history only to the depth useful in real household use.
 
-Usually household-visible; some locations/items may be restricted. (Medication storage belongs
-in Health, not Inventory.)
+**Belongs elsewhere:**
 
-## 5. Hub / Calendar / Notifications
+- the actual household shopping list → Atlas Grocery/Shopping;
+- recipes/meal plans → Hearth;
+- pet care/profile/treatments → Pets;
+- home appliances/warranties → Homestead;
+- vehicles/tools/valuables → future Assets & vehicles capability;
+- medication/medical stock → Health;
+- finance/budget/payment history → Solace.
 
-Widgets: low stock · expiring soon · recently added · shopping suggestions · pet-food status.
-Calendar (via helper): expiry reminders, recurring restock, consumable-replacement reminders
-(unless better handled by Assets), `recurrence_rule`. Notifications: low stock · expired ·
-expiring soon · recurring restock due.
+## 3. Homestead capability position
 
-## 6. Events (signals)
+If built, Stock & storage should appear as an optional Homestead capability because rooms/storage
+locations provide a natural physical context and this avoids another top-level navigation item.
 
-Publishes: `inventory_item_low`, `inventory_item_expiring`, `inventory_item_used`,
-`inventory_item_added`, `inventory_shopping_required`.
-Consumes: `meal_plan_created`, `ingredient_required`, `shopping_item_completed`,
-`pet_food_low`.
-Example: Hearth meal plan → Inventory checks ingredients → missing items sent to Atlas grocery
-list.
+That presentation decision must not make Homestead UI code the reusable business boundary. Other
+services such as Hearth, Pets or Atlas should interact through approved selectors/services/events.
 
-## 7. Search / Kiosk
+Do not create a standalone `inventory` node first and promise to consolidate it later unless a new
+explicit product decision changes this direction.
 
-FTS over item names, locations, categories, notes. Kiosk: view low-stock, add to shopping list,
-mark used, view pantry/freezer — large buttons, minimal typing.
+## 4. Candidate data model
 
-## 8. Data model
+Only create these models when implementation is approved. A small first slice could include:
 
-`inventory_locations`, `inventory_items` (`low_stock_threshold`, `expiry_date`,
-`calendar_event_id` where dated, `recurrence_rule` where recurring). Inherit
-`HouseholdBaseModel`.
+### StorageLocation
 
-## 9. Scope & completion
+- name;
+- optional Room/area relationship;
+- type/category;
+- notes;
+- visibility if needed.
 
-Initial: locations · items · quantity · low-stock thresholds · expiry dates · Hub low-stock
-widget · Atlas shopping-integration foundation · FTS · basic permissions · mobile list view.
-Complete when users track consumables, see low-stock/expiry reminders, and send items to Atlas
-shopping lists. Future: barcode/QR, expiry dashboard, smart suggestions, bulk import, Hearth
-pantry checks.
+### StockItem
+
+- name;
+- location;
+- quantity/unit;
+- low-stock threshold;
+- optional expiry date;
+- category;
+- notes;
+- optional attachment/image;
+- household/base-model fields.
+
+Avoid a complex warehouse/transaction system unless actual use demands it.
+
+## 5. Actions
+
+Possible useful actions:
+
+- add/update quantity;
+- mark low/empty;
+- move location;
+- consume/restock;
+- add/suggest item to Atlas Grocery/Shopping;
+- view expiring items.
+
+Fast manual correction is more important than pretending every household stock movement can be
+perfectly automated.
+
+## 6. Atlas Grocery/Shopping integration
+
+Atlas is the shopping-list source of truth.
+
+Stock & storage may propose/add a required item through an approved service/event contract, but it
+does not create another shopping-list database.
+
+Examples:
+
+- low milk → propose/add milk to Atlas Grocery;
+- cleaning supply empty → propose/add replacement to Atlas Shopping/Grocery according to the
+  household workflow;
+- ticking an Atlas item bought may optionally update stock if the user confirms the handoff.
+
+Keep these interactions idempotent enough to avoid duplicate shopping spam.
+
+## 7. Hearth integration
+
+Hearth does **not** depend on Stock & storage existing.
+
+Hearth can always send reviewed recipe ingredients to Atlas Grocery. If Stock & storage is later
+enabled, Hearth may query it to estimate what is already on hand before proposing missing
+ingredients.
+
+Stale/unknown stock must be presented honestly rather than silently suppressing a grocery item.
+
+## 8. Pets integration
+
+Pets may use Stock & storage for pet-food quantity/low-stock context in the future. Pet profile,
+feeding/care schedule and treatments remain Pets-owned.
+
+## 9. Dates / Calendar / notifications
+
+Only meaningful dated facts should project into Calendar, such as an expiry/replacement reminder
+where that is useful. Do not create recurring Calendar noise simply because an item exists.
+
+Low-stock/expiry notifications use the shared Notifications/Web Push system and user preferences.
+
+## 10. Hub and Search
+
+Potential useful Hub summaries:
+
+- low stock;
+- expiring soon;
+- items needing shopping action.
+
+Search would cover permitted item/location/category/notes data using the normal permission-aware
+search pattern.
+
+Neither Hub nor Search owns stock state.
+
+## 11. Permissions / kiosk
+
+Most household consumables can be household-visible, while restricted storage locations/items can
+use the standard permission/visibility model.
+
+Medical items belong in Health rather than relying on Inventory visibility settings.
+
+A future kiosk surface could support simple view/use/add-to-Grocery actions, but kiosk support is
+not a prerequisite for the capability.
+
+## 12. Future enhancements
+
+Only after a useful basic capability exists:
+
+- barcode/QR scanning;
+- storage labels;
+- bulk import;
+- pantry-aware Hearth suggestions;
+- expiry dashboard;
+- purchase/consumption trends.
+
+## 13. Implementation gate
+
+Do not implement until real household use shows that maintaining stock-on-hand will provide enough
+value to justify the data-entry burden.
+
+If approved, the first completion point is: the household can define storage locations, track a
+small set of useful consumables, see low/expiry attention and send required items into existing
+Atlas Grocery/Shopping without creating another top-level Inventory node.

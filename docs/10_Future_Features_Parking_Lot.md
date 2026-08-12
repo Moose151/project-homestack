@@ -1,116 +1,242 @@
 # Document 10 — Future Features & Parking Lot
 
-> Canonical. Supersedes earlier versions. Holds future ideas without licensing node sprawl or
-> premature scope. Decisions D1–D23 in `00_README_and_Changelog.md`.
+> **Canonical future-work register.** This file contains genuinely deferred ideas only. Shipped
+> work belongs in the owning specification and `VERSION_HISTORY.md`, not here. Architectural
+> decisions D1–D24 live in `00_README_and_Changelog.md`.
 
 ## 1. Parking-lot rule
 
-A future idea usually becomes a **feature inside an existing node**, not a new node. New nodes
-require strong justification (Node Decision Record §5).
+A future idea normally becomes a **feature inside an existing node or core service**, not a new
+node. New nodes require the justification in `09_Node_Model_Decision_Record.md`.
 
-## 2. Deferred-but-anticipated infrastructure
+Items should be removed from this document when they ship or are promoted into an active roadmap
+milestone.
 
-These are intentionally not in V1 but the architecture leaves room for them:
+## 2. Deferred infrastructure
 
-- **Durable event bus** (D4) — the internal `events` signal interface can be re-pointed at a
-  real broker later without changing callers.
-- **Redis + Celery + Celery-beat** (D5) — added when reminders/background work outgrow the
-  scheduled management command.
-- **Attachment per-row ACL** (`attachment_permissions`) (D11) — if `visibility`/`sensitivity`
-  proves too coarse.
-- **Wiki page version history** (`wiki_page_versions`) — schema anticipated, not built in V1.
-- **Token auth / 2FA / passkeys / biometrics** — added with native apps and any remote access.
+Add these only when real operating pressure justifies them:
 
-## 3. Parked under existing nodes
+- **Durable event bus** — D4 deliberately uses the thin in-process events interface today. A
+  broker/durable queue is only warranted if reliability/scale requirements outgrow signals.
+- **Redis / Celery / Celery Beat** — introduce when background work can no longer be handled
+  reliably by the current scheduled management-command pattern.
+- **Per-row attachment ACLs** — only if the existing visibility/sensitivity model proves too
+  coarse in real use.
+- **Production serving hardening** — replace Django `runserver` and the Vite development server in
+  the live stack with a production WSGI/static-serving path; reduce direct host port exposure and
+  move internal services onto private Docker networking.
+- **Automated deployment/CI** — one supported deploy command with backup, build, migration,
+  restart and health checks; backend/frontend/production-build/E2E checks in CI.
+- **Encrypted off-server backups** — retain the tested HomeStack restore path while adding a
+  second encrypted copy outside the primary server/storage device.
+- **2FA / passkeys** — particularly for adult/admin accounts before any public exposure.
 
-**Atlas:** rich text/Markdown, templates, recurring lists, quick capture, voice input, smart
-grocery suggestions. Agenda, appointments and People & birthdays are promoted to Milestone 2.6.
-**Home Wiki / Household guide:** recommended as an optional Homestead capability rather than a
-separate navigation node. Page templates, page revision history, linked pages, emergency mode,
-house-sitter mode and procedure blocks remain future improvements.
-**Pets:** feeding schedules, food-inventory link, weight graphs, pet insurance, house-sitter
-pet mode, Meridian pet tasks.
-**Education:** study timers, reading logs, grades, term imports, university dashboard,
-Meridian homework tasks.
-**Inventory / Stock & storage:** recommended as an optional Homestead capability rather than a
-top-level node. Barcode scanning, QR storage labels, expiry dashboard, smart grocery suggestions
-and storage-box tracking remain future scope.
-**Assets & vehicles:** recommended as an optional protected Homestead capability; home appliances
-and warranties already live there. Odometer reminders, warranty claims, service costs, QR labels,
-maintenance templates and insurance tracking remain future scope.
-**Hearth:** recipe import, meal voting, nutrition, leftovers, batch cooking, pantry checks,
-grocery generation.
-**Travel:** the initial Trips/To-go, booking/cost, Calendar/deadline, notification, Corner and
-surprise-visibility slice shipped in v0.33.0; remaining core scope is in spec 19. Uploaded galleries,
-itinerary, packing and protected documents remain planned. Maps, weather, live flight status,
-external booking APIs, currency conversion, travel journal, pet-care automation and deep Solace
-travel budgets remain parked.
-**Projects:** do not add a top-level node yet. Homestead owns home projects, Travel owns trips and
-Atlas covers lightweight general work. Reconsider only for demonstrated cross-domain Kanban,
-dependencies, templates, budget links or photo-progress needs.
-**Health:** prescription tracking, health graphs, provider directory, emergency health card,
-encrypted health attachments, field-level encryption.
-**Meridian:** achievements, streaks, household challenges, task templates, weekly summaries.
-**Solace:** subscriptions (richer), travel/grocery/asset-purchase budget integration, reports,
-exports, encrypted finance fields.
-**Homestead:** editable pool-care cadence/day and future-only rescheduling are promoted to
-Milestone 2.6. A household-portable visual floor-plan builder: blank/template/image-tracing
-onboarding, drag/resize/snap rooms, optional polygons and architectural features, multi-level
-plans, draft/publish and revision history. Areas link to real Homestead rooms and inherit their
-name/icon/colour. Promoted to Roadmap 8.1 for productization; it remains a friendly approximate
-planner rather than CAD.
-**People / shared core:** household **Corners** aggregating meaningful visible activity,
-active assignments, personal Atlas shopping/wish lists, Homestead room products and Meridian
-child wishes without duplicating source records. Household interaction is suggestion-first, with
-approved grouped emoji reactions plus optional comments/help offers that re-check source
-visibility. The initial Corner/list/suggestion/reaction slice shipped in v0.31.0; see core spec 28
-for remaining polish.
+## 3. Current active platform expansion
 
-## 4. Future platform features
+**PWA / Web Push notifications** are the active follow-up now that trusted LAN HTTPS exists. The
+canonical design is `32_Core_Notifications_and_Push.md`; do not duplicate its implementation plan
+here. Native-app push and email notification channels remain future work.
 
-PWA · native Android/iOS · desktop app · offline mode · email notifications · external
-calendar sync · plugin architecture · general-purpose webhooks/automation · AI-assisted search ·
-OCR · semantic search.
+**Home Assistant** is not parked: it is the next important dedicated integration milestone after
+push notifications, governed by D22 and `26_Node_Home_Assistant.md`.
 
-Per-user responsive-PWA Web Push preferences are promoted to Milestone 2.6; native-app push and
-email remain parked.
+## 4. Deferred features by existing domain
 
-**Safe link import/enrichment** — the product preview/cache/watch slice for Homestead/Atlas
-shipped in v0.31.0; Schema.org Recipe data for Hearth remains later. Roadmap 8.3/core spec 29
-defines this bounded shared
-service with SSRF protection and user confirmation, not a general scraper or automatic AI import.
-Confirmed images are cached locally; watched wishes may receive one household-local 09:00 daily
-price observation and deduplicated sale/drop/target notification without changing saved costs.
+### Atlas
 
-> **Promoted from the parking lot (2026-08-09):** the dedicated **Home Assistant bridge** is now
-> important Roadmap Milestone 5.5 (D22; `26_Node_Home_Assistant.md`). General plugins, arbitrary
-> webhooks and other integrations remain parked; the promotion does not create a generic
-> integrations framework.
+- rich text/Markdown notes;
+- reusable list/templates and recurring-list workflows;
+- voice capture;
+- smarter grocery assistance once Hearth exists.
 
-**Node graph / "web" view (Obsidian-style)** — a visual map of the Hub at the centre with every
-node hanging off it, coloured lines connecting nodes to show how they interact and what data
-flows between them (which signals/events each sends and receives — see each node spec's "Events"
-section + D4). Clicking a node's icon navigates to that node's page. *Not important — a fun,
-exploratory visualisation, not core functionality.* Naturally driven by the existing decoupled
-events interface (D4): the edges are the publish/consume relationships already declared per node.
-Parked until the core product is solid; revisit as a delight feature (possibly alongside the Hub
-work, but well after V1).
+Grocery, Shopping, Agenda, appointments/events browsing and birthday/People coordination have
+already shipped and must not be listed as future work.
 
-> Per D3, the mobile/desktop tech choice (React Native vs. Tauri vs. PWA) is deliberately
-> undecided; a PWA is the likely first phone bridge.
+### Home Wiki / household guide
 
-## 5. Not for V1
+- page revision history;
+- stronger linked-page/procedure blocks;
+- house-sitter/emergency presentation modes;
+- possible future presentation as a Homestead capability rather than separate top-level
+  navigation, if the proposed consolidation is actually approved and implemented.
 
-Native mobile/desktop apps · full offline mode · Health node · native Solace migration (comes
-after security maturation, not in the first usable V1) · OCR · AI · plugin system · public
-internet exposure · external calendar sync · barcode scanning · field-level encryption.
+### Pets
 
-> Multi-household and SaaS are **not parked for later — they are out of scope** (D1, D2).
-> If HomeStack is ever released, it ships self-hosted (one household per install). The tenant
-> column is carried only as cheap insurance, not as a roadmap item.
+- feeding schedules;
+- food/inventory integration;
+- weight trends;
+- deeper insurance/document workflows;
+- house-sitter mode;
+- Meridian-generated pet chores.
 
-## 6. Future node review rule
+### Education
 
-Before creating a new node, ask: major household domain? unique workflows? unique permissions?
-would it overload an existing node? would many households use it independently? If not, keep
-it inside an existing node.
+- richer grades/progress analytics;
+- study timers;
+- reading logs;
+- term/import helpers;
+- deeper school-age child/kiosk workflows where they add real value;
+- Meridian homework/task integration.
+
+### Homestead
+
+- portable floor-plan **builder/editor** for other households (the current installation already
+  has a native interactive plan for this house);
+- revision/draft support for editable plans;
+- deeper document/warranty linkage;
+- richer long-term maintenance templates;
+- productized onboarding for an unknown household rather than assumptions from a supplied plan.
+
+The pool schedule editor, utility usage, room plans, linked floor-plan spaces and household cost
+integration have already shipped.
+
+### Inventory / Stock & storage
+
+Do not automatically create a new top-level node. The current proposal is an optional Homestead
+capability. Potential scope:
+
+- consumables and stored-item inventory;
+- low-stock/expiry views;
+- barcode/QR labels;
+- storage locations/boxes;
+- pantry linkage to Hearth/Atlas Grocery.
+
+### Assets & vehicles
+
+The home-appliance/warranty scope already belongs to Homestead. Remaining possible non-home scope:
+
+- vehicles;
+- tools and high-value owned items;
+- odometer/service/registration reminders;
+- insurance and warranty claims;
+- service-cost history;
+- QR labels.
+
+Prefer a protected Homestead capability unless actual use demonstrates that this is a major
+independent domain.
+
+### Hearth
+
+A significant remaining everyday-life gap:
+
+- recipes and safe recipe import;
+- meal planning/calendar;
+- "what's for dinner" household view;
+- ingredient scaling;
+- leftovers/batch cooking;
+- optional nutrition;
+- generation of missing ingredients into **Atlas Grocery**, not a competing grocery database.
+
+### Travel
+
+The core trip, booking/cost and itinerary/Things-to-do workflow is shipped. Remaining possible
+slices:
+
+- packing lists;
+- protected travel documents;
+- richer galleries/journal;
+- maps/weather/live-flight information;
+- external booking APIs;
+- currency conversion;
+- pet/home-care handoff;
+- deeper Solace travel-budget integration.
+
+### Projects
+
+Do not add a top-level Projects node without evidence. Homestead owns home projects, Travel owns
+trips and Atlas covers lightweight general work. Reconsider only if real cross-domain projects need
+Kanban/dependencies/templates/budget/photo-progress workflows that do not fit those owners.
+
+### Health
+
+This remains intentionally deferred because of its sensitivity. Possible scope includes:
+
+- appointments/providers;
+- medications/prescriptions;
+- allergies/immunisations;
+- medical notes/documents;
+- health trends;
+- emergency health card;
+- stronger encryption requirements where justified.
+
+Medical Health must remain separate from the shipped social **Fitness & Training** node (D24).
+
+### Meridian
+
+Potential polish rather than a new architecture:
+
+- additional challenge/task templates;
+- richer weekly summaries;
+- optional evidence/photo workflows where useful;
+- further child-facing delight only when real use asks for it.
+
+### Solace / Money
+
+Potential additions:
+
+- richer reports/exports;
+- tighter links to future Hearth/Travel/vehicle planning where ownership remains clear;
+- encrypted finance fields only if the threat model justifies the complexity.
+
+### Fitness & Training
+
+Potential additions:
+
+- rest timers;
+- RPE/RIR;
+- scheduled training-day planning;
+- running/swimming pace splits;
+- trend charts and deeper progression analytics.
+
+These are optional enhancements, not blockers for the existing Fitness node.
+
+### People / Corners
+
+- optional comments/help offers beyond current bounded reactions where privacy rules remain clear;
+- further household member summaries only when they can be projected safely from source records.
+
+## 5. Future platform features
+
+- native Android/iOS application;
+- desktop application;
+- fuller offline mode and conflict handling;
+- email notifications;
+- external calendar sync;
+- OCR and document extraction;
+- semantic/AI-assisted search;
+- general plugin framework only if multiple real integrations demonstrate the need;
+- general-purpose webhooks/automation only after the Home Assistant bridge proves the narrower
+  event/control pattern.
+
+A PWA is the current first mobile bridge; native-client technology remains deliberately undecided.
+
+## 6. Delight / low-priority ideas
+
+**Node graph view.** An Obsidian-style visual map of HomeStack domains and their declared
+publish/consume relationships could be useful as an exploratory architecture/product view. It is
+not operationally important and should wait until core reliability and daily-use work is mature.
+
+## 7. Explicitly out of scope
+
+These are not "later" items:
+
+- SaaS hosting/multi-household tenancy;
+- building a second source of truth for Calendar/Hub/Corners;
+- arbitrary cross-node model imports;
+- a generic integration/plugin layer merely to connect Home Assistant;
+- uncontrolled public exposure of the home server.
+
+If HomeStack is released, it remains self-hosted with one household per installation unless a new
+explicit product decision replaces D1/D2.
+
+## 8. Review rule
+
+Before promoting a parked idea, ask:
+
+1. Is this solving a real household problem observed in use?
+2. Does an existing domain already own the data/workflow?
+3. Can it reuse current permissions, Calendar, notifications, attachments and events boundaries?
+4. Is the operational/security cost justified?
+5. If proposing a new node, would it still make sense as an independently useful household domain?
+
+If those answers are weak, leave it parked.

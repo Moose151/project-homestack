@@ -1,65 +1,125 @@
 # Node Spec — Projects
 
-> Canonical. **Later node** (post-V1). Global rules from `00_README_and_Changelog.md` apply.
+> **Status:** evidence-gated future domain, not an automatic roadmap commitment. Homestead already
+> owns home/room improvements, Travel owns trips, and Atlas covers lightweight general planning.
+> Create a top-level Projects node only if real cross-domain initiatives demonstrably need richer
+> project workflows that do not fit those owners.
 
-## 1. Purpose & philosophy
+## 1. Why this spec still exists
 
-Manages larger household initiatives needing tasks, notes, planning, timelines, files or
-budgets — keeping big efforts from scattering across Atlas, Calendar and Home Wiki. Answers:
-*"What bigger household things are we working on?"* Absorbs would-be standalone nodes like
-garden projects, party planning, moving house, renovations and large purchases.
+HomeStack may eventually need a domain for genuinely large, cross-domain initiatives with enough
+structure to justify their own lifecycle, tasks, milestones, files and coordination.
 
-## 2. Belongs / does not belong
+This document preserves that possible boundary without authorising implementation merely because a
+Projects node appeared in early plans.
 
-**Belongs:** renovations, garden builds, party planning, moving house, garage organisation,
-large-purchase planning, home improvement, room makeovers.
-**Not:** simple lists → Atlas; permanent instructions → Home Wiki; financial set-asides →
-Solace; assets created by a project → Assets; trip itineraries → Travel; rewarded tasks →
-Meridian.
+## 2. Current ownership before Projects exists
 
-## 3. Key features
+Use the existing owner when it fits:
 
-**Project** — title, description, status (idea/planning/active/paused/complete/cancelled),
-category, start/target date, `owner_person_id`, visibility.
-**Tasks** — title, description, `assigned_to_person`, `due_at`, status, priority,
-`calendar_event_id`.
-**Notes** — text, attachments, links.
-**Timeline** — milestones, due dates, calendar events.
-**Budget** (optional) — estimated/actual cost; Solace link (future).
+- **home renovations/room upgrades/repairs/home improvements** → Homestead;
+- **trips/holidays/travel planning** → Travel;
+- **ordinary household to-do/checklists/planning** → Atlas;
+- **rewarded work** → Meridian;
+- **financial set-asides/bills/purchase planning** → Solace;
+- **durable household instructions/reference** → Home Wiki.
 
-## 4. Permissions
+Do not move existing Homestead/Travel/Atlas records into a speculative Projects domain just to make
+the architecture look symmetrical.
 
-Household-visible or restricted; sensitive projects hidden; financial project details
-restricted or linked to Solace.
+## 3. Evidence required to create the node
 
-## 5. Hub / Calendar / Notifications
+A top-level Projects domain becomes justified only when real household use repeatedly needs several
+of the following across non-home/non-travel initiatives:
 
-Widgets: active projects · tasks due · upcoming milestones · recently updated. Calendar (via
-helper): milestones, due dates, project tasks, review dates. Notifications: task due ·
-milestone upcoming · project overdue · assigned task updated.
+- project-specific lifecycle/status independent of a room/trip/list;
+- multiple workstreams or task groups;
+- dependencies/milestones;
+- substantial notes/files/history around one initiative;
+- progress tracking/Kanban-like planning;
+- project-level budget references to Solace without Solace becoming project management;
+- several People coordinating work over weeks/months;
+- reusable project templates;
+- photo/progress history;
+- meaningful Hub/Calendar/Search behavior unique to projects.
 
-## 6. Events (signals)
+One isolated complex list is not enough justification.
 
-Publishes: `project_created`, `project_task_created`, `project_task_completed`,
-`project_milestone_due`, `project_completed`.
-Consumes: `atlas_checklist_created`, `asset_created`, `solace_planned_purchase_created`.
-Example: large-purchase project completed → `project_completed` → Assets prompts an asset
-record; Solace closes the planned purchase (future).
+## 4. Possible future ownership boundary
 
-## 7. Search / Kiosk
+If approved, Projects would own **general cross-domain initiative structure**, not the domain facts
+produced by the initiative.
 
-FTS over project names, tasks, notes, milestones, attachments. Not a primary child node; kiosk
-may show assigned project tasks, a simple checklist, or a countdown — no complex boards by
-default.
+For example:
 
-## 8. Data model
+- a project can reference a Solace budget/purchase but does not own payment history;
+- a completed project can link to an asset/home record but does not become the asset/property owner;
+- project tasks can project into Calendar but remain project-owned;
+- attachments use the shared file service;
+- rewarded versions of a task can be linked through Meridian without copying the project task into
+  Meridian as the only source of truth.
 
-`projects` (`owner_person_id`), `project_tasks` (`assigned_to_person_id`, `calendar_event_id`),
-`project_notes`. Inherit `HouseholdBaseModel`.
+## 5. Candidate model
 
-## 9. Scope & completion
+Only if the node is approved, a small initial model might include:
 
-Initial: project profiles · tasks · notes · attachments · calendar milestones · Hub widget ·
-basic permissions. Complete when users create projects, add tasks/notes, attach documents,
-track milestones, and show relevant items on Hub and Calendar. Future: Kanban boards, budget
-integration, templates, photo progress, recurring reviews, Meridian/Assets integration.
+### Project
+
+- title/description;
+- lifecycle/status;
+- category;
+- start/target date;
+- owner Person;
+- visibility;
+- optional links to related domain records.
+
+### Project task
+
+- project;
+- title/description;
+- assigned Person;
+- due date;
+- priority/status/order;
+- source-linked Calendar projection.
+
+### Notes / milestones
+
+Add only when the first approved workflows need them. Do not prebuild a full project-management
+suite.
+
+## 6. Permissions
+
+Follow central role/visibility rules. A project's visibility must not grant access to linked
+financial, Health or other sensitive domain records.
+
+Cross-domain summaries always re-check the linked source's permissions.
+
+## 7. Hub / Calendar / Notifications
+
+If implemented, possible projections include active projects, tasks/milestones due and assigned
+work.
+
+Dates follow D7; notifications use the shared system; no project-specific scheduler/push mechanism.
+
+## 8. Events and integrations
+
+Use D4 events/shared services for cross-domain reactions. Do not import Solace/Homestead/Assets/
+Meridian models into Projects or vice versa.
+
+A project completion event can invite another domain to create/update its own record, but the
+receiving domain remains the owner of that result.
+
+## 9. Search / mobile / kiosk
+
+Search operates on permission-filtered Projects data only after the node exists.
+
+Responsive web would be the primary project-management surface. Kiosk should show only simple
+permitted assigned work/countdowns if useful rather than a full board.
+
+## 10. Decision rule
+
+Before starting Projects, document at least two or three real household initiatives that the
+existing Homestead/Travel/Atlas owners cannot represent cleanly and show what shared project
+capability they require.
+
+If that evidence is absent, keep this node unimplemented and improve the existing owner instead.

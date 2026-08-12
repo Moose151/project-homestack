@@ -1,822 +1,332 @@
 # HANDOVER.md — HomeStack
 
-> **Read this first if you are a coding assistant.** It tells you what HomeStack is, the rules
-> you must not break, what is done, and what to do next. Then read the canonical docs (below)
-> before writing code. At the **end of every working session, append to the Progress Log** so
-> the next assistant can continue cleanly.
+> **Read this first if you are a coding assistant.** This file is intentionally short and current.
+> It explains what HomeStack is, the rules that must not be broken, the live deployment, current
+> priorities, and where to find canonical detail. Historical implementation logs belong in
+> `VERSION_HISTORY.md` and Git history — do not turn this file back into a session diary.
 
 ---
 
 ## 1. What HomeStack is
 
-A secure, modular, **self-hosted** household management platform for **one household** (two
-adults, two children), run on an always-on home server via Docker Compose. It replaces scattered
-apps with one warm, family-oriented system: a **Hub** ("what needs attention today?"), a
-**Calendar** (the household timeline), opt-in **nodes** (areas of household life), and a
-touchscreen **kiosk** the kids use.
+HomeStack is a secure, modular, **self-hosted household management platform for one household**.
+It runs on an always-on home server through Docker Compose and is already in daily household use.
 
-Built solo. May *one day* be released as a **self-hosted** product other families run themselves
-(never SaaS). That ambition only disciplines which decisions are permanent — it does not expand
-current scope.
+The product is centred on:
 
-## 2. Canonical documentation (source of truth)
+- **Hub** — what needs attention today.
+- **Calendar** — the shared household timeline.
+- **People** — household members and non-login people used throughout the system.
+- **Opt-in nodes** — broad household domains with their own records/workflows.
+- **Responsive web/PWA** — the primary everyday surface on phone and desktop.
+- **Kiosk** — a shared child-friendly household surface.
 
-Read these in `docs/`. **If anything conflicts, this doc set wins.** Older `.docx` files are
-archived/superseded — ignore them.
+HomeStack may eventually be released as a **self-hosted product other households run themselves**.
+It is not being designed as SaaS.
 
-- `00_README_and_Changelog.md` — **all key decisions (D1–D24) with reasoning. Read this.**
-- `01_Master_Software_Specification.md` — vision, node model, V1 scope.
-- `02_Software_Architecture_Document.md` — architecture, base model, resolver, helpers.
-- `03_Database_Design_Document.md` — schema and conventions.
-- `04_Development_Roadmap.md` — milestones with "done when".
-- `05_Security_Architecture_Document.md` — auth, permissions, sensitive nodes, kiosk.
-- `06_API_Specification.md` — endpoints.
-- `07_UIUX_Design_Guide.md` — design system, kiosk/child UX.
-- `08_Coding_Standards_and_Project_Structure.md` — **how to write the code. Read this.**
-- `09_Node_Model_Decision_Record.md` — why these nodes.
-- `10_Future_Features_Parking_Lot.md` — what is deferred vs out of scope.
-- `11`–`22_Node_*.md` — per-node specs (Atlas, Home Wiki, Pets, Education, Meridian,
-  Inventory, Assets, Hearth, Travel, Projects, Health, Solace).
-- `23_Core_Hub.md` — Hub core-service spec (aggregation surface, widgets, kiosk Hub). Read
-  before the Atlas + Hub UX pass (§8).
-- `24_Core_Calendar.md` — Calendar core-service spec (app `scheduling`, D7/D8 timeline,
-  every-page access, configurable views, look & feel).
-- `25_Node_Homestead.md` — home/property source of truth and Solace handoff (D21).
-- `26_Node_Home_Assistant.md` — important dedicated Home Assistant bridge contract (D22/M5.5).
-- `27_Node_Fitness.md` — social training programs, live workouts and personal records (D24).
-- `28_Core_Corners.md` — household Corners: activity, assignments, lists and reactions.
-- `29_Core_Link_Import.md` — shipped product URL preview/watch contract; Hearth recipes remain later.
-- `30_Core_Daily_Coordination.md` — shipped appointments/Atlas Agenda, birthdays/people and editable
-  pool schedules; in-place Atlas schedule management is shipped. §7/§8 slice 4 (phone notification
-  preferences/Web Push) are superseded by doc 32 below.
-- `31_Core_Manage_HomeStack.md` — in-app version history and node guides, guide preferences,
-  capability toggles and the proposed Inventory/Assets/Home Wiki consolidation into Homestead.
-- `32_Core_Notifications_and_Push.md` — **not yet built.** Full notification-category taxonomy,
-  preference/quiet-hours/device data model, event-bus dispatcher design, bundling mechanism and
-  Web Push mechanics. Read before touching `apps/notifications` or building push.
-- `MILESTONE_1_Checklist.md` / `MILESTONE_2_Checklist.md` / `MILESTONE_2.5_Checklist.md` — the
-  per-milestone build checklists. **M4 is functionally complete; production acceptance is active.**
+---
 
-## 3. Hard rules (do NOT violate these)
+## 2. Current live deployment
 
-These are settled decisions. If you think one is wrong, **flag it in the Progress Log and ask —
-do not silently override it.**
+The live household instance runs on the home server with Docker Compose.
 
-1. **Single household, keep the tenant column (D1).** Every user-facing model inherits
-   `HouseholdBaseModel` (household FK + soft delete + created/updated-by-user). Don't build
-   multi-household signup/billing/isolation. Don't drop `household_id`.
-2. **No SaaS / multi-household behaviour (D2).** Productization, if ever, is self-hosted.
-3. **API-first (D3).** All clients talk to `/api/v1/`. Business logic in the backend.
-4. **No durable event bus (D4).** Node decoupling uses Django signals behind the thin
-   `apps/events/` interface. **No `event_bus_events` table, no broker.** Nodes never import each
-   other's models.
-5. **No Celery/Redis yet (D5).** Scheduled work runs via a Django management command on cron.
-   Add Redis/Celery only when a feature genuinely needs background processing.
-6. **Session auth, avatar + PIN (D6).** No token auth until native apps exist. Sensitive re-auth
-   uses a **password**, not the PIN. PIN + password hashed with **Argon2id**.
-7. **Calendar has one source of truth (D7).** Node records own their dates. The `scheduling`
-   helper creates/updates/deletes `calendar_events` and writes `calendar_event_id` back. **Nodes
-   never write calendar rows directly.**
-8. **One recurrence format (D8):** `recurrence_rule` (RRULE) on the owning record. No parallel
-   `repeat_rule`. The bounded rotating two-state Calendar layer is governed separately by D23;
-   it is not a second general event recurrence field.
-9. **Search via Postgres FTS (D9)** in selectors. No hand-maintained `search_index` table.
-10. **Central permission resolution (D10).** One resolver + one visibility queryset mixin. **No
-    ad-hoc permission checks in views. Permission tests are written FIRST.**
-11. **Attachments: `visibility` + `sensitivity` only (D11).** No per-row ACL table in V1.
-12. **People vs. Users (D12):** `created_by`/`updated_by`/ownership/audit = **user**;
-    `assigned_to`/subject = **person**. People may have no login.
-13. **Meridian early, Solace after security (D13).** Both are **native nodes**, not external
-    integrations. **No iframe / external-link layer. No `integrations` app.**
-14. **Migrate Meridian/Solace by rebuild-shell + reuse-logic + import-data (D14).** Rebuild
-    models/serializers/views on shared services; reuse their proven business logic; one-time
-    dry-runnable import script in `scripts/`.
-15. **No household specifics in schema or logic (D15).** No "two cats", no hardcoded names. Keep
-    everything general for a future buyer.
-16. **Calendar app is named `scheduling` (D16)**, not `calendar` (avoids stdlib clash).
-17. **Backups define a working restore (D17).** Restore is tested, documented, admin-re-auth
-    gated.
-18. **Walking skeleton first (D18).** Build the Milestone 1 vertical slice before any other node.
-19. **Rotations are one cycle plus exceptions (D23).** Never materialise one Calendar event per
-    day. Calculate the requested range from one anchored `P`/`S` cycle; store only changed dates
-    as exceptions. Keep it generic (shared care, shift work, on-call), not household-specific.
-20. **Fitness is separate from medical Health (D24).** Fitness owns social training programs,
-    workouts and records. Diagnoses, medications, injuries, body measurements and medical notes
-    stay in password-gated Health; do not blur their privacy contracts.
+Current LAN URL:
 
-### Per-app layering (Coding Standards §6)
-Views are **thin** → delegate to `services` (writes) and `selectors` (reads). Every app:
-`models, serializers, views, urls, permissions, services, selectors, events, tasks, tests`.
+```text
+https://homestack.moosesoftwares.com
+```
 
-## 4. Tech stack
+HTTPS is provided outside the HomeStack Compose stack by the existing **Nginx Proxy Manager**.
+A real Let's Encrypt certificate is issued by NPM through a **Cloudflare DNS-01 challenge**.
+**Pi-hole** resolves `homestack.moosesoftwares.com` to the server's LAN address
+(`192.168.1.125`) so the app remains LAN-only.
 
-Backend: Python · Django · DRF · PostgreSQL. Frontend: React · TypeScript · Vite · TailwindCSS.
-Deploy: Docker Compose on a Linux home server, local-network only (HTTPS/reverse-proxy/VPN
-before any remote access). Redis/Celery and the mobile/desktop tech choice are deferred.
+No router port forwarding is required for certificate issue/renewal and HomeStack is **not
+publicly exposed**.
 
-## 5. Current status
+Current HomeStack services are:
 
-**Phase: v0.33.0 is code-complete locally and awaiting production deployment plus household
-acceptance (2026-08-11).** Since the original v0.21 pilot gate, HomeStack has completed the
-generic sensitive-node lock and audit work (M4), shipped Fitness & Training (v0.25), Pools & spas
-inside Homestead (v0.26), rebuilt Money around daily use and a bucket ledger (v0.27), and closed
-the known behavioural gaps against standalone Solace including income allocation, cycle history
-and annual summaries (v0.28.0–0.28.1). The phone interaction and UI consistency passes are also
-complete through v0.28.2; v0.29 adds metered water/electricity usage, the HomeStack brand, a
-strict 100% ceiling for Solace percentage allocations, consolidated subscriptions into Bills,
-self-repairing bill occurrence schedules after date corrections, exact local pay-cycle boundaries,
-Solace-only financial ownership for every home bill displayed in Homestead, complete removal of
-the leftover Subscriptions subsection, household-timezone-aware cycle boundaries, and a native
-interactive SVG of the real house/property plan in Homestead Rooms. Its focused interior/property
-views now support strong selected-space highlighting and explicit persistent links to existing
-room records, whose saved names, icons and colours are then used on the plan. v0.31 adds normal
-household **Corners** (activity, assignments, personal lists/wishes, suggestions and reactions)
-plus safe product-link enrichment, local confirmed-image caching and optional daily price watches.
-v0.32 adds Calendar appointments, Atlas Agenda, dated to-do sync, birthdays/People and editable
-pool-care schedules. v0.33 ships the first useful **Travel** node: Trips/To go, booking and cost
-planning, Calendar/deadline integration, notifications/Corner activity and selected-user surprise
-visibility.
-**Update, 2026-08-12 (owner report): the home server deploy has happened and the app is in daily
-use.** Owner chose to start Solace from scratch with bills entered manually rather than importing
-the standalone database — the import/verify tooling remains available but is no longer part of
-this household's cutover path. Fitness and the partner/two-account acceptance pass are both done.
-Pool-care band verification is blocked until the household moves into the new house with a pool
-(no longer scheduled work). Home Assistant M5.5 is intentionally on hold until HTTPS and phone
-push notifications are sorted — see the daily-coordination Web Push slice below. Kiosk refinement
-remains deferred. **Current real-use priorities (owner, 2026-08-12):** a Solace performance pass
-(done, v0.34.4 — see Progress Log), a Money → Now timezone bug (fixed, v0.34.4), a Travel
-itinerary + day/multi-day trip type, and a general (non-personal, non-room) household shopping
-list — the natural future home for a grocery list too.
+- `homestack-postgres` — PostgreSQL 16.
+- `homestack-backend` — Django/DRF.
+- `homestack-frontend` — React/TypeScript/Vite.
 
-> **Owner direction, 2026-07-29.** Focus on usability, functionality, response time, navigation
-> and layout across the responsive web app. v0.12.0 delivers the shared foundation: route
-> splitting/caching, global search + quick-create, persistent URL tabs, custom mobile navigation,
-> consistent page/load/error states, session reliability, responsive accessibility and
-> optimistic high-frequency actions. Next work should be driven by real home-server use and
-> measured slow-request logs rather than another broad speculative redesign.
+The current base stack still runs Django `runserver` and the Vite development server. This is the
+main production-readiness issue now that Web Push is shipped. The next engineering phase should
+replace those development servers with a production WSGI/static frontend path and tighten container
+network exposure.
 
-> **Owner direction, 2026-07-14 (new term started).** Two changes to priorities:
-> 1. **Build the school/education side now** so it's usable this university term — track
->    assignments, lectures/timetable, exams, etc. (Education node, uni-student use first; the
->    household also has school-age children.)
-> 2. **Web/mobile daily use is the priority; kiosk is secondary.** The Calendar, tasks and lists
->    surfaces feel "clunky" on **web/mobile** and need a UX pass there first. Kiosk polish that was
->    being treated as a priority is explicitly de-prioritised — revisit it later.
->
-> Meridian remains a work in progress but is **paused** — it is no longer the active workstream.
-> "Mobile" here means the **responsive web app** (there is no native client yet; native mobile/
-> desktop stays deferred per D3 — PWA is the likely first bridge). See §8 open questions.
+### Live HTTPS environment
 
-> **Deploy gotcha (read this):** the home server runs **Docker** (not Podman). After every
-> `git pull` + rebuild, run **`docker exec homestack-backend python manage.py migrate`** — the
-> running Postgres schema is separate from the image. Forgetting it causes `column ... does not
-> exist` 500s (this bit us on the Hub page after `atlas.0002` added `quantity`/`due_at`).
+The live `.env` must include the LAN hostname/IP plus the trusted public hostname, including:
 
-- [x] Documentation consolidated to one canonical set (docs 00–27 + milestone checklists).
-- [x] All current architectural decisions recorded (D1–D24).
-- [x] **Milestone 1 (Walking Skeleton) — DONE** (Phases 1.0–1.12) and used on the Docker home
-  server. Current production deployment/acceptance work is tracked below, not as an M1 gap.
-- [~] **Milestone 2: native Meridian — functional, now under parity/cockpit revisit (owner
-  request, 2026-07-10).** Backend + web/kiosk frontend had been marked complete: points-ledger
-  parity (reservation/refund, balance vs lifetime earned), tasks (hot/behaviours/scope), routines
-  + streaks, rewards shop (stock/limits/cart), group goals, wishlist, cross-node achievements
-  (`apps/achievements`), notifications, scheduled command (allowance/perfect-month), settings,
-  reports/leaderboard, and a dry-runnable full data importer. New product decision: **HomeStack is
-  the Meridian source of truth and adult/admin cockpit; the native Meridian app is the behavioural/
-  visual reference and may remain/adapt as the child-facing client.** Current shipped revisit work:
-  `MeridianTaskCompletion` model/API (per-person submissions, shared/household task blocking,
-  review notes/history) + adult Overview tab + task-management tab.
-- [x] **Milestone 2.5: Core surfaces — Hub, Atlas, Calendar. DONE.** Full detail
-  in `MILESTONE_2.5_Checklist.md` + the Progress Log below. Status by workstream:
-  - **(A) Hub — DONE.** Web renders Meridian widgets; widget-config API (`/hub/widgets/…`,
-    `hub.edit` perm) + "Customise" UI (household enable/order/size, per-user hide/reorder);
-    "every node ships its widget" pattern; ambient **clock** widget; size-aware grid.
-  - **(B) Atlas — DONE.** Postgres FTS w/ SQLite fallback (`_search`) + fixed a search visibility
-    leak; unified `/atlas/search/`; item `due_at`+`quantity`; web error banner, due badges,
-    quantity, search box. *(Tags/categories + templates parked; kiosk ticking blocked for kids by
-    D10, by design; adult-facing kiosk ticking parked.)*
-  - **(C) Calendar — DONE.** Query API window + node/person filters; month/week/day/agenda views,
-    per-person colour + legend, nav; every-page `CalendarPeek` + quick-add; prefs (view/week-start/
-    12-24h in localStorage); event create/edit/delete modal; `calendar_upcoming` Hub widget;
-    kiosk calendar with month/week/day/agenda; dated Atlas/Hub items deep-link to Calendar day.
-    *(RRULE expansion deferred D8; household-default prefs parked.)*
-  - **(D) UX fixes — DONE** (kiosk enter/exit, admin-only price, keyboard PIN, login tiles, emoji
-    avatars, kiosk restyle + light/dark toggle). D.6 used the legacy reference at
-    `/home/moose/Documents/project-meridian`; the handover's older
-    `~/Documents/new/project-meridian` path did not exist.
-- [x] **Milestone 3: Education, Home Wiki, Pets — COMPLETE (2026-07-20).** All three nodes
-  shipped end-to-end (each with its Hub widget(s) per the M2.5 A.3 rule). Meridian revisit
-  remains paused (see §5 phase note).
-  - **Pets V1 slice — SHIPPED end-to-end (2026-07-20, v0.9.0).** Backend `apps/pets`: `Pet`
-    profiles + `PetTreatment` (flea/worming/vaccination/medication/grooming; `next_due_at`
-    source of truth; RRULE recurrence, D8) + `PetAppointment`; treatments/appointments sync to
-    Calendar (D7). `complete_treatment` stamps `last_done_at` and advances `next_due_at` to the
-    next RRULE occurrence (via dateutil), clearing the reminder when non-recurring. Full layered
-    app + FTS (`search_pets`) + `pets.*` perms (perms `0017`) + two Hub widgets
-    (`pets_reminders`/`pets_appointments`, hub `0010`, wired via `_pets_widget_content`) +
-    publish-only signals. 23 tests. Frontend: `/pets` route + nav stack + accent token, Pets tab
-    (profile cards w/ inline treatments+appointments), Reminders tab (all due, one-tap Done),
-    Appointments tab, search, Hub renderers.
-  - **Home Wiki V1 slice — SHIPPED end-to-end (2026-07-20, v0.8.0).** Backend `apps/home_wiki`:
-    `WikiCategory` (12 seeded defaults, migration `0002`) + `WikiPage` (body, category, comma
-    tags, favourite/emergency/kiosk-safe, visibility+sensitivity). Full layered app + FTS
-    (`search_wiki`, SQLite fallback) + `homewiki.*` perms (perms `0016`) + three Hub widgets
-    (favourites/emergency/recent, hub `0009`, wired via `_wiki_widget_content`) + publish-only
-    signals. 20 tests (permissions-first, visibility, search, hub, seed). Frontend: `/wiki`
-    route + nav stack + accent token, Pages tab (filters, CRUD, expandable bodies, pin
-    favourites), Categories tab (admin add/hide/delete), search, Hub renderers.
-  - **Education uni-first slice — SHIPPED end-to-end (2026-07-14).** Backend `apps/education`:
-    models `EducationInstitution`, `EducationCourse`, `EducationAssessment` (due→Calendar via the
-    scheduling helper, D7), `EducationClassSession` (weekly timetable, `recurrence_rule`/RRULE, D8);
-    full layered app (serializers/selectors/services/views/urls/events/admin); `education.*`
-    permissions (perms migration `0014`); two seeded Hub widgets `education_deadlines` +
-    `education_classes` (hub migration `0006`, `source_node="education"`, kiosk off for now) wired
-    through `hub/services._education_widget_content`; 21 tests (permissions-first, calendar sync,
-    visibility, hub). Frontend: `EducationPage` (Assignments / Courses / Timetable tabs, mobile-
-    first responsive) + `/education` route + nav entry + Hub widget renderers + API client/types.
-    **Still to do for the fuller node:** institution management UI (API exists, no dedicated
-    screen), assessment edit form (only status/quick-actions inline so far), person/student
-    assignment UI, FTS search box, and the deferred school-child/kiosk features.
-- [x] **Daily-use web/mobile experience pass (v0.12.0, 2026-07-29).** Shared navigation,
-  response-time, reliability, layout and accessibility foundation delivered across all web
-  surfaces. Kiosk equivalents remain deferred.
-- [x] **Household-launch mobile pass (v0.19.0, 2026-08-04).** Partner-oriented responsive-web
-  defaults and polish: adult-useful bottom navigation, calmer phone header, mobile Home launchpad,
-  profile editing, friendly quick-create/sign-in/empty states, safe-area spacing, auto-scrolling
-  tabs, readable mobile Calendar Month and Solace Schedule, and actionable notifications.
-- [x] **Dense mobile workspace follow-up (v0.19.1, 2026-08-04).** Solace, Homestead and Education
-  now use compact phone section pickers; Solace creation forms stay collapsed and no longer have
-  doubled card padding; hover-only actions remain visible to touch users; Homestead maintenance
-  rows stack cleanly; node search results navigate to useful destinations; and the Hub offers a
-  household-configured countdown widget for a named target date.
-- [x] **Inter-node single entry + fast Hub arranging (v0.19.2, ownership corrected v0.29.6).** New or existing
-  Solace bills can be organised as Homestead insurance, household services/costs or paid home
-  maintenance without re-entry. Solace now owns every insurance/service bill field and its
-  occurrences/payment history; Homestead is a read-through with only house-specific policy and
-  account metadata editable there. The Calendar stays single-entry. Desktop Hub cards and configuration rows now drag-and-drop; arrow moves are
-  optimistic and persist the complete order in one batch request instead of N sequential calls.
-- [x] **Bidirectional interaction + responsive follow-up (v0.19.3, 2026-08-09).** Homestead
-  maintenance can create/update its single protected Solace cost after password re-auth, while
-  Solace retains amount/payment ownership and the Calendar retains only its financial event.
-  Linked home-finance badges open filtered Solace results; synced Calendar events route back to
-  Atlas, Pets, Education, Homestead, Solace or Meridian. Touch laptops/tablets no longer hide
-  hover actions, and dense Solace/Education pages use wider desktop layouts.
-- [x] **Forecastable rotating Calendar schedules (v0.20.0 / D23, 2026-08-09).** One anchored
-  two-state cycle is calculated for each visible range without daily `CalendarEvent` rows. The
-  setup is pre-filled with 2/2/3/2/2/3, optionally associates People once, and remains generic
-  for shared care, shift work or on-call cover. One-day exceptions swap a state, retain a note,
-  show a visible swap marker and can restore the repeating plan. Desktop and phone Month views
-  provide a continuous two-colour top strip on otherwise-neutral day cells as users move between
-  months; detailed week/day/agenda status remains available. **624 backend tests green; production build clean; no
-  migration drift.**
-- [x] **Navigation and visual-system refinement (v0.20.1, 2026-08-09).** Household-facing names
-  now lead consistently in the sidebar, mobile navigation, search and page headings, with node
-  brands retained as context. Desktop navigation is grouped and descriptive; mobile More is a
-  complete destination directory and clearer bottom-bar editor. Shared headings/tabs, Hub widget
-  layout and Calendar controls were refined, and duplicate Hub navigation was removed. **Frontend
-  production build clean; no migration; backend unchanged from the 624-test v0.20.0 baseline.**
-- [x] **Mobile Calendar selected-day flow (v0.20.2, 2026-08-09).** Phone Month view now keeps
-  the month visible when a date is tapped and presents its rotations/events in an in-place panel
-  with explicit Day view and Add event actions. Horizontal swipes, safe month-end stepping,
-  selected-day emphasis and coloured event dots make forecasting faster. The view/filter row,
-  monthly agenda and 14-night setup grid were simplified for narrow screens. **Frontend
-  production build clean; no migration; backend unchanged from the 624-test v0.20.0 baseline.**
-- [x] **Full app-style phone Month view (v0.20.3, 2026-08-09).** The complete six-week grid is
-  now the edge-to-edge primary mobile surface, with compact coloured event labels inside occupied
-  dates and no permanent day panel or duplicate agenda beneath it. Tapping a date opens details
-  and actions in a bottom sheet; a floating add button and Filter-hosted rotation management keep
-  chrome compact. **Frontend production build clean; no migration; backend unchanged from the
-  624-test v0.20.0 baseline.**
-- [x] **Daily Lists/Tasks responsive slice (v0.20.4, 2026-08-09).** Manager task tables become
-  information-complete cards below desktop size, with inline labelled editing, large approval
-  controls and progressive creation options. Atlas item rows wrap and group due/assignee details,
-  quick capture expands only when requested on phones, duplicate mobile page headings are removed
-  and rewards metrics are more compact. **Frontend production build clean; no migration; backend
-  unchanged from the 624-test v0.20.0 baseline.**
-- [~] **Fitness & Training node (v0.25.0, 2026-08-10, D24).** Built locally, **not yet migrated or
-  deployed.** `apps/fitness` owns the exercise library (45 seeded), programs assigned to People,
-  immutable live-session snapshots, personal records, household/private visibility, notifications
-  and the recent-training Hub widget; medical data stays in Health. Sets open at the weight the
-  person last completed for that exercise rather than a stale program target — see
-  `docs/27_Node_Fitness.md` §4a for the exact rule. Migrations `nodes.0008`, `permissions.0021`,
-  `fitness.0001–0002` and `hub.0015` still need applying before the node works on a server.
-- [x] **Room jobs as projects (v0.23.1, 2026-08-09).** `RoomPlanItem.plan_mode` is `single`
-  (products are alternatives; the chosen one sets the estimate) or `project` (products are parts
-  that are all required and sum). A project's estimate is derived from its parts, so the manual
-  cost fields are hidden and `_apply_chosen_product` no-ops in project mode. Parts carry
-  `is_purchased` + `actual_cost`, giving `spent_cost` / `remaining_cost` /
-  `parts_bought_count`. Cost properties read `products`, so any path that totals plan items must
-  `prefetch_related("products")` — `room_summaries` does.
-- [x] **Multi-person assignment (v0.23.0, 2026-08-09).** `assigned_to_person` is replaced by an
-  `assigned_to_people` M2M on all nine assignable models (Atlas items, Calendar events, Meridian
-  tasks/routines, Education assessments/events, Homestead maintenance/improvements/room items):
-  empty = the whole household, one or more = each of them. Filters match membership and
-  de-duplicate; Meridian availability treats an empty set as "anyone"; `get_calendar_data()`
-  returns `assigned_to_person_ids` and the scheduling helper applies them after insert (D7).
-  Shared write helpers live in `apps/core/assignment.py`, the API shape in
-  `apps/core/serializers.AssigneeSerializerMixin`. Migrations copy existing assignees across
-  before dropping the column. The web picker is now a multi-select. Also: the duplicated page
-  header is gone on desktop — `PageHeader` renders actions only when its title just restates the
-  destination the top bar already names.
-- [x] **Room shopping lists (v0.22.1, 2026-08-09).** A room plan item's single `link_url` is
-  replaced by `RoomPlanProduct` — any number of options per job, each with a title, link, image
-  URL, shop, quantity and price. The option marked `is_chosen` drives the plan item's estimate
-  (only one at a time; re-pricing it re-applies), so room and whole-house totals follow the
-  option actually picked. Images are remote URLs, not uploads; both URL fields are restricted to
-  http(s) because they render as `href`/`src`. Migration `homestead.0005` carries existing
-  `link_url` values into a chosen option before dropping the field. **Still open from this
-  request:** an "All adults / non-child accounts" assignment target — see §8.
-- [x] **Attention-driven Hub + shell consistency (v0.22.0, 2026-08-09).** Owner UI review of the
-  desktop surfaces; every finding is recorded with its status in
-  `docs/UI_CONSISTENCY_AUDIT.md` — **read that before another UI pass.** Shipped: the Hub drops
-  any widget with nothing to show (`HubWidget.always_visible` exempts ambient cards); a single
-  `upcoming` widget replaces nine per-node dated widgets, aggregating calendar events (D7, so no
-  double counting) grouped by day with Next 7 days / This pay cycle / Next 30 days horizons; Hub
-  configuration became one ordered list plus one searchable grouped catalogue; the Hub grid tiles
-  properly (4 columns, 1/2/4 spans) instead of always leaving a dead third column; one
-  `CONTENT_CONTAINER` token replaced four different per-page max-widths; the sidebar and top bar
-  headers share a height and container; and shell fixes (logo links home, platform-correct
-  Ctrl/⌘ K, drawn calendar icon replacing the 📅 emoji that always read 17 July, left-edge active
-  indicator that no longer truncates labels, faded nav overflow). `RowActions` gives one
-  Edit/Delete/Remove vocabulary, applied to Pets. **642 backend tests green; production build
-  clean; no migration drift.** Those audit items are now resolved through v0.28.2; only the
-  deferred decision about replacing warm node emoji with a formal icon set remains.
-- [x] **Milestone 4: security maturation — FUNCTIONALLY COMPLETE (v0.24.1).** Shared attachments have
-  protected upload/list/download/delete APIs, visibility+sensitivity enforcement through the
-  central resolver, randomized non-public storage, sensitive-download audit records and frontend
-  client/types. Existing Education files use a permission-checked download route; direct private
-  assessment/note/file ID access was tightened. Password re-auth now expires after five minutes
-  and rejects old permanent session flags. The generic node lock, machine-readable re-auth
-  contract, one-minute kiosk elevation and account/permission audit coverage are shipped. Only
-  the pre-remote-access checklist remains, and only if remote access is pursued.
-- [x] **Milestone 5: native Solace — DEPLOYED AND IN USE (2026-08-12).** Owner started fresh
-  with bills entered manually rather than running `import_solace`; standalone Solace is not being
-  cut over from. The importer/`--verify` tooling remains available but is no longer an open task
-  for this household. v0.34.4 fixed a real-use household-timezone bug in occurrence generation
-  and a Bootstrap-request performance issue — see Progress Log.
-  Backend `apps/solace` covers bills, paydays, planned purchases, budget buckets/set-asides,
-  subscriptions and payday checklist items. All rows default to `visibility="sensitive"` +
-  `sensitivity="financial"`. Bills/paydays/subscriptions/planned purchases sync to Calendar via
-  the scheduling helper only (D7/D8). Solace is admin-only by default, disabled by default,
-  kiosk-off, and every Solace API route audits `sensitive_node_accessed`. Password re-auth remains
-  the secure default but v0.19.0 lets an admin disable the extra Solace-on-entry prompt through
-  Manage → Solace settings; `solace.*` permissions remain enforced. Calendar hides sensitive/financial events
-  until re-auth; Solace Hub widgets return content only when unlocked and authorised. Frontend
-  `/solace` route shipped with password unlock, overview, search and tabs. `import_solace`
-  now dry-runs/imports the local legacy SQLite DB (`/home/instructor/Documents/new/project-solace`):
-  settings, categories, recurring bills and occurrence history, paydays, planned purchases,
-  buckets, balances, preferences, closeouts and the latest payday-checklist cycle. Legacy
-  subscription-category recurring payments remain Bills so their occurrence and set-aside
-  history stays intact; native subscriptions remain available for separately managed records.
-  v0.13.0 restores native fortnightly pay planning with structured percentage/fixed
-  bucket rules, proportional household fixed amounts, rounding/caps, per-income splits and
-  idempotent cycle-checklist generation. v0.14.0 adds independent recurring bill occurrences,
-  month-end-safe generation, paid/unpaid/skipped actions, monthly bill/income calendar/list,
-  full Bill management/cost summaries, legacy occurrence import and working finance Hub cards.
-  v0.15.0 completes closeout/reconciliation, account balances and projections, finance health,
-  complete record management, custom categories, settings, set-aside coverage, CSV/XLSX
-  export, reviewed bill import and generic scheduled reminders. v0.16.0 adds the auditable
-  3–24 month bills-account cash-flow forecast and closes the deeper standalone workflow gaps:
-  bill autopay/stop dates/history/edit scope and filtering, current/next pay plans and
-  checklists, standard payday workflow steps, calculated upcoming income dates, purchase
-  quick-saving, normalised/filterable category reporting and fuller setup health checks.
-  v0.27.0 reorganises Money around Now/Bills/Plan/Insights/Manage, adds due-before-payday actions
-  and an auditable bucket ledger. v0.28.0–0.28.1 adds individual/shared income scope, standard/
-  lump/custom shared allocation, per-person contribution breakdowns, cycle history, calendar/
-  financial-year summaries and standalone-matching purchase completion. No behavioural parity
-  gap is currently known; `docs/SOLACE_PARITY_CHECKLIST.md` is the source of truth. **Still to do
-  for cutover:** deploy migrations/import real data, compare a full pay cycle and monthly
-  schedule, accept the phone/laptop workflow, then
-  retire standalone Solace.
-- [~] **Homestead node — SHIPPED (2026-07-21; costs & cover v0.11.2; room planning v0.18.0;
-  Pools & spas v0.26.0; utility usage v0.29.0; decision D21).** The household's home/property hub (maintenance,
-  appliances/warranties,
-  service contacts, improvements + property record). Rooms/areas now link to dedicated pages
-  with unified purchase/maintenance/renovation/upgrade plans, active/completed/archived lifecycle,
-  estimated/actual costs and exact room/whole-house totals. The clickable floor plan uses stable
-  room IDs plus `floorplan_data.floorplan_slot` for explicit links and falls back to name-based
-  suggestions for older data. Folds the *home* scope of planned **Assets**.
-  Protected insurance + rates/water/gas/utility cost tracking mirrors linked Solace bills through
-  events (D4). Pools/spas add water testing, sanitiser/surface-aware target bands and idempotent
-  care jobs implemented as normal recurring Homestead maintenance (not a parallel scheduler).
-  Utility usage (v0.29.0) records one `UtilityBill` per arrived water/electricity/gas bill —
-  period, amount used, unit, total cost, estimated-or-read — and derives days, per-day usage/cost
-  and the effective unit rate at read time. The usage endpoint returns one series per utility with
-  per-day averages and two comparisons (previous bill, a year ago matched within 45 days). It is
-  household-visible with **no re-auth gate** (owner, 2026-08-10) while Costs & cover stays gated,
-  and it writes nothing to the Calendar.
-  Real pool-shop guidance still needs to be compared with the defaults, but this is **blocked,
-  not scheduled** — the household does not have the pool yet and this is deferred until they
-  move into the new house (owner, 2026-08-12). Pool-specific FTS remains a small follow-up. Full
-  Projects integration remains future. See spec `25_Node_Homestead.md`.
-  A general floor-plan authoring tool is deliberately future work under Roadmap 8.1: blank,
-  template or uploaded-image tracing; drag/resize/snap areas; real Room links; multiple levels;
-  draft/publish and revision history. The current hard-coded geometry is only this installation's
-  saved-plan migration source, never a default for other households.
-  Two further owner-requested productization features are documented, not built: Roadmap 8.2 adds
-  privacy-aware Corners aggregating activity, active assignments and source-owned personal/
-  room/Meridian lists; Roadmap 8.3 adds safe preview-and-confirm URL enrichment for products and
-  later Hearth recipes. See core specs 28 and 29. Do not implement either as copied cross-node
-  data or an unrestricted server-side scraper.
-  Owner follow-up settled household-visible personal lists, suggestion-only changes by others,
-  30-day initial activity, confirmed local image copies and snapshot pricing. Optional watched
-  wishes run once after ~09:00 Household-local time and notify only on a new sale/drop/target hit.
-  Recommended Corner interactions are reactions, short comments, help offers and watching;
-  gift reservation remains later because it needs hidden-from-recipient privacy.
-  Owner subsequently approved reactions: visible activity rows should accept ❤️/👍 and other
-  friendly emoji, group counts by emoji, toggle a person's reaction off, show reactors only to
-  authorised viewers and bundle notifications rather than alerting once per tap.
-- [x] **Fitness & Training — DEPLOYED AND IN USE (v0.25.0, D24; acceptance done 2026-08-12).**
-  Forty-five seeded exercises, searchable custom library, assigned multi-day programs, immutable
-  live sessions, previous-performance defaults, editable sets and mid-workout add/drop, strength/
-  running/swimming personal records, notifications, global search and a Hub widget are complete
-  and in real use. Next possible work (not scheduled): rest timers, RPE, pace splits, trend
-  charts — pick these up only if the owner asks. See `docs/27_Node_Fitness.md`.
-- [ ] **Milestone 5.5: Home Assistant bridge — IMPORTANT / ON HOLD (D22).** Explicitly gated by
-  the owner (2026-08-12) behind HTTPS + working phone push notifications, not by anything else in
-  this list — deploy, Solace, Fitness, pool and acceptance are all already done. Once HTTPS/push
-  land, resume in order: establish the
-  backend-only secret/connection and allowlist gate; ship read-only mapped Home Status + Hub
-  widget; add safe centrally permissioned/audited controls; then deliver approved HomeStack
-  events into Home Assistant automations. WebSocket live state and a custom component remain
-  conditional follow-ups. See `docs/26_Node_Home_Assistant.md`.
-- [ ] Milestone 6: Hearth and Health as appetite allows; finish Travel slices. Inventory/Assets are
-  proposed Homestead capabilities and standalone Projects is evidence-gated (spec 31).
+```text
+HOMESTACK_PUBLIC_HOSTNAME=homestack.moosesoftwares.com
+DJANGO_ALLOWED_HOSTS=...,192.168.1.125,homestack.moosesoftwares.com
+DJANGO_CSRF_TRUSTED_ORIGINS=https://homestack.moosesoftwares.com
+```
 
-## 6. Active tasks — real-use fixes and the next owner-requested features
+`config.settings.prod` is the recommended live setting module because it already contains the
+secure-proxy/cookie behaviour expected behind NPM. Confirm the actual live value before assuming
+that switch has happened.
 
-**Current state (2026-08-12):** `main` is at v0.34.9, 826 backend tests green, clean frontend
-build, no migration drift. **Deploy, Solace cutover (manual entry, not import), Fitness, the
-partner acceptance pass and HTTPS are all done** — HomeStack is deployed on the home server and
-in daily use. Notifications & Push (`docs/32_Core_Notifications_and_Push.md`) is under active
-build on **`feature/push-notifications`** (v0.34.13 on that branch, not yet merged) — a second
-assistant is concurrently consolidating documentation on its own branch, per owner instruction;
-the two are reconciled at merge time, not mid-flight. **All four slices are now done on the
-feature branch** — push notifications work end to end: the household gets notified when someone
-adds to the calendar/a shared list or finishes a book (bundled, not spammed), appointments and
-assigned to-dos get a 24h-before + morning-of reminder, and an active Hub Countdown sends a daily
-digest at each person's own morning time. What's left is entirely the owner's: merge the branch
-(coordinating with the documentation-consolidation branch first), add the
-`notifications_run_scheduled` hourly cron entry to the home server, and do a real-device
-subscribe → push → click test — see item 6 below. That done, this is what gates Home Assistant
-M5.5 next:
+---
 
-1. **Solace performance pass — DONE (v0.34.4).** `SolaceBootstrapView` fanned out to ~14
-   sub-views per Money page load; four of them (Bills, Health, Cycle closeout, Forecast) each
-   independently re-reconciled every active bill's occurrences over heavily overlapping windows.
-   A request-scoped cache (`_ensure_bills_reconciled` in `apps/solace/views.py`) now reconciles
-   each bill's widest requested window once per request. If Solace still feels slow after this,
-   profile with the existing `Server-Timing`/slow-request logging (v0.12.0) rather than assuming
-   the cause — this pass fixed the one clearly diagnosed redundant-query source, not necessarily
-   every cost.
-2. **Money → Now timezone bug — DONE (v0.34.4).** Bills due "today" in household-local time
-   (e.g. a utility cost linked from Homestead) could silently not appear in Now. Root cause:
-   `apps/solace/bill_schedule.py` (plus `forecast.py`/`tasks.py`) compared bills against Django's
-   active timezone, which stays UTC inside Docker since nothing activates a request-local one —
-   the same class of bug v0.29.7 fixed for pay-cycle/Now comparisons, but that pass missed the
-   occurrence-generation engine itself. Fixed by reading `Bill.household.timezone` directly,
-   independent of Django's active timezone.
-3. **General household Grocery + Shopping tabs — DONE (v0.34.5, owner request 2026-08-12).**
-   Split Atlas' generic Lists tab: **Grocery** is a dedicated tab kept deliberately simple
-   (name/quantity/assignee) so a future Hearth/meal-planning pass can populate it from a meal
-   plan's ingredient list, per the handoff the node spec already anticipated
-   (`docs/11_Node_Atlas.md`). **Shopping** is a dedicated tab with the room-project shopping-list
-   treatment: paste-a-link "Fill" import (reusing the existing safe link-import boundary),
-   quantity, a new `AtlasListItem.priority` field (low/medium/high, migration `atlas.0007`) and an
-   optional price-drop watch — the home for an ordinary household item (a vacuum cleaner) that
-   isn't a room project or a personal Corner wish. New `frontend/.../pages/atlas/ShoppingTab.tsx`.
-4. **Travel itinerary + trip type — DONE (v0.34.6, owner request 2026-08-12).** New
-   `TravelItineraryItem` (migration `travel.0003`) — a "Things to do" section on the trip: items
-   with title/location/notes either assigned to a specific day of the trip or left as an
-   unscheduled "option to do". Dated items sync to Calendar (D7) with the trip's
-   colour/visibility/surprise exclusions; clearing the day removes the Calendar entry. Trips also
-   carry `trip_type` (`day_trip`/`multi_day`); choosing day-trip locks the stored end date to the
-   start date on create and edit. `docs/19_Node_Travel.md` §14 slice 4 updated — itinerary is
-   shipped, packing/protected documents remain a future slice if the owner wants it next.
-5. **HTTPS on the LAN via the existing Nginx Proxy Manager + Pi-hole — DONE and confirmed live
-   (v0.34.7, 2026-08-12).** Owner registered `moosesoftwares.com` through Cloudflare; the home
-   server's existing Nginx Proxy Manager (80/81/443) holds a Let's Encrypt cert for
-   `homestack.moosesoftwares.com` via its own DNS Challenge (Cloudflare) — no new HomeStack
-   service handles TLS. NPM proxies the hostname to the frontend (`:5173`) with a second custom
-   location routing `/api` straight to the backend (`:8000`); Pi-hole resolves the hostname to
-   `192.168.1.125` locally. `HOMESTACK_PUBLIC_HOSTNAME` in `.env` lets Vite's dev server accept
-   the hostname (`frontend/vite.config.ts`). **Owner-confirmed working:** the backend health
-   endpoint returns 200 over `https://homestack.moosesoftwares.com`. See
-   `docs/05_Security_Architecture_Document.md` §14. **Still open, not blocking:** whether the
-   live server has actually switched `DJANGO_SETTINGS_MODULE` to `config.settings.prod` (as
-   recommended — it already has the right `SECURE_PROXY_SSL_HEADER`/secure-cookie handling,
-   currently unused under `dev`) hasn't been confirmed, nor has a real login/write action (not
-   just the health check) been verified over the new HTTPS origin. Worth doing both before
-   treating this as fully hardened. Django admin's CSS going unstyled once `DEBUG=0` remains a
-   known, deliberately-unfixed side effect (admin isn't part of normal HomeStack use).
-6. **Notifications & Push, all four slices — DONE on `feature/push-notifications`, not yet merged
-   (v0.34.13, 2026-08-12).** See `docs/32_Core_Notifications_and_Push.md` for the full design.
-   - **Slice 1:** `NotificationPreference`/`UserNotificationSettings` models (migration
-     `notifications.0002`); an optional `category` param on the shared `create_notification`/
-     `notify_person` that gates delivery (omitted = today's unconditional behaviour, unchanged);
-     eight real call sites tagged with categories (`achievements`→meridian, `atlas` suggestions→
-     corners, `education`→assigned_tasks, `fitness`→fitness, `link_imports`→wish_price_alerts,
-     `meridian`×5→meridian, `people` Corner reactions→corners, `travel`→travel); Solace stays
-     uncategorised on purpose (sensitive-node push exclusion). Settings → **Your notifications**
-     page (12 categories × in-app/push toggles + quiet hours + morning-digest time), reachable
-     from `/settings` (admin) and the profile editor (everyone — preferences are self-service and
-     `/settings` itself is admin-gated).
-   - **Slice 2:** push genuinely works now. `manage.py generate_vapid_keys`, `PushDevice` model +
-     register/list/revoke/test endpoints (migration `notifications.0003`), `apps/notifications/
-     push.py` sending via `pywebpush` — a send is only attempted with VAPID configured, the
-     category's push toggle on, outside quiet hours, and the source node not re-auth-gated
-     (checked generically via `HouseholdNode.requires_reauthentication`, not a hardcoded node
-     list); a `404`/`410` response deactivates the device automatically. Frontend: `public/sw.js`
-     service worker, `public/manifest.json` + `apple-mobile-web-app-capable` (iOS only allows Web
-     Push for an installed PWA), and an explicit "Enable push on this device" flow — never
-     auto-prompts for permission.
-   - **Slice 3:** the literal owner request now works — adding to the calendar, a shared
-     list, or finishing a book notifies the household, bundled rather than spammed (five
-     additions to a shopping list in a minute produce one notification, not five). New
-     `apps/notifications/handlers.py` subscribes to `scheduling.event_created` (was dead code,
-     now wired), the new `atlas.list_item_created` and `books.entry_finished` topics; `notify_bundled()`
-     extracted from Corner reactions into shared code, which now calls it too. Every handler
-     re-checks `apply_visibility` per candidate recipient, so a private list or surprise-hidden
-     event never leaks. Fitness workout completions were deliberately **not** added here — they
-     already notify directly from slice 1, and subscribing them too would double-notify.
-   - **Slice 4:** appointments and assigned to-dos now get a real reminder — once ~24h before
-     they're due and again the morning of, each exactly once even if the hourly job overlaps or
-     re-runs. New `apps/notifications/tasks.py` (`run_due_reminders`, `run_countdown_digest`) and
-     the `notifications_run_scheduled` management command (matching the existing
-     `solace_run_scheduled`/`link_imports_run_scheduled` cron pattern — **not yet added to the
-     home server's crontab**, that's an owner deploy step). Sourced entirely from `CalendarEvent`
-     rather than a separate Atlas query, since dated Atlas records already mirror there (D7) —
-     the category is derived from `source_node` (unset → `appointments`; `source_node.key ==
-     "atlas"` → `assigned_tasks`). Deliberately scoped to just those two sources, not every
-     synced node (Solace already has its own reminder job and is re-auth-gated; Meridian/
-     Homestead/Pets/Travel/Education weren't part of the ask). A user's `mine_only` preference
-     (assigned-to-me vs. everyone's) is enforced by the sweep itself, not the shared gate, since
-     only the sweep knows who's assigned. New `NotificationReminderLog` model (migration
-     `notifications.0004`) — `recipient_user` is null for the 24h reminder (one lock covers every
-     recipient, since the lead time doesn't depend on any individual's clock) but set per-user
-     for morning-of and the daily countdown digest, since `morning_time` differs per person; the
-     Hub Countdown widget's `target_date`/`target_time` (no new countdown model, already existed)
-     drives "N days/hours to go" digests, gated on the `countdown` category same as everything
-     else. **875 backend tests green (16 new); frontend typecheck clean (no frontend changes this
-     slice); migration `notifications.0004` applied to the live dev database.** This closes out
-     the feature — all four delivery slices from docs/32 §12 are done.
+## 3. Canonical documentation
 
-**Deferred / on hold, not active work right now:**
-- Pool-care band verification against the pool shop's guidance — blocked until the household
-  moves into the new house with a pool.
-- Home Assistant Milestone 5.5 — on hold until phone push notifications are built (HTTPS is now
-  live, so this is the remaining blocker).
-- Homestead capability consolidation (Roadmap doc) — explicitly not a priority.
-- Icon system — explicitly not a priority.
+The canonical documentation lives in `docs/`. If stale prose or a historical checklist conflicts
+with the canonical docs, the canonical docs win.
 
-`docs/PARTNER_PILOT_READINESS.md` was the two-account/real-device release gate; acceptance is
-done, so treat new findings as ordinary bug reports/feature requests rather than re-running it.
+Read these first:
 
-**Milestone 4 is functionally complete (v0.24.1).** The sensitive-node lock is generic
-(`apps/nodes/access.py`), account/permission changes are audited, the locked-state contract is
-machine-readable (`code: "reauth_required"` + node key, rendered by `components/SensitiveGate`),
-and the kiosk's elevation window is a minute against the web's five — a client that does not
-declare its surface gets the cautious one. What remains is the **pre-remote-access checklist in
-`docs/05_Security_Architecture_Document.md` §14**, and only if remote access is ever pursued.
+- `00_README_and_Changelog.md` — decisions D1–D24 and documentation map.
+- `01_Master_Software_Specification.md` — product vision, node model and scope.
+- `02_Software_Architecture_Document.md` — architecture and shared boundaries.
+- `03_Database_Design_Document.md` — schema conventions.
+- `04_Development_Roadmap.md` — current sequencing and future gates.
+- `05_Security_Architecture_Document.md` — auth, permissions, sensitivity and remote-access gate.
+- `06_API_Specification.md` — API conventions/route ownership.
+- `07_UIUX_Design_Guide.md` — responsive/kiosk design rules.
+- `08_Coding_Standards_and_Project_Structure.md` — implementation standards.
+- `09_Node_Model_Decision_Record.md` — deliberate node boundaries.
+- `10_Future_Features_Parking_Lot.md` — genuinely deferred ideas.
 
-**Superseded, 2026-08-12 — kept for the deploy mechanics, not the sequencing.** The
-deploy/cutover/Fitness/pool/acceptance/Home-Assistant priority order this block used to give is
-resolved: see the current §6 priority list above. The owner chose to start Solace from bills
-entered manually rather than running `import_solace` against the standalone database, so the
-importer/`--verify` sequence below remains available tooling, not an open task. Deploy mechanics
-that are still accurate whenever a new migration lands: rebuild the backend image (or rely on the
-bind-mounted dev compose, which picks up code changes without a rebuild) and run
-`docker exec homestack-backend python manage.py migrate`. This repo runs on Docker Compose bound
-to `/home/instructor/Documents/new/project-homestack` — `docker-compose.yml` +
-`docker-compose.dev.yml` (`DJANGO_SETTINGS_MODULE=config.settings.dev`, `DEBUG=1`, `runserver`
-with autoreload), so backend source edits take effect immediately; only migrations and frontend
-changes need an explicit rebuild/restart.
+Important newer/current specs:
+
+- `23_Core_Hub.md`
+- `24_Core_Calendar.md`
+- `25_Node_Homestead.md`
+- `26_Node_Home_Assistant.md`
+- `27_Node_Fitness.md`
+- `28_Core_Corners.md`
+- `29_Core_Link_Import.md`
+- `30_Core_Daily_Coordination.md`
+- `31_Core_Manage_HomeStack.md`
+- `32_Core_Notifications_and_Push.md` — shipped notification/PWA contract.
+- `33_Node_Books.md` — shipped Books domain.
+- `34_Recommended_Next_Steps.md` — practical production-readiness/reliability plan.
+
+`VERSION_HISTORY.md` is the release chronology. Do not duplicate that history here.
+
+---
+
+## 4. Non-negotiable architecture rules
+
+1. **One household per install; keep `household_id` (D1/D2).** No SaaS tenancy/signup/billing.
+2. **API-first (D3).** Business logic belongs in the backend.
+3. **Thin event interface, no durable bus (D4)** until measured need justifies one.
+4. **No Redis/Celery by default (D5).** Scheduled work uses management commands/cron for now.
+5. **Shared session auth (D6).** Avatar/PIN everyday login; password re-auth for sensitive areas.
+6. **Calendar has one source of truth (D7).** Owning records own dates; use scheduling helpers.
+7. **One general recurrence format (D8).** RRULE/`recurrence_rule` except bounded D23 rotations.
+8. **Permission-aware search/projections (D9/D10).** Never aggregate inaccessible data first.
+9. **Central backend permissions (D10).** Frontend hiding is not authorization.
+10. **Shared attachment security (D11).** No per-node file-security systems.
+11. **Users act; People are subjects (D12).** Do not collapse the concepts.
+12. **Meridian and Solace are native domains (D13/D14).** No iframe/generic integration shell.
+13. **No household-specific schema/business logic (D15).**
+14. **Calendar Django app is `scheduling` (D16).**
+15. **Backup means restore capability (D17).**
+16. **Rotating schedules are calculated cycles + sparse exceptions (D23).**
+17. **Fitness is separate from medical Health (D24).**
+
+Keep views thin. Reads belong in `selectors`; writes/business transitions belong in `services`.
+Do not import another node's models merely to make a cross-node feature convenient.
+
+---
+
+## 5. Current product state
+
+Major shipped areas include:
+
+- Core auth, People/Users, roles/permissions, audit, backups and protected attachments.
+- Hub, Calendar, global search and notifications.
+- Atlas notes/to-do/Grocery/Shopping/reminders/Agenda.
+- Native Meridian tasks/rewards/points workflows.
+- Education, Home Wiki and Pets.
+- **Books** personal shelves, per-User ratings/notes and shared Book Clubs/up-next queue.
+- Homestead rooms/planning/maintenance/appliances/services/cover/pools/utilities/floor plan.
+- Native Solace/Money.
+- Fitness & Training.
+- Travel trips/bookings/costs/itinerary.
+- Corners and safe link/product/book enrichment/watch infrastructure.
+- Manage HomeStack guides/version history/configuration.
+- Trusted LAN HTTPS.
+- **PWA/Web Push notifications (v0.34.10–v0.34.13)** — preferences, per-device subscriptions,
+  VAPID delivery, quiet hours, household-activity bundling, fixed 24h/morning reminders,
+  countdown digest, sensitive-safe push gating and service-worker/PWA support.
+
+The completed notification branch reported **875 backend tests green** and a clean frontend
+TypeScript check. Live deployment/device validation is still required below.
+
+---
+
+## 6. Active/recommended next phase
+
+**Production readiness and reliability** is now the recommended primary engineering workstream.
+Use `docs/34_Recommended_Next_Steps.md` for the practical plan and
+`docs/04_Development_Roadmap.md` for canonical sequencing.
+
+Recommended order:
+
+1. replace Django `runserver` and Vite dev serving with production serving;
+2. reduce unnecessary LAN-exposed database/backend/frontend ports;
+3. create one supported deploy command with migration + smoke validation;
+4. add frontend unit/E2E testing and CI;
+5. establish encrypted off-server backup + recovery validation;
+6. add small operational/System Health visibility;
+7. add passkeys/2FA before any public remote-access plan.
+
+After the reliability baseline: Home Assistant, Hearth, Travel finishing work and later Health.
+
+Explicitly avoid generic plugins/integrations, Kubernetes/microservices, Redis/Celery without
+measured need, or public exposure before the Security Architecture gate is satisfied.
+
+---
+
+## 7. Notification deployment requirements
+
+The Web Push implementation is merged, but the live server must still be configured and validated.
+
+### Deploy code and migrations
+
+```bash
+docker compose build homestack-backend homestack-frontend
+docker compose up -d
+docker exec homestack-backend python manage.py migrate
+```
+
+Current notification migrations after `0001_initial` are:
+
+```text
+notifications.0002_notificationpreference_usernotificationsettings_and_more
+notifications.0003_pushdevice
+notifications.0004_notificationreminderlog
+```
+
+### Configure VAPID
+
+Required deployment values:
+
+```text
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=
+```
+
+Generate keys with:
+
+```bash
+docker exec homestack-backend python manage.py generate_vapid_keys
+```
+
+Put the values in the live `.env`, then recreate/restart the backend as required. Never commit the
+private key. Push gracefully no-ops when VAPID is not configured.
+
+### Schedule reminder/countdown delivery
+
+Run at least hourly:
+
+```bash
+docker exec homestack-backend python manage.py notifications_run_scheduled
+```
+
+The command is idempotent and currently handles:
+
+- fixed 24-hour reminders for standalone Calendar and Atlas-sourced Calendar entries;
+- morning-of reminders at each User's configured `morning_time`;
+- the daily enabled Hub countdown digest.
+
+It is deliberately **not** a generic per-domain/configurable-lead-time reminder engine.
+
+### Real-device validation
+
+Before treating the live rollout as fully verified:
+
+- register at least two household users/devices with different preferences;
+- send a device test push;
+- confirm normal push arrives while HomeStack is closed;
+- confirm quiet hours suppress normal push;
+- confirm the fixed 24h/morning scheduled behaviour and countdown do not double-send on rerun;
+- confirm sensitive/re-auth-required sources cannot expose protected lock-screen content;
+- tap pushes and verify the destination re-checks current permissions;
+- test expired/revoked subscription behaviour;
+- on iOS, test an **installed Home Screen PWA** — a normal Safari tab is insufficient.
+
+---
+
+## 8. General deployment workflow
+
+The home server uses **Docker**, not Podman.
+
+After pulling code that changes baked images:
+
+```bash
+docker compose build homestack-backend homestack-frontend
+docker compose up -d
+```
+
+After any deployment that may include migrations:
 
 ```bash
 docker exec homestack-backend python manage.py migrate
 docker exec homestack-backend python manage.py showmigrations
 ```
 
-**Working rhythm (proven this milestone):** small workstream → backend (models/migration/services/
-selectors/serializers/views/urls) → tests → frontend (types/client → UI) → `tsc` + `npm run build`
-+ `python manage.py test` (SQLite) → tick checklist → Progress Log row → commit + push to `main`.
-Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only features (see Atlas
-`_search`).
+Do not assume image rebuilds apply database migrations.
 
-## 7. Guardrails — common ways to get this wrong
+Useful checks:
 
-- Don't add Redis/Celery/event-bus tables "to be safe" — they're deliberately deferred.
-- Don't put permission checks in views — use the resolver/mixin.
-- Don't let a node write a `calendar_event` directly — call the scheduling helper.
-- Don't import one node app's models into another — communicate via signals.
-- Don't add a second auth system for Meridian/Solace — they use shared Users/People.
-- Don't hardcode anything specific to this household.
-- Don't skip permission tests — they come first.
-- **Don't forget `migrate` after a deploy** — `docker exec homestack-backend python manage.py
-  migrate` after every pull+rebuild, or you get `column ... does not exist` 500s.
-- Don't use Postgres-only ORM features without a SQLite fallback — tests run on SQLite (e.g. Atlas
-  `_search` branches on `connection.vendor`).
+```bash
+docker compose ps
+docker logs --tail=200 homestack-backend
+docker logs --tail=200 homestack-frontend
+curl -I https://homestack.moosesoftwares.com
+curl -I https://homestack.moosesoftwares.com/api/v1/health/
+```
 
-## 8. Open questions / decisions still pending
-
-*(Append here when something needs the owner's call. None blocking Milestone 1 currently.)*
-
-- Mobile/desktop client tech (React Native vs. Tauri vs. PWA) — deferred until after core
-  product proves itself (D3). PWA is the likely first bridge.
-- **Owner re-prioritisation 2026-07-14 — RESOLVED (owner answers):**
-  1. **"Mobile" = responsive-web polish only** for now (no PWA/install/offline yet; PWA stays the
-     later bridge).
-  2. **"Tasks" = the Atlas to-do lists** — improve the existing Atlas lists/items as the general
-     task surface (not a new task app, not Meridian).
-  3. **Education V1 = uni-first focused slice:** courses/subjects + assignments/exams (due dates →
-     Calendar) + weekly lecture **timetable**. School-age-child features (homework cards, reading
-     logs, kiosk) come **after** the uni slice is usable.
-  4. **Sequencing = Education first.** Build the Education uni slice now (term already started);
-     Calendar + Atlas web/mobile polish follows or runs alongside. Kiosk deferred throughout.
-- **Revisit Atlas + Hub after Meridian (owner request, 2026-06-25).** *Resolved → folded into the
-  new **Milestone 2.5** (Core surfaces: Hub, Atlas, Calendar) in `04_Development_Roadmap.md` and §5
-  above.* Both surfaces "are not functioning as I would like yet"; the milestone now scopes a
-  dedicated pass on the Hub (incl. building the Meridian Hub widget + the per-node widget pattern),
-  Atlas, and building out the Calendar core. Gather any remaining UX specifics from the owner when
-  starting each workstream.
-
-## 9. Progress Log
-
-> **Append a dated entry at the end of every session.** Newest at the bottom. Keep it factual:
-> what you built, what you changed, what's half-done, what the next assistant should pick up.
-
-| Date | Author (assistant/human) | Milestone | What changed | Next step |
-|------|--------------------------|-----------|--------------|-----------|
-| 2026-06-23 | Planning | M0 | Consolidated docs 00–22, Milestone 1 checklist, this handover. No code yet. | Start Phase 1.0 (Docker scaffold). |
-| 2026-06-23 | Assistant | M1 | **Phase 1.0 done.** Repo scaffold: `backend/ frontend/ docs/ docker/ scripts/ backups/`, `.env.example`, `.gitignore`, `README.md`, `docker-compose.yml` (3 services: postgres, backend, frontend — no Redis/Celery), `docker-compose.dev.yml` (hot-reload bind mounts). Volumes `postgres_data`/`media_data`/`backup_data`. Minimal Django backend (single `config/settings.py`, health endpoint at `/` and `/api/v1/health/`). Minimal Vite React/TS frontend with `/api` dev proxy to backend. Consolidated all docs from `documents/` → `docs/`. **Stack boots & verified:** postgres healthy, backend serves health JSON, frontend HTTP 200, proxy OK. | Start Phase 1.1: real Django project — split settings `config/settings/{base,dev,prod,test}.py`, add DRF + Argon2, create empty app skeletons (`core accounts people permissions nodes hub scheduling notifications attachments audit search backups events atlas`). |
-| 2026-06-23 | Assistant | M1 | **Phase 1.1 done.** DRF + argon2-cffi added to requirements. Settings split into `config/settings/{base,dev,prod,test}.py`; `DJANGO_SETTINGS_MODULE=config.settings.dev` (manage.py/wsgi/asgi setdefault + `.env`). All 14 app skeletons created under `backend/apps/` (`apps.<name>` AppConfigs) and registered in INSTALLED_APPS; calendar app is `scheduling` (D16); `events` is the thin-signal app only (D4). Argon2id confirmed as default PASSWORD_HASHERS entry. `/api/v1/health/` now phase 1.1. **Verified:** `manage.py check` → no issues; all apps load; health OK via proxy. **Deliberately deferred to Phase 1.3** (noted in `base.py`): contrib `auth`/`sessions`/`messages`/`admin` apps + session/auth middleware + `AUTH_USER_MODEL` — added *before the first migration* so the custom `accounts.User` is in place from the start. No migrations run yet. DRF default permission is `AllowAny` until the central resolver (Phase 1.5, D10). | Start Phase 1.2: `core.Household` (single row) + seed it, `HouseholdBaseModel` (household FK, soft delete, created/updated-by-user), `HouseholdManager` default manager. |
-| 2026-06-23 | Assistant | M1 | **Phase 1.2 done.** `core.Household` (tenant anchor, plain model) + idempotent seed migration `0002_seed_household` (one row: "HomeStack Household"/`homestack`, generic per D15). `HouseholdBaseModel` (abstract): `household` PROTECT FK, created/updated_at, `created_by`/`updated_by` → `AUTH_USER_MODEL` (D12, nullable), `deleted_at` soft delete, `soft_delete()`/`restore()`. `HouseholdManager` (default) excludes soft-deleted + is the single household-scoping hook (D1, no-op in single-household mode); `all_objects` includes deleted. `get_active_household()` helper for services. Migrated (only `core` — still no contrib.auth tables, custom-user trap avoided). 3 core tests pass on `config.settings.test`. **Dev workflow:** run with `-f docker-compose.yml -f docker-compose.dev.yml` (bind mount + hot reload); dev override now sets `user: ${UID:-1000}:${GID:-1000}` so container-generated files (migrations) are host-owned. Soft-delete/manager concrete test deferred to 1.3 (needs first real subclass `accounts.User`). | Start Phase 1.3: add contrib `auth`/`sessions`/`messages` + session/auth middleware, define custom `accounts.User` (on HouseholdBaseModel) and set `AUTH_USER_MODEL` **before migrating**; session auth endpoints (`pin-login`, `password-login`, `logout`, `me`, `reauth` stub); Argon2 PIN+password. |
-| 2026-06-23 | Assistant | M1 | **Phase 1.3 done.** Added `django.contrib.auth/contenttypes/sessions/messages/admin` + middleware to `base.py`; set `AUTH_USER_MODEL = 'accounts.User'`. Custom `accounts.User` (AbstractBaseUser + HouseholdBaseModel): fields `display_name, username, email, avatar, pin_hash, role, is_active, is_child_account, colour` + inherited `password, last_login, household, created/updated_at, created/updated_by, deleted_at`. `UserManager` extends `HouseholdManager` (soft-delete + household scoping). Two auth backends: `PinBackend` (all users via PIN), `PasswordBackend` (non-child users via full password). Services: `pin_login_user`, `password_login_user`, `logout_user`, `reauth_user` (short-lived elevated session flag `_homestack_reauth`). Endpoints live at `/api/v1/auth/{pin-login,password-login,logout,me,reauth}/`. Django admin registered (no PermissionsMixin — custom resolver Phase 1.5). Test settings updated to use SQLite in-memory. **36/36 tests green** (core 3, accounts model 20, accounts auth 13). Soft-delete tests now covered via User. | Start Phase 1.4: `people.Person` model (linked_user_id nullable, display_name, preferred_name, avatar, colour, DOB, profile_type ∈ {adult,child,other}, notes + base fields) + CRUD endpoints at `/api/v1/people/`. |
-| 2026-06-24 | Assistant | M1 | **Phase 1.4 done.** `people.Person` (HouseholdBaseModel): `linked_user` (nullable OneToOneField → User), `display_name, preferred_name, avatar, colour, date_of_birth, profile_type ∈ {adult,child,other}, notes`. Full layered app: `models, serializers (PersonSerializer + PersonWriteSerializer), selectors (list_people, get_person_by_id), services (create_person, update_person, delete_person), views (PersonListView, PersonDetailView), urls`. `PersonWriteSerializer` validates blank `display_name`. All writes stamp `created_by`/`updated_by` (D12). Delete is soft (HouseholdManager hides it from the default queryset). `python manage.py seed_people` creates 4 generic placeholder people (2 adults, 2 children — D15). Migration `people.0001_initial` generated. **68/68 tests green** (+32: 16 model, 16 view). Health endpoint bumped to phase 1.4. | Start Phase 1.5: permission resolver — write permission tests first (D10), then `permissions` models (roles, role_permissions, user_permissions), resolver function, visibility queryset mixin, wire into DRF base permission class + base selector. |
-| 2026-06-24 | Assistant | M1 | **Phase 1.6 done.** `nodes` app: `Node` (global catalogue, 12 nodes seeded), `HouseholdNode` (per-household enable/display state), `NodeSetting` (per-household key-value). Data migration `nodes.0002_seed_nodes` seeds all 12 nodes + household_nodes (atlas enabled, rest disabled). Endpoints: `GET /nodes/` (nodes.view), `POST /nodes/{key}/enable|disable/` (nodes.edit, admin only), `PATCH /nodes/{key}/settings/` (nodes.edit). `HomeStackPermission` updated to respect `permission_action` view attribute so POST can override to "edit". `audit.AuditLog` (append-only, immutable `save()` guard): fields `user, action, target_node, target_record_type, target_record_id, ip_address, user_agent, metadata_json, created_at`. `log_audit()` helper in `audit/helpers.py`. Login success + failure wired into `accounts/services.py`. `GET /audit-logs/` (audit.view, admin only). Household endpoint: `GET/PATCH /household/` (household.view / household.edit). Permissions migration `0003` seeds nodes/household/audit permissions — admin gets all, manager/user/guest get view-only on nodes+household. **156/156 tests green** (+36). | Start Phase 1.7: scheduling/calendar — `CalendarEvent` model, `sync_event_for`/`delete_event_for` helper, `GET/POST/PATCH/DELETE /calendar/events/`, recurrence via RRULE. |
-| 2026-06-24 | Assistant | M1 | **Phases 1.7–1.10 done.** Phase 1.7: `scheduling.CalendarEvent` (HouseholdBaseModel, visibility+sensitivity, source_node/source_record_type/source_record_id for node-backed events), `CalendarSyncMixin` (`scheduling/mixins.py`), `sync_event_for(record)` / `delete_event_for(record)` helper (scheduling/helpers.py) — nodes call these, never write CalendarEvent rows directly (D7). `events/bus.py` thin signal bus (D4). `GET/POST/PATCH/DELETE /api/v1/calendar/events/` (synced events reject direct writes). Permissions `scheduling.view/create/edit/delete` seeded. 20 tests. Phase 1.8: `atlas` app — `AtlasNote`, `AtlasList` (todo/grocery/checklist/shopping/general), `AtlasListItem` (completed_at/completed_by, assigned_to_person), `AtlasReminder` (CalendarSyncMixin: dated reminders auto-sync to CalendarEvent, D7). Full CRUD API at `/api/v1/atlas/`. `apply_visibility` updated (Phase 1.8b) — admin/manager see all, users see household+own-private, guests+children see household-only, children blocked from sensitive content. FTS via icontains (SQLite-safe; TODO: SearchVector in M2). `atlas/events.py` signals via bus (D4). Permissions seeded (user can create/edit, admin/manager can delete). 41 tests inc. 8 calendar-sync assertions. Phase 1.9: `hub` app — `HubWidget`, `HouseholdHubWidget`, `UserHubWidget`. Seed migration adds `atlas_todos` + `atlas_reminders` widgets (both kiosk-safe). `GET /api/v1/hub/` and `GET /api/v1/hub/kiosk/` (kiosk filters supports_kiosk=True). `GET /api/v1/auth/kiosk-users/` (AllowAny — returns persons-with-linked-user for kiosk avatar selection). 15 tests. Phase 1.10: kiosk frontend — installed `tailwindcss@3` + `react-router-dom`. `/kiosk` route in `App.tsx`. State machine in `KioskApp.tsx`: ambient → avatar_select → pin_entry → dashboard → (5-min idle timeout) → avatar_select. Components: `AmbientScreen` (clock), `AvatarSelect` (fetches kiosk-users, renders avatar cards), `PINEntry` (6-digit numeric pad, calls /auth/pin-login/), `KioskDashboard` (fetches /hub/kiosk/, renders todos+reminders widgets, sign-out button, inactivity timeout). API client in `src/api/client.ts`. TypeScript clean, Vite build passes. **232/232 tests green.** | Start Phase 1.11 (Backups + restore) — pg_dump + media tarball, admin re-auth gate, `POST /api/v1/backups/`, restore endpoint + documented procedure. |
-| 2026-06-24 | Assistant | M1 | **Phase 1.12 done.** Web frontend. Shared primitives: `Button`, `Card`, `Avatar`, `PINPad` in `src/components/`. `AuthContext` + `LoginPage` (username → PIN flow, `me()` on load). `useDarkMode` hook (localStorage + prefers-color-scheme, class strategy). `AppShell`: sidebar nav on md+, bottom nav on mobile, dark mode toggle, user avatar + sign-out. Pages: `HubPage` (greeting, date, todo/reminder widgets with due-date badges), `AtlasPage` (tabs: Lists/Reminders; live tick-off, add/delete items and lists, reminder CRUD with datetime), `CalendarPage` (upcoming events grouped by date, today/tomorrow labels). API client extended with all Atlas/Calendar/Hub/auth endpoints. TypeScript clean. Podman dev stack running and verified locally (kiosk + web both work). | Deploy to home server (start Milestone 2: native Meridian) when ready to go daily. |
-| 2026-06-24 | Assistant | M1 | **Phase 1.11 done.** Backups + restore (D17). `apps/backups`: `Backup` model (status/label/db_file/media_file/db_checksum/media_checksum/size_bytes/error_message), `services.create_backup` (pg_dump + media tar, checksum, audit log), `services.restore_backup` (checksum verify, pg_restore, unpack media, audit log). Low-level ops (`_dump_db`, `_tar_media`, `_restore_db`, `_unpack_media`) isolated so tests patch them without needing a real PG. `POST /api/v1/backups/` (admin+reauth), `GET /api/v1/backups/`, `GET /api/v1/backups/{id}/download/` (streaming tar.gz), `POST /api/v1/backups/{id}/restore/` (admin+reauth). Permissions seeded: `backups.view/create/restore` — admin only. `docs/restore.md`: full step-by-step restore procedure (API path + manual fallback). **248/248 tests green** (+16 backup tests). `BACKUP_DIR`/`MEDIA_ROOT` added to `base.py`. | Start Phase 1.12: web frontend — shared component primitives, auth flow (avatar+PIN), Hub view, Atlas UI (lists/items/reminders), Calendar view, dark mode + large touch targets. |
-| 2026-06-25 | Assistant | M4-pull-fwd | **User management (admin) — pulled forward from M4.** New `users` permission (admin-only, perms migration 0012). Backend: `accounts/user_services.py` (create/update/deactivate + person link/create), `user_views.py` + `/api/v1/users/` (`user_urls.py`), `UserAdminSerializer`/`UserWriteSerializer`, `list_users` selector. Create links an existing unlinked Person or auto-creates one (owner's choice). Frontend: admin **Users** page (`features/web/pages/UsersPage.tsx`) — list, create (username/role/PIN/password/child/colour + person link), inline edit (role, reset PIN/password), deactivate; admin-only nav entry + `/users` route. Can't deactivate self. **350 tests green** (+11); frontend builds clean. | Continue M2 polish / M3, and the Atlas+Hub follow-up (§8). |
-| 2026-06-25 | Assistant | M2 | **Frontend full set (2.19) — M2 COMPLETE.** Rebuilt the Meridian web UI to match the legacy templates (per-feature components under `frontend/src/features/web/pages/meridian/`): Tasks board (filters, badges, base+bonus, role-aware actions, create form), Shop (cart + checkout, stock, admin create + approvals), Routines (streaks), Goals + Wishlist (progress + contribute + request/approve/fulfill), Leaderboard + Badges, admin Settings; plus a notification bell in `AppShell`. Kiosk: tap-to-complete tasks & routines (celebration), reward shop, goals/wishlist quick-contribute, my-badges strip. API client + types extended for every endpoint; added `getPeople`, `updateMeridianTask/Reward`. `tsc` + production build clean. Backend untouched (339 tests still green). | **Milestone 3** (Home Wiki, Pets, Education) — but first revisit Atlas + Hub UX (owner request, §8). Optionally tackle carried-forward polish (2.9b, etc.). |
-| 2026-06-25 | Assistant | M2 | **Full data import (2.18).** Extended `import_meridian` (dry-runnable) to the whole feature set: categories(kind), point-ledger with `transaction_type` (so balance AND lifetime-earned match), routines+completions, group goals+contributions, wishlist items/contributions/requests, earned badges, allowances. Entities idempotent (natural keys); history append-only (run once / after wipe). **339 tests green.** | Last phase: 2.19 frontend (web + kiosk) for the full feature set; then 2.9b. |
-| 2026-06-25 | Assistant | M2 | **Settings + reports + category kinds (2.17).** `apps/meridian/config.py` — typed household settings over `NodeSetting` (`points_label`, `group_goals_enabled`, `wishlist_requests_enabled`, `auto_end_streaks`); `GET/PATCH /meridian/settings/` (PATCH=manager via `get_permission_action`). Toggles enforced in `contribute_to_goal`/`request_wishlist_item`; `current_streak` now defaults to the `auto_end_streaks` setting (default False = lenient, legacy parity). `MeridianCategory.kind` (task/reward, migration 0010) + `?kind=` filter. `GET /meridian/reports/` leaderboard (balance/earned/badges) + recent activity. **337 tests green.** | Continue: 2.18 full data import, 2.19 frontend; 2.9b. |
-| 2026-06-25 | Assistant | M2 | **Atlas blank-screen fix + scheduled command (2.16).** Fixed `GET /atlas/lists/` using the write serializer (no `id`/`items`) → web ListCard crashed once a list existed; now uses the read serializer + frontend defaults items to []; regression test added. Phase 2.16: `meridian_run_scheduled` management command (D5 cron) — `MeridianAllowance` (per-person weekly allowance, migration 0009) + `award_allowances` (idempotent per day, notifies), perfect-month routine badge via `award_perfect_month_badges` → `meridian.routine_perfect_month` event → achievements awards. Streak auto-end is read-time (no job); recurring-task re-arm deferred to 2.9b; allowance config UI → 2.17/2.19. **330 tests green.** | Continue: 2.17 settings/reports/leaderboard, 2.18 import, 2.19 frontend; 2.9b. |
-| 2026-06-25 | Assistant | M2 | **Notifications (2.15).** Built the scaffolded `notifications` app as shared infra (called directly by nodes, like audit/scheduling): `Notification` model, `create_notification`/`notify_person[_id]`/`mark_read`/`mark_all_read`, `GET /notifications/` (+unread_count), read + read-all endpoints, `notifications.view` perm (migration 0011), `notifications.0001_initial`. Wired into Meridian (task approved/rejected, reward approved/rejected) and achievements (badge earned) via direct service calls. Allowance notification comes with 2.16; bell/list UI with 2.19. **324 tests green.** | Continue: 2.16 scheduled cmd, 2.17 settings/reports, 2.18 import, 2.19 frontend; 2.9b. |
-| 2026-06-25 | Assistant | M2 | **Deploy fixes + cross-node achievements (2.14).** Fixed two LAN-deploy traps surfaced by live testing: (1) `CSRF_TRUSTED_ORIGINS` now read from env + auto-derived from `DJANGO_ALLOWED_HOSTS` in dev (Django 4 Origin check rejected the SPA's `:5173` origin behind the Vite `changeOrigin` proxy); (2) documented in README that the base compose bakes source at build time so a rebuild (or the dev-override bind mount) is required after `git pull`. Phase 2.14: new `apps/achievements` (cross-node, D20) — `Badge` (global catalogue, 15 seeded), `PersonBadge`, `AchievementCounter`; awards purely via the events bus in `handlers.connect()` (no Meridian imports, D4). Enriched Meridian events (routine `streak`, points `transaction_type`, `wishlist_contributed`). `achievements.view` perm (migration 0010). **316 tests green.** `perfect_month` → 2.16; badge UI → 2.19. | Continue: 2.15 notifications, 2.16 scheduled cmd, 2.17 settings/reports, 2.18 import, 2.19 frontend; 2.9b task-completion model. |
-| 2026-06-25 | Assistant | M2 | **Meridian economy ported (phases 2.10/2.12/2.13).** 2.10 rewards shop: stock (`remaining_stock`/`disappear_when_empty`), `daily_limit_per_user`, `allow_multiple_in_cart`, price/store/image fields, archive, `checkout_cart` (all-or-nothing); uploaded image carousel deferred to attachments. 2.12 group goals: `MeridianGroupGoal` + contribution (reserve/refund, funded), child-safe `contribute`. 2.13 wishlist: request→approve→item→contribution (reserve/refund, funded/fulfilled), child-safe request+contribute. Added `meridian.contribute` permission (perms migration 0009) + resolver carve-out; `HomeStackPermission` now supports `get_permission_action(request)` for mixed-method views. Migrations meridian 0006–0008. **307 tests green.** Not committed in this row (committed next). | Continue strict order: 2.14 achievements app (cross-node, D20), 2.15 notifications, 2.16 scheduled cmd, 2.17 settings/reports, 2.18 import, 2.19 frontend; plus 2.9b task-completion model. |
-| 2026-06-25 | Assistant | M2 | **Meridian full-port build started (D19/D20 ratified into changelog).** Phase 2.8 ledger parity: typed signed transactions (`MeridianPointsEntry.TransactionType`), `get_total_earned` (earning types only) vs `get_points_balance`, reward **reservation/refund** (reserve on request, idempotent refund on reject/cancel, no double-deduct on approve). Phase 2.9 tasks parity (additive): `completion_behavior`, `is_active`/`is_archived`, hot `hot_bonus_points`/`hot_label` + `award_value`, `completion_scope`/`availability_window` fields; **deferred** per-person completion history / shared & recurring completion / evidence / admin-complete-for-person to a `MeridianTaskCompletion` model (Phase 2.9b). Phase 2.11 routines+streaks: `MeridianRoutine` + `MeridianRoutineCompletion`, immediate points (no approval), idempotent per day, streak calc, admin void claws back; full API + child-safe complete. Migrations 0003–0005. **292 tests green** (+10). Not committed. | Continue: Phase 2.10 rewards shop (stock/limits/images/cart), then 2.12 goals, 2.13 wishlist, 2.14 achievements app, 2.15 notifications, 2.16 scheduled cmd, 2.17 settings/reports, 2.18 import, 2.19 frontend. |
-| 2026-06-25 | Assistant | M2 | **Audit + scope correction + bug fix.** Found the Progress Log was missing all M2 + design-system/seed-admin/prod-cookie commits, and §5 was stale ("code not started"). **Fixed a CSRF write bug breaking ALL browser writes** (Atlas save, Meridian add, every POST/PATCH/DELETE): DRF `SessionAuthentication` enforces CSRF but the SPA never sent a token. Fix: `@ensure_csrf_cookie` on `GET /auth/me/` (`accounts/views.py`) + client reads `csrftoken` cookie → `X-CSRFToken` header on unsafe methods (`api/client.ts`). **Audited native Meridian vs the legacy app** (`~/Documents/new/project-meridian`, 20 models/9 services): only a thin tasks/points/rewards subset was ported — no routines/streaks, group goals, wishlist, badges, allowance, shop depth (stock/limits/images/cart), reports/leaderboard, notifications, or separate task/reward categories. **Rewrote `15_Node_Meridian.md` and `MILESTONE_2_Checklist.md`** to the true full-port scope (Parts A/B/C). Proposed **D19** (Meridian = full port) and **D20** (cross-node achievements/badges system) — ratify into `00_README_and_Changelog.md` on sign-off. | **Owner sign-off on the rewritten M2 spec**, then build Part B (wire up foundation) → Part C phases 2.8–2.19. |
-| 2026-07-17 | Assistant | Books node | **Books node shipped as v0.6.0.** Backend `apps/books`: book catalogue, personal shelf entries, book clubs + memberships, club books, ordered club up-next queue, one `BookRating` per user/book shared across personal and club history; permissions migration `0015`; node catalogue migration `nodes.0004`; full API under `/api/v1/books/`; 9 Books tests added and full backend suite passes (415 tests). Frontend: `/books` route + nav stack, personal backlog/reading/history shelves, club-colour-highlighted club items with filter, club creation/editing, member add/remove, club backlog/up-next/reading/history management, rating/notes UI, version bumped to `0.6.0`. | Deploy note: run `docker exec homestack-backend python manage.py migrate`; then enable the Books stack in Settings before use. |
-| 2026-07-17 | Assistant | Books node | **Books UX update v0.6.1.** Reworked `/books` from column-first layout to top-level Individual / Book club tabs with Backlog / Reading / Read sub-tabs. The top add-book control now chooses the target shelf; each book card has a status dropdown that moves it between shelves; personal backlog books can be added directly to a chosen book club. Frontend build passes. | Next Books polish: drag/drop or better numeric ordering for club up-next queue, plus optional book search/autocomplete when adding. |
-| 2026-07-17 | Assistant | Web/mobile UX | **Global layout + Books desktop/mobile polish v0.6.2.** AppShell main content widened from `max-w-4xl` to a responsive `max-w-[1600px]` with larger desktop gutters, so every node can use desktop real estate. Books page now uses multi-column card grids on desktop with right-side panels for shelf counts, club books, and up-next; mobile remains stacked. Added Books accent token. Frontend build passes. | Continue UX pass node-by-node: Calendar, Atlas, Education and Hub still need the same desktop/mobile treatment and should be reviewed with screenshots. |
-| 2026-07-17 | Assistant | Books node | **Books edit patch v0.6.3.** Added inline book editing from personal shelf cards and club book cards. Edit form updates the shared book record fields: title, author, pages, genre, ISBN, and description. Frontend build passes. | Continue Books polish: add search/autocomplete to avoid duplicate book records, and consider cover image editing. |
-| 2026-06-24 | Assistant | M1 | **Phase 1.5 done.** Permission spine (D10) fully implemented. `permissions` app: `Permission` (global catalogue, `{resource}.{action}` codenames), `Role` (HouseholdBaseModel, system roles: admin/manager/user/guest), `RolePermission` (join: role→permission), `UserPermission` (HouseholdBaseModel, per-user override with `is_granted`). Data migration `0002_seed_roles_and_permissions` seeds 4 system roles + 4 `people.*` permissions + default matrix (admin/manager=all, user/guest=view-only). **Resolver** (`permissions/resolver.py`): unauthenticated/inactive→deny; `is_child_account+non-view`→deny; user_permission override first; role_permission fallback. **Visibility mixin** (`permissions/visibility.py`): structural passthrough, ready to extend in Phase 1.8 when Atlas adds visibility/sensitivity. **DRF class** (`permissions/drf.py`): `HomeStackPermission.for_resource("people")` factory — no view checks permissions ad hoc. `people/views.py` switched from `IsAuthenticated` to `HomeStackPermission`. `people/selectors.py` now passes user to `apply_visibility`. **120/120 tests green** (+52: 31 resolver, 21 integration). | Start Phase 1.6: nodes registry (`nodes`, `household_nodes`, `node_settings`), seed node rows (atlas enabled), minimal household settings endpoints, audit log. |
-
-| 2026-06-25 | Assistant | M2.5 | **M2.5 kicked off (Core surfaces).** Added core-service specs `23_Core_Hub.md` + `24_Core_Calendar.md` (Hub = read-only widget aggregation; Calendar = `scheduling`, D7 timeline, every-page access + configurable + nice-to-look-at per owner). Inserted **Milestone 2.5 — Core surfaces (Hub/Atlas/Calendar)** in `04_Development_Roadmap.md` (before M3) + `MILESTONE_2.5_Checklist.md`; updated §5 status + resolved the §8 Atlas/Hub open question into it. Parked an Obsidian-style **node graph "web" view** in `10_Future_Features_Parking_Lot.md` §4. **First build:** found Meridian Hub widgets were already seeded (mig `0003`) + content-wired in `hub/services.py`, and the **kiosk** already rendered them, but the **web `HubPage`** only rendered the two Atlas widgets (Meridian fell through to the reminders renderer). Fixed: web HubPage now renders Meridian tasks/points/reward-requests via a key dispatcher (`tsc` + production build clean). | Continue M2.5: **2.5A.1** widget-config endpoints (household enable/order/size + per-user reorder) → **2.5A.2** Hub config UI; then Atlas FTS (**2.5B.1**) and the Calendar core build (**2.5C**). Smoke-test the web Meridian widgets live on the home server. |
-
-| 2026-06-25 | Assistant | M2.5 | **UI/UX fixes (Workstream D) noted + 3 of 6 shipped.** Logged six owner UX items as Phases 2.5D.1–.6 in the checklist. Done: **(D.1)** enter/exit kiosk buttons (web shell `→ /kiosk`; kiosk ambient corner link `→ /`); **(D.2)** estimated cost (`price_estimate`) is now **admin-only** in shop/wishlist/group-goals — `AdminOnlyPriceMixin` (fails closed) + `request` context threaded through all Meridian output call sites, with tests (74 meridian tests green); **(D.3)** hardware-keyboard PIN entry on web `PINPad` + kiosk `PINEntry`. `tsc` + build clean. | **Remaining D items:** D.4 user-tiles web login (reuse kiosk-users; confirm all login users have a linked Person), D.5 emoji account pictures (store in `User.avatar`, `Avatar` emoji→img→initials, picker on Users page), D.6 kiosk restyle to match **original Meridian** (need legacy ref `~/Documents/new/project-meridian`) + kiosk light/dark toggle. Then resume A.1 widget-config API / C Calendar core. |
-
-| 2026-06-25 | Assistant | M2.5 | **UX fixes D.4 + D.5 shipped.** **(D.5) Emoji account pictures:** stored in `User.avatar`; `Avatar` renders emoji→image→initials (`isImageAvatar` helper); emoji picker (preset grid) on the admin Users create/edit forms + avatar shown in user rows; `kiosk-users` now returns the account avatar (`User.avatar` ?? `Person.avatar`) so emoji show on web login tiles, kiosk avatar-select + PIN. **(D.4) Web login user tiles:** `LoginPage` shows avatar tiles (from `getKioskUsers`) → PIN, with a "username instead" fallback so no one is locked out. **352 backend tests green; tsc + build clean.** Committed + pushed. | **Remaining D item:** D.6 kiosk restyle to match original Meridian (needs legacy ref `~/Documents/new/project-meridian`) + kiosk light/dark toggle. Then **Workstream 2.5A** in full: A.1 widget-config endpoints (household enable/order/size + per-user reorder) → A.2 Hub config UI → A.4 usability polish (A.3 Meridian widget already done). |
-
-| 2026-06-25 | Assistant | M2.5 | **Workstream A (Hub) complete (A.1/A.2/A.4; A.3 already done).** **A.1 widget-config API:** `GET /hub/widgets/` (catalogue + household + per-user state via `hub/selectors.list_widget_config`), `PATCH /hub/widgets/<key>/` (household enable/order/size, new `hub.edit` perm migration `0013`, admin/manager), `PATCH /hub/widgets/<key>/me/` (per-user hide/reorder, self via `permission_action="view"`); `get_hub_widgets` now scopes to `user.household` + applies per-user reorder/hide; +5 hub tests (20 green). **A.2 config UI:** `HubConfig` panel ("⚙ Customise" on the Hub) — per-user show/hide + up/down reorder; admin household enable/disable + size; refreshes live. **A.4 polish:** size-aware responsive grid, clearer empty-state, ambient **clock** widget (`source_node=null`, kiosk-safe, hub migration `0004`, rendered client-side web+kiosk). **357 backend tests green; tsc + build clean.** Committed + pushed. | **A.4 leftover:** wire Calendar "upcoming" widget (needs Workstream C). Then **D.6** (kiosk restyle to original Meridian — needs `~/Documents/new/project-meridian` ref + kiosk light/dark), and **Workstream B** (Atlas FTS + UX) / **C** (Calendar core). |
-
-| 2026-06-25 | Assistant | M2.5 | **Workstream B (Atlas) complete.** **B.1 FTS:** `atlas/selectors._search` uses Postgres `SearchVector`/`SearchQuery` in prod, `icontains` fallback on SQLite (tests); applied to notes/lists/items/reminders. **Fixed a visibility leak** in `search_atlas` (lists/reminders now permission-filtered; item hits restricted to visible lists). New `GET /atlas/search/?q=`. **B.2 fields:** `AtlasListItem` gained `due_at` + `quantity` (migration `0002`) + `atlas_list_id` in serializer; services allow-list updated. **B.3 UX:** web Atlas error banner, item due-date badges + quantity prefix, debounced Atlas-wide search box. Kiosk Atlas ticking intentionally **not** added — children can't complete items (resolver blocks child non-view actions, D10). +6 atlas tests (47). **362 backend tests green; tsc + build clean.** Committed + pushed. | **Remaining M2.5:** D.6 (kiosk restyle to original Meridian — needs `~/Documents/new/project-meridian` + kiosk light/dark), A.4 Calendar "upcoming" widget, and **Workstream C — Calendar core** (the big one: month/week/day/agenda, every-page access, configurable). Tags/categories + templates for Atlas remain parked. |
-
-| 2026-06-25 | Assistant | M2.5 | **Workstream C (Calendar core) complete.** **C.1:** `GET /calendar/events/` now takes `start`/`end` window + `node`/`person` filters (permission-filtered, D10); serializer exposes `source_node` key; synced events stay read-only (D7). **C.2:** new `CalendarPage` — month grid / week / day / agenda views, prev-today-next nav, per-person colour coding + legend, today marker. **C.3:** `CalendarPeek` popover in the shell header on every page (next events + quick-add + open-calendar). **C.4:** saved default view + start-of-week + 12/24h (localStorage); source/person filters. **C.5:** event create/edit/delete modal; synced events read-only with "edit in node" note; RRULE expansion deferred (D8). **C.6 / A.4 leftover:** `calendar_upcoming` Hub widget (migration `0005`, web + kiosk). Fixed a latent frontend bug (type used `all_day`/`source_node` vs API `is_all_day`). +4 scheduling tests. **365 backend tests green; tsc + build clean.** Committed + pushed. | **M2.5 nearly done.** Remaining: **D.6** kiosk restyle to original Meridian (needs `~/Documents/new/project-meridian` ref + kiosk light/dark). Optional follow-ups: calendar household-default prefs, RRULE expansion, deep-links from node items, Atlas tags/categories. |
-
-| 2026-06-25 | Assistant | M2.5 | **D.6 kiosk look & feel complete.** The expected legacy path `~/Documents/new/project-meridian` was missing, so used `/home/moose/Documents/project-meridian` (`app/static/css/homestack.css`, kiosk templates) as the reference. Restyled React kiosk screens (`AmbientScreen`, `AvatarSelect`, `PINEntry`, `KioskDashboard`) from hardcoded gray/dark styling to shared HomeStack tokens: warm paper background, raised cards, primary/warning/success accents, larger child-friendly cards/buttons. Added kiosk light/dark toggle via `KioskThemeToggle` using shared `hs-dark` preference. Fixed dashboard header emoji avatars by distinguishing emoji from image URLs. `npm run build` clean; `DJANGO_SETTINGS_MODULE=config.settings.test python manage.py test` green (365 tests). | Start **2.5X verification**: role/permission smoke checks across Hub/Atlas/Calendar, then home-server run-through/deploy. |
-
-| 2026-06-25 | Assistant | M2.5 | **2.5X kiosk follow-ups shipped.** Improved kiosk light-theme contrast by moving kiosk screens to the stronger `sunken` background and using `raised` panels with stronger borders/shadows. Added a direct kiosk Calendar surface in `KioskDashboard`: Home/Calendar switch, month/week/day/agenda modes, event cards with time/source/location, using the existing permission-filtered `/calendar/events/` API. Added a kiosk dashboard "Web mode" link back to `/`. `npm run build` clean. | Continue **2.5X verification**: Atlas reminders Hub+Calendar no double-write, Meridian Hub/Calendar role smoke checks, backend suite, home-server run-through/deploy. |
-
-| 2026-06-25 | Assistant | M2.5 | **M2.5 closed.** Added the Hub-widget completion rule to Home Wiki/Pets/Education specs. Fixed Hub `atlas_todos` to read through a permission-filtered Atlas selector instead of direct model access. Added cross-surface tests: Atlas dated reminder appears in Hub reminders + Calendar widget with one CalendarEvent; private Atlas list items do not leak to child Hub; Atlas/Meridian synced calendar events expose source node and respect visibility. Added Atlas/Hub deep-links into Calendar day view. `npm run build` clean; full backend suite green (**369 tests**). README and handover now point to M3. | Start **Milestone 3: Home Wiki, Pets, Education**. Remember every node must ship Hub widget rows/selectors as part of done. |
-
-| 2026-07-10 | Assistant | M2 revisit | **Meridian parity/cockpit revisit started (owner direction).** Product direction clarified: **HomeStack becomes the Meridian source of truth and adult/admin cockpit**; the native Meridian app at `/home/instructor/Documents/new/project-meridian` is the behaviour/style reference and may remain/adapt as child-facing client. Behaviour parity first: added `MeridianTaskCompletion` model + migration `0011` (submitted/approved/rejected, per-person history, review notes, evidence placeholder), completion-based service flow with backward-compatible task endpoints, completion list/approve/reject API, tests for per-person vs household/shared completions and specific-completion approval. Frontend: typed completion API bindings, new default **Meridian Overview** tab for pending task/reward approvals + balances/activity, and rebuilt **Tasks** as an adult management table with filters, inline edit, hide/archive/delete, pending completion actions, and recent completion history. **372 backend tests green; frontend `tsc && vite build` clean.** Applied migrations to local running DB. | Commit + push, then continue adult cockpit with **Shop/Rewards management** (setup, stock, approvals, monitoring) before broader UI polish. |
-
-| 2026-07-10 | Assistant | M2 revisit | **Adult Shop/Rewards management shipped.** Rebuilt `ShopTab` from a shopper/product-card-first surface into an adult management view for admins/managers: metrics (active rewards, pending requests, out-of-stock), filters (active/needs approval/out-of-stock/hidden/all), reward table with image, stock, price/store, daily limit, multi-cart badges, inline pending request approvals, inline edit form (name, cost, description, image/store/price, stock, daily limit, multiple-cart, hide-when-empty, active), hide/show, archive/unarchive, delete, and a side pending-request queue. Non-manager shopper view remains card/cart based but secondary. Frontend `tsc && vite build` clean. | Next: reports/history polish from `MeridianTaskCompletion`, then settings/admin polish (category management, reward-category linking, allowance config UI). |
-
-| 2026-07-10 | Assistant | M2 revisit | **Reports/history cockpit polish shipped.** `LeaderboardTab` now acts more like an adult audit surface: metrics for approved/submitted/rejected completions, ledger-entry count, badges earned; leaderboard retained; badge catalogue moved into a denser panel; added **Task completion history** (status, person, timestamps, rejection reason/review note) from `MeridianTaskCompletion`; added **Points ledger** panel from `/meridian/points/`. Frontend `tsc && vite build` clean. | Next: settings/admin polish — category management UI, reward-category linking (backend + frontend), allowance config UI. |
-
-| 2026-07-10 | Assistant | M2 revisit | **Settings category management shipped.** `SettingsTab` now includes task/reward category management using the existing Meridian category API: load task + reward categories, create categories, delete categories, and visible error handling. Frontend `tsc && vite build` clean. | Next: reward-category linking (backend + frontend), then allowance config UI. |
-
-| 2026-07-10 | Assistant | M2 revisit | **Reward-category linking shipped.** Added `MeridianReward.category` FK + migration `0012`, exposed `category_id` in reward serializer/service/API, added regression test, and wired reward category filter/display/select into the adult Shop/Rewards management UI. **78 Meridian tests green; frontend `tsc && vite build` clean.** | Next: allowance config UI. Remember to run `docker exec homestack-backend python manage.py migrate` after deploying this migration. |
-
-| 2026-07-10 | Assistant | M2 revisit | **Allowance config UI/API shipped.** Added `/api/v1/meridian/allowances/` (`GET` per-person config, `PATCH` batch upsert, manager/admin edit permission), `selectors.allowance_config`, `services.set_allowance_config`, and tests for admin upsert + non-manager denial. Settings tab now has a weekly allowances table with amount, weekday, active toggle, and save action. **80 Meridian tests green; frontend `tsc && vite build` clean.** | Next: live run-through/deploy verification, then choose deeper parity vs returning to M3. |
-| 2026-07-14 | Assistant | Planning | **Owner re-prioritisation captured (no code).** Recorded new direction in §5, §8 and the roadmap: **pause Meridian**, **build the Education node uni-first** for the new term, and run a **web/mobile UX pass on Calendar + Atlas (tasks/lists)** while **deferring kiosk** work. Added four open questions (§8) on "mobile" scope, what "tasks" means, the Education V1 slice, and sequencing. Roadmap M3 note + "NOT on roadmap" mobile note updated. | Get owner answers to §8 Q1–Q4, then begin (likely: quick Calendar/Atlas web-mobile polish → Education uni slice). |
-| 2026-07-14 | Assistant | M3 | **Education uni-first slice shipped (owner answers: Education first; "tasks"=Atlas lists; mobile=responsive web; V1=uni slice).** New `apps/education` node end-to-end: institutions, courses, assessments (due dates sync to Calendar via helper, D7), class sessions (weekly timetable via `recurrence_rule`, D8). Layered app + `education.*` perms (perms `0014`) + two Hub widgets (hub `0006`, wired in `hub/services`). Frontend `EducationPage` (Assignments/Courses/Timetable, mobile-first) + route + nav + Hub renderers + client/types. **21 education tests; full suite 396 green; `tsc` + `vite build` clean; no migration drift.** Note: fixed a DRF gotcha — bare `<fk>_id` fields listed in a ModelSerializer's `fields` are read-only; declared them as explicit `IntegerField`s so writes land (atlas write serializers carry the same latent quirk, left untouched). | Deploy (`docker exec homestack-backend python manage.py migrate` — perms `0014`, hub `0006`, education `0001`). Then either extend Education (institution/edit/search UI, student assignment, school-child+kiosk slice) or start the **Calendar + Atlas web/mobile UX polish** (the other half of the 2026-07-14 direction). |
-| 2026-07-17 | Assistant | M3 | **Assessment notes + files shipped; auto-assignee fix.** Added `EducationAssessmentNote` (per-assessment text notes) and `EducationAssessmentFile` (file uploads, stored in `MEDIA_ROOT/education/assessments/<id>/`) models — migration `education.0003`. Full layered backend: services/selectors/serializers/views; nested REST endpoints `/education/assessments/<id>/notes/` and `/education/assessments/<id>/files/` (note/file delete uses `education.edit` perm since users need to manage their own content). Added `MEDIA_URL = "/media/"` to settings and `static(MEDIA_URL, ...)` in `urls.py` so Django serves uploads in dev (Docker volume `media_data` covers prod). Frontend: `AssessmentDetail` panel — click any assignment row to expand and reveal editable notes + attached files (upload, open via link, delete). **Auto-assignee fix:** `useEffect` in `AssignmentForm` now syncs the assignee state when `defaultAssignee` becomes available (people load asynchronously after mount), so the form always pre-selects the logged-in user. Added a `_fetchRaw` helper in `api/client.ts` for FormData uploads (no Content-Type override). **27 education tests; full suite 406 green; `tsc` + `vite build` clean.** Deploy: `docker exec homestack-backend python manage.py migrate` (education `0003`). | Next: institution management UI, assessment edit form, FTS search box, or Calendar + Atlas web/mobile UX polish. |
-| 2026-07-17 | Assistant | M3 | **User profile self-edit + display_name→person sync.** Fixed `update_user_account` to sync `display_name` (and `colour`) to the linked Person when either changes — so renaming your account now renames the person too. Added `PATCH /api/v1/auth/me/` endpoint (any authenticated user, self-editable fields only: display_name/colour/avatar/pin/password) + `patchMe` in the API client. Added `updateUser` to `AuthContext`. AppShell sidebar: clicking the user avatar/name opens an inline `ProfileEditor` panel with name input, colour picker, and emoji picker — no admin needed. **Full suite 406 green; `tsc` + `vite build` clean.** No migration needed. | Deploy: no migrate needed. |
-| 2026-07-17 | Assistant | M3 | **Academic profile + course credit tracking + module bucketing.** Added `EducationAcademicProfile` model (OneToOne per person: institution, programme_name, credits_required, credits_per_course_default, graduation_year, notes; `get_current_credits()` sums completed course credits) and `EducationCourse.credit_value` + `is_completed` fields — migration `education.0004`. Backend: `get_or_create_academic_profile` + `update_academic_profile` services; `get_academic_profile` + `list_courses_for_profile` (current/upcoming/past buckets based on today vs start_date/end_date/is_completed) selectors; `GET/PATCH /education/profile/<person_id>/` view returning profile + bucketed courses. Course serializer updated with `credit_value` + `is_completed`. Frontend: new **My Profile** tab (first tab) with institution, programme, graduation year, credit progress bar with %; collapsible current/upcoming/past course cards with tick-to-mark-complete that auto-refreshes credits; edit form. Courses tab enhanced with start/end date, credit value, and student assignment on add; cards now show date range + UOC badge. `_COURSE_FIELDS` allowlist in services updated. **406 tests green; `tsc` + `vite build` clean.** Deploy: `docker exec homestack-backend python manage.py migrate` (education `0004`). | Next: institution management UI; FTS search; Atlas/Calendar web/mobile UX polish. |
-| 2026-07-17 | Assistant | Meta | **Version history + version display.** Created `VERSION_HISTORY.md` (repo root) covering all releases 0.1.0–0.5.1 derived from the progress log; `0.X` = major milestone, `0.X.Y` = smaller addition. Created `frontend/src/config/version.ts` exporting `APP_VERSION = '0.5.1'`. Added version badge (`v0.5.1`) to the AppShell sidebar footer. Updated §10 of this handover with the mandatory version update rule: bump `VERSION_HISTORY.md` + `version.ts` with every push to `main`. | Deploy: `npm run build` (no backend changes). |
-| 2026-07-19 | Assistant | Fleshing-out (0.7.0–0.7.5) | **Cross-node fleshing-out pass (owner: flesh out existing hub/nodes to spec parity, consistent styling, before adding anything new).** **Phase 0 (0.7.0):** shared UI kit — `Field/Input/Textarea/Select`, `Tabs`, `Modal`, `EmptyState`, `Badge`, `PageHeader` + `ui.ts` barrel; adopted in Meridian/Atlas/Education tab bars+headers. **Phase 1 (0.7.0):** Hub — new `quick_add`, `notifications_summary`, ambient `daily_quote` widgets; seed mig `hub/0007`; service returns a `meta` payload; +3 tests. **Phase 2 (0.7.1):** Calendar — event modal on shared Modal/Field; per-source **layer toggles** + **My events**; **household calendar defaults** (view/week-start/time-format) on `Household` (mig `core/0004`), user prefs still win; +2 tests. **Phase 3 (0.7.2):** Atlas — full **Notes** tab (browse/create/inline-edit/delete, visibility) + **list-type picker** (todo/grocery/shopping/checklist/general); two-col grid. **Phase 4 (0.7.3):** Education — **Institutions** management tab + **FTS search box** (backend already existed). **Phase 5 (0.7.4):** Meridian — task **weekly recurrence** picker (RRULE weekday set) in create+edit forms + "repeats" badge (backend already honoured `recurrence_rule`). **Phase 6 (0.7.5):** Books — add-book **duplicate-avoidance autocomplete** + shared input/header styling. **All 420 backend tests green; `tsc`+`vite build` clean at every phase; committed per-phase (not pushed).** | **Deploy:** `docker exec homestack-backend python manage.py migrate` (`hub/0007`, `core/0004`). **Remaining spec-parity follow-ups:** *(All cleared as of v0.7.8 — Education Events+notifications v0.7.6, Education width v0.7.6, Meridian shared-kit adoption v0.7.7, Meridian legacy completion-history import v0.7.8; see Progress Log below.)* **Maybe / not a priority (may never be built):** Meridian photo evidence on completions — left as a possible future enhancement only. Not pushed to `main` yet — owner to review the 6 commits (`b66aafc`→`95cdd02`). |
-
-| 2026-07-20 | Assistant | UX | **Layout polish (v0.9.1).** Aligned the sidebar header and top bar to a shared `h-16` so their bottom borders line up on every page (`AppShell`). Books page fixes (owner feedback): added a padded `selectCls` so native-select dropdown arrows stop clipping labels (the "Backlog" select), stacked the book-tile status/add-to-club controls so they're no longer cramped, and grouped the "Show book club items" toggle with the shelf tabs instead of floating it to the far right above the wider side panel. Frontend-only; `tsc` + `vite build` clean. | No migrate. |
-| 2026-07-20 | Assistant | M3 | **Pets node shipped end-to-end — Milestone 3 COMPLETE (v0.9.0).** New `apps/pets` (Node Spec 13): `Pet` (species/breed/avatar/vet/microchip/insurance/food notes) + `PetTreatment` (CalendarSyncMixin; flea/worming/vaccination/medication/grooming; `next_due_at` source of truth; RRULE recurrence, D8) + `PetAppointment` (CalendarSyncMixin). `complete_treatment` stamps `last_done_at` and advances `next_due_at` to the next RRULE occurrence via `dateutil.rrule` (clears reminder when non-recurring). Layered app (serializers/selectors/services/views/urls/events/admin, mig `0001`); FTS `search_pets`; `pets.*` perms (perms `0017`, resource `pets`); two Hub widgets `pets_reminders`/`pets_appointments` (hub `0010`, wired via `hub/services._pets_widget_content`); publish-only signals. Registered in INSTALLED_APPS + `/api/v1/pets/`. 23 tests (permissions-first, CRUD, calendar sync, RRULE completion advance, visibility, search, hub). Frontend: `/pets` route (NodeRoute-gated) + `stacks.ts` entry + `--hs-accent-pets`; `PetsPage` (Pets tab with profile cards + inline treatments/appointments, Reminders tab with one-tap Done, Appointments tab) + search + Hub renderers; types + client. **470 backend tests green; `tsc`+`vite build` clean; no migration drift.** | **Deploy:** `docker exec homestack-backend python manage.py migrate` (pets `0001`, permissions `0017`, hub `0010`) then **enable the Pets stack in Settings** (disabled by default). **Milestone 3 is complete (Education/Home Wiki/Pets).** Uncommitted since `ba36de6` — commit due. Next: owner to pick the next milestone (M4 security maturation, M5 Solace, or M6 nodes), or resume the paused Meridian revisit. |
-| 2026-07-20 | Assistant | M3 | **Home Wiki node shipped end-to-end (v0.8.0).** New `apps/home_wiki` (Node Spec 12): `WikiCategory` (name/colour/icon/order/hidden; 12 seeded defaults mig `0002`) + `WikiPage` (title/body/category/comma-tags/`is_favourite`/`is_emergency`/`is_kiosk_safe`/visibility/sensitivity). Layered app (serializers/selectors/services/views/urls/events/admin); FTS `search_wiki` (Postgres SearchVector + SQLite icontains fallback) over title/body/tags; `homewiki.*` perms (perms mig `0016`, resource `homewiki`); three Hub widgets `wiki_favourites`/`wiki_emergency`/`wiki_recent` (hub mig `0009`, favourites+emergency kiosk-safe, wired via `hub/services._wiki_widget_content`); publish-only signals (`home_wiki.page_created/updated/deleted/emergency_page_updated`). Registered in INSTALLED_APPS + root urls (`/api/v1/wiki/`). 20 tests (permissions-first, CRUD, visibility incl. child-sensitive, search, hub, seed). Frontend: `/wiki` route (NodeRoute-gated on `home_wiki`) + `stacks.ts` nav entry + `--hs-accent-home_wiki` token; `HomeWikiPage` (Pages tab: All/⭐Favourites/🚨Emergency + category filters, create/edit/delete, expandable bodies, star-to-pin; Categories tab: admin add/hide/delete) + wiki search + `WikiPagesWidget` Hub renderers; `WikiCategory`/`WikiPage` types + client. **447 backend tests green; `tsc`+`vite build` clean; no migration drift.** | **Deploy:** `docker exec homestack-backend python manage.py migrate` (home_wiki `0001`+`0002`, permissions `0016`, hub `0009`) then **enable the Home Wiki stack in Settings** (disabled by default). Next M3 node: **Pets** (last one). Nothing committed since `7534376` — a commit of this whole session (v0.7.6→0.8.0) is due. |
-| 2026-07-20 | Assistant | M2 revisit | **Meridian legacy completion-history import (v0.7.8).** Extended the dry-runnable `import_meridian` command with a `task_completions` section that imports legacy `TaskCompletion` rows (from `/home/moose/Documents/project-meridian` `app/models.py`) into `MeridianTaskCompletion` — maps `task_title`→task (by title) + `user_meridian_id`→person, preserves `status`/`submitted_at`/`reviewed_at`/`rejection_reason`/`review_note`/`evidence_photo`. Idempotent (get_or_create on task+person+submitted_at) and skips rows missing task/person/submitted_at. `reviewed_by` left null (legacy Meridian user id has no HomeStack User equivalent). Added `_parse_dt` helper (aware datetimes). Extended the FullImport test fixture with tasks+task_completions and assertions (create + idempotent). **427 backend tests green; no migration (command only).** | Frontend-only version bump (0.7.8). No migrate. **All non-"maybe" spec-parity follow-ups are now cleared.** Next natural work: pick the next M3 node (Home Wiki or Pets), or deploy/commit this batch — nothing committed since `7534376`. |
-| 2026-07-20 | Assistant | Polish | **Education page widened + Meridian shared-kit adoption (v0.7.6/0.7.7).** Education page shell `max-w-3xl`→`max-w-5xl` with `lg:grid-cols-3` course/institution grids (folded into 0.7.6). **v0.7.7:** migrated the hand-rolled input classes in every large Meridian sub-tab (Tasks, Shop, Routines, Goals & Wishlist, Reports & Settings) to the shared `fieldClass` (single source of truth, `bg-surface` + 44px touch targets) — narrow fields kept via `!w-*` overrides against `fieldClass`'s `w-full`. `tsc` + `vite build` clean (bundle slightly smaller from de-duplicated strings). | Frontend-only, no migrate. Remaining follow-ups: Meridian legacy completion-history import (needs legacy ref `/home/moose/Documents/project-meridian`); OverviewTab/GoalsWishlist deeper component (Modal/Field) adoption if desired. |
-| 2026-07-20 | Assistant | M3 | **Education Events + notifications/signals shipped (v0.7.6).** New `EducationEvent` model (CalendarSyncMixin + HouseholdBaseModel) — types: excursion/school_event/term_start/term_end/exam_session/milestone/holiday/other; optional course+institution+assigned person; `start_at`/`end_at`/`is_all_day` (all-day default), `recurrence_rule` (D8); syncs to the shared Calendar via the helper (D7, `source_node="education"`). Migration `education.0005`. Full layered CRUD: serializer (`validate` gates required `start_at` on `self.partial`, not instance — the ClassSession serializer has the same latent PATCH quirk, left as-is since its frontend always sends start_at), selectors (`list_events` w/ upcoming/course/person filters + events in `search_education`), services (`create/update/delete_event`), views + urls (`/api/v1/education/events/`), admin. **Notifications/signals:** wired the previously-unwired `events.py` publishes into services (`assessment_created`, `assessment_completed` [only on todo→complete transition], `class_session_created`) + new `school_event_created`; `_notify_assigned` helper notifies the assigned person (via linked user, skips self per D12) on assignment/event create. New `education_events` Hub widget (hub migration `0008`, upcoming events, kiosk off) wired through `_education_widget_content`. Frontend: `EducationEvent`/`EducationEventType` types + client CRUD, **Events** tab on the Education page (create form with type/course/institution/when/assignee, upcoming-vs-past toggle, delete), events in the search results + `education_events` Hub renderer. **+7 education tests (34 education / 427 total green); `tsc` + `vite build` clean; no migration drift.** | **Deploy:** `docker exec homestack-backend python manage.py migrate` (`education 0005`, `hub 0008`). Then either widen the Education page (`max-w-3xl`→wider, others already widened), deeper shared-kit adoption in the big Meridian sub-tabs, or the Meridian legacy completion-history import. Also: prior fleshing-out commits `b66aafc`→`95cdd02` may still need owner review/push. |
-
-| 2026-07-21 | Assistant | M2.5 follow-up | **Calendar + Atlas web/mobile UX pass (v0.9.2).** The long-deferred owner follow-up (surfaces "clunky" for daily phone/laptop use — functionality was already there since M2.5). Owner design calls: Calendar = compact bar + Filter popover; entry = inline quick-add + slim modal; Atlas = unified quick-capture bar. **Calendar** (`CalendarPage.tsx`): the ~8-chip filter row (person/my-events/source-layers/week-start/12-24h/set-default) now collapses into one **Filter** `Popover` with an active-count badge; bigger `‹ Today ›` nav targets; **inline `QuickAddBar`** on Day+Agenda that parses a time from free text (`lib/quickParse.ts` → `parseQuickEvent`/`quickEventPreview`, e.g. "Dentist 3pm"→timed, no-time→all-day) and defaults the assignee to the adder; **slim `EventModal`** — Title+Start always, end/location/assignee/colour/visibility behind a "▾ More options" toggle (auto-expanded when editing an event that already uses them); week-view days shorter on mobile + tappable to add. **Atlas** (`AtlasPage.tsx`): new **`CaptureBar`** routes one line into a To-do (chosen list), Note, or Reminder and jumps to the landing tab (per-list `cardRefresh` counter remounts only the target list card; `captureTick` key remounts the self-fetching Notes/Reminders tabs); list add-row no longer wraps on mobile (input row, then who+Add); reminder form collapsed behind "+ New reminder" like notes; list cards show "N to do". New shared **`Popover`** component. **Frontend-only; `tsc` + `vite build` clean; no backend/migration changes.** | **Deploy:** `npm run build` only (no migrate). Next: live-test on the home server (deployed-but-not-daily), then either continue polish (Hub/other nodes on the same pattern, RRULE expansion, Atlas tags) or move to a new milestone (M4 security / M5 Solace / M6 nodes) or the paused Meridian revisit. |
-
-| 2026-07-21 | Assistant | New node | **Homestead node shipped end-to-end (v0.10.0) + decision D21.** Owner bought a house and asked for a home node. Found the domain was split across planned Assets/Projects/Home Wiki/Solace specs; owner chose **one unified warm "Homestead" node** that folds the *home* scope of Assets (recorded as **D21** in the changelog + new spec `docs/25_Node_Homestead.md`). Backend `apps/homestead`: `Property` (record + kiosk-safe emergency info: water/gas/electric/boiler locations), `MaintenanceTask` (CalendarSyncMixin; recurring/one-off upkeep + renewals; `next_due_at` source of truth; RRULE, D8; **complete → advance to next occurrence** via dateutil — the Pets pattern), `Appliance` (brand/model/serial, room, warranty expiry + countdown, manual link), `ServiceProvider` (trades directory), `Improvement` (CalendarSyncMixin; status/priority/target-date; dormant `project_ref` forward-hook to the future Projects node). **No money fields — deferred to Solace.** Note: dropped a per-item `property` FK on the child models (single home is YAGNI, and a field named `property` shadows the `@property` decorator). Full layered app + FTS `search_homestead` + `homestead.*` perms (perms `0018`, resource `homestead`) + 3 Hub widgets (`homestead_maintenance`/`homestead_warranties`/`homestead_improvements`, hub `0011`, wired via `hub/services._homestead_widget_content`) + publish-only signals + node catalogue (nodes `0005`, disabled by default). Registered in INSTALLED_APPS + `/api/v1/homestead/`. **28 tests; full suite 498 green.** **Aggregating-hub intent baked in (owner request):** Homestead is designed to later surface Solace bills/rates + Projects renovations read-only via the events bus (D4, no model imports); Overview shows a "coming soon" note. Frontend: `/homestead` route (NodeRoute-gated) + `stacks.ts` entry + `--hs-accent-homestead` token; `HomesteadPage` with 5 tabs (Overview/Maintenance/Appliances/Improvements/Contacts) + search + Hub renderers; types + client + write types. `tsc` + `vite build` clean; no migration drift. | **Deploy:** `docker exec homestack-backend python manage.py migrate` (homestead `0001`, permissions `0018`, nodes `0005`, hub `0011`) then **enable the Homestead stack in Settings** (disabled by default). Next: enable + live-test on the home server; then either extend Homestead (document attachments, meter readings, rooms, seasonal templates, notifications) or pick the next milestone. When Solace/Projects are built, wire Homestead's aggregation consumers (D21). |
-| 2026-07-21 | Assistant | M5 | **Solace initial native shell shipped (v0.11.0).** Backend `apps/solace`: `Bill`, `Payday`, `PlannedPurchase`, `BudgetBucket`, `Subscription`, `PaydayChecklistItem`; all default `visibility="sensitive"` + `sensitivity="financial"`. Bills/paydays/subscriptions/planned purchases sync to Calendar via the scheduling helper (D7) and use `recurrence_rule` where relevant (D8). Solace perms `0019` are admin-only by default; node config `0006` keeps Solace disabled, kiosk-off and `requires_reauthentication=True`; every Solace API view requires password re-auth and audits `sensitive_node_accessed`. Added Hub widgets `solace_bills_due`/`solace_subscriptions`/`solace_planned_purchases` (hub `0012`, web-only) and tightened Hub/Calendar so finance/sensitive content is suppressed until re-auth. Frontend `/solace`: password unlock, overview cards, search, Bills/Buckets/Subscriptions/Purchases/Paydays/Checklist tabs. **511 backend tests green; `npm run build` clean; no migration drift.** | **Deploy:** `docker exec homestack-backend python manage.py migrate` (`solace 0001`, permissions `0019`, nodes `0006`, hub `0012`) then enable Solace in Settings. Next M5 slice: inspect legacy Solace schema/export and build the dry-runnable idempotent importer in `scripts/`; then add notifications/attachments and richer edit/delete UI before retiring the standalone app. |
-| 2026-07-21 | Assistant | M5 | **Solace legacy importer shipped (v0.11.1).** Found local standalone Solace at `/home/moose/Documents/project-solace`; live data is SQLite at `instance/solace.db`. Added `import_solace`: `python manage.py import_solace --sqlite-db /home/moose/Documents/project-solace/instance/solace.db --dry-run`. Dry-run rolls back inside a transaction; apply mode is idempotent by natural keys. Maps legacy `RecurringBill` to native `Bill`, except category `Subscriptions` → native `Subscription`; `IncomeSource` → `Payday`; `PlannedPurchase` → native purchases; active `Bucket` transfer rules → bucket notes/targets; latest `PaydayChecklistItem.cycle_start` only → native checklist, preserving legacy cycle/key in notes. RRULEs are generated from legacy frequency/due-day; dated records use Solace services so Calendar sync stays on the helper (D7). Added importer tests. **513 backend tests green; `npm run build` clean.** | **Deploy:** after migrations, run importer dry-run first, then apply if counts look right. Next: richer edit/delete UI, notifications/attachments, and live cutover/retire standalone Solace. |
-| 2026-07-28 | Assistant | Homestead | **Costs & cover shipped (v0.11.2).** Added protected `InsurancePolicy` and `HouseholdCost` records (rates/water/gas/electricity/mortgage/strata/waste/internet), full CRUD, premiums/amounts, policy/account numbers, excess details, renewals/due dates and annualised UI summary/search. Every active row mirrors exactly one source-linked Solace `Bill` through events (D4); update/deactivate/delete stays in sync and financial Calendar rows remain Solace-owned. Finance endpoints require both Homestead + Solace permission, password re-auth and audit. General pass fixed detail visibility enforcement, touch-only missing actions and Cancel buttons submitting forms. **Full backend suite: 521 green; frontend production build clean.** | **Deploy:** run `docker exec homestack-backend python manage.py migrate` (Homestead `0002`, Solace `0002`) and rebuild frontend. Then live-test Costs & cover with an admin account. Future: document attachments, meter readings, notifications, Projects links. |
-| 2026-07-28 | Assistant | Fix | **Recurring pet/home completion dependency fix (v0.11.3).** Production traceback from `POST /pets/treatments/1/complete/` showed `ModuleNotFoundError: dateutil`. `Pets` and `Homestead` RRULE completion logic already used `python-dateutil`, but it was present only in the local environment and missing from `backend/requirements.txt`, so the Docker image could not run it. Added pinned `python-dateutil==2.9.0.post0`; recurring-treatment tests green. | **Deploy requires a backend image rebuild** so pip installs the dependency; a restart alone is not enough. Then retry the flea-treatment Done action. |
-| 2026-07-29 | Assistant | Daily UX | **Daily-use experience milestone shipped (v0.12.0).** Navigation: contextual shell header, global Search (`Ctrl/⌘ K`) + Create, custom mobile bottom bar, URL-backed node tabs, scroll restoration and working quick-create deep links. Functionality: canonical permission-aware `/api/v1/search/` aggregates Calendar + enabled nodes in one request; locked Solace is reported without searching/leaking it. Performance: route lazy-loading cut initial JS ~543→245 KB (gzip 137→75 KB); shared People/Users/Nodes/Household requests dedupe/cache with auth-boundary clearing; API `Server-Timing` + >500 ms slow logging. Reliability: self-password reset preserves the Django session; global auth-expiry, offline/network, retry/load/error states. Layout/accessibility: shared Hub/admin headers, focus-trapped mobile sheets, keyboard tabs, touch/focus/reduced-motion improvements. Fast actions: optimistic Atlas/Solace completion and Undo for paid bills. **526 backend tests green; production frontend build clean; no migration drift.** | **Deploy:** rebuild backend + frontend images; **no database migration is introduced by v0.12.0** (running the standard `migrate` remains safe). Hard-refresh once after deploy so the new split frontend assets replace the old bundle. Then live-test common phone/laptop journeys and use `Server-Timing`/slow logs for the next targeted pass. |
-| 2026-07-29 | Assistant | M5 | **Solace pay-cycle planning built (v0.13.0).** Ported the standalone app's core pay-split workflow into the native protected node. New pure budget engine calculates the current 14-day cycle, recurring income occurrences, per-income percentage allocations, proportional shares of fixed household allocations, rounding and remaining-pay caps. Buckets now hold structured allocation rules/order/active state; paydays can be paused; the new Pay plan tab shows household and source breakdowns and creates idempotent cycle-specific checklist transfers without resetting completed rows. The importer now preserves/enriches legacy bucket rules and checklist cycle/source keys. All routes remain permission/re-auth/audit gated. **530 backend tests green; production frontend build clean; no migration drift.** | **Deploy:** rebuild backend/frontend, run `migrate` (`solace.0003_budget_planner`), rerun `import_solace` dry-run/apply to enrich already imported zero-rule buckets, then verify real two-income totals against standalone Solace. Remaining M5: richer edit/delete, notifications, attachments and cutover. |
-| 2026-07-29 | Assistant | M5 | **Solace recurring bill schedule built (v0.14.0).** Added `BillOccurrence` as the independent due-date/status record so paying one recurring occurrence no longer permanently pays the definition. Generator ports standalone weekly/fortnightly/monthly/quarterly/six-monthly/yearly behaviour and clamps the 29th–31st correctly without drift. New protected Schedule API/UI combines monthly bill occurrences and recurring income with calendar/list views, totals and paid/unpaid/skipped/restore actions. Bills now have responsive create/edit/pause/delete, set-aside inclusion, annual/fortnightly costs and summaries. Importer idempotently restores legacy occurrence history. Existing Solace Hub widgets now render useful finance cards. Added `docs/SOLACE_PARITY_CHECKLIST.md`. **Expected 535 backend tests after final validation; production build clean; no migration drift.** | **Deploy:** rebuild both images, run `migrate` (`solace.0004_bill_occurrences`), rerun the importer dry-run/apply, then compare a real standalone month and pay cycle. Next parity slice: cycle closeout + account balance/health, then remaining record edit/delete, exports and notifications. |
-| 2026-07-30 | Assistant | M5 | **Standalone Solace feature parity completed (v0.15.0).** Added cycle closeout/reconciliation, balance snapshots/projections, finance health, full management flows, custom categories, checklist preferences, Solace settings, required set-aside/coverage, CSV/XLSX export, reviewed bill import and generic scheduled reminders. Expanded the idempotent legacy importer to bring across the remaining standalone state and validated it read-only against the live local SQLite database. The responsive Solace workspace now loads through one bootstrap request. Follow-up corrected the omitted v0.15 version/handover/README records, removed a dead importer statistic, fixed the configured pay-cycle anchor so it remains authoritative when income sources exist, and added read-only `import_solace --verify` cutover checks with actionable record/field drift reporting. **549 backend tests green; frontend type-check and production build clean; no migration drift.** | **Deploy/cutover:** rebuild both images (backend adds `openpyxl`), migrate through `solace.0006`, copy the legacy SQLite DB into the backend container, run importer dry-run/apply/verify, compare a full real pay cycle and month, then accept phone/laptop workflows before retiring standalone Solace. Docker is not installed in this development environment, so production deploy remains an owner/home-server operation. |
-| 2026-07-30 | Assistant | M5 | **Solace cash-flow forecast and deep standalone parity (v0.16.0).** Added an audited 3–24 month bills-account forecast that combines the latest balance, expected Bills-bucket transfers, included bills and active subscriptions into a dated running balance; it reports the low point/risk date, required opening balance, shortfall, bills-only surplus and buffer-preserving safe withdrawal. Ported bill autopay/stop dates and 12+12 occurrence detail, filter/sort, six-monthly entry and protected future/all-unpaid edit scope; current/next Pay plan and Checklist navigation; confirm-income/review-bills/record-balance steps; calculated upcoming paydays; capped purchase quick-saving; standalone-equivalent category report filters/period totals; and expanded health checks. Import/verify now preserves bill stop/autopay fields. **560 backend tests green; frontend type-check + production build clean; no migration drift.** | **Deploy/cutover:** rebuild both images, migrate through `solace.0007`, copy the legacy SQLite DB into the container, run importer dry-run/apply/verify, record a fresh real bills-account balance, and validate the forecast timeline/safe-withdrawal value plus a full pay cycle/month on phone and laptop before retiring standalone Solace. |
-| 2026-08-04 | Assistant | M4 | **Protected shared attachments and expiring re-auth shipped (v0.17.0).** Built the D11 attachment model/API with permission-first tests, linked node/record metadata, randomized storage, checksums/limits, visibility+sensitivity filtering through the central resolver, ownership-aware soft deletion and audited sensitive downloads. Removed raw `/media/` serving; Education assessment files now download through a visibility-checked API and private assessment/note/file direct-ID lookups were tightened. Password elevation is timestamped, expires after five minutes, rejects guest/child elevation and invalidates legacy permanent flags. Frontend shared client/types added. **581 backend tests green; frontend type-check + production build clean; no migration drift.** | Continue M4 locally: generic sensitive-node lock contract/web+kiosk timeout and remaining permission/user-change audit coverage. Production later: migrate `attachments.0001`, `permissions.0020`, `solace.0007`, then complete Solace cutover validation. |
-| 2026-08-04 | Assistant | Homestead | **Room and area planning shipped (v0.18.0).** Added household-scoped `RoomArea` and `RoomPlanItem` models plus layered CRUD APIs, permission-first tests, central visibility filtering, publish-only lifecycle events, admin registration and local/global search. Each room links from the new Homestead Rooms tab to a dedicated page. Plans combine purchases, maintenance, renovations and upgrades with priority, assignee, quantity, estimated unit cost, optional actual total cost, reference link and notes. Planned/in-progress items drive remaining estimates; completed items use actual cost or estimate fallback; archived items stay visible but are excluded. Exact decimal summaries roll up per room and household. Completed/archived items can be reopened/restored; stable room routes and `floorplan_data` reserve the future clickable-map path. **593 backend tests green; frontend type-check + production build clean; no migration drift.** | **Deploy:** rebuild both images and run `docker exec homestack-backend python manage.py migrate` (`homestead.0003`). Then enable/open Homestead and live-test room creation, item completion/actual costs and phone layout. Future room slice: clickable floor-plan renderer. Otherwise resume remaining M4 lock/audit work locally. |
-| 2026-08-04 | Assistant | Mobile launch | **Household-launch mobile experience shipped (v0.19.0).** Reworked the responsive shell for partner-first daily use: avatar-led calmer phone header; safe-area-aware five-target bottom bar; new-browser defaults prioritising Home/Calendar/Atlas/Homestead; clearer active states; a three-column More grid; profile/avatar editing from mobile; and warmer login language. Added a phone-only Hub launchpad for Calendar, Lists & notes, Our home and Pets; friendlier quick-create choices/descriptions including Home plan; responsive shared headings/cards/modals and auto-centred scrollable tabs. Calendar Month renders as a readable agenda on phones, Solace Schedule defaults to List, and notification taps now follow `action_url`. Added an admin-controlled **Ask for a password when opening Solace** switch in Manage settings. It uses existing `HouseholdNode.requires_reauthentication`, defaults on, is permission-tested, preserves `solace.*` access control and continues access auditing. **597 backend tests green; frontend type-check + production build clean; no migration drift.** | Deploy/rebuild and migrate through `homestead.0003` (v0.19 itself adds no migration). On the partner's phone, sign in, choose/edit her four bottom destinations from More, then observe real Calendar/Atlas/Homestead/notification friction. Solace prompt toggle: Solace → Manage → Solace settings. Resume M4 locally after pilot feedback. |
-| 2026-08-04 | Assistant | Mobile usability | **Dense workspace, navigation and Countdown follow-up shipped (v0.19.1).** Replaced the long phone tab strips in Solace, Homestead and Education with labelled section pickers. Collapsed Solace's five large creation forms until requested, removed its accidental double card padding, kept its mobile Schedule list default, and made its search/refresh controls phone-friendly. Made hover-dependent edit/delete actions visible on touch devices, stacked Homestead maintenance rows around a prominent Done action, prevented narrow native fields overflowing, and locked background scroll behind the More sheet. Added one-tap clear to shared node search and made Atlas, Pets, Education and Homestead results navigate to their relevant tab, room or Calendar date; Atlas list creation is now progressive. Added a configurable core Countdown widget: admins set a household title/date in Tune my Hub, then it shows days remaining, today or days elapsed and participates in normal Hub enable/size/order controls. **599 backend tests green using local SQLite test settings; frontend type-check + production build clean; no migration drift.** | Deploy/rebuild both images and migrate through `hub.0013`. Configure the countdown from Home → Tune my Hub, then pilot Solace, Homestead maintenance/rooms and Education assignments on the partner's phone. Resume M4 locally after household feedback. |
-
-| 2026-08-09 | Assistant | Mobile/integration polish | **Single-entry Homestead/Solace handoff and fast Hub arranging shipped locally (v0.19.2).** Solace bill create/edit now has an explicit Homestead destination for home insurance, household costs/services and paid maintenance. The event boundary idempotently creates the richer home record, links the existing bill, keeps Homestead descriptive edits synced, blocks direct linked-bill edit/delete divergence and suppresses duplicate maintenance Calendar rows. Added mobile-first Solace bill layout, cross-node deep links, linked badges and larger Homestead finance actions. Hub ordering now has one atomic batch endpoint; arrows move optimistically and desktop users can drag config rows or live Hub cards while Tune mode is open. **609 backend tests green; frontend type-check + production build clean; no migration drift.** | **Deploy:** rebuild both images and migrate through `homestead.0004`; no Hub migration. Pilot creating/converting an insurance, utility and paid-maintenance bill, then drag Hub cards on desktop and verify mobile arrows. Resume M4 lock/audit work after pilot feedback. |
-| 2026-08-09 | Assistant | M5.5 planning | **Home Assistant promoted to an important roadmap feature (D22).** Added detailed Roadmap Milestone 5.5 with contract/security, read-only status, safe controls, HomeStack-event delivery, conditional WebSocket and optional custom-component stages, each with an acceptance gate. Added canonical node spec `docs/26_Node_Home_Assistant.md` covering source-of-truth boundaries, data model, permissions, API, phone/desktop/kiosk UI, secrets, failure behavior and tests. Updated the MSS, node decision record and parking lot consistently. Documentation only; no app version bump or runtime code change. | Complete the household pilot, remaining M4 security work and Solace cutover validation, then start M5.5.0 by validating backend-container reachability to the household's Home Assistant instance and its URL/TLS/secret arrangement. |
-| 2026-08-09 | Assistant | GUI/inter-node polish | **Bidirectional maintenance finance and source navigation shipped locally (v0.19.3).** Added protected `POST /homestead/maintenance/{id}/track-cost/`: after Solace permission + password re-auth it publishes primitive maintenance/cost data, idempotently creates or updates one source-linked Solace bill, stores only its reference in Homestead and removes the duplicate Homestead Calendar mirror. The responsive Homestead UI provides a bottom-sheet/desktop modal, explicit ownership copy and direct filtered Solace links for maintenance, insurance and household costs. Synced Calendar events now link back to source workspaces across Atlas/Pets/Education/Homestead/Solace/Meridian. Coarse-pointer devices force hover actions visible; dense Solace/Education workspaces expand on desktop. **613 backend tests green; frontend production build clean; no migration drift.** | Deploy/rebuild through v0.19.3 and migrate through `homestead.0004`. On phone and desktop, create a Homestead maintenance task, Track cost with an admin password, follow both cross-node links, mark the task done, then confirm one Solace financial Calendar event and preserved payment history. Continue M4 after pilot feedback. |
-| 2026-08-09 | Assistant | Calendar/D23 | **Forecastable rotating schedules shipped locally (v0.20.0).** Added household-scoped `RotatingSchedule` + optional People and sparse `RotatingScheduleException`; one anchored P/S cycle is expanded only for a requested window and never creates daily Calendar events. Added permission/visibility/forecast/far-future/swap/restore/reuse tests and CRUD/occurrence/exception APIs. Calendar now has a guided, editable 14-night 2/2/3/2/2/3 preset; desktop and phone Month views add a narrow state-colour strip to otherwise-neutral day cells and keep forecasting as month arrows move, while detailed week/day/agenda badges, responsive bottom sheets, notes, swap markers and restoration remain available. Recorded D23 and updated Calendar/database/API/architecture/UI docs. **624 backend tests green; frontend production build clean; no migration drift.** | Deploy/rebuild and migrate `scheduling.0002`. In Calendar → Rotation choose the Monday beginning a “With us” Monday/Tuesday + Friday–Sunday week, rename the other label, select the children and click through several months on both phones/desktop. Swap and restore one future day, then resume M4 lock/audit work. |
-| 2026-08-09 | Assistant | UI/navigation | **Household navigation and visual-system refinement shipped locally (v0.20.1).** Replaced internal-first labels with consistent household-facing destinations while retaining node brands as supporting context. The wider desktop sidebar groups routes by purpose and explains each destination; the mobile More sheet is now a complete directory with a clearer four-shortcut editor, profile and global actions. Shared page headings/tabs, search and quick-create language now match the shell. Hub no longer repeats navigation cards and uses a roomier widget grid while retaining drag-and-drop; Calendar navigation and filters use one calmer responsive toolbar. **Frontend production build clean; no migration; backend unchanged from the 624-test v0.20.0 baseline.** | Deploy/rebuild the frontend, hard-refresh once, then test route finding and bottom-bar setup on both partners' phones, sidebar/search on desktop, Hub drag ordering and several Calendar months before resuming M4 lock/audit work. |
-
-| 2026-08-09 | Assistant | Mobile Calendar | **Phone Month browsing redeveloped locally (v0.20.2).** Tapping a date now selects it without abandoning Month view and exposes an in-place plan panel with rotating-state controls, timed/all-day events, locations, Add event and explicit Day view navigation. Added guarded horizontal month swipes, selected-day emphasis, up to three person/source-coloured event dots and safe month-end arithmetic. Replaced the cramped four-way phone switcher with a view picker beside Filter, collapsed the full monthly agenda, shortened quick add and made the 14-night rotation editor legible with compact date tiles plus a nearby label/colour key. **Frontend TypeScript check and production build clean; no migration; backend unchanged from the 624-test v0.20.0 baseline.** | Superseded in v0.20.3 by the full-grid + bottom-sheet phone model; retain the swipe, month-end and rotation-editor improvements. |
-| 2026-08-09 | Assistant | Mobile Calendar | **Full app-style phone Month view shipped locally (v0.20.3).** The complete six-week month is now an edge-to-edge primary surface. Each occupied date shows one tiny person/source-coloured event label and a `+N` count while the narrow care-state strip, selected date, Today and swap marker stay distinct. Date details, care changes and Day-view navigation move into a bottom sheet instead of permanently extending the page; duplicate phone page actions and the duplicate monthly agenda were removed, a floating add button handles creation, and rotation management is available from Filter. **Frontend TypeScript check and production build clean; no migration; backend unchanged from the 624-test v0.20.0 baseline.** | Deploy/rebuild the frontend and hard-refresh. On both partners' phones, confirm all six weeks are visible, inspect long and overlapping event names, swipe February and 31-day boundaries, open/close several date sheets, add an event to the selected date and edit/restore one care swap. |
-| 2026-08-09 | Assistant | Lists/Tasks UI | **Daily-use responsive slice shipped locally (v0.20.4).** Replaced Meridian's horizontally scrolled manager table below `lg` with information-complete task cards, large pending-approval controls, progressive secondary actions and an inline labelled editor; desktop keeps the full table. New task creation now leads with name/points/person and groups schedule/category/rules/hot options under a clear disclosure. Atlas list items wrap and place assignee/due metadata beneath the title, delete has an independent touch target, phone quick capture is collapsed until requested and Note actions remain visible on touch. Removed redundant phone page headings for Atlas/Meridian, adopted shared Search and compacted the reward overview metrics. **Frontend TypeScript check and production build clean; no migration; backend unchanged from the 624-test v0.20.0 baseline.** | Deploy/rebuild the frontend and hard-refresh. Test long grocery items, assigned/due rows, quick capture and note actions on both phones; as manager create/edit/approve/hide/archive/restore/delete Tasks on phone, then verify the desktop table remains efficient. |
-| 2026-08-09 | Assistant | Partner pilot readiness | **Controlled two-adult pilot gate shipped locally (v0.21.0).** Added an explicit, audited per-user Money grant to admin account onboarding/editing, with manager guidance, adult-password enforcement and a child-account block; child logins are also constrained to the Household member role and converting an adult login to a child clears prior finance grants. Node discovery now returns `can_view`; navigation/routes/global discovery and contributed Hub widgets require both node enablement and current-user view permission. Homestead also hides Costs & cover, Track cost and Solace links when Money is unavailable, matching its existing protected backend. Standardised first-level mobile headings; made Meridian reward, allowance, goal, wishlist and routine management responsive, labelled and failure-aware; and refined Books with shared controls, visible action errors, destructive confirmations and full-size touch actions. Pets now has labelled pet/care forms and complete treatment/appointment create-edit-delete UI; Household guide pages/categories use the same labelled touch pattern and no longer suppress category-load errors. Corrected blank Solace empty states and added `docs/PARTNER_PILOT_READINESS.md` with implemented-node core workflows, single-entry ownership and real-device acceptance steps. **636 backend tests green; frontend TypeScript/production build clean; no migration drift.** | Deploy/rebuild v0.21.0, migrate, create/link the partner manager account, and complete the readiness document on both phones plus desktop. Keep Solace standalone until its full real-data comparison passes. |
-
-| 2026-08-10 | Assistant | Fitness | **Fitness & Training shipped locally (v0.25.0 / D24).** Added a social Fitness node separate from medical Health: 45 seeded exercises; searchable custom library; multi-day programs assigned to People; immutable live-session snapshots; timer and large set controls; editable reps/weight/time/distance; add/drop exercises and sets mid-workout; duration/reps/volume summaries; strength, running and swimming personal records; household history, private sessions, notifications, events and a recent-training Hub widget. Responsive Train/Programs/History/Records/Exercises UI and full API shipped. **Fitness + node tests green; frontend production build and migration drift clean.** Full-suite verification reached 710 tests but the stale running backend image lacks the already-declared `python-dateutil` package, causing 18 unrelated recurrence errors; rebuild before rerunning. | Rebuild both images, migrate `nodes.0008`, `permissions.0021`, `fitness.0001–0002`, `hub.0015`, enable Fitness in Manage HomeStack, and complete a real phone workout. Then consider rest timers/RPE, scheduled training days, pace splits and trend charts from `docs/27_Node_Fitness.md`. |
-| 2026-08-10 | Assistant | Fitness | **Sets now default to the weight last lifted (owner request), still v0.25.0.** New selector `fitness.selectors.last_performance` returns the completed sets of each exercise's most recent finished session, visibility-filtered; `previous_set` matches set for set and repeats the final set beyond that count. `start_session` prefills weight from history and falls back to the program target only until history exists (reps still follow the prescription unless it gives none); `add_session_exercise` prefills the same way; `add_set` repeats the set just done in the current workout. `SessionExercise.last_performance` is attached by the selectors for active sessions and serialised, and the live screen shows the training each default came from. Abandoned sessions never become defaults. 8 new tests. **Full suite verified green at 718 tests; production build clean; no migration drift** — the 18 recurrence errors in the previous entry were only the stale dev image, fixed by `pip install python-dateutil openpyxl` inside `homestack-backend` (both already in `requirements.txt`; a rebuild does the same properly). | Unchanged: rebuild both images, migrate `nodes.0008`, `permissions.0021`, `fitness.0001–0002`, `hub.0015`, enable Fitness in Manage HomeStack, and complete a real phone workout — note the local dev database is many migrations behind (from `education.0014` onward), so it was deliberately left unmigrated. Then consider rest timers/RPE, scheduled training days, pace splits and trend charts. |
-
-| 2026-08-10 | Assistant | Mobile UX | **Phone interaction pass (v0.25.1)**, after the owner reported the mobile GUI still felt "very clunky and annoying to use". Read as a phone rather than a desktop, so the findings are new; all are recorded in `docs/UI_CONSISTENCY_AUDIT.md` §10 — **read that section before another mobile pass**. Fixed: every form control was under 16px, so iOS Safari zoomed in on focus and never back out (one `@media (pointer: coarse)` floor in `index.css`); all 43 `window.confirm` and 9 `window.prompt` boxes became themed in-app dialogs via the new module-level `confirmDialog()`/`promptDialog()` + one `DialogHost` in the shell (`components/Dialogs.tsx`, native fallback when no host is mounted, e.g. kiosk); `PageHeader` was hiding its *actions* along with the redundant heading on phones, so "+ Add pet", "+ New list" and "Add household login" were unreachable there; tabs now follow one rule (more than three primary tabs becomes a picker) instead of each page opting in; Money's six-column category report is per-category cards below `md`; 9–10px shell text raised; `Modal` now honours `[data-autofocus]` instead of focusing its own close button. **718 backend tests green; typecheck and production build clean; no migration.** | Use it on a real phone and report what still grates — the remaining known mobile-shaped items are Solace's CSV import preview table (admin, still scrolls sideways) and the open audit items in §5/§3. Fitness still needs its migrations applied and a real workout logged. |
-
-| 2026-08-10 | Assistant | Homestead | **Pools & spas (v0.26.0, owner request).** `apps/homestead` gains `Pool` and `WaterTest` plus `pool_care.py`, which holds the target water bands and the starter care schedule. Care jobs are ordinary `MaintenanceTask` rows with `category="pool"` and a `pool` FK — **deliberately not a parallel scheduler**, so recurrence (D8), Calendar sync (D7), completion-advances and the Hub all work unchanged; the FK exists only so the pool screen can claim its own jobs. Target bands vary by sanitiser and surface (salt pools get a higher stabiliser band; fibreglass/vinyl need less calcium; a chlorine pool is never asked for salt), and in-range status is computed at read time rather than stored, so corrected guidance applies to old readings. Re-applying the schedule is idempotent by title. New Pool & spa tab in Homestead, written to teach — each reading states what it is for and what to do when it is out of band. Migration `homestead.0008`. **734 backend tests green (16 new); typecheck and production build clean; no drift.** | Owner wanted this because they have a saltwater pool and are learning pool care — worth a real-world check that the bands and job list match what their pool shop advises, then adjust `pool_care.py`. Not yet done: pools are absent from Homestead FTS search, and there is no pool-specific Hub widget (care jobs surface through the existing maintenance/upcoming cards). |
-
-| 2026-08-10 | Assistant | Solace | **Money regrouped and made usable for the cutover (v0.27.0, owner request).** Owner reported buckets needed work, and that the cycle, upcoming bills and marking them paid were hard to find — then that twelve tabs was "a bit ridiculous". **Twelve tabs are now five** (Now / Bills / Plan / Insights / Manage), with the old second level kept as `secondary` Tabs inside each and a `section` URL param so both levels survive a refresh; `LEGACY_TABS` maps old `?tab=` values so existing links still land correctly. **The landing screen now answers "what do I owe before next payday"** with a running total and Paid/Skip on each row — deliberately modelled on the standalone app's `due_before_next_payday` dashboard widget, which is what the owner is used to. One `GET /solace/now/` call backs it (`selectors.get_now_summary`), and it materialises occurrences with a 90-day lookback so genuinely overdue rows appear. **Buckets got a real ledger:** `BucketEntry` (deposit/withdrawal/adjustment) keeps `current_amount` as the running total the pay planner already reads while recording how it got there; Add/Spend are now the bucket's primary actions; editing the balance by hand records a correction rather than silently diverging. Buckets also carry a `purpose`. Fixed `import_solace`'s `DEFAULT_DB`, which still pointed at `/home/moose/...` — the standalone app lives at `/home/instructor/Documents/new/project-solace`. Migration `solace.0008`. **747 backend tests green (13 new); typecheck and production build clean.** | This is the cutover run: deploy, migrate, then `python manage.py import_solace --dry-run` before the real import, and compare a full pay cycle against standalone. Note a backdated bill is settled as paid on entry by design, so overdue only arises from time passing. Still untouched from the owner's list: whether the pay-cycle *plan* itself needs work beyond visibility, and Solace's CSV import preview table still scrolls sideways on a phone. |
-
-| 2026-08-10 | Assistant | Solace | **Income parity with the standalone app (v0.28.0).** Owner asked for a comparison against standalone and identical behaviour. Re-read `project-solace/app/budget_engine.py` and `models.py` rather than trusting `docs/SOLACE_PARITY_CHECKLIST.md`, which **wrongly claimed complete parity** — that document is now corrected and carries a warning to tick items only against the standalone source. Three features had never been ported: **individual vs shared income scope**, **shared-income allocation modes** (`standard`/`lump`/`custom` with a remainder line), and the **per-person contribution breakdown** (the importer had been flattening `owner_name` into the income title, losing the grouping). All three are implemented faithfully in `budget_engine.build_pay_cycle_plan`, including the reference engine's rule that only the *first* cap-to-remaining bucket may cap. New `IncomeAllocation` model + `PUT /solace/paydays/<id>/allocations/`; importer carries scope/mode/split across and tolerates older standalone DBs lacking `shared_income_allocation`. Migration `solace.0009`. **755 backend tests green (8 new); build clean.** | **Important for cutover: no standalone database on this PC holds real data** — `project-solace/instance/solace.db` has 1 bill, 4 buckets and no income, and the docker-compose uses a named volume with no container here, so the live data is on the home server. Run `import_solace --dry-run` against *that* copy. Still missing vs standalone and recorded in the parity doc: cycle history, annual summary, and purchase completion not raising saved to target. |
-
-| 2026-08-10 | Assistant | Solace | **Closed the last three standalone parity gaps (v0.28.1).** **Cycle history** (`GET /solace/cycle-history/`) lists every closeout newest first with paid/skipped/outstanding counts and totals per cycle — recomputed from the occurrences in each window rather than stored, so a later bill correction flows through. **Annual summary** (`GET /solace/annual-summary/?year_type=calendar|financial`) groups a year of occurrences by category then by bill, both ordered by cost, with an expandable category list; the financial year runs 1 Jul – 30 Jun and uncategorised bills are counted as "Uncategorised". **Purchase completion** now raises `saved_amount` to `target_amount` when status becomes `bought`, matching standalone, while keeping a balance that already exceeds the target. Both views are sections under Insights and old `?tab=cycle-history` / `annual-summary` links map to them. `docs/SOLACE_PARITY_CHECKLIST.md` now records that no behavioural gap is known and asks that anything newly found be added rather than assumed absent. **766 backend tests green (11 new); build clean; no migration.** | Cutover is now a data and acceptance exercise, not a build one: deploy, migrate, run `import_solace --dry-run` **against the home server's copy of the standalone database** (no copy on this PC has real data), then `--verify`, then compare one full pay cycle side by side before retiring standalone. |
-
-| 2026-08-10 | Assistant | UI consistency | **Worked the open items in `docs/UI_CONSISTENCY_AUDIT.md` (v0.28.2); one item now remains.** **School & study's dead end is reproduced and fixed** — `personIdForUser` returns nothing when the signed-in account has no linked Person, and the Profile tab it opens on hid its student picker unless the household had 2+ people, so there was no way to recover; it now falls back to the first person, always shows the picker, and gives a people-less household a real empty state instead of a permanent "Loading profile…". **Settings vocabulary unified** — Meridian's tab is labelled Manage like Money's (key stays `settings` so links work); Homestead's property record is recorded as `[decided]` reference content, not settings. **Approve/reject** had three treatments across two Meridian screens and is now primary/ghost everywhere. **Homestead's six hand-rolled Edit/Delete pairs use `RowActions`**, removing the app's last bare `✕` deletes. Tasks & rewards' duplicate top-balance tile removed. The two-search-boxes question is settled as `[decided]` with a rule: an in-node box must name its scope, never a bare "Search…". **766 backend tests green; build clean; no migration.** | Only `[~] Emoji as the icon system` is left, and it is a deferred design decision rather than a defect — a proper icon set is its own piece of work. Any new UI finding should be appended to that audit rather than fixed silently. |
-
-| 2026-08-10 | Assistant | Handover | **Forward-looking handover corrected and released as v0.28.3.** Updated the canonical-doc index through D24/doc 27, replaced the stale v0.21 phase summary, marked M4 functionally complete, brought Fitness, Pools & spas and Solace v0.28 parity into the status section, corrected the standalone Solace path and production migration heads, and replaced duplicate Home Assistant guidance with an ordered deploy → Solace cutover → real Fitness/pool checks → partner acceptance → Home Assistant 5.5.0 sequence. Historical progress entries were preserved. | Rebuild/migrate the home server, execute the real Solace import/verify and acceptance gates, then update the household-acceptance results before starting Home Assistant. |
-| 2026-08-10 | Assistant | Homestead | **Metered water/electricity usage shipped as v0.29.0.** New `UtilityBill` (`homestead.0009_utility_bills`): utility type, period start/end, amount used + unit (kWh/kL/L/m³/MJ/therms, defaulted per type), total cost, provider, estimated-or-read, notes, `visibility` defaulting to household. Nothing derived is stored — `days` (inclusive), `daily_usage`, `daily_cost` and `unit_cost` are model properties, so a corrected bill corrects every figure. `GET/POST /homestead/utility-bills/`, `PATCH/DELETE /homestead/utility-bills/<id>/` and `GET /homestead/utility-usage/` (one series per utility, oldest first, per-day averages, `vs previous bill` + `vs a year ago` matched within 45 days of a year earlier). All comparisons are per day because billing periods differ in length. Publishes `homestead.utility_bill_logged` (D4); no Calendar row (D7 — an arrived bill is not an appointment; its `HouseholdCost` owns the due date). **Owner decision (asked, 2026-08-10): usage is household-visible with no password gate**, unlike Costs & cover — so it uses `_Perm` only, not `HomesteadFinanceAccessMixin`, and works with the Money node disabled. Frontend: new **Power & water** tab, entry form, per-utility card (3 stat tiles, change chips, two column charts, and a full table with edit/delete), plus a dependency-free `components/BarChart.tsx` (single series, ≤24px bars, latest emphasised + directly labelled, striped estimated reads, focusable columns announcing their figures, light/dark checked by screenshot). Also fixed `?tab=pool` falling back to Overview — `pool` was missing from `TAB_KEYS`. **783 backend tests green (17 new); tsc + production build clean; no migration drift.** | Deploy: rebuild + `docker exec homestack-backend python manage.py migrate`, then log two real bills per utility and check the year-ago match against the paper bills. Follow-ups left open: utility bills are not in `search_homestead`, there is no Hub widget, and a bill is not linked to its `HouseholdCost` account (deliberate — that surface is Solace-gated). |
-| 2026-08-10 | Assistant | Brand | **Logo implemented across the app (v0.29.1).** Owner supplied three renders; they now live in `brand/` as sources with a README, and `scripts/build_brand_assets.py` (Pillow) crops each to its artwork at alpha>40 with a 2% margin, resizes and writes the committed web assets to `frontend/public/brand/` — `mark.png`/`mark-192.png`, `wordmark.png`, `lockup.png`, `apple-touch-icon.png` (on paper, because iOS blacks out transparency) and `favicon-32.png`. Sources are ~1 MB of mostly empty canvas, so nothing loads them directly. Placement: **mark** replaces the `◇` tile in the sidebar header and names the kiosk ambient screen; **wordmark** beside it there; **lockup** leads the sign-in page (one lockup per surface). `index.html` gains favicon 32/192, Apple touch icon, app title and light/dark `theme-color`. All uses go through `components/Logo.tsx`, which declares intrinsic width/height and is `aria-hidden` where the word HomeStack is already beside it. Rendered and eyeballed on the warm paper and the dark surface at full size and at 36px. **Typecheck + production build clean; no backend change, no migration.** | Known nit: the lockup's navy "Home" is quiet on the dark surface — the standalone wordmark is the light-background/dark-background pair, so if it bothers anyone, swap the lockup for mark+wordmark in dark. Docs: design guide §6a, `brand/README.md`. |
-| 2026-08-11 | Assistant | Solace | **Percentage allocation ceiling shipped as v0.29.2.** Active bucket percentages are transactionally limited to a combined 100%, with inactive future rules excluded. Custom shared-income splits enforce the same ceiling before replacing saved rows. Both editors show the available/allocated share and prevent invalid saves; the API remains authoritative. **787 backend tests green; frontend production build clean; no migration.** | Deploy/rebuild, then confirm the live imported bucket rules total no more than 100% and complete the planned Solace cutover comparison. |
-| 2026-08-11 | Assistant | Solace | **Subscription presentation unified as v0.29.3.** A Bill whose category is Subscription is filtered out of the ordinary Bills section and presented beside dedicated Subscription records. It remains a Bill underneath, preserving occurrence/payment history, Mark paid, autopay and set-aside behaviour; dedicated Subscription records retain their renewal-cycle editor. Recategorising moves the record between sections on reload. Added a combined empty state and short in-product explanation. **Frontend production build clean; backend unchanged at 787 tests; no migration.** | Deploy/rebuild and confirm both an existing Subscription-category bill and a dedicated subscription appear together, with their respective edit/payment controls. |
-| 2026-08-11 | Assistant | Solace | **Stale overdue occurrences fixed as v0.29.4.** Root cause: Bill edit defaulted to `future_unpaid`, so moving First due forward regenerated future rows but deliberately stranded the old overdue row; Now then correctly counted that stale row forever. Schedule-field changes now rebuild all unpaid dates automatically, while amount-only edits keep their selectable scope. Paid and skipped history is preserved. `ensure_bill_occurrences` now reconciles obsolete upcoming rows inside its window, and opening Now starts at each bill's earliest unpaid row, automatically repairing old data even beyond the normal 90-day lookback. The editor relabels the scope as Amount updates and explains the schedule rule. **790 backend tests green; frontend production build clean; no migration.** | Deploy/rebuild, open Money → Now once to trigger reconciliation, and confirm the seven obsolete overdue notices disappear while genuine missed bills remain. |
-| 2026-08-11 | Assistant | Solace | **Subscriptions consolidated into Bills as v0.29.5 (owner request).** Removed the duplicate runtime model/API/UI path. Add subscription now opens the full Bill form with category fixed to Subscription; every subscription therefore gets Bill occurrences/history, Mark paid, autopay, set-aside, pause/delete, overdue reconciliation, forecast/reminder/export/Search/Calendar and Hub behaviour. `solace.0010` converts every live legacy Subscription before deleting its table, retaining renewal date → First due, recurrence, provider, amount, notes, active state, visibility/sensitivity, timestamps and the existing Calendar link; a MigrationExecutor regression proves the conversion. Standalone import already produced Subscription-category Bills and remains idempotent. **792 backend tests green; frontend production build clean; no migration drift.** | Deploy/rebuild and run `migrate` through `solace.0010`; then open Subscriptions, inspect each converted renewal/recurrence, mark one occurrence paid and confirm history/Now/forecast. |
-| 2026-08-11 | Assistant | Solace + Homestead | **Exact cycle boundaries and one bill owner shipped as v0.29.6 (owner request).** Fixed the local-date/UTC leak that put 12 August occurrences into the cycle displayed as ending 11 August, and made cycle windows use their literal displayed dates. Solace now owns all insurance and household-service financial fields and retains full edit/delete, occurrence history, Mark paid and autopay behavior even while a bill is shown in Homestead. Costs & cover is a protected read-through: its cards update from Solace events, link back to Solace, and edit only policy/excess/claims/account metadata. Creation/deletion there directs users to Solace. `homestead.0010` preserves valid links and creates a linked Solace bill for every existing Homestead-only policy/cost. Migration and ownership regressions added. **794 backend tests green; frontend production build clean; no model drift.** | Deploy/rebuild and migrate through `homestead.0010`; open Money → Now and confirm 12 August bills appear only in the new cycle, then inspect Electricity and every Costs & cover card in Solace. |
-| 2026-08-11 | Assistant | Solace follow-up | **Subscriptions fully absorbed and the actual timezone defect fixed as v0.29.7.** The v0.29.6 occurrence bounds still read Django's active timezone, which is UTC inside Docker, rather than the configured Household timezone; a Brisbane-local 12 August midnight could therefore remain 11 August to the backend. Pay-cycle construction, bill bounds, today and overdue comparisons now explicitly use `Household.timezone`, and Now accepts its date parameter. Removed the leftover Subscriptions subsection/filter entirely: subscription-category rows are normal Bills and legacy links land on Bills. The regression deliberately leaves Django in UTC while setting the household to Australia/Brisbane. **794 backend tests green; frontend production build clean; no migration.** | Rebuild both images (a restart of the old baked images is insufficient), confirm Settings → Household timezone is `Australia/Brisbane`, then hard-refresh and recheck Money → Now/Bills. |
-| 2026-08-11 | Assistant | Homestead floor plan | **The real house plan is now a native interactive Homestead surface (v0.30.0, owner request).** Used the supplied full-property plan for pool/cabana/shed/carport placement and the detailed plan for internal rooms/dimensions, but did not ship either branded image. `HomeFloorPlan.tsx` redraws it as responsive SVG using HomeStack light/dark tokens, room colours, zoom, keyboard links and accessible labels. It matches common room-name aliases to existing stable Room pages; unlinked spaces remain plan references. Rooms defaults to Floor plan and retains Room list as a secondary view. **Frontend production build clean; backend unchanged at 794 tests; no migration.** | Rebuild frontend and inspect the plan on phone/desktop. Rename existing Room records to the labels shown (or a supported alias) where a space is not linked; report any physical boundary/label that needs correcting from lived knowledge. |
-| 2026-08-11 | Assistant | Homestead floor plan | **The floor plan was made readable and explicitly linkable (v0.30.1, owner feedback).** Replaced the sparse all-in-one canvas and card-like rounded rooms with a large connected internal plan plus a simplified whole-property view. Shared walls, restrained architectural cues, fit/zoom controls and a side detail rail keep it visually integrated with HomeStack. Clicking or keyboard-selecting a space now gives it a strong filled highlight/glow. Editors can link any plan space to an existing Room; the association persists in `floorplan_data.floorplan_slot`, explicit links win over legacy name suggestions, and the plan adopts the room's saved name/icon/colour. Moving a room clears its old slot, and unlinking preserves all room data. **Frontend production build clean; persistence regression green; no migration.** | Rebuild the frontend, hard-refresh, then use Homestead → Rooms → Floor plan to save the real room associations. Check the interior and whole-property views on phone and laptop; only physical-boundary refinements from lived knowledge remain. |
-| 2026-08-11 | Assistant | Roadmap | **A household-portable floor-plan builder was added as future Roadmap 8.1 (owner request; documentation only).** The current plan is intentionally installation-specific. The future Homestead editor offers blank/template/upload-to-trace onboarding, a desktop/tablet drawing canvas with move/resize/snap, room link-or-create, architectural/outdoor features, multiple levels, undo/redo, drafts/publish and revision restore. Proposed household-scoped `FloorPlan`/`FloorPlanArea`/`FloorPlanFeature` records replace code geometry and use a real Room FK; the existing house migrates into saved data while new installs start empty. The roadmap includes the intended UI, four delivery slices and a clean-install acceptance gate. It explicitly rejects CAD/construction scope and makes later image recognition optional/editable. | Revisit during productization after the current household deployment and acceptance work. Start with rectangle-based core authoring plus reference-image tracing; do not begin with automatic recognition or full CAD behaviour. |
-| 2026-08-11 | Assistant | Roadmap | **Corners and safe URL enrichment were documented as Roadmap 8.2/8.3 (owner request).** Core spec 28 makes the normal household page a Corner backed by `Person`, separate from admin account management, with Overview/Activity/Assigned/Lists & wishes. Nodes provide permission-filtered projections rather than copied data: Atlas owns ordinary personal shopping/wishes, Homestead owns room products, and Meridian keeps the child points workflow. Core spec 29 defines preview-and-confirm extraction of product title/shop/price/currency/image and later Schema.org recipes. It begins with a strict SSRF boundary, handles blocked/partial sites honestly, preserves provenance and never overwrites confirmed user data. | Build order: Corner shell/Assigned → personal lists/projections → activity/reactions; separately safe fetch tests → product preview in Homestead → Atlas → price watches → Hearth later. |
-| 2026-08-11 | Assistant | Roadmap follow-up | **Owner defaults and daily sale watching were added to future specs 28/29 (documentation only).** Personal lists default household-visible; other members submit suggestions for accept/edit/dismiss; Activity opens on 30 days. Confirmed product images copy locally and confirmed prices remain snapshots. Optional watches check public wish URLs once after approximately 09:00 in Household local time via an idempotent catch-up-safe cron command, retain separate compact observations and notify only for a new explicit sale, meaningful drop or target hit. The Person interaction proposal adds bounded reactions, short moderated comments, offer-to-help approval and list watching; no DMs/pokes/engagement ranking, and surprise gift reservation remains later. | Still needed before implementation: representative retailer fixture URLs, confirmation of the recommended 5% meaningful-drop threshold, which proposed interactions should ship initially, and whether hidden-from-recipient gift reservation is worth its special privacy rule. |
-| 2026-08-11 | Assistant | Corner reactions | **Emoji reactions on visible Corner activity were approved and specified.** Activity rows receive a friendly quick set beginning with heart/thumbs-up/celebration/strength/applause, with room for a broader safe picker. Reactions are per Person+emoji, idempotent/toggleable, grouped with counts and visible reactor names only to authorised viewers. They remain attached to source-visible activity, carry no Meridian points/ranking meaning, and notify the activity owner in bundled form. | Initial set: ❤️ 👍 🎉 💪 👏. Comments, offer-to-help and surprise gift reservation remain deferred. |
-| 2026-08-11 | Assistant | Corners + safe link import | **Shipped v0.31.0.** Added My Corner/[Name]’s Corner with household switching, Overview/30-day Activity/Assigned/Lists & wishes, permission-aware node providers, personal Atlas wishlist/shopping ownership, suggestion review and grouped toggleable reactions with bundled notifications. Added SSRF-resistant/rate-limited product previews, editable confirmation in Corners and Homestead room plans, confirmed local image caching, provenance, and optional separate price watches. The hourly-safe scheduled command claims each watch once after 09:00 Household local time, stores observations and deduplicates meaningful-drop/sale/target alerts. The eight supplied retailers were exercised; structured/public pages enrich fully or partially and blocked sites retain manual entry. **806 backend tests green; frontend production build clean; no migration drift.** | Deploy/rebuild and migrate. Add host cron `7 * * * * docker exec homestack-backend python manage.py link_imports_run_scheduled`; its local-time/idempotency gate performs one daily check after 09:00. Then use two accounts to test suggest→accept and reaction visibility, and confirm one imported wish plus one room product caches its image. |
-| 2026-08-11 | Assistant | Roadmap | **Daily coordination documented as future Milestone 2.6/core spec 30 (documentation only).** Appointments remain Calendar-owned and project into a new Atlas Agenda; every due-dated Atlas item syncs automatically; birthdays derive from household People or deduplicated external contacts and show turning age without annual event copies; pool care gains editable cadence/day with future-only changes; shared per-user/per-device notification preferences lead to sparse, permission-safe responsive-PWA Web Push. | Implement in four bounded slices: classification/Agenda → birthdays/people → pool schedule editor/history → preferences/Web Push. Resolve no additional product question before slice one; the spec records full-year birthdays and 28 February handling for leap-day birthdays as initial defaults. |
-| 2026-08-11 | Assistant | Link import follow-up | **Retailer interruption pages can no longer become product names (v0.31.1).** Reproduced the supplied Harvey Norman TV URL: its bot-protection response is titled “Pardon Our Interruption” and currently exposes neither a reliable product image nor price to HomeStack. The extractor now rejects common challenge/error titles while retaining any independently valid price/site/image fields and gives specific manual-entry warnings. Homestead room products and Corner wishes now fill blank fields only, preserving names, images, suppliers and prices already entered by the user. Added a regression where an interruption page still exposes a valid product price. **All 6 link-import tests green; frontend production build clean; no migration.** | Rebuild backend/frontend before retesting. Harvey Norman may still require manual name, price and copied image URL whenever its bot protection withholds product metadata; HomeStack must remain honest rather than bypassing the retailer challenge. |
-| 2026-08-11 | Assistant | Daily coordination | **The HTTP-safe Daily Coordination slice shipped as v0.32.0.** Calendar has explicit Event/Appointment classification plus provider/contact; Atlas opens on an Agenda projection of permitted upcoming Calendar work excluding birthdays/holidays; every due-dated Atlas item automatically owns one task Calendar mirror through D7 and completion/reopen/delete stay aligned. Atlas People & birthdays stores external contacts while household members continue using `Person.date_of_birth`; Calendar derives annual occurrences and turning ages without stored yearly events, and user management exposes the profile date. Pool care tasks now independently edit next occurrence and weekly/fortnightly/monthly cadence or pause, preserving completed state. **810 backend tests green; frontend production build clean; Scheduling 0004 + Atlas 0006; no drift.** | Deploy/migrate and acceptance-test appointment→Agenda, dated to-do completion, household/external birthdays and two differently scheduled pool jobs. Web Push/preferences remain deliberately pending: configure HTTPS for both iPhone and Android access first, then implement adult self-management plus admin/parent management of child preferences. |
-| 2026-08-11 | Assistant | Travel roadmap | **Travel was promoted as the next node and fully respecified in v0.32.1 (documentation only).** The old six-paragraph spec already named trips/bookings/flights/accommodation/packing/Calendar, but omitted the requested product behaviour. Spec 19 now defines project-like Trips and To-go tabs, multiple linked/uploaded images, multi-Person participation, conditional multi-leg flights/stays, quote/actual and booked roll-ups, coloured planning/booked Calendar treatment, flight times, source-owned book-by actions projected into Atlas Agenda/Hub, and bundled idea-added notifications. It includes data contracts, privacy boundaries, four delivery slices and acceptance tests. | Resolve the few product questions recorded with the owner, then implement slice 1 with permission tests first. Do not start external maps/flight APIs, currency conversion or deep Solace integration. |
-| 2026-08-11 | Assistant | Travel | **Shipped v0.33.0 Travel.** Added responsive Trips and To go, shared notes, People assignment, linked-image galleries, editable dates/colour/status and idempotent idea conversion. Flight/accommodation/other components carry editable providers, times, route/reference, whole-party quote/actual costs, booked state and separate book-by dates; Trip/component/deadline Calendar mirrors feed Atlas Agenda and the generic Hub upcoming surface. Household-visible destination ideas notify permitted users and project to the creator's Corner. **Keep this a surprise** excludes selected linked Users from Travel, direct Calendar URLs/lists, Agenda, Hub, notifications, Search and Corners, including admin/manager reads, while preventing creator self-exclusion. Added `travel.0001/0002`, `scheduling.0005`, `nodes.0009` and `permissions.0023`. **813 backend tests green; frontend production build clean; no migration drift.** | Rebuild both images, migrate, enable Travel in Settings → Nodes, then acceptance-test a normal trip and a hidden surprise trip with two accounts. Remaining spec slices: uploaded attachments, itinerary, packing/protected documents and HTTPS-gated phone reminders. |
-| 2026-08-11 | Assistant | Roadmap | **Documented the owner-requested Discoverability and daily navigation package (future Milestone 2.7; no code).** Countdown targets now specify time/noon fallback and switch to hours inside 48 hours. Atlas will combine Appointments & events behind filters and edit standalone Calendar entries in place. My Corner and Education Study must resolve the signed-in linked Person; Study create/edit forms select saved Institutions rather than duplicating their names; activity/notifications deep-link to exact sources and Fitness can expand immutable session details. New spec 31 defines accessible node summaries, detailed/dismissible in-app guides, generated offline version history and non-destructive capability toggles. Recommended consolidation: Homestead absorbs optional Stock & storage, Assets & vehicles and Household guide; home projects remain Homestead, travel projects remain Travel and simple work remains Atlas. Books is evidence-gated; Solace/Fitness/Health/Education/Pets/Travel/Meridian retain distinct ownership. | Owner to confirm the Homestead capability consolidation before it becomes a hard decision. Suggested implementation order: fix current-person routing and Study institution selectors → countdown/Atlas inline editor and filters → node guides/version history → capability framework and migrations. |
-| 2026-08-11 | Assistant | Core UX | **Discoverability and daily navigation shipped as v0.34.0; consolidation remains documentation only.** My Corner and Study now default to the linked current Person; Study institution fields use saved records. Countdown targets include local time/noon fallback and hours inside 48h. Atlas adds combined Appointments & events filters and shared in-place editing for standalone schedule records and Atlas to-dos; node-owned rows retain exact source navigation. Corner activities now carry record-specific links, Fitness workout summaries expand safely and target sessions/programs highlight at source. Manage HomeStack includes accessible summaries and full guides for enabled and disabled nodes, dismissible per-login browser guide links, restoration, and an offline in-app Version history generated from canonical `VERSION_HISTORY.md`. Capability/node consolidation was explicitly excluded. **815 backend tests green; frontend production build clean; no migration drift.** | Rebuild both images and acceptance-test with two linked household accounts: My Corner/Study defaults, a timed Countdown, Atlas event/to-do edits, a completed workout expansion/deep-link, and opening a disabled-node guide. HTTPS/Web Push and the proposed Homestead capability consolidation remain future work. |
-| 2026-08-11 | Assistant | Books + colour UX | **Book URL/ISBN review import and shared colours shipped as v0.34.1.** The existing SSRF-pinned/rate-limited preview boundary now accepts Book previews: public URLs expose Schema.org Book/Product metadata and an ISBN, then user-triggered Open Library lookup fills title/author/publication/pages/subjects/description/cover; bare ISBN works directly and partial metadata stays editable. Books persist publication text and source URL and display cover/date. Replaced every standalone native colour well with one accessible shared 24-swatch palette plus unrestricted custom colour; Calendar explicit colours can still be cleared to inherit Person/family colour. Added `books.0002`. **817 backend tests green; frontend production build clean; no migration drift.** | Rebuild/migrate, paste one retailer book URL and one ISBN into Books, review before saving, and check profile/event/schedule/trip/club/room/Wiki colour selection on phone and desktop. |
-| 2026-08-11 | Assistant | Acceptance fixes | **Trip deletion, linked My Corner resolution and book-club layout fixed as v0.34.2.** Added a confirmed Delete action to trip detail using the existing protected Travel endpoint. Corrected the People read contract from `linked_user` to documented `linked_user_id`, which lets My Corner recognise an already-linked login and restores linked-user consumers such as Travel surprise selection. Reflowed Book club settings so the shared 24-swatch colour picker uses the card width rather than a five-rem column. Added the People API regression. **817 backend tests green; frontend production build clean; no migration drift.** | Rebuild both images and hard-refresh. Open Nick's My Corner, delete the test trip from its detail page, and check Book clubs on phone and desktop. |
-| 2026-08-11 | Assistant | Books UX | **Book-club settings made dismissible as v0.34.3.** Club name, colour and member management are collapsed by default behind Edit club, have an explicit Close action and collapse when the selected club changes. **Frontend production build clean; backend unchanged; no migration.** | Rebuild the frontend and hard-refresh; confirm Edit club/Close on phone and desktop. |
-| 2026-08-12 | Assistant | Real-use fixes | **Status correction + Solace timezone/performance fixes shipped as v0.34.4 (owner report from live daily use).** HomeStack is deployed on the home server and in daily use; the owner started Solace from bills entered manually rather than via `import_solace`, and Fitness/partner acceptance are both done — corrected §5/§6 accordingly, which had gone stale describing an undeployed app. **Bug fix:** bills due "today" in household-local time (e.g. Homestead-linked utility costs) could silently not appear in Money → Now. `apps/solace/bill_schedule.py` (plus `forecast.py`/`tasks.py`) compared occurrence windows against Django's active timezone, which stays UTC inside Docker since nothing activates a request-local one — the same class of bug v0.29.7 fixed for pay-cycle/Now comparisons, but that pass missed the occurrence-generation engine itself (the existing Brisbane-timezone tests all happened to wrap themselves in `timezone.override`, masking the gap). Added `bill_schedule.household_timezone(household)` and read it directly from `Bill.household`/the caller everywhere date math happens. **Performance fix:** diagnosed why Solace "takes a few seconds to load" — `SolaceBootstrapView` fans out to ~14 sub-views per request, and four of them (Bills, Health, Cycle closeout, Forecast) each independently re-ran full per-bill occurrence reconciliation over heavily overlapping windows (up to 4x redundant delete/diff/bulk-create work per bill per page load). Added a request-scoped cache (`_ensure_bills_reconciled` in `views.py`) that reconciles each bill's widest requested window once per request; narrower calls from other sub-views become no-ops. Regenerated the stale `versionHistory.json` manifest. **820 backend tests green (3 new); no migration; no frontend change.** Also retired a stale memory entry ("revisit Atlas + Hub after Meridian") that had already been resolved back in M2.5 (2026-06-25) but was still surfacing in project memory. | Owner-requested and queued, in this order: (1) done — Solace performance + Now timezone; (2) Travel itinerary (day-assignable or unassigned "option to do" items) + day-trip/multi-day-trip type on Trips; (3) a general (non-personal, non-room) household shopping list, likely the future grocery-list home too — Atlas already has `shopping`/`grocery` list types (v0.7.2) and the link/price preview boundary already exists (v0.31.0); investigate wiring it onto an Atlas list item before inventing a new model. HTTPS + phone push notifications ("needs to be sorted soon") remain the gate before Home Assistant M5.5. |
-| 2026-08-12 | Assistant | Atlas | **Dedicated Grocery and Shopping tabs shipped as v0.34.5 (owner request — Atlas work prioritised ahead of Travel itinerary).** Split Atlas' generic Lists tab: existing/new `grocery`- and `shopping`-typed lists now render under their own tabs (client-side filter by `list_type`, no data migration needed) instead of being mixed into the generic Lists tab, which now keeps to-do/checklist/general/wishlist. **Grocery** stays deliberately simple (name/quantity/assignee, reusing the existing `ListCard`) so a future Hearth/meal-planning pass can populate it from a meal plan's ingredient list, matching the handoff `docs/11_Node_Atlas.md` already anticipated. **Shopping** gets the room-project shopping-list treatment in a new `pages/atlas/ShoppingTab.tsx`: paste-a-link "Fill" import through the existing safe link-import boundary (`api.previewProductLink`, already used by Corners/Homestead room products), image, shop, price, quantity, a new `AtlasListItem.priority` field (low/medium/high, blank by default, migration `atlas.0007`; only the Shopping UI sets it) with a high-priority badge, inline edit and an optional price-drop watch. Search results and quick-capture's todo-list picker now exclude/route around grocery+shopping so links don't land on a tab that no longer shows the match. **822 backend tests green (2 new); frontend typecheck and production build clean; migration applied to the live dev database.** Not yet verified in a live browser (no browser tool available this session) — worth a click-through before relying on it daily. | Give the new tabs a look in-browser. Then continue the owner's queue: Travel itinerary (day-assignable or unassigned "option to do" items) + day-trip/multi-day-trip type on Trips. HTTPS + phone push notifications ("needs to be sorted soon") remain the gate before Home Assistant M5.5. |
-| 2026-08-12 | Assistant | Travel | **Trip itinerary and day-trip/multi-day-trip type shipped as v0.34.6 (owner request, completing the 2026-08-12 real-use-feedback queue).** New `TravelItineraryItem` model (migration `travel.0003`) mirrors the existing `TravelBooking` pattern: title/location/notes, an optional link to a booking, and either `scheduled_date`/`scheduled_time` (a day of the trip) or neither (an unscheduled "option to do"). Dated items sync to Calendar through the existing helper (D7), inheriting the trip's colour/visibility/`hidden_from_users` surprise exclusions exactly like bookings and the trip itself; clearing the day removes the Calendar mirror. `Trip.trip_type` (`day_trip`/`multi_day`) locks the stored `end_date` to `start_date` on both create and update when set to day-trip, so downstream day-range logic (the itinerary's day picker) never needs a special case; a "Day trip" badge shows on the trip card and detail header. New `POST /travel/trips/<id>/itinerary/` + `PATCH/DELETE /travel/itinerary/<id>/`, nested read-only under `TripSerializer.itinerary_items`. Frontend: `TripDetail` gained a "Things to do" card grouping items by trip day (falling back to an "Options to do" bucket, plus an orphaned-date bucket if a scheduled item's date falls outside the trip's current range after an edit) with add/edit/delete, and `PlanForm` gained the trip-type picker that hides the Ends field for day trips. `docs/19_Node_Travel.md` updated (banner + §14 slice 4: itinerary shipped, packing/documents still open). **826 backend tests green (4 new); frontend typecheck and production build clean; migration applied to the live dev database.** Not yet verified in a live browser (no browser tool available this session). | Give the new itinerary UI a look in-browser on a real trip. This closes the owner's 2026-08-12 queue — HTTPS + phone push notifications ("needs to be sorted soon") remain the only open item, gating Home Assistant M5.5. Packing/protected documents (Travel spec §14 slice 4) are a natural next Travel slice if wanted. |
-| 2026-08-12 | Assistant | Infra | **HTTPS-on-LAN prepared as v0.34.7 around the existing Nginx Proxy Manager + Pi-hole (owner registered `moosesoftwares.com` mid-session; owner clarified NPM/Pi-hole already run on the home server, so no new HomeStack service handles TLS).** Entered plan mode given the live-server/secrets stakes; owner confirmed switching the live server to `config.settings.prod` as part of this work (found it already has the right `SECURE_PROXY_SSL_HEADER`/secure-cookie handling, just sitting unused while the server runs `dev`). NPM requests the Let's Encrypt certificate via its own DNS Challenge (Cloudflare) and proxies `homestack.moosesoftwares.com` straight to the frontend container; Pi-hole resolves it locally. Confirmed no NPM path-splitting/custom locations are needed: the frontend's own dev-server proxy already forwards `/api` to the backend internally (`frontend/vite.config.ts`), same as it does for direct-IP access today; `/media/` has no route to proxy (removed in v0.17.0); `/admin/` is reachable directly at `:8000` today and would need its own NPM custom location if the owner wants it on the new hostname too. `.env.example` documents `HOMESTACK_PUBLIC_HOSTNAME` and the `dev`→`prod` switch. `frontend/vite.config.ts`'s `allowedHosts` now includes the public hostname via `process.env.HOMESTACK_PUBLIC_HOSTNAME`. Flagged a real side effect of the `prod` switch: Django admin's CSS/JS only auto-serves under `DEBUG=1`, so `/admin/` renders unstyled afterward unless static serving (e.g. whitenoise) is added — left for the owner to decide since Django admin isn't part of normal HomeStack use. `docs/05_Security_Architecture_Document.md` §14 updated. **Not yet live** — blocked on the owner's NPM proxy host/SSL config and Pi-hole DNS record, both outside this repo. | Owner: create the NPM proxy host (`homestack.moosesoftwares.com` → `192.168.1.125:5173`) with SSL via DNS Challenge/Cloudflare, add the Pi-hole local DNS record, then update `.env` (`DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `DJANGO_SETTINGS_MODULE=config.settings.prod`) and rebuild. Check login/CSRF/session over `https://homestack.moosesoftwares.com`, and check whether Django admin still needs to look right, before treating this as done. Push notification backend/frontend work (VAPID keys, device registration, service worker) is a separate follow-up once HTTPS is confirmed live. |
-| 2026-08-12 | Assistant | Infra | **HTTPS-on-LAN confirmed live as v0.34.8 (owner report).** Owner finished the NPM/Pi-hole side: proxy host live, Let's Encrypt cert issued via Cloudflare DNS Challenge, Pi-hole record resolving, `/api` custom location routing straight to the backend (their choice over relying on Vite's internal proxy — functionally identical, one fewer hop), `HOMESTACK_PUBLIC_HOSTNAME` set and frontend rebuilt. Owner-confirmed: backend health endpoint returns 200 over `https://homestack.moosesoftwares.com`. Updated `docs/05_Security_Architecture_Document.md` §14 and HANDOVER §5/§6 from "prepared, not live" to done — no code changed this entry, documentation only. **Not independently verified this session:** whether the live server actually switched `DJANGO_SETTINGS_MODULE` to `config.settings.prod`, and whether a real login/write action (not just the health check) works over the new HTTPS origin — worth confirming both since the health endpoint is an easy pass that doesn't exercise CSRF/session cookie behaviour. | Confirm login + a save action (e.g. an Atlas to-do) works over `https://homestack.moosesoftwares.com`, and confirm/apply the `config.settings.prod` switch if not already done. Then the natural next slice is Web Push: VAPID keys, a `notification_devices` model/registration endpoint, a service worker, and adult self-serve + admin/parent-managed child notification preferences — see `docs/30_Core_Daily_Coordination.md` for the preferences shape already specified. That closes the remaining Home Assistant M5.5 gate. |
-| 2026-08-12 | Assistant | Planning | **Notifications & Push core spec written as v0.34.9 (owner asked to document requirements before building; requirements: fully customisable per-category preferences, 24h+morning-of appointment/to-do reminders, a daily countdown digest, and cross-user activity notifications that bundle bursts instead of spamming one-per-item).** New `docs/32_Core_Notifications_and_Push.md`, superseding `docs/30_Core_Daily_Coordination.md` §7/§8-slice-4. Investigated before writing rather than designing blind: found `apps/notifications` already has the shared in-app infrastructure (`create_notification`/`notify_person`, ~13 unconditional call sites across 8 apps) but zero preference gate; found the event bus (D4) already has ~40 published domain-event topics across 11 apps, almost entirely unconsumed, and that `scheduling.event_created`/`updated`/`deleted` are defined but never actually called from `apps/scheduling/services.py`; found Corner reactions (`apps/people/corner_services.py::_notify_reaction`) already implement exactly the "collapse a burst into one evolving notification within a rolling window" pattern the owner wants generalised for shared-list additions; found the Hub Countdown widget (v0.19.1) already holds the one household target date/time the daily digest needs, so no new countdown model. Asked and got answers on three real design forks: 60-minute bundling window (matching Corners' existing constant), per-user (not household-wide) quiet hours, and quiet hours suppressing push only, never the in-app bell. Spec covers: 12-category taxonomy with independent in-app/push toggles; `NotificationPreference`/`UserNotificationSettings`/`PushDevice`/`NotificationReminderLog` models; the central preference gate added to the existing shared functions (backward-compatible — an unset `category` behaves exactly as today); `notify_bundled()` extracted from Corners; the event-dispatcher catalogue of what's already wired versus what needs a new publish call; the two-fixed-lead-time reminder design and countdown digest, both idempotent via `NotificationReminderLog`; Web Push mechanics (`pywebpush`, VAPID, service worker, payload-safety rules, sensitive-node/Solace push exclusion); a 6-endpoint API surface; four delivery slices. No code changed — documentation only. | Owner to review `docs/32_Core_Notifications_and_Push.md` before implementation starts. Suggested entry point: slice 1 (preference model + gate + settings UI, no push yet) so the filtering logic is provable before a delivery channel is added on top. |
-| 2026-08-12 | Assistant | Notifications | **Slice 1 (preferences + gate) shipped as v0.34.10 on `feature/push-notifications` — branched off because a second assistant is concurrently consolidating documentation on its own branch (owner instruction: keep push-notification work off `main` until both are ready to combine; update docs normally regardless, reconcile at merge time).** New `NotificationPreference` (user × category, in-app/push/mine-only) and `UserNotificationSettings` (quiet hours, morning-digest time) models, migration `notifications.0002`. `create_notification`/`notify_person`/`notify_person_id` gained an optional `category` kwarg that gates in-app delivery through the new preference (missing row defaults to enabled, matching docs/32 §5); omitting it — every pre-existing call site — behaves exactly as before. Fixed a real bug found while testing: `UserNotificationSettings.morning_time`'s model default was the bare string `"08:00"` instead of `datetime.time(8, 0)`, so a freshly-created row serialised as `"08:00"` while an explicitly-saved one serialised as `"08:00:00"` — inconsistent API output depending on whether the row had ever been written to; fixed at the model level rather than papering over it in the serializer. Tagged eight real call sites with categories so the gate has immediate effect: `achievements`→meridian, `atlas` list suggestions→corners, `education`→assigned_tasks, `fitness`→fitness, `link_imports`×2→wish_price_alerts, `meridian`×5→meridian, `people` Corner reactions→corners, `travel`→travel; `solace` stays uncategorised on purpose (sensitive-node push exclusion, docs/32 §10). New `GET/PATCH /notifications/preferences/` and `/notifications/settings/`, both self-service (`notifications.view`, same permission the existing bell already uses — works for children too). Frontend: new Settings → **Your notifications** page (`/settings/notifications`) with all 12 categories × in-app/push toggles + the mine-only switch where it applies, plus quiet hours/morning time; linked from both `SettingsPage.tsx` (admin route) and the profile editor in `AppShell.tsx` (everyone — `/settings` itself is admin-gated, so non-admin users need a different path to their own preferences, which is why the route isn't gated). **836 backend tests green (18 new); frontend typecheck and production build clean; migration applied to the live dev database** (which is currently on this feature branch, not `main` — bind-mounted dev server reflects whatever branch is checked out). | Slices 2–4 remain: Web Push infrastructure (VAPID keys, `pywebpush`, `PushDevice` model, service worker, subscribe/unsubscribe/test endpoints); the event-bus dispatcher + `notify_bundled()` extraction (several new/wired publish calls needed — see docs/32 §7); scheduled reminders (24h/morning-of) + the countdown digest, both via a new idempotent management command. Do not merge to `main` until the owner says so — coordinate with the documentation-consolidation branch first. |
-| 2026-08-12 | Assistant | Notifications | **Slice 2 (Web Push infrastructure) shipped as v0.34.11 on `feature/push-notifications` — push notifications genuinely work end to end now.** `manage.py generate_vapid_keys` (self-contained, uses `cryptography` directly rather than shelling out to `py_vapid`'s CLI) prints a server keypair for `.env`. New `PushDevice` model (migration `notifications.0003`) + `GET/POST /notifications/devices/`, `DELETE /notifications/devices/<id>/`, `POST /notifications/devices/<id>/test/`, `GET /notifications/vapid-public-key/`. New `apps/notifications/push.py` (kept separate from `services.py` so the pywebpush/VAPID mechanics don't clutter the plain in-app path) sends via `pywebpush`, wired into `create_notification` right after the in-app row is created: a send is only attempted when VAPID keys are configured, the category's push toggle is on (missing preference defaults push-on except the two categories docs/32 §3 defaults off), the recipient isn't in their quiet hours (handles the overnight-wrap case, e.g. 22:00–07:00), and the source node isn't re-auth-gated — checked generically via `HouseholdNode.requires_reauthentication` rather than hardcoding "solace"/"health", so any future sensitive node is covered automatically. A `404`/`410` `WebPushException` response deactivates that device rather than retrying it forever; delivery failures are logged and swallowed, never raised into the caller, since the in-app notification already exists by the time push is attempted. Frontend: `public/sw.js` (minimal — `push` shows the notification with a sparse payload, `notificationclick` focuses or opens the deep link), `public/manifest.json` + `apple-mobile-web-app-capable` meta tag in `index.html` (iOS only allows Web Push for an installed/home-screen PWA, not a plain Safari tab — without this, iOS push silently never arrives), service worker registered unconditionally but inertly in `main.tsx` (no prompts until the user acts). New Devices card on the notifications settings page: "Enable push on this device" (explicit click → `Notification.requestPermission()` → `PushManager.subscribe()` → register with the server), device list with Test/Revoke. Hit and fixed a TypeScript strictness issue building the VAPID `applicationServerKey` (lib.dom wants an `ArrayBuffer`-backed `Uint8Array`, `Uint8Array.from()` produces the wider `ArrayBufferLike`-backed type) by filling the array with indexed writes instead. **849 backend tests green (13 new); frontend typecheck and production build clean; migration `notifications.0003` applied to the live dev database.** New dependency `pywebpush==2.0.1` (pulls in `cryptography`, `py-vapid`, `aiohttp`). | Slices 3–4 remain: the event-bus dispatcher + `notify_bundled()` extraction from Corners (several new/wired publish calls needed, see docs/32 §7 for exactly which), and the scheduled 24h/morning-of reminder + countdown-digest command (idempotent via `NotificationReminderLog`, cron matching the existing `link_imports_run_scheduled` pattern). Still on `feature/push-notifications` — do not merge to `main` until the owner says so and the documentation-consolidation branch is reconciled. Before relying on push for real, generate real VAPID keys on the home server (`docker exec homestack-backend python manage.py generate_vapid_keys`) and test the full subscribe → push → click flow on an actual phone, ideally an iPhone added to the home screen given the iOS install requirement above. |
-| 2026-08-12 | Assistant | Notifications | **Slice 3 (event-bus dispatcher + bundling) shipped as v0.34.12 on `feature/push-notifications` — the literal owner ask now works: adding to the calendar, a shared list, or finishing a book notifies the rest of the household, bundled rather than spammed.** `notify_bundled()` extracted out of Corner reactions (`apps/people/corner_services.py::_notify_reaction`) into shared `apps/notifications/services.py`, which now calls it too instead of duplicating the "find an existing unread row for this `(recipient, source_node, action_url)` within the rolling window and update it in place, else create one" logic. New `apps/notifications/handlers.py` subscribes to three event-bus topics via the same `AppConfig.ready()` pattern as `achievements`/`homestead`/`solace`: `scheduling.event_created` (defined since D7 but never actually published from `apps/scheduling/services.py::create_event` until now — genuinely dead code brought to life), a new `atlas.list_item_created` (published from `create_list_item`), and a new `books.entry_finished` (published from `apps/books/services.py` only on the transition *into* `PersonalBookEntry.Status.HISTORY`, not on every save). A shared `_notify_household_activity()` helper iterates every other active household member and re-checks `apply_visibility()` per recipient before notifying, so a private list or a `hidden_from_users`-excluded event never leaks a "someone added something" notification either — same permission boundary the UI itself uses (D10). Fitness workout completions were deliberately left off this dispatcher: they already notify directly via the slice-1 category tag on `apps/fitness/services.py`, and subscribing them here too would fire twice. **859 backend tests green (10 new, including a dedicated `HouseholdActivityDispatcherTests` class covering bundling, visibility exclusion, actor self-exclusion, and category-disable suppression); frontend typecheck clean; no migration needed (`makemigrations --check` confirms no model changes this slice).** | Slice 4 remains: the scheduled 24h-before/morning-of reminder command for appointments and assigned to-dos (idempotent via a new `NotificationReminderLog` model) and the daily countdown-digest push (reusing the existing Hub Countdown widget's target date, no new model), both via a management command matching the `link_imports_run_scheduled`/`solace_run_scheduled` cron pattern — see docs/32 §8/§9/§12. Still on `feature/push-notifications` — do not merge to `main` until the owner says so and the documentation-consolidation branch is reconciled. |
-| 2026-08-12 | Assistant | Notifications | **Slice 4 (scheduled reminders + countdown digest) shipped as v0.34.13 on `feature/push-notifications` — this closes out Notifications & Push; all four docs/32 delivery slices are now done.** New `apps/notifications/tasks.py::run_due_reminders` sweeps `CalendarEvent` (not a separate Atlas query — dated Atlas records already mirror into Calendar via `CalendarSyncMixin`, D7) for anything 23–25h out (24h-before) or due the current household-local day (morning-of, fired once per user at their own `UserNotificationSettings.morning_time`), deriving the category from `source_node` (unset → `appointments`; `source_node.key == "atlas"` → `assigned_tasks`) and deliberately excluding every other synced node (Solace already has its own reminder job and is re-auth-gated; Meridian/Homestead/Pets/Travel/Education weren't part of the ask — a one-line filter change extends the sweep later if wanted). A user's `mine_only` preference is enforced in the sweep itself (`_recipients_for`), since the shared `create_notification` gate only knows `in_app_enabled`/`push_enabled`, not who's assigned to a given record. `run_countdown_digest` reads the existing Hub Countdown widget's `target_date`/`target_time` (no new model) and sends a daily "N days/hours to go" digest, also at each user's own morning time. New `NotificationReminderLog` model (migration `notifications.0004`) — added a `recipient_user` column beyond the doc's original four-field sketch, null for the 24h reminder (one lock covers every recipient at once, since that lead time doesn't depend on anyone's personal clock) but set per-user for morning-of/countdown, since `morning_time` genuinely differs person to person and each needs their own idempotency record. New `notifications_run_scheduled` management command, recommended hourly cron matching the `solace_run_scheduled`/`link_imports_run_scheduled` pattern — **not yet added to the home server's actual crontab**, that's an owner deploy step, same as the VAPID key generation from slice 2. **875 backend tests green (16 new: `ScheduledReminderTests` + `CountdownDigestTests`); frontend typecheck clean (no frontend changes this slice); migration `notifications.0004` applied to the live dev database.** | Nothing further planned for this feature — it's the owner's turn: merge `feature/push-notifications` into `main` when ready (coordinating with the documentation-consolidation branch first, per the owner's own stated plan), add the `notifications_run_scheduled` hourly cron entry to the home server, generate real VAPID keys there if not already done (slice 2), and do one real end-to-end check on a phone (ideally an installed/home-screen iPhone PWA) — subscribe, trigger a push-eligible event, confirm it arrives and the click deep-links correctly. That closes the Home Assistant M5.5 gate. |
-
-### Session notes (free-form, optional)
-
-*(Use this space for anything that doesn't fit the table — gotchas, decisions made mid-session,
-things you were unsure about. Date each note.)*
+Before risky migrations/data changes, take or verify a backup according to `docs/restore.md`.
 
 ---
 
-## 10. How to update this file
+## 9. Known deployment/security follow-ups
 
-At the **end of your session**: (1) tick the boxes you completed in `MILESTONE_1_Checklist.md`;
-(2) update **§5 Current status** if a milestone's state changed; (3) add a **Progress Log** row;
-(4) if you made or hit a decision, note it in **§8**; (5) if you had to deviate from a Hard Rule,
-say so explicitly in the log and explain why. Keep this file honest — it is the memory that lets
-the next assistant continue without re-reading everything.
+- Confirm the live server is actually using the intended production Django settings.
+- Confirm a real authenticated **write** over the trusted HTTPS origin, not only health checks.
+- Complete the Web Push VAPID/cron/real-device rollout above.
+- Solve production static/admin assets as part of the production-serving work.
+- HomeStack remains LAN-only; do not add router port forwarding as a shortcut.
+- If remote access is pursued, follow `05_Security_Architecture_Document.md` rather than assuming
+  HTTPS alone makes the app internet-ready.
 
-### Version rule (mandatory with every push to `main`)
+---
 
-1. Open `VERSION_HISTORY.md` at the repo root and add a new entry at the top of the relevant `0.X` section.
-   - Bump `0.X` for a major milestone (new node, major new capability).
-   - Bump `0.X.Y` for a smaller addition within a milestone.
-2. Update the `**Current version:**` line at the top of `VERSION_HISTORY.md`.
-3. Update `APP_VERSION` in `frontend/src/config/version.ts` to match.
-4. The version is displayed in the sidebar footer of the web app — it auto-reads the constant.
+## 10. Working and validation rhythm
+
+1. Read the relevant canonical spec and shared architecture/security/coding rules.
+2. Check current implementation before designing duplicate capability.
+3. Write permission/security regression tests first where access boundaries change.
+4. Backend: model/migration → selectors/services → serializers/views/URLs → tests.
+5. Frontend: types/client → shared components → feature UI.
+6. Run focused tests plus appropriate full-suite/type/build checks.
+7. Update the canonical spec if the contract changed.
+8. Add concise release chronology to `VERSION_HISTORY.md` when appropriate.
+9. Keep `HANDOVER.md` current rather than appending session history.
+
+Backend tests intentionally support SQLite as well as the PostgreSQL live environment; preserve the
+established fallback strategy for Postgres-specific features where required.
+
+---
+
+## 11. Handover maintenance rule
+
+Only edit this file when one of these changes:
+
+- live deployment shape;
+- a non-negotiable design rule;
+- current product status;
+- active/near-term priorities;
+- a known operational blocker/gotcha;
+- the canonical documentation map.
+
+For ordinary feature completion, update the owning spec and `VERSION_HISTORY.md`. Git already
+preserves detailed implementation chronology.

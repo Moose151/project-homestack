@@ -1,112 +1,173 @@
 # HomeStack
 
-A secure, modular, **self-hosted** household management platform for one household,
-run on an always-on home server via Docker Compose. It replaces scattered apps with one
-warm, family-oriented system: a **Hub** ("what needs attention today?"), a **Calendar**,
-opt-in **nodes** (areas of household life), and a touchscreen **kiosk** for the kids.
+A secure, modular, **self-hosted** household management platform for one household. HomeStack
+combines a shared Hub, Calendar, People layer and opt-in household domains into one responsive
+family-oriented application, with a shared kiosk for child/family use.
 
-> **Source of truth:** the canonical docs live in [`docs/`](docs/). Read
-> [`HANDOVER.md`](HANDOVER.md) first, then `docs/00_README_and_Changelog.md` (decisions
-> D1–D22) and the relevant milestone checklist. If anything conflicts, the doc set wins.
+> **Start here:** read [`HANDOVER.md`](HANDOVER.md) for the current live state and active work.
+> Canonical product/architecture/security documentation lives in [`docs/`](docs/), with settled
+> decisions D1–D24 in [`docs/00_README_and_Changelog.md`](docs/00_README_and_Changelog.md).
 
-## Status
+## Current status
 
-Milestones 1–3 are complete, including the walking skeleton, native Meridian, the core
-Hub/Atlas/Calendar surfaces, Education, Home Wiki and Pets. Homestead now includes linked room and
-area pages with purchase/maintenance/renovation plans and exact room/whole-house cost summaries.
-Native Solace has reached standalone feature parity, including a dated bills-account forecast and
-safe-withdrawal calculation. The v0.19 household-launch pass makes phone navigation, Hub shortcuts,
-calendar reading, search journeys, touch actions and quick creation easier for everyday non-admin
-use; dense Solace, Homestead and Education workspaces now have phone-friendly section navigation,
-the Hub includes a configurable household countdown, and Solace's extra password-on-entry prompt
-is an admin-controlled setting. Homestead maintenance and Solace costs now work in either
-direction without duplicate records, and Calendar events can take users back to their owning node.
-Security maturation
-includes the shared permission-checked attachment service, audited sensitive downloads, non-public
-file storage and five-minute password elevation.
-Production Solace import/comparison remains pending until the home-server environment is available.
-Fitness & Training now supports shared programs, live editable workouts and personal records while
-remaining separate from sensitive medical Health (D24). Home Assistant is now an important planned dedicated bridge (Roadmap M5.5/D22), sequenced after
-the household pilot, remaining security maturation and Solace cutover validation.
-See [`HANDOVER.md`](HANDOVER.md).
+HomeStack is deployed on the home server and is in daily household use.
+
+Current shipped areas include:
+
+- core Hub, Calendar, People, Search, Notifications, permissions, audit and backup/restore;
+- Atlas household notes/to-dos plus dedicated Grocery and Shopping surfaces;
+- native Meridian tasks/routines/points/rewards/approvals;
+- Education, Home Wiki and Pets;
+- **Books** with personal Want to Read / Reading / Read shelves, ratings/notes and shared Book Clubs;
+- Homestead property/rooms/plans/maintenance/appliances/cover/pools/utilities/floor plan;
+- native Solace/Money;
+- Fitness & Training (separate from sensitive medical Health, D24);
+- Travel trips, booking/cost planning and itinerary/Things to do;
+- Corners and safe product/book-link preview/cache/watch flows;
+- daily coordination across appointments, Agenda, birthdays and pool schedules;
+- **PWA/Web Push notifications** with per-user preferences, per-device subscriptions, quiet hours,
+  bundled household activity, scheduled reminders/countdown delivery and sensitive-safe payloads.
+
+Trusted **LAN HTTPS is live** at:
+
+`https://homestack.moosesoftwares.com`
+
+The hostname resolves locally through Pi-hole to the home server; Nginx Proxy Manager terminates a
+Let's Encrypt certificate obtained through Cloudflare DNS challenge. This does **not** mean
+HomeStack is publicly exposed.
+
+The recommended primary engineering workstream is now **production readiness and reliability**:
+production serving, tighter Docker networking, safer deployment automation, frontend/E2E CI and
+off-server recovery. See [`docs/34_Recommended_Next_Steps.md`](docs/34_Recommended_Next_Steps.md)
+and [`docs/04_Development_Roadmap.md`](docs/04_Development_Roadmap.md).
 
 ## Tech stack
 
-- **Backend:** Python · Django · DRF · PostgreSQL (DRF/apps land in Phase 1.1)
-- **Frontend:** React · TypeScript · Vite · TailwindCSS (Tailwind lands in Phase 1.12)
-- **Deploy:** Docker Compose on a Linux home server, local-network only
-- Redis/Celery and the mobile/desktop client choice are deliberately deferred (D5, D3)
+- **Backend:** Python · Django · Django REST Framework · PostgreSQL
+- **Frontend:** React · TypeScript · Vite · TailwindCSS
+- **Architecture:** Django modular monolith, API-first, Docker Compose
+- **Deploy:** Linux home server, LAN-only HTTPS through the existing Nginx Proxy Manager
+- **Deferred until justified:** Redis/Celery, durable event broker, native-client technology
 
 ## Repository layout
 
-```
-backend/      Django backend (modular monolith)
-frontend/     React + TypeScript + Vite app
-docs/         Canonical documentation (source of truth)
-docker/       Docker support files
-scripts/      Backup/restore and data-import (Meridian/Solace) scripts
-backups/      Local backup volume target
+```text
+backend/      Django/DRF modular backend
+frontend/     React + TypeScript application
+docs/         Canonical product/architecture/domain documentation
+scripts/      Operational/import/maintenance helpers
+brand/        HomeStack brand source assets
+backups/      Local backup-volume target
 ```
 
-## Getting started (local dev)
+## Local development
 
 Prerequisites: Docker and Docker Compose.
 
 ```bash
-# 1. Create your env file from the template and edit secrets
 cp .env.example .env
+# edit local secrets/settings
 
-# 2. Build and start the three services (postgres, backend, frontend)
 docker compose up --build
+```
 
-#    …or with hot-reload bind mounts for development:
+For bind-mounted development/hot reload:
+
+```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
-Then:
+Default direct development endpoints:
 
-- Backend health: <http://localhost:8000/api/v1/health/> → `{"status": "ok", ...}`
-- Frontend: <http://localhost:5173>
-- Postgres: `localhost:5432` (healthcheck via `pg_isready`)
+- backend health: `http://localhost:8000/api/v1/health/`
+- frontend: `http://localhost:5173`
+- PostgreSQL: `localhost:5432`
 
-Stop with `docker compose down`. Add `-v` to also drop the data volumes.
+## Updating a running base-compose deployment
 
-## Updating a running server
+The base Compose file builds application source into the backend/frontend images. A plain
+`git pull` does not replace code inside already-built images.
 
-⚠️ **The base `docker-compose.yml` bakes the backend and frontend source into their images at
-build time — there is no source bind mount.** A plain `git pull` + restart keeps running the
-**old** code. After pulling you must **rebuild the changed image(s)**, e.g.:
+Typical update sequence:
 
 ```bash
 git pull
 docker compose build homestack-backend homestack-frontend
 docker compose up -d
-docker exec homestack-backend python manage.py migrate   # if the pull added migrations
+docker exec homestack-backend python manage.py migrate
+curl -fsS http://127.0.0.1:8000/api/v1/health/
 ```
-Then hard-refresh the browser (Ctrl-Shift-R) so it drops cached JS.
 
-**Recommended while iterating:** run with the dev override, which bind-mounts the source so
-pulls take effect on a restart with **no rebuild** (the backend also auto-reloads):
+Then verify the trusted LAN origin:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
-# thereafter: git pull && docker compose -f docker-compose.yml -f docker-compose.dev.yml restart
+curl -I https://homestack.moosesoftwares.com
+curl -I https://homestack.moosesoftwares.com/api/v1/health/
 ```
 
-> **CSRF / LAN access:** add your server's hostname/IP to `DJANGO_ALLOWED_HOSTS` in `.env`. The
-> dev settings derive the browser's trusted CSRF origin (`http://<host>:5173`) from it, so saving
-> (POST/PATCH/DELETE) works. Without it, writes fail with *"CSRF Failed: Origin checking failed"*.
+The production-readiness milestone will replace this manual sequence with one supported deployment
+command and move the live stack away from development application servers.
 
-## Services
+## Web Push deployment note
 
-| Service              | Port | Notes                                   |
-|----------------------|------|-----------------------------------------|
-| `homestack-postgres` | 5432 | PostgreSQL 16, `postgres_data` volume   |
-| `homestack-backend`  | 8000 | Django; `media_data` + `backup_data`    |
-| `homestack-frontend` | 5173 | Vite dev server                         |
+The Web Push implementation is shipped, but the live server needs VAPID configuration and the
+scheduled dispatcher. See [`HANDOVER.md`](HANDOVER.md) and
+[`docs/32_Core_Notifications_and_Push.md`](docs/32_Core_Notifications_and_Push.md) before deploying
+or troubleshooting push.
 
-## Security note
+Do not commit VAPID private keys. On iOS, Web Push must be tested from an installed Home Screen PWA,
+not an ordinary Safari tab.
 
-Local-network only. Do **not** expose HomeStack publicly until the pre-exposure
-checklist in `docs/05_Security_Architecture_Document.md` §14 is satisfied
-(HTTPS, reverse proxy, rate limiting, strong admin passwords, sensitive-node locking).
+## Current live-serving caveat
+
+The current container definitions still use Django `runserver` and the Vite development server.
+They work behind the LAN reverse proxy, but they are not the intended final production-serving
+architecture. Production WSGI/static serving and tighter Docker-network exposure are now the
+recommended immediate engineering work before any public exposure is considered.
+
+## Environment / HTTPS notes
+
+For the current LAN hostname, HomeStack needs the public hostname represented in its environment,
+including the allowed-host/CSRF configuration expected by the selected Django settings and:
+
+```text
+HOMESTACK_PUBLIC_HOSTNAME=homestack.moosesoftwares.com
+```
+
+The **Cloudflare DNS API token does not belong in HomeStack's `.env`** for the current setup. It is
+stored in Nginx Proxy Manager's DNS-challenge certificate credentials.
+
+Pi-hole owns the local DNS mapping:
+
+```text
+homestack.moosesoftwares.com -> 192.168.1.125
+```
+
+Deployment-specific secrets and the real `.env` must never be committed.
+
+## Security
+
+HomeStack is still **LAN-only** by design. Owning a public domain and using a trusted certificate
+does not make the instance ready for public internet access.
+
+Before any Cloudflare Tunnel/direct public exposure, satisfy the explicit gate in
+[`docs/05_Security_Architecture_Document.md`](docs/05_Security_Architecture_Document.md), including
+production serving, stronger adult remote authentication, rate limiting, protected off-server
+backups and a dedicated exposure review.
+
+## Documentation maintenance
+
+Use:
+
+- [`HANDOVER.md`](HANDOVER.md) — current state, deployment requirements and what to do next;
+- [`docs/00_README_and_Changelog.md`](docs/00_README_and_Changelog.md) — settled decisions and doc map;
+- [`docs/01_Master_Software_Specification.md`](docs/01_Master_Software_Specification.md) — product contract;
+- [`docs/04_Development_Roadmap.md`](docs/04_Development_Roadmap.md) — current/future sequencing;
+- [`docs/05_Security_Architecture_Document.md`](docs/05_Security_Architecture_Document.md) — security contract;
+- [`docs/32_Core_Notifications_and_Push.md`](docs/32_Core_Notifications_and_Push.md) — shipped notification/PWA contract;
+- [`docs/33_Node_Books.md`](docs/33_Node_Books.md) — Books domain contract;
+- [`docs/34_Recommended_Next_Steps.md`](docs/34_Recommended_Next_Steps.md) — practical current execution plan;
+- [`VERSION_HISTORY.md`](VERSION_HISTORY.md) — historical release chronology.
+
+Do not turn `HANDOVER.md` back into a permanent implementation diary; Git history and
+`VERSION_HISTORY.md` already provide that history.

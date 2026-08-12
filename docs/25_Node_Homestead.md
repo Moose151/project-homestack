@@ -1,212 +1,271 @@
 # Node Spec — Homestead
 
-> Canonical. Shipped V1 (2026-07-21, v0.10.0); costs & cover added in v0.11.2;
-> room/area planning added in v0.18.0; single-entry Solace handoff added in v0.19.2;
-> maintenance-to-Solace cost creation added in v0.19.3; pools & spas added in v0.26.0;
-> metered utility usage added in v0.29.0; Solace-only bill ownership adopted in v0.29.6;
-> native interactive floor plan added in v0.30.0.
-> Global rules from `00_README_and_Changelog.md`
-> apply. See **D21** for why this node exists and how it relates to Assets / Projects / Solace.
+> **Status:** shipped, broad and in daily use. Homestead is the home/property source of truth
+> (D21). Current capabilities include property/maintenance/appliances/providers, Costs & cover,
+> rooms/room plans, pools & spas, metered utilities, single-entry Solace handoffs, safe product-link
+> enrichment and the native interactive floor plan. The proposed Stock & storage / Assets & vehicles
+> / Household guide capability consolidation remains a future proposal, not implemented fact.
 
-## 1. Purpose & philosophy
+## 1. Purpose
 
-The household's **home/property hub**. Answers: *"What does our home need, what's in it, who do
-we call, and what do we want to improve?"* Built when the owner bought a house (2026-07-21). Folds
-the **home scope of the planned Assets node** into one warm, house-focused surface, and is designed
-to be an **aggregating hub** — home policies/accounts are displayed here while every financial
-schedule is managed in Solace; future renovations come from Projects. Cross-node flow always
-uses the events bus (D4).
+Homestead answers: **What does our home need, what is in it, who do we call, and what do we want to
+change?**
 
-## 2. Belongs / does not belong
+It is intentionally a warm home/property domain rather than a generic asset CMDB.
 
-**Belongs:** the property record + key dates (purchase/move-in), practical emergency info (water
-stopcock, gas shut-off, consumer unit, boiler location), recurring/one-off **maintenance** and
-renewals, **appliances** + warranties + manuals + serials, a **service-provider** directory, and a
-lightweight **improvements** list. Also belongs: home insurance policy details and home service
-accounts/costs (rates, water, gas, electricity, mortgage/rent, strata, waste and internet), plus
-structured rooms/areas and their wanted purchases, maintenance, renovations and upgrades, and
-**metered usage** — what each water/electricity/gas bill covered, used and cost.
-**Not:** whole-house budgeting/paydays/savings → **Solace**; heavyweight
-renovations with task boards → **Projects** (an Improvement can link via `project_ref`); how-to
-guides & manuals text → **Home Wiki**; simple to-do lists → **Atlas**; vehicles/tools/non-home
-assets → the proposed optional **Assets & vehicles** Homestead capability.
+Homestead owns the physical/property context while related shared/domain systems retain their own
+clear ownership:
 
-**Proposed consolidation (owner discussion, 2026-08-11):** do not create Inventory and Assets as
-additional top-level nodes. Add independently enabled **Stock & storage**, **Assets & vehicles**
-and **Household guide** capabilities inside Homestead. This matches the physical place/location
-model and the existing D21 appliance/warranty ownership while preserving stronger permissions for
-vehicle, serial, receipt and insurance details. See `31_Core_Manage_HomeStack.md`; treat this as the
-recommended direction until the owner confirms it as a hard architectural decision.
+- finance/payment schedule → Solace;
+- general shopping/grocery → Atlas;
+- permanent guide/procedure content → Home Wiki unless future capability consolidation is actually
+  approved;
+- trip planning → Travel;
+- medical information → Health;
+- shared files → Attachments.
 
-## 3. Key features
+## 2. Property and emergency context
 
-**Property** — name, type, tenure, address, purchase/move-in dates, year built, notes, emergency
-info (water/gas/electric/boiler locations, kiosk-safe). Usually one row; multiple allowed.
-**Maintenance** — title, category, `next_due_at` (source of truth), `recurrence_rule` (RRULE, D8),
-`last_done_at`, optional linked appliance/provider, assignee. **Mark done → advances to the next
-occurrence** (dateutil), clearing the reminder when non-recurring. The Pets-treatment pattern.
-Paid maintenance can start on either side without re-entry: a Solace bill can be organised here,
-or an existing Homestead task can use **Track cost** to create its one protected Solace bill.
-Homestead owns task details while Solace retains amount, schedule and payment history.
-**Appliances** — name, category, brand/model/serial, room, purchase date, warranty expiry
-(countdown), warranty provider, manual link, notes.
-**Service providers** — name, trade, company, phone/email/website, last used, notes.
-**Improvements** — title, status (idea→planned→in-progress→on-hold→done/cancelled), priority, room,
-optional target date (→ Calendar), assignee, `project_ref` (dormant link to a future Project).
-**Insurance** — Solace owns name, provider, premium/cycle, renewal, recurrence, active state and
-finance notes. Homestead displays those values and owns only home-specific policy type/number,
-excesses, coverage summary and claims contact/portal.
-**Household costs** — Solace owns rates, water, gas, electricity, mortgage/rent, strata/body
-corporate, waste and internet bill names, providers, amounts, cycles, due dates, recurrence and
-active state. Homestead displays linked bills and owns only the home classification/account number.
-**Pools & spas** — a pool, spa, swim spa or plunge pool, with how it is sanitised (saltwater,
-manually chlorinated, mineral, bromine), surface, filter type, volume and equipment notes.
-Two things follow from those choices rather than being asked for again:
+Property records carry the implemented home identity/key-date/details and practical emergency
+information such as utility shut-off/equipment locations where configured.
 
-- **Target water bands.** `pool_care.py` holds the widely published domestic-pool ranges and
-  varies them by sanitiser and surface — a salt pool is held to a higher stabiliser band because
-  the cell trickles chlorine in all day, fibreglass and vinyl need less calcium than concrete, and
-  a manually chlorinated pool is never asked for a salt reading. A `WaterTest` records whichever
-  readings were actually taken; whether each is in range is computed at read time against the
-  current targets, never stored, so corrected guidance applies to old readings too. Every reading
-  carries what it is for and, when out of band, what to do about it — the node is meant to be
-  usable by a household that has never looked after a pool.
-- **A starter care schedule.** Adding a pool creates the usual jobs (skim, test, brush, vacuum,
-  empty baskets, monthly full test, filter clean, salt-cell inspection, annual service), staggered
-  so they do not all land on day one. These are ordinary `MaintenanceTask` rows carrying
-  `category="pool"` and a `pool` FK, so they recur (D8), reach the Calendar (D7), complete and
-  advance, and appear in Maintenance and the Hub exactly like any other home job — the link exists
-  so the pool screen can claim its own jobs, not to fork the behaviour. Re-applying the schedule is
-  idempotent by title, so switching to a salt cell adds only the job that switch introduces and
-  never overwrites a job the household has edited.
+Emergency-safe information can be deliberately kiosk/household visible; account/policy/financial
+information remains protected separately.
 
-Kept general (D15): the bands and the schedule come from how the pool is built and sanitised, not
-from whose pool it is.
+Do not hardcode this household's exact address/room count/layout into general schema/business rules
+(D15).
 
-**Utility usage** — one `UtilityBill` per arrived bill: which utility, the period it covers, how
-much was used and in what unit, what it cost in total, and whether the meter was read or
-estimated. The linked Solace Bill owns the recurring account and when the next bill is due; this
-usage record owns what actually happened.
+## 3. Maintenance
 
-Everything derived is calculated at read time and per day — `days` (both end dates included),
-`daily_usage`, `daily_cost` and the effective `unit_cost`. Billing periods are not equal lengths,
-so a 92-day quarter next to an 88-day one would otherwise look 5% worse before anyone turned
-anything on. The usage endpoint returns one series per utility, oldest period first, with totals,
-per-day averages, and two comparisons: **vs the previous bill** and **vs a year ago** — matched to
-the closest period start within 45 days of a year earlier, because utilities are seasonal and
-billing dates drift. Mixed units inside one utility take the newest bill's unit for the series so a
-chart never adds kL to litres.
+Homestead owns recurring and one-off home maintenance.
 
-Household-visible by default (owner, 2026-08-10): usage is something the whole house should be
-able to look at, so this surface has **no password gate** — unlike Costs & cover next door, which
-holds account and policy numbers. Nothing is written to the Calendar: a bill that has arrived is
-not an appointment, and its account already owns the due date (D7).
+A MaintenanceTask keeps the semantic next-due date and recurrence. Completion records the action and
+advances/clears the next due state according to its recurrence behavior, with Calendar projection
+maintained through D7.
 
-**Rooms & areas** — named interior, outdoor, utility, storage or other spaces. Every room is a
-link to a stable dedicated page, with icon, colour, ordering, description and reserved
-`floorplan_data` metadata. The Rooms tab includes a native SVG redraw of this installation's
-house/property plan, split into a detailed **Inside the house** view and a simplified **Whole
-property** view for the pool, cabana, shed and carport. It uses app tokens rather than embedding
-the listing image. Every space is pointer- and keyboard-selectable with a persistent highlighted
-selection. Editors can link it to any existing room; `floorplan_data.floorplan_slot` stores the
-association and the plan adopts that room's saved name, icon and colour. Tolerant name matching
-provides non-destructive suggestions for older rooms, while explicit links take precedence. Zoom,
-fit controls and the Room list remain available.
-**Room plans** — one unified list of purchases, maintenance, renovations and upgrades per room,
-including status (planned/in progress/completed/archived), priority, assignee, quantity,
-estimated unit cost, optional actual total cost, reference link and notes. Active items are
-grouped by type; completed and archived records stay visible and can be restored. Room and
-household totals count active estimates plus completed actual cost (falling back to estimate)
-and exclude archived items.
-Roadmap 8.2 will project assigned room-plan items/products into each Corner without moving
-or copying them. Roadmap 8.3/core spec 29 will let a pasted public product link preview its title,
-retailer, price and image before the user confirms a `RoomPlanProduct`; manual fields remain the
-source of truth after confirmation.
+Important ownership rule:
 
-## 4. Permissions
+- Homestead owns **what work the home needs**;
+- Solace owns **the financial bill/occurrence/payment history** where a maintenance cost is tracked.
 
-`homestead.view` (all roles) · `homestead.create`/`homestead.edit` (admin/manager/user) ·
-`homestead.delete` (admin/manager). Finer visibility (private/sensitive records hidden from other
-users/children) via the central resolver + `apply_visibility` (D10), not extra codes.
-The **Costs & cover** endpoints and maintenance **Track cost** action additionally require
-`solace.*` permission, password re-auth and audit every access. They are therefore admin-only by
-default and never kiosk-visible.
+The approved handoff creates/updates one source-linked financial record without requiring duplicate
+manual entry or cross-node model imports.
 
-## 5. Hub / Calendar / Notifications
+## 4. Appliances and service providers
 
-Widgets (hub mig `0011`): **home maintenance** (due/overdue), **warranties expiring**, **home
-improvements** (active). Calendar (via helper, D7): maintenance `next_due_at` and open improvement
-`target_date`, `source_node = "homestead"`; recurring maintenance carries an RRULE (D8). Kiosk off
-for now. Insurance renewals and household-cost due dates create **Solace** financial Calendar
-events only, avoiding duplicate Homestead events and retaining Solace re-auth filtering.
-Solace-funded maintenance follows the same rule: it appears in the Maintenance workspace but
-does not create a second Calendar row.
-Notifications: assignment/overdue reminders are a later slice.
+Homestead owns home appliance/warranty/manual/serial/context records and the household service
+provider directory.
 
-Future Milestone 2.6 adds a Pool & spa care-schedule editor for cadence, preferred weekday,
-first/next occurrence, assignee and reminders. Edits affect future incomplete work only and never
-move completed history; customised schedules are not overwritten by new starter suggestions. See
-`30_Core_Daily_Coordination.md`.
+Files/manuals/receipts use the shared attachment capability where stored as files. A URL/reference
+field does not bypass the shared security model.
 
-## 6. Events (signals)
+Non-home vehicle/tool/valuables scope remains part of the proposed future Assets & vehicles
+capability rather than being mixed into appliance records today.
 
-Publishes (D4): `homestead.property_created`, `homestead.maintenance_completed`,
-`homestead.appliance_added`, `homestead.improvement_created`, `homestead.improvement_completed`,
-`homestead.room_created`, `homestead.room_item_created`, `homestead.room_item_completed`,
-`homestead.maintenance_cost_requested`, `homestead.pool_saved`, `homestead.pool_deleted`,
-`homestead.water_test_logged` and `homestead.utility_bill_logged`.
-Solace publishes `solace.bill_saved`/`solace.bill_deleted`; Homestead refreshes or removes its
-linked Costs & cover display record and stores only that lightweight bill reference. Future
-`project_*` events link house projects to Improvements. Nodes never import each other's models.
-Solace can also publish `solace.homestead_record_requested` for an explicitly classified bill;
-Homestead idempotently creates the correct policy, cost or maintenance record and publishes the
-lightweight link back. Linked maintenance save/delete events keep that same bill aligned; repeated
-cost requests update the existing source-linked bill instead of creating another.
+## 5. Costs & cover / Solace boundary
 
-## 7. Search / Kiosk
+Homestead can present richer home-specific context for insurance and household service accounts,
+while Solace owns financial schedule/payment state.
 
-FTS `search_homestead` (Postgres SearchVector + SQLite icontains fallback, D9) over appliances
-(name/brand/model/serial/room/notes), maintenance (title/notes), providers (name/company/notes),
-improvements (title/description/room/notes), rooms (name/description), and room plan items
-(title/description/notes) — permission-filtered. Room and item results deep-link to the dedicated
-room page. Not a primary kiosk node;
-emergency info is kiosk-safe for a future safe view.
-Policy/account-number search is available only inside the unlocked Costs & cover surface and is
-kept out of the ordinary Homestead search response.
+Examples of Homestead-owned context include policy/account classification, coverage/excess/contact
+information and how the cost relates to the home. Examples of Solace-owned facts include amount,
+due cycle/recurrence, bill occurrence/payment history and budget treatment.
 
-## 8. Data model
+Protected Costs & cover actions require the appropriate Homestead + Solace permissions and
+password re-authentication. These surfaces are not child/kiosk content.
 
-`homestead` app. `Property`, `ServiceProvider`, `Appliance`, `MaintenanceTask` (CalendarSyncMixin),
-`Improvement` (CalendarSyncMixin), `RoomArea`, `RoomPlanItem`, `InsurancePolicy`, `HouseholdCost`,
-`Pool`, `WaterTest`, `UtilityBill`. All inherit
-`HouseholdBaseModel`. No per-item `property` FK in V1 (single home; avoids the
-`property`/`@property` clash and is YAGNI). `InsurancePolicy`/`HouseholdCost` own only home-specific
-metadata and keep `solace_bill_ref`; the linked `Solace.Bill` owns every financial field, its
-occurrences/payment history and the financial Calendar mirror.
-Solace-funded `MaintenanceTask` rows also keep only `solace_bill_ref` and suppress their ordinary
-Homestead Calendar mirror so the shared timeline remains single-entry.
-`Improvement.project_ref` is the forward hook to the Projects node.
+Single-entry handoffs must preserve one owner for each field and reject edits that would silently
+diverge linked records.
 
-## 9. Scope & completion
+## 6. Pools & spas
 
-V1 (done): property record + emergency info · maintenance with recurrence + complete-advances +
-calendar sync · appliances + warranties · service-provider directory · improvements · structured
-room/area plans and costs · native interactive house/property floor plan · pools/spas with target water bands, water-test history and a starter
-care schedule · metered utility usage with per-day comparison charts · FTS · three Hub widgets · `homestead.*` permissions · node catalogue
-(disabled by default). Frontend: `/homestead` route (node-gated) + 7 tabs
-(Overview/Rooms/Maintenance/Appliances/Pool & spa/Power & water/Improvements/Contacts/
-Costs & cover), dedicated
-`/homestead/rooms/:roomId` pages, search and Hub renderers.
-Costs & cover includes annualised summaries, protected search, read-through bill cards and editing
-for home-specific policy/account metadata. Bill CRUD, payment history and autopay live in Solace.
-Solace bill creation/edit can hand home insurance, household services and paid maintenance into
-these workspaces without re-entry; Homestead maintenance can create the same protected financial
-record in the other direction. Linked cards deep-link between their owning workspaces.
-Future: the household-portable floor-plan builder specified in Roadmap 8.1 replaces hard-coded
-geometry with household-scoped plans/areas/features, blank/template/image-tracing onboarding,
-drag/resize/snap editing, room creation/linking, multiple levels, drafts and revision history.
-The current plan must migrate into saved records; new installs must never inherit this household's
-shape. Also future: Projects linking, meter readings entered as counter values (usage is entered
-directly today), tying a utility bill to its `HouseholdCost` account,
-utility usage in FTS and a Hub widget, document attachments,
-seasonal maintenance templates, kiosk safe view, assignment/overdue notifications.
+Homestead owns configured pool/spa records, their equipment/context, water-test interpretation and
+care/maintenance schedule.
+
+### Water tests
+
+Store the readings actually taken. Interpret in/out-of-range state at read time against current
+configured guidance rather than storing a permanent calculated status that becomes wrong when
+advice/configuration changes.
+
+Guidance varies by relevant pool/sanitiser/surface characteristics, not by household-specific
+hardcoding (D15).
+
+### Care schedule
+
+Pool-care tasks use the ordinary Homestead maintenance/calendar system rather than a parallel pool
+task engine.
+
+Starter schedules can be generated idempotently and then edited by the household. Reapplying a
+starter/config change must not overwrite custom schedules indiscriminately.
+
+Future schedule changes affect incomplete/future work while completed history remains historical
+fact.
+
+## 7. Metered utility usage
+
+Homestead owns **what an arrived utility bill period actually used/cost**, while the corresponding
+Solace bill/account owns the recurring future financial schedule.
+
+Usage records can include utility, billing period, usage/unit, total cost, provider, estimated/read
+status and notes as implemented.
+
+Derived comparisons use per-day normalized values because billing periods vary in length. Current
+views can compare against the previous bill and an approximate year-ago period according to the
+implemented matching rules.
+
+Utility usage is household-visible by the current product decision; Costs & cover remains more
+protected because it contains account/policy/finance context.
+
+An arrived usage record does not need another Calendar event when its Solace account already owns
+the future due date.
+
+## 8. Rooms and areas
+
+Rooms/areas are stable Homestead records with their own names/icons/colours/ordering/detail pages.
+
+They provide the organizing context for:
+
+- room purchases;
+- maintenance;
+- renovations/upgrades;
+- products/references;
+- room-specific planning notes/cost estimates.
+
+A room is not merely a drawing polygon: its durable record remains useful even when the floor-plan
+presentation changes.
+
+## 9. Room plans
+
+Room plan items combine purchases, maintenance, renovations and upgrades with the implemented
+combination of status, priority, assignee, quantity, estimated/actual cost, link and notes.
+
+Totals follow the established rules so planned/in-progress estimates and completed actuals are not
+double-counted; archived items remain historical but are excluded from active totals.
+
+Completed/archived records can be restored/reopened according to the service contract rather than
+deleted to hide history.
+
+## 10. Interactive floor plan — shipped
+
+The current household has a native responsive SVG representation of the supplied house/property
+plan rather than embedding the original listing image.
+
+Current behaviour includes:
+
+- inside-the-house and whole-property views;
+- HomeStack light/dark design tokens;
+- zoom/fit controls;
+- keyboard/pointer selection;
+- strong selected-space indication;
+- explicit linking of plan slots to existing Room records;
+- persistence of the association in room `floorplan_data`;
+- linked plan spaces adopting the saved room name/icon/colour;
+- tolerant legacy/name suggestions while explicit links win.
+
+The plan is an approximate household navigation/planning surface, not CAD.
+
+A future productized floor-plan **builder/editor** for arbitrary households is separate future work.
+
+## 11. Room products and safe link import — shipped
+
+Homestead room product/planning flows reuse the shared safe Link Import service rather than
+implement a Homestead scraper.
+
+A pasted product URL can preview supported metadata such as title/retailer/price/image. The user
+reviews/edits the result before it becomes confirmed HomeStack data.
+
+Important rules:
+
+- confirmed/manual HomeStack fields are the saved source of truth;
+- bot challenge/error page titles are rejected rather than stored as product names;
+- the importer fills blank/confirmable information and does not overwrite existing user-confirmed
+  values with poor external metadata;
+- confirmed images may be cached locally according to the shared link-import policy;
+- optional price watches observe/notify without silently rewriting the saved planned cost.
+
+## 12. Corners / People projection — shipped baseline
+
+Assigned/visible Homestead room plan items/products can appear in the appropriate Person's Corner
+through the shared projection contract. Corners do not move or copy ownership away from Homestead.
+
+Suggestions/reactions remain permission-aware and source-linked.
+
+## 13. Permissions
+
+General Homestead records follow `homestead.*` permissions plus visibility filtering.
+
+Sensitive/protected areas add stronger gates, especially:
+
+- Costs & cover/account/policy data;
+- Solace-linked finance actions;
+- sensitive attachments/identifiers.
+
+Children/users may see ordinary household home/utility/planning information where permitted but do
+not gain finance/account access simply because it is presented inside Homestead.
+
+## 14. Hub / Calendar / Notifications
+
+Homestead may contribute permission-aware summaries such as:
+
+- maintenance due/overdue;
+- warranty expiry;
+- active room/home improvements;
+- pool-care work;
+- relevant household/home attention items.
+
+Calendar mirrors Homestead-owned dates through D7. Solace-owned financial due dates remain Solace
+Calendar projections.
+
+Notifications use the shared notification/Web Push system. Sensitive account/policy/financial
+content must not leak into ordinary push payloads.
+
+## 15. Search and attachments
+
+Search covers permitted Homestead records/room/product context according to current selectors.
+Protected finance/sensitive fields are filtered by source permissions before snippets.
+
+Files use shared Attachments; manual/external product URLs use the safe link-import boundary where
+applicable.
+
+## 16. Capability consolidation proposal — not yet implemented
+
+`31_Core_Manage_HomeStack.md` proposes reducing future top-level navigation by presenting these as
+optional Homestead capabilities:
+
+- **Stock & storage** (planned Inventory scope);
+- **Assets & vehicles** (remaining non-home Assets scope);
+- **Household guide** (possible future presentation of Home Wiki content).
+
+This remains a proposal. Do not claim those capabilities exist or migrate/delete existing Home Wiki
+data merely to simplify navigation.
+
+If implemented later, hiding a capability must preserve data/permissions and re-enabling it must
+restore the prior records cleanly.
+
+## 17. Heavy project boundary
+
+Homestead already owns home improvements/room plans. Do not create a Projects node for home work it
+can already represent.
+
+A future top-level Projects domain is justified only if real non-home/cross-domain work needs
+substantially richer boards/dependencies/templates/budget/history than Homestead/Travel/Atlas can
+provide.
+
+## 18. Data ownership
+
+Exact schema is defined by current Django models/migrations. Homestead owns the implemented
+families for property, maintenance, appliances/providers, home insurance/cost context, pools/water
+tests, utilities, rooms/room plans/products and floor-plan association data.
+
+Solace remains the owner of financial bill/payment records; Attachments and Link Import remain
+shared core capabilities.
+
+## 19. Completion state
+
+Homestead's broad current baseline is shipped and used. Future work should be driven by lived home
+use and productization needs rather than by adding every conceivable property-management feature.
+
+Likely future directions include the optional capability consolidation, deeper document/warranty
+linkage, portable floor-plan onboarding/builder tooling and measured refinements to maintenance/
+pool/utility workflows.

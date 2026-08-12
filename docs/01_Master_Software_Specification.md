@@ -1,191 +1,207 @@
 # Document 1 — Master Software Specification (MSS)
 
-> Canonical. Supersedes all earlier MSS versions. See `00_README_and_Changelog.md` for decisions.
+> **Canonical product specification.** Architectural decisions live in
+> `00_README_and_Changelog.md`; implementation status lives in `HANDOVER.md`; historical release
+> detail lives in `VERSION_HISTORY.md`. This document describes what HomeStack *is* and the
+> boundaries that should remain stable as it grows.
 
 ## 1. Purpose
 
-HomeStack is a secure, modular, self-hosted household management platform that provides one
-central place to run household life. It replaces the scattered apps, documents, calendars,
-lists and reminders a family currently juggles with a single, coherent, family-oriented
-system.
+HomeStack is a secure, modular, self-hosted household management platform for one household. It
+replaces scattered household apps, lists, calendars, documents and reminders with one coherent
+system built around a shared Hub, Calendar, People directory and a deliberate set of opt-in
+household domains.
 
-It is built first for one household — two adults and two children, on an always-on home
-server — and designed so that, if it proves genuinely good, it could later be released as a
-**self-hosted** product other families run themselves. That ambition shapes which technical
-decisions are treated as permanent (see §3); it does not expand the initial scope.
+It is built first for the household that runs it. If it later becomes a product, the intended
+model is still **self-hosted, one household per installation**, not SaaS.
 
-## 2. Vision
+## 2. Product vision
 
-HomeStack should feel like one warm, approachable system rather than a collection of
-separate applications. The Hub answers "what needs attention today?", the Calendar is the
-household's shared timeline, and a touchscreen kiosk turns the system into a family
-information centre everyone — including the kids — can use comfortably.
+HomeStack should feel like one warm, approachable household operating system rather than a set of
+unrelated apps. The important surfaces are:
 
-Long-term platform reach (web → kiosk → PWA → native apps) is enabled by an API-first
-backend, but only the web and kiosk experiences are in early scope.
+- **Hub** — what needs attention today.
+- **Calendar** — the household timeline.
+- **People** — the shared identity/subject layer used across domains.
+- **Responsive web/PWA** — the primary everyday adult/mobile surface.
+- **Kiosk** — a shared, permission-safe family surface, especially for children.
+- **Corners** — person-centred views of assignments, activity, lists and wishes.
+- **Opt-in nodes** — major household domains with their own workflows and permissions.
 
-## 3. Core design philosophies
+The backend is API-first so future native clients can be added without rebuilding business logic.
 
-**Security first.** HomeStack holds sensitive household information — finances, health
-notes, documents, children's details. Security is a built-in feature, not an afterthought:
-role-based and backend-enforced permissions, sensitive-node re-authentication, audit logs,
-secure PIN/password storage, session management and protected backups. (See the Security
-Architecture document.)
+## 3. Stable design principles
 
-**Modular and opt-in.** A fresh install includes only core services, Hub, Calendar, user
-management and settings. Every node is enabled deliberately by an administrator. Nodes can
-be enabled, disabled, hidden, locked, permission-restricted or kiosk-restricted.
+**Security first.** HomeStack stores finances, personal information, documents and potentially
+health data. Permissions are backend-enforced, sensitive areas re-authenticate, protected access is
+audited, and clients are never trusted as the security boundary.
 
-**Flexible tracking depth.** Users are never forced to record more than they want. Each
-node supports basic, standard and detailed use, and remains useful with only one or two
-fields filled in.
+**One household per install.** Every user-facing model remains household-scoped for structural
+consistency and future self-hosted portability, but HomeStack does not implement SaaS tenancy,
+sign-up or billing.
 
-**Family-oriented experience.** Friendly, warm, visual, touch-friendly, consistent, and
-child-appropriate where relevant. It must never feel like enterprise software.
+**Modular monolith.** Domains are separate Django apps within one backend. Shared capabilities live
+in core services. Do not introduce microservices or cross-node model coupling without a demonstrated
+need.
 
-**Kiosk as a first-class platform.** A permanently available household touchscreen (tablet,
-Surface, Raspberry Pi display, wall-mounted screen) is a primary surface, with avatar login,
-PIN entry, ambient mode, large touch targets and permission-safe displays.
+**Nodes are domains, not features.** A feature normally belongs inside an existing domain. New
+nodes require clear independent workflows, data, permissions and household value.
 
-**API-first.** Business logic lives in the backend; all clients share one API. This is the
-hinge that keeps native apps — and a possible PWA bridge — open without backend rework.
+**One source of truth.** Calendar events, Hub summaries, Corners and cross-node views project data
+from the owning record instead of creating parallel competing records.
 
-**One household per install.** HomeStack runs a single household. The schema carries a tenant
-column for future-proofing (see Architecture/Database docs), but no multi-household behaviour
-is built.
+**Flexible depth.** A household can track the minimum useful information or progressively add
+more detail. Detailed tracking must not be mandatory for basic use.
 
-## 4. Confirmed node model
+**Family-oriented UX.** Responsive, touch-friendly, understandable to non-technical household
+members, consistent across nodes, and safe for children.
 
-Nodes are broad areas of household life with their own workflows, records, permissions and
-Hub/Calendar behaviour — not small features.
+## 4. Core platform services
 
-**Core platform services** (always present, not optional):
-Hub · Calendar (app name: `scheduling`) · People · Notifications · Search ·
-Documents/Attachments · Permissions · Settings · Backups.
-*(The durable Event Bus from earlier drafts is deferred; node decoupling uses signals — see Architecture doc.)*
+These are platform capabilities rather than optional household domains:
 
-**Confirmed opt-in nodes:**
-Atlas · Home Wiki · Pets · Education · Inventory · Assets · Hearth · Travel · Projects ·
-Health · Meridian · Solace · Homestead · Home Assistant.
+- **Hub** — permission-aware configurable widgets and daily summaries.
+- **Calendar (`scheduling`)** — standalone events plus projections from dated node records.
+- **People** — household members/profiles; separate from login Users.
+- **Notifications** — in-app notification store plus shipped PWA/Web Push delivery, per-user
+  preferences, per-device subscriptions, quiet hours, bundling and scheduled reminders.
+- **Search** — global permission-aware search over owning node querysets.
+- **Documents/Attachments** — shared protected file capability used by domain records.
+- **Permissions** — central roles, per-user overrides, visibility and sensitivity enforcement.
+- **Settings / Manage HomeStack** — household, node, user and presentation configuration.
+- **Backups** — backup creation plus a defined and tested restore path.
+- **Audit** — immutable security/administrative activity records.
+- **Events interface** — thin in-process publish/consume boundary based on Django signals (D4), not
+  a durable broker or user-facing service.
 
-### 4.1 Consolidation rules (unchanged, still in force)
+## 5. Current node model
 
-These do **not** become standalone nodes:
+### 5.1 Shipped / active domains
 
-- Home property, appliances, warranties and home maintenance → **Homestead** (D21)
-- Non-home vehicles/tools/owned items → future **Assets** scope, if still justified
-- Subscriptions → **Solace**
-- Documents → core **Documents/Attachments** service
-- Garden → **Projects** or **Inventory** by context
-- People → core service
-- Library → parked unless it outgrows simple asset tracking
-- Fitness → parked under Health/future
-- Smart-home status and safe controls → dedicated **Home Assistant** bridge (D22)
+- **Atlas** — household notes, to-dos, Grocery, Shopping, checklists, reminders, Agenda and shared
+  everyday capture.
+- **Meridian** — tasks, routines, points, rewards, approvals, goals, wishes and achievements;
+  HomeStack is the source of truth and adult/admin cockpit.
+- **Education** — institutions, academic profiles, courses, assessments, timetable/classes and
+  education events.
+- **Home Wiki** — persistent household knowledge, favourites and emergency/kiosk-safe reference.
+- **Pets** — pet profiles, recurring treatments/reminders and appointments.
+- **Books** — shared household Book catalogue, per-User Want to Read / Reading / Read shelves,
+  personal ratings/notes and shared Book Clubs with ordered up-next queues.
+- **Homestead** — home/property source of truth: rooms/areas, plans, maintenance, appliances,
+  warranties, services, cover/cost context, pools/spas, utilities and floor plan.
+- **Solace / Money** — bills, pay cycles, budgets/buckets, planned purchases and financial
+  forecasting; sensitive and permission/re-auth protected.
+- **Fitness & Training** — social training programs, live workouts, exercise history and personal
+  records. It is intentionally separate from medical Health (D24).
+- **Travel** — trips and ideas, participants, bookings/cost planning, itinerary/Things to do,
+  Calendar/deadline integration and surprise visibility.
 
-### 4.2 Node decision rule
+### 5.2 Important planned domain
 
-A future feature becomes a new node only if it represents a major household domain, has its
-own data model and workflows, needs its own permissions, appears uniquely on Hub/Calendar,
-would overload an existing node if absorbed, and would be independently useful. Otherwise it
-is a feature inside an existing node.
+- **Home Assistant** — a dedicated local bridge for selected state, safe allowlisted controls and
+  approved HomeStack automation events. Home Assistant remains owner of devices, state, history
+  and automations. HomeStack stores only household presentation/control/event mappings.
 
-## 5. User roles
+### 5.3 Deferred / evidence-gated domains
 
-- **Admin** — full access; manages users, permissions, nodes, settings, backups, audit logs;
-  reaches sensitive areas after re-authentication.
-- **Manager** — trusted adult; manages most household information and nodes; reaches Solace/
-  Health only if granted.
-- **User** — standard household member; uses permitted nodes, Hub widgets and Calendar events;
-  avatar/PIN login.
-- **Guest** — optional, disabled by default (house/pet sitter); never sees sensitive data by
-  default.
+- **Hearth** — recipes, meal planning and generation of items into the shared Atlas Grocery list.
+- **Health** — sensitive human medical information, deliberately separate from Fitness.
+- **Inventory / Stock & storage** — still proposed as a Homestead capability rather than an
+  automatic new top-level node.
+- **Assets & vehicles** — non-home asset/vehicle scope; currently proposed as a protected
+  Homestead capability unless real usage proves it needs an independent node.
+- **Projects** — do not create as a top-level node until cross-domain project workflows materially
+  exceed Homestead projects, Travel trips and Atlas lists.
 
-Identity note: a **user** has a login and owns/audits records; a **person** is a household
-profile (adult, child, or non-login member) and is the subject/assignee of records. Many
-members are both.
+### 5.4 Consolidation boundaries
 
-## 6. Authentication (summary)
+- Home property, home appliances, warranties, home maintenance and home projects → **Homestead**.
+- Household grocery/shopping → **Atlas**; Hearth may populate Grocery later rather than create a
+  competing shopping store.
+- Personal reading history and shared book-club workflows → **Books**; Education may later link to
+  Books for course reading but does not own personal shelves/clubs.
+- Finance/subscriptions → **Solace**.
+- Documents → shared **Documents/Attachments**, linked to owning records.
+- People → core **People**.
+- Fitness/social training → **Fitness & Training**.
+- Diagnoses, medications, injuries, measurements and medical notes → **Health** only.
+- Smart-home device/state ownership → **Home Assistant**, with HomeStack only as a bounded bridge.
 
-Avatar + PIN for everyday login (web and kiosk), backed by Django sessions. Admin/manager
-accounts also have passwords. Sensitive nodes (Solace, Health, sensitive Documents) require
-re-authentication using a password rather than the PIN. Token auth is added when native apps
-arrive. Full detail lives in the Security Architecture document.
+## 6. Users, People and roles
 
-## 7. Core platform services (responsibilities)
+A **User** is a login identity and owns/audits actions. A **Person** is a household profile and is
+the subject/assignee of household records. A Person may exist without a login.
 
-- **Hub** — the landing page; "what needs attention today?"; configurable, permission-aware
-  widgets.
-- **Calendar** — the household timeline; all nodes may contribute events through one shared
-  generation helper (nodes own their dates).
-- **People** — member profiles used across nodes.
-- **Notifications** — in-app reminders now; push/email later.
-- **Search** — global, permission-aware, via Postgres full-text search.
-- **Documents/Attachments** — shared file service used by all nodes; sensitive files get
-  stronger controls.
-- **Permissions** — central, backend-enforced access control.
-- **Settings** — household, user, theme, widget and node settings.
-- **Backups** — manual and scheduled backup *and a defined restore path*.
+Roles:
 
-## 8. Confirmed nodes (summary)
+- **Admin** — full household administration; sensitive access still requires the relevant
+  re-authentication gate.
+- **Manager** — trusted adult with broad management capability, subject to explicit grants for
+  sensitive domains.
+- **User** — ordinary household member using permitted nodes and records.
+- **Guest** — optional restricted role; disabled/unused unless deliberately configured.
 
-Full per-node specs are separate documents. In brief:
+Children use the same permission spine; child-safe behaviour is enforced by the backend, not by
+hiding buttons alone.
 
-- **Atlas** — notes, to-do/grocery/shopping lists, checklists, simple reminders, quick capture.
-- **Home Wiki** — persistent household knowledge: WiFi, emergency info, procedures, manuals,
-  bin schedules, kiosk-safe reference pages.
-- **Pets** — profiles, treatment/vaccination reminders, vet appointments, medication, pet
-  documents and care instructions.
-- **Education** — school and university: courses, assessments, homework, exams, timetables,
-  events, permission slips.
-- **Inventory** — consumables and stored items with low-stock and expiry alerts.
-- **Assets** — vehicles, appliances, tools, warranties, service history, maintenance and
-  registration reminders, documents.
-- **Hearth** — recipes, meal plans, "dinner tonight", grocery generation.
-- **Travel** — trips, bookings, itineraries, packing, countdowns.
-- **Projects** — large household initiatives with tasks, milestones, notes, attachments.
-- **Health** — sensitive human health: appointments, medications, allergies, immunisations,
-  records. Built only after the security foundation is mature.
-- **Meridian** — household tasks, rewards and points; kid-facing kiosk experience. Becomes a
-  **native node early**.
-- **Solace** — bills, budgets, planned purchases, subscriptions; sensitive, re-auth required.
-  Becomes a **native node after security maturation**.
-- **Homestead** — the home/property hub: maintenance, rooms, appliances, warranties, cover,
-  household services and lightweight improvements; financial mirrors remain Solace-owned.
-- **Home Assistant** — a dedicated local bridge for selected smart-home state, safe allowlisted
-  controls and approved HomeStack automation events; Home Assistant remains device/state owner.
+## 7. Authentication and sensitive access
 
-Meridian and Solace already exist as working applications in the household. They are migrated
-in natively (shell rebuilt on shared services, proven logic reused, live data imported) — no
-external-link/iframe layer is built.
+- Django session authentication for the current web/kiosk/PWA application.
+- Avatar/PIN everyday login.
+- Adult password credentials for re-authentication and administrative/sensitive operations.
+- Argon2id password/PIN hashing.
+- Short-lived elevated session state for sensitive-node access.
+- HTTPS is used on the LAN at `https://homestack.moosesoftwares.com` through the existing Nginx
+  Proxy Manager and Pi-hole split/local DNS arrangement.
+- Web Push uses deployment-held VAPID credentials and sparse sensitive-safe payloads; opening a
+  push does not bypass normal session/permission/re-authentication checks.
+- Token/native-app authentication remains future work.
 
-## 9. Version 1 scope
+See `05_Security_Architecture_Document.md` for the authoritative security contract.
 
-V1 is deliberately small. It is reached in stages (see Roadmap), but the V1 *system* is:
+## 8. Cross-domain rules
 
-- Core platform: Docker stack, session auth (avatar/PIN + admin passwords), Users + People,
-  central permissions, Settings, Backups (with restore), audit logs.
-- Hub + Calendar with the shared event-generation helper.
-- Kiosk shell (ambient mode, avatar login, timeout).
-- **Atlas** as the first node.
-- **Meridian** migrated native.
-- **Home Wiki, Pets, Education.**
+1. Nodes do not import one another's models for business integration.
+2. Cross-domain reactions use the thin events interface and shared services.
+3. Node records own their dated information; Calendar projections use the scheduling helper.
+4. Hub/Corners/Search are projections and must re-check source permissions.
+5. `created_by`/`updated_by`/audit ownership references Users; assignee/subject references People.
+6. Recurrence uses the established RRULE representation except the bounded rotating-schedule
+   layer defined by D23.
+7. Sensitive data must not leak into Calendar, Hub, Search, notifications, Corners or kiosk
+   through derived representations.
 
-V1 does **not** include: Inventory, Assets, Hearth, Travel, Projects, Health, native Solace or
-Home Assistant (these follow), nor native mobile/desktop apps, offline mode, OCR/AI, plugin system, public
-internet exposure, external calendar sync, or field-level encryption.
+## 9. Current product baseline
+
+As of 2026-08-12, HomeStack is deployed on the home server and used in daily household workflows.
+The foundational milestones, Meridian, core Hub/Atlas/Calendar surfaces, Education, Home Wiki,
+Pets, **Books**, security maturation, native Solace, Homestead, Fitness, Corners/link import, daily
+coordination, Travel, Grocery/Shopping, LAN HTTPS and **PWA/Web Push notifications** are implemented.
+
+The recommended current engineering phase is **production readiness and reliability**: production
+serving, tighter container networking, safer deployment automation, frontend/E2E CI and stronger
+off-server recovery. Home Assistant remains important planned feature work after that baseline is
+stronger. Public internet exposure has not been enabled.
+
+Historical implementation detail does not belong in this MSS; use `VERSION_HISTORY.md` and Git
+history for release chronology. Operational notification deployment requirements live in
+`HANDOVER.md`; the practical next-phase plan is `34_Recommended_Next_Steps.md`.
 
 ## 10. Success criteria
 
-HomeStack succeeds when, for this household:
+HomeStack succeeds when:
 
-- The Hub clearly shows what matters today and the Calendar acts as the shared timeline.
-- The kiosk is useful and the kids reach for it.
-- Everyone sees only what they're permitted to; sensitive data stays protected.
-- Nodes feel visually consistent — one platform, not many apps.
-- The node list stays deliberate and manageable.
-- Atlas, Home Wiki, Pets, Education and native Meridian deliver real daily value, and the
-  family reaches for HomeStack instead of the old separate apps.
+- household members use it because it is easier than the tools it replaces;
+- the Hub and Calendar provide a dependable shared view of what matters;
+- common tasks work comfortably on phone/laptop and shared kiosk surfaces;
+- each record has one obvious owning domain;
+- sensitive information remains protected in direct and derived views;
+- the node model stays understandable rather than expanding for every feature;
+- backup/restore and deployment are dependable enough that HomeStack can be treated as household
+  infrastructure;
+- future clients/integrations can use stable APIs without bypassing the existing permission and
+  business-logic spine.
 
-The path to a sellable product runs *through* a great product for this household: if HomeStack
-genuinely replaces Meridian and Solace for the family and gets used daily, that is the proof
-it is worth releasing.
+The path to any future self-hosted release runs through making the single-household installation
+reliable and genuinely useful first.

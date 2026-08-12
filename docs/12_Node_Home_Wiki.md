@@ -1,147 +1,149 @@
 # Node Spec — Home Wiki
 
-> Canonical. **V1 node.** Global rules from `00_README_and_Changelog.md` apply.
+> **Status:** shipped and in household use. Home Wiki is the persistent household knowledge base.
+> A future proposal may present this content as a Homestead **Household guide** capability, but
+> that consolidation has not been implemented and does not change current data ownership.
 
 ## 1. Purpose
 
-Home Wiki is the household knowledge base: persistent information the household references
-repeatedly, that doesn't belong in a temporary note, checklist, project, document vault or
-calendar entry. It answers: *"Where do we keep the information we may need to look up later?"*
-— WiFi, emergency info, appliance instructions, bin schedules, procedures, contacts, utility
-details.
+Home Wiki stores information the household expects to look up repeatedly: procedures, emergency
+reference, technology/Wi-Fi instructions, house-running knowledge, contacts and other durable
+reference material.
 
-## 2. Philosophy
+It answers: **Where do we keep household information that should still be useful months from now?**
 
-For information that stays useful over time. Short-term notes/lists → Atlas. Secure files →
-Documents/Attachments. Large initiatives → Projects. Home Wiki is clear, searchable,
-organised, easy to update, kiosk-safe where appropriate, and useful in emergencies. It should
-end repeated questions like "what's the WiFi password?", "when is bin night?", "how do I reset
-the router?", "who do we call in an emergency?"
+## 2. Ownership boundaries
 
-## 3. What belongs
+**Home Wiki owns:**
 
-WiFi details; router reset; bin schedule; emergency contacts; water shutoff/switchboard
-location; appliance instructions; utility/internet provider details; vet/school contacts;
-house rules; routines; "how to use the kiosk"; cleaning notes; where things are stored;
-house-sitter and pet-sitter instructions; evacuation notes.
+- durable household reference pages;
+- categories/tags/favourites;
+- emergency/reference page presentation flags;
+- kiosk-safe reference content;
+- review/reminder metadata where implemented.
 
-## 4. What does NOT belong
+**Belongs elsewhere:**
 
-Temporary notes/lists → Atlas. Large initiatives → Projects. Sensitive scanned files (e.g.
-passport scan) → Documents/Attachments. Medical records → Health. Bills/budgets → Solace.
-Warranties/serials/service history → Assets. Home Wiki may *link* to these but never owns them.
+- temporary notes/lists → Atlas;
+- protected raw files → shared Attachments linked to the appropriate owner;
+- property/room/appliance structured records → Homestead;
+- finance → Solace;
+- pet structured care/history → Pets;
+- medical information → Health;
+- large home improvements → Homestead;
+- future non-home project boards → only a Projects domain if real use later justifies one.
 
-## 5. Primary users
+Home Wiki may link to another domain's structured record/file without copying ownership.
 
-Admins, managers, users, permitted children, kiosk users, future guest/house-sitter accounts.
-Children may see safe pages (morning routine, emergency contacts, pet feeding, kiosk help) but
-never private/sensitive/adult-only pages.
+## 3. Pages and categories
 
-## 6. Key features
+Wiki pages support the implemented useful combination of:
 
-**Wiki pages** — title, body, category, tags, visibility, attachments; `created_by/updated_by`
-= user. V1 plain/basic rich text; Markdown/templates/linked pages parked. `is_kiosk_safe`
-flag.
+- title/body;
+- category/tags;
+- favourite state;
+- emergency/kiosk-safe presentation flags;
+- visibility/sensitivity;
+- attachments/links where appropriate.
 
-**Categories** — suggested defaults: Emergency, Internet & Technology, Utilities, Appliances,
-Household Procedures, Cleaning, Pets, School, Contacts, House Sitting, Manuals, Miscellaneous.
-Admins can add/edit/hide/reorder.
+Categories keep browsing understandable but should not become a deep taxonomy. The household can
+add/hide/manage categories according to current UI permissions.
 
-**Favourite pages** — pinned to the top of Home Wiki, Hub, kiosk and emergency mode (e.g.
-emergency contacts, WiFi, bin night, pet feeding, router reset).
+## 4. Favourites and emergency information
 
-**Emergency information** — a dedicated area (address, emergency/doctor/dentist/vet contacts,
-poison hotline, water shutoff, switchboard, procedures, evacuation notes). Carefully
-permissioned: some kiosk-safe, sensitive personal detail protected.
+Favourite pages provide quick access to commonly referenced household knowledge.
 
-**Procedures** — step-style pages (router reset, washing machine, school lunches, feeding
-pets, bin night, power outage). Procedure checklist blocks parked.
+Emergency pages may deliberately be more discoverable, but **emergency visibility is not a bypass
+of sensitive data rules**. A page can expose safe instructions while protected personal/account/
+medical information remains in its owning protected domain.
 
-**Attachments & manuals** — link PDFs/photos/manuals via the shared service. No own storage.
+Examples of useful Wiki content include:
 
-**Templates** — parked (appliance, emergency contact, utility, procedure, pet-care,
-technology, house-sitter pages).
+- Wi-Fi/router procedures;
+- power/water outage procedures;
+- bin/house routines;
+- safe emergency contacts/instructions;
+- pet/house-sitter instructions;
+- appliance usage guidance;
+- kiosk/how-to guidance.
 
-## 7. Permissions
+Where Homestead already owns structured emergency/property locations, the Wiki should link or
+explain rather than maintain a second conflicting structured value.
 
-Visibility: private · household · role_restricted · user_restricted · kiosk_safe · sensitive.
-Default household. Emergency pages may be broadly visible but sensitive detail restricted.
-Children see only safe pages; future guests see only specifically shared pages.
+## 5. Permissions and kiosk
 
-## 8. Hub integration
+Pages follow central visibility/permission filtering.
 
-Widgets: favourite pages · emergency-info shortcut · recently updated · bin-night reminder ·
-household notice · quick links · kiosk help. Permission-aware (a child sees only safe items).
+- children/kiosk see only explicitly safe permitted content;
+- sensitive/private/adult pages remain hidden even if the category itself is visible;
+- kiosk is primarily read-focused and easy to return from;
+- attachment access is independently permission checked through the shared service.
 
-Completion rule: this node is not "done" until its Hub widget rows are seeded with
-`source_node` set, kiosk support declared per widget, and content is supplied through
-permission-filtered selectors that the Hub service calls without cross-node model imports.
+UI flags such as `is_kiosk_safe` help presentation but backend permissions remain authoritative.
 
-## 9. Calendar integration
+## 6. Hub / Search / Notifications
 
-Mostly reference, so few events. Some pages carry date-based reminders (bin night, filter
-replacement, review reminders) — created via the scheduling helper with `calendar_event_id`,
-recurrence as `recurrence_rule`.
+Home Wiki can contribute permission-aware favourites/emergency/recent-reference shortcuts to Hub.
 
-## 10. Notifications
+Search is especially important for this domain and must filter source pages before snippets are
+created.
 
-Optional and sparing: review this page · procedure outdated · emergency contacts need review ·
-manual added · page assigned for reading.
+Notifications should remain sparse and useful (for example a review reminder) rather than turning a
+reference wiki into a noisy task system.
 
-## 11. Events (signals)
+## 7. Calendar
 
-Publishes: `wiki_page_created/updated/deleted`, `wiki_page_marked_favourite`,
-`wiki_emergency_page_updated`. Consumes: `asset_manual_added`,
-`pet_care_instruction_updated`, `household_setting_changed`. Example: Assets uploads a manual →
-`asset_manual_added` → Home Wiki links it to the appliance reference page.
+Most Wiki content is timeless reference. Date-based review/reminder records, where used, follow the
+shared Calendar ownership/scheduling helper rather than maintaining an independent reminder engine.
 
-## 12. Search
+Do not add Calendar events simply because a page exists.
 
-Highly searchable: page title/body, category, tags, attachment metadata, linked records — via
-FTS, permission-filtered. Home Wiki is effectively the household memory system; search is its
-most important feature.
+## 8. Events and cross-domain relationships
 
-## 13. Attachments
+Home Wiki can publish meaningful page lifecycle/reference events through D4. Other domains can link
+to Wiki pages without importing Wiki models.
 
-PDFs, photos, screenshots, reference docs, procedure images — via the shared service.
-Sensitive attachments never exposed on kiosk/child accounts unless explicitly permitted.
+Old examples that assumed a future top-level Assets node are not architectural requirements. Home
+appliance/serial/warranty structure already belongs to Homestead; the Wiki may hold human-readable
+instructions or link to the structured record/manual.
 
-## 14. Kiosk
+## 9. Attachments
 
-Favourite pages, emergency info, simple browsing, large category cards, search, read-only for
-children, easy return to Hub. Kiosk-safe pages clearly marked; sensitive pages never exposed.
+Files use shared Attachments. Home Wiki does not implement its own file storage/security.
 
-## 15. Mobile
+Sensitive attachments never become kiosk/public simply because they are linked from a kiosk-safe
+page.
 
-Quick search, favourites, easy reading, simple editing, attachment viewing, category browsing
-— useful for checking household instructions while away from the kiosk.
+## 10. Mobile experience
 
-## 16. Progressive detail
+Prioritize quick search, favourites, readable long-form reference and simple editing. A household
+member should be able to find an instruction on a phone without navigating a deep category tree.
 
-Basic: create page, add text. Standard: categories, tags, attachments, favourites, visibility.
-Detailed: templates, linked pages, page history, review reminders, emergency/house-sitter mode.
+## 11. Data ownership
 
-## 17. Data model
+Exact schema is defined by current Django models/migrations. Home Wiki owns its page/category data;
+shared Attachments, Search, Hub and Calendar remain projections/services around that source.
 
-`wiki_pages` (`is_kiosk_safe`, `visibility`, `calendar_event_id` where dated). `wiki_page_versions`
-deferred but schema-anticipated. All inherit `HouseholdBaseModel`. Shared: attachments, tags,
-categories, calendar_events, notifications, audit_logs.
+Page version history, richer templates/linked-page graph, OCR/AI and house-sitter modes remain
+optional future enhancements.
 
-## 18. V1 scope
+## 12. Capability-consolidation proposal
 
-Create/edit/delete pages · categories · basic formatting · tags · favourites · attachments ·
-FTS · permission-aware visibility · kiosk-safe read view · emergency-info section · Hub
-favourite-pages widget. Not in V1: full page history, rich templates, linked-page graph, OCR,
-AI summarisation, public sharing.
+`31_Core_Manage_HomeStack.md` proposes a future **Homestead → Household guide** capability to reduce
+top-level navigation if that proves desirable.
 
-## 19. Risks & mitigation
+Until explicitly implemented:
 
-Risk: overlap with Atlas/Documents, sensitive info leaking to kiosk, clutter, stale pages, too
-many categories. Mitigation: Atlas for temporary, Home Wiki for long-term; clear visibility
-labels; favourites; review reminders later; few categories; strong search.
+- Home Wiki remains its own current node/domain;
+- do not migrate/delete its records;
+- do not claim the Homestead capability exists;
+- any future presentation consolidation must preserve existing data, permissions, Search/Hub
+  behavior and stable links.
 
-## 20. Completion criteria
+## 13. Completion state
 
-Create/edit/delete pages; categorise, tag, attach, favourite; search; permissions enforced;
-kiosk-safe pages viewable from kiosk; emergency info configurable; Hub shows favourites;
-Hub widget rows/selectors are shipped; follows the shared design system.
+The current baseline is complete: pages/categories, favourites/emergency/reference behavior,
+permission-aware search, attachments, Hub contributions and kiosk-safe reading are available.
+
+Future work should improve reference usefulness (revision history/templates/linking) only when real
+household use demonstrates the need.

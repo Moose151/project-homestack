@@ -1,217 +1,237 @@
 # Node Spec — Travel
 
-> Canonical. **Initial useful slice shipped in v0.33.0 (2026-08-11).** Itinerary items
-> (trip-day activities, `docs/19_Node_Travel.md` §10) and a day-trip/multi-day-trip type on
-> Trips shipped in v0.34.6 (2026-08-12); packing and protected documents remain from §14 slice 4.
-> Global rules from
-> `00_README_and_Changelog.md` apply: household-scoped base models; assignments are People (D12);
-> dates sync only through the Calendar helper (D7); cross-node effects use signals (D4); shared
-> attachments own uploaded files; reads use central visibility (D10) and Postgres FTS (D9).
+> **Status:** shipped and in use as a real HomeStack domain. The initial Trips/To go/booking/cost
+> slice shipped in v0.33.0; itinerary/Things to do plus explicit day-trip/multi-day-trip behaviour
+> shipped in v0.34.6. Packing and protected travel-document workflows remain future additions.
 
-## 1. Purpose and shape
+## 1. Purpose
 
-Travel plans holidays from the first “we should go there” idea through research, booking, the
-trip itself and history. It should feel like Homestead room projects: one calm project page with
-summary, participants, images, component rows, costs and completion states, rather than a dense
-travel-agent form.
+Travel owns household trip planning from the first "we should go there" idea through a structured
+trip, bookings, itinerary/Things to do and trip history.
 
-It answers: **Where might we go? What are we planning? What still needs booking? What will it
-cost?** It does not replace Atlas for unrelated lists, Solace for household budgeting, or shared
-Attachments for file storage.
+It answers:
 
-## 2. Navigation
+- Where might we go?
+- Which trips are actually planned?
+- Who is going?
+- What still needs booking?
+- What will it cost?
+- What might we do on each day?
 
-The node opens with two primary tabs:
+It does not replace Atlas for general lists, Solace for household finance, or shared Attachments for
+protected file storage.
 
-- **Trips** — active and past trip plans, grouped by planning/booked/travelling/completed state.
-- **To go** — lightweight destination ideas which can later be promoted into a full Trip.
+## 2. Primary surfaces
 
-A Trip has a stable detail route and sections for Overview, Travel & stays, Things to do,
-Packing/documents and Images. Progressive disclosure hides flight/accommodation forms until their
-requirement is enabled.
+Travel has two main entry views:
 
-## 3. Trips
+- **Trips** — active/past plans with planning/booked/travelling/completed-style state as supported
+  by the implementation.
+- **To go** — lightweight destination ideas that can later be converted into a Trip.
 
-A `Trip` stores title, destination/place, comments/description, start and end dates, timezone,
-status (`planning`, `ready_to_book`, `booked`, `travelling`, `completed`, `cancelled`), selected
-Calendar colour, visibility and People participants. Empty participants means the whole household;
-otherwise several selected People means all of those individuals. A separate **Keep this a
-surprise** control can hide a household-visible Trip from selected linked Users. This exclusion is
-copied to every owned Calendar entry/deadline and enforced for direct links as well as lists.
+A Trip has a stable detail route and progressively exposes trip overview, bookings/travel & stays,
+Things to do/itinerary and related information without forcing every trip to use every feature.
 
-Two explicit requirements—**Flights required** and **Accommodation required**—control the setup
-checklist and visible sections. They do not imply booked: each required component must have at
-least one relevant booking marked booked before the trip can be considered fully booked. Users
-may still add transport, activities, restaurants and other reservations independently.
+## 3. Trips and trip type
 
-Comments are ordinary editable trip notes in the first slice. A later discussion stream is not
-required merely because several people can see a trip.
+A Trip owns its title/destination, notes, dates, colour, visibility, participants and other current
+planning fields.
 
-## 4. Images
+`trip_type` distinguishes:
 
-Each Trip and To-go idea may have multiple ordered images with caption and optional credit/source.
-Support both an external public image URL and an uploaded/cached shared Attachment; never store
-image bytes or filesystem paths on Travel records. One image can be selected as the cover. Failed
-or blocked remote images degrade to a placeholder without breaking the trip.
+- **day trip** — start/end are the same date; save/edit logic keeps them aligned;
+- **multi-day trip** — normal start/end range.
 
-The initial implementation does not scrape destination pages automatically. The shared safe-link
-service may later preview a public page, but saving a source URL never grants permission to copy
-copyrighted text or bypass access controls.
+The owning Trip remains the source of truth for its dates/status/participants. Its Calendar block is
+a projection maintained through D7.
 
-## 5. Flights, accommodation and other bookings
+## 4. Participants and surprise visibility
 
-`TravelBooking` types: flight, accommodation, transport, activity, restaurant and other. Shared
-fields: title/provider, status (`researching`, `planned`, `booked`, `cancelled`), quoted amount,
-currency, booked/paid amount, booking reference, notes, URL, start/end time, timezone, location,
-`book_by`, and visibility. Booking reference and sensitive documents remain adult/restricted.
+Participants are People. Empty participant selection may represent the whole household according to
+the current implementation contract.
 
-Flight rows additionally support flight number, departure/arrival airport, departure/arrival
-time and leg direction; multiple rows naturally support outbound, return and multi-city travel.
-Each timed flight creates exactly one node-owned Calendar event and updates/removes it through D7.
+A separate surprise/hidden-user control can exclude selected linked Users from a trip/idea that
+would otherwise be visible. This is not the same as participant assignment.
 
-Accommodation rows support property/address, check-in/check-out and number of nights. Multiple
-stays are allowed. Check-in/out may appear as one stay event or two concise Calendar markers, but
-must never create duplicates.
+The exclusion must be respected consistently across:
 
-Every component has a **Booked** action/check box. Marking it booked records who/when, retains the
-quote, permits an actual booked amount, and resolves its associated booking deadline. Reopening a
-component restores the actionable deadline if it is still relevant.
+- Travel list/detail/direct-ID routes;
+- Calendar and Agenda projections;
+- Hub;
+- Search;
+- Notifications;
+- Corners/activity.
 
-## 6. Cost roll-up
+A hidden User must not recover the destination or other trip details by guessing IDs or opening a
+derived record. The creator cannot accidentally exclude themselves where the implementation guards
+that case.
 
-The Trip summary calculates rather than stores:
+## 5. To go / Travel ideas
 
-- quoted total and booked/actual total;
-- flights, accommodation, transport, activities and other subtotals;
-- booked versus outstanding component count;
-- optional amount still expected to book.
+A lightweight idea can carry the implemented useful subset of destination/title/location/comments,
+rough cost/currency, participants, visibility/colour, images, travel/accommodation flags and
+surprise exclusions.
 
-Amounts belong to the booking component and are treated as whole-party totals by default; a
-component may optionally record quantity/people count and a per-person note. Currency conversion
-is deferred—mixed currencies remain visibly separated and are never silently added together.
-Solace integration later links a travel budget or purchase plan; Travel must not duplicate bank,
-bucket or payment-history logic.
+**Plan this trip** converts the idea into one Trip while retaining confirmed information and linking
+back to the created Trip. Repeating conversion should remain idempotent rather than create duplicate
+Trips.
 
-## 7. Calendar and booking state
+Household-visible idea notifications remain source/permission-aware and should not notify excluded
+Users or the creator unnecessarily.
 
-The Trip owns its all-day start/end Calendar block. Its selected colour is editable from the Trip
-screen and is inherited by its flight/stay events unless a booking overrides it. The Calendar
-title/status treatment makes **Planning** versus **Booked** visible at a glance (for example a
-clear status chip/icon plus the same trip colour); status updates the existing mirror rather than
-creating a new event.
+## 6. Images
 
-Flight departure/arrival times and applicable stay times appear in Calendar. All events are
-assigned to the Trip participants and inherit its visibility. Calendar details deep-link to the
-Trip or booking source; synced events remain read-only in Calendar.
+Trip/idea images use the established Travel/image/shared-attachment/link rules. Remote image failure
+must degrade safely rather than break the trip.
 
-## 8. Book-by actions, Atlas Agenda and Hub
+Do not scrape destination pages automatically or store copied copyrighted page text merely because
+a URL was supplied. Where the shared link-import capability is useful, retain its safe URL/provenance
+boundary.
 
-An unbooked required component may have a `book_by` date. Travel owns that deadline and mirrors it
-once into Calendar; Atlas Agenda automatically projects it as an actionable Travel item without
-copying a second Atlas record. The action is **Mark booked**, not an unrelated duplicate checkbox.
-Booking/cancellation removes it from upcoming work while preserving the booking record and audit
-history.
+## 7. Bookings and costs
 
-Hub widgets show: next trip/countdown; bookings due soon/overdue; booked-versus-required progress;
-and packing progress. “Coming close” uses the user's shared reminder lead-time preference when the
-notification work lands, with a sensible node default until then.
+Travel booking/component records can represent the implemented categories such as flights,
+accommodation, transport, activities, restaurants or other trip reservations.
 
-## 9. To go
+Shared concepts include the relevant combination of:
 
-A `TravelIdea` is deliberately lighter than a Trip: destination/title, where it is, comments,
-flight/accommodation requirement flags, rough cost/currency, participants (optional), visibility,
-colour, selected surprise exclusions and multiple images. It has states active, converted and
-archived. Conversion retains both participants and surprise exclusions.
+- provider/title;
+- planned/booked/cancelled state;
+- quoted/actual cost and currency;
+- booking reference/notes/link;
+- start/end/check-in/out/departure/arrival timing;
+- location;
+- `book_by` deadline;
+- component-specific flight/stay fields.
 
-**Plan this trip** opens a preview and transactionally creates one Trip, copies the confirmed
-fields/image links and marks the idea converted with `converted_trip_id`. Repeating the action is
-idempotent and opens the existing Trip. Research notes are preserved; no fields are silently
-discarded.
+Costs belong to Travel as **trip planning totals**, not household bank/budget history. Mixed
+currencies must not be silently added without a real conversion rule.
 
-When a permitted user adds a household-visible idea, other household users receive one bundled,
-source-linked in-app notification. The creator is excluded; private ideas notify nobody. Phone
-delivery follows shared preferences only after HTTPS/Web Push is available.
+Solace may later link budget/set-aside context but remains the finance source of truth.
 
-## 10. Itinerary, packing and documents
+## 8. Calendar and booking deadlines
 
-Itinerary items are dated/timed activities with location, notes and optional booking link; dated
-items sync through Calendar. Packing is a Trip-owned checklist with shared or per-Person items and
-packed state. Uploaded confirmations, tickets, insurance and permitted identity documents use
-shared Attachments. Passport/identity material is sensitive and never exposed in ordinary Search,
-Hub, kiosk or notification payloads.
+The Trip owns its start/end date range and projects one trip block into Calendar where appropriate.
+Timed booking components such as flights/stays can create their own source-linked Calendar mirrors
+through D7.
 
-## 11. Permissions and social behaviour
+An unbooked component with a `book_by` deadline owns that deadline. Calendar/Atlas Agenda/Hub may
+project it as one actionable item. Marking the component booked/cancelled resolves/removes future
+actionability without deleting the booking history.
 
-`travel.view/create/edit/delete` follows normal node roles. Visibility supports household,
-private and restricted records. In addition, Trips and ideas may explicitly exclude selected
-linked Users for surprise planning. That exclusion applies even to managers/admins and across
-Travel API/UI, Calendar and Agenda list/detail routes, Hub projections, notifications, Search and
-Corners; the creator cannot accidentally exclude themselves. Children see only permitted trip
-summaries/packing; adult-only references, costs and identity documents stay hidden. Participant
-assignment is not itself an ACL: visibility still decides who may read the record.
+Changing participants/visibility/surprise exclusions must update what derived surfaces return; they
+must not retain stale visibility.
 
-Notifications: destination idea added; participant assigned; booking deadline approaching/
-overdue; booking added/changed; trip approaching; packing incomplete. Avoid noisy per-keystroke
-alerts—notify on meaningful saves and bundle related changes.
+## 9. Things to do / itinerary — shipped
 
-## 12. Events, search and integrations
+Travel itinerary is now a first-class shipped Trip-owned feature.
 
-Publishes: `travel.idea_created`, `travel.idea_converted`, `travel.trip_created`,
-`travel.trip_updated`, `travel.booking_saved`, `travel.booking_booked`,
-`travel.booking_deadline_due`, `travel.packing_item_created`, `travel.packing_complete`.
-Consumes later: `solace.travel_budget_updated`, `pets.care_required`,
-`atlas.list_completed`. Nodes do not import each other's models.
+A `TravelItineraryItem` represents something the household may do during the Trip. It includes the
+implemented combination of title, location, notes and optional booking/source context.
 
-FTS covers trip/idea destinations and comments, providers, airports, accommodation, itinerary,
-packing and attachment metadata, always permission-filtered.
+The key scheduling model is:
 
-## 13. Proposed data model
+- item assigned to a **specific day of the Trip**; or
+- item left **unassigned/unscheduled as an "option to do"**.
 
-- `travel_trips` — core plan, status, dates, colour, requirement flags, visibility;
-  M2M `participants`, M2M `hidden_from_users`; `calendar_event_id`.
-- `travel_ideas` — lightweight To-go entry, requirements/rough cost, conversion link;
-  M2M participants and `hidden_from_users`.
-- `travel_images` — trip or idea parent, URL or attachment, caption/credit, order, cover flag.
-- `travel_bookings` — typed flight/stay/other component, times, quote/actual cost, booked state,
-  `book_by`, booking/deadline Calendar references.
-- `travel_itinerary_items` — dated activity and optional booking link; Calendar reference.
-- `travel_packing_items` — text, quantity, assigned People and packed-by audit fields.
+Dated items project into Calendar through D7 using the Trip's applicable visibility/participant/
+surprise rules. Clearing the assigned day removes that Calendar projection.
 
-All user-facing records inherit `HouseholdBaseModel`. Use the existing multi-Person assignment
-pattern rather than a singular assignee. Avoid polymorphic generic foreign keys for the two image
-parents: use explicit nullable Trip/Idea FKs with a constraint that exactly one is set.
+Do not invent a separate general itinerary calendar. The Travel item remains the source of truth.
 
-## 14. Delivery slices
+If timed itinerary items are added later, extend this model deliberately rather than documenting
+time fields as already supported when they are not.
 
-1. **Trips and To go:** permissions first, models/API/FTS, participants, images, conversion,
-   responsive list/detail UI and idea-added in-app notification.
-2. **Required bookings and costs:** conditional flight/accommodation sections, multi-leg/stay
-   rows, booked controls, quote/actual roll-ups and readiness state.
-3. **Calendar, deadlines and Hub:** Trip/flight/stay sync, at-a-glance booked state, book-by
-   Agenda actions, notifications and widgets.
-4. **Itinerary, packing and documents:** trip-day activities **(shipped v0.34.6)**, assigned
-   packing and protected attachments **(not started)**. Solace/Pets automation remains later.
+## 10. Packing — future slice
 
-## 15. Completion criteria
+Packing remains a natural Trip-owned checklist because its lifecycle is specific to the trip.
 
-- Create a household trip, assign several People, select dates/colour, add several images and see
-  exactly one correctly coloured planning block in Calendar.
-- Require flights and accommodation, add outbound/return flights plus a stay, record quotes,
-  mark components booked and see exact category/total/progress figures.
-- Flight times appear once in Calendar. Changing trip participants/colour/status updates all
-  owned mirrors and visibly distinguishes planning from booked.
-- Give an unbooked component a book-by date; Calendar, Atlas Agenda and Hub show one actionable
-  deadline, and marking it booked resolves the action without erasing history.
-- Add a household-visible To-go idea; other permitted users receive one notification. Convert it
-  once into a pre-filled Trip with its notes/images retained.
-- Private/restricted trips, costs, references and attachments do not leak through API, Search,
-  Calendar, Hub, notifications, Corner or kiosk tests.
-- Hide a surprise plan from one selected linked User; it remains available to its creator but is
-  absent for the selected User from Travel and Calendar lists and returns 404 through direct
-  Travel/Calendar URLs. No destination notification is sent to that User.
+Future packing should support:
 
-## 16. Deferred
+- item text/quantity;
+- shared or per-Person responsibility;
+- packed/unpacked state and completion audit;
+- reusable templates only if they reduce real household friction.
 
-Maps/routes, live flight status, external booking APIs, collaborative comments, weather, currency
-conversion, travel journal/photo timeline, itinerary export, pet-care automation and deep Solace
-budget integration remain later. No external service is required for the first useful release.
+General non-trip checklists still belong in Atlas.
+
+## 11. Travel documents — future sensitive slice
+
+Tickets, confirmations, insurance and identity/passport material should use the shared protected
+Attachment capability linked to Travel records.
+
+Identity/passport information is sensitive and must not leak through ordinary Search, Hub, kiosk,
+Corners or push payloads. A travel-document feature should be built only with an explicit
+visibility/re-auth/download policy.
+
+## 12. Hub / Notifications / Corners
+
+Potential/current Travel projections include:
+
+- next trip/countdown;
+- booking deadlines/overdue items;
+- booked-vs-required progress;
+- trip/destination activity visible in Corners;
+- trip approaching / booking changed / itinerary reminders.
+
+Notification delivery uses the shared in-app/Web Push preference system. HTTPS is now live; Web
+Push implementation is the active cross-cutting workstream. Travel must not create its own phone
+notification channel.
+
+Sensitive/surprise trip text is filtered before notification payload generation.
+
+## 13. Events and search
+
+Travel publishes meaningful source events for trip/idea/booking/itinerary changes through D4.
+Other domains may react without importing Travel models.
+
+Search covers permitted trip/idea/booking/itinerary content according to current implementation and
+must enforce surprise/visibility filtering before snippets are built.
+
+## 14. Data ownership
+
+Exact schema is defined by current Django models/migrations. Travel owns the implemented equivalents
+of:
+
+- Trips;
+- To-go/ideas;
+- participant/hidden-user associations;
+- images;
+- bookings/components;
+- itinerary/Things-to-do items.
+
+Packing records will be added only when that slice is implemented. Attachments remain shared core
+records linked to Travel.
+
+## 15. Completion state
+
+The current useful Travel baseline is complete:
+
+- Trips and To go;
+- participant/surprise visibility;
+- images/notes;
+- conditional flight/accommodation and other bookings;
+- planning/actual cost roll-ups;
+- Calendar and book-by actions;
+- Hub/notification/Corner integration;
+- day-trip/multi-day-trip behavior;
+- Things to do items assigned to a Trip day or left as unscheduled options.
+
+Future work is no longer "build the itinerary". Remaining likely slices are:
+
+1. packing;
+2. protected travel documents;
+3. optional richer maps/weather/live-flight/external-booking integration only when useful;
+4. deeper Solace/Pets/home-care handoffs without duplicating ownership.
+
+## 16. Acceptance invariants
+
+- Trip dates/status/participants have one owning Travel record and correct Calendar projection.
+- Day trips cannot drift into a different stored end date.
+- Hidden/surprise Users cannot recover trip data through Travel or derived surfaces.
+- Booking deadlines appear once and resolve when booked/cancelled.
+- Idea conversion is idempotent and retains confirmed information.
+- A dated Things-to-do item appears correctly on the selected Trip day; making it an unscheduled
+  option removes the Calendar mirror without deleting the itinerary item.
+- Travel planning costs do not become a competing financial ledger.
+- Protected/sensitive future documents will not be exposed through normal household summaries.
