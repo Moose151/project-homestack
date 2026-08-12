@@ -1,0 +1,267 @@
+# Core Spec — Notifications and Push
+
+> Canonical. Extends and supersedes `docs/30_Core_Daily_Coordination.md` §7 ("Custom phone
+> notifications") and §8 slice 4 ("Preferences and PWA foundation"), which sketched this feature
+> before HTTPS existed. HTTPS on the LAN is now live (`docs/05_Security_Architecture_Document.md`
+> §14), so this is buildable. Global rules apply: shared infrastructure, not a node (`apps/notifications`
+> already follows this pattern — nodes call it directly, like audit/scheduling, D4); central
+> permission/visibility resolution (D10); no durable event bus beyond the existing thin signal
+> wrapper (D4); scheduled work is an idempotent Django management command on cron (D5).
+
+## 1. Outcome
+
+Every notification-worthy thing that happens in HomeStack — an appointment approaching, a to-do
+due, someone adding to a shared list, a workout finished, a countdown ticking down — reaches the
+right person, in the way they've chosen, without spamming them. Preferences are genuinely
+granular (per category, per channel) and live in one place per user, not scattered per node.
+Phone delivery is standards-based Web Push; the in-app notification centre (`apps/notifications`,
+shipped) remains the source of truth regardless of whether push succeeds.
+
+## 2. What already exists (read before building)
+
+- **`apps/notifications`** (shipped): `Notification` model, `create_notification`/`notify_person`/
+  `notify_person_id`, `mark_read`/`mark_all_read`, `GET /notifications/` + read endpoints, a bell
+  UI. ~13 call sites across `achievements`, `atlas`, `education`, `fitness`, `link_imports`,
+  `meridian`, `solace`, `travel` call these **directly and unconditionally** — no preference gate
+  exists today. This spec adds the gate *inside* `create_notification`/`notify_person` so every
+  existing call site respects preferences automatically, without each node needing to check.
+- **The event bus is already wide** (`apps/events/bus.py`, D4): `publish`/`subscribe` on named
+  string topics. Every major node already has an `events.py` with topics like
+  `scheduling.event_created`, `atlas.list_item_completed`, `fitness.session_completed`,
+  `meridian.task_approved`, `homestead.maintenance_completed`, `pets.treatment_completed`, and
+  many more (~40 topics total across 11 apps). **Most are publish-only — nothing subscribes to
+  them yet**, and a few (`scheduling.event_created`/`event_updated`/`event_deleted`) are defined
+  but **never actually called** from `apps/scheduling/services.py` — wiring the publish call is
+  part of this work, not already done. `apps/achievements`, `apps/homestead` and `apps/solace`
+  already have a `handlers.py` subscribing to other nodes' events via `AppConfig.ready()` — this
+  spec's dispatcher follows the exact same pattern (`apps/notifications/handlers.py`).
+- **Bundling already has a working precedent.** Corner reactions
+  (`apps/people/corner_services.py::_notify_reaction`) collapse a burst of reactions on one
+  activity into a single evolving notification: it looks for an existing **unread** notification
+  on the same `(recipient, source_node, action_url)` created within the last hour and updates its
+  title/message in place, rather than creating a new row per reaction. This spec generalises that
+  exact mechanism into a shared helper instead of leaving it Corners-only.
+- **The Hub Countdown widget already exists** (`apps/hub`, v0.19.1): one household-wide
+  `target_date`/`target_time` in `HouseholdHubWidget.settings_json`. "Daily countdown push" reads
+  this existing widget — it does not need a new countdown model.
+- **`Household.timezone`** already exists and is the correct source for "morning" / quiet-hours
+  time-of-day math (the same field the Solace timezone fix used this session).
+
+## 3. Notification categories
+
+One flat, finite list — each is a real toggle in preferences, each maps to concrete event(s)/job(s):
+
+| Category | Source | Trigger |
+|---|---|---|
+| `appointments` | Calendar | Appointment/event within 24h or due this morning |
+| `assigned_tasks` | Atlas, node-owned due items | Assigned to-do/reminder within 24h or due this morning |
+| `household_activity` | Atlas, Calendar, Homestead rooms, Travel | Someone else adds/changes a shared list, calendar entry or room plan item (**bundled**, §6) |
+| `home_maintenance` | Homestead | Maintenance/pool-care due or completed, warranty expiring |
+| `meridian` | Meridian | Task approved/rejected, reward approved, allowance paid, badge earned |
+| `fitness` | Fitness | Someone completes a workout, a personal record is set |
+| `books` | Books | Someone finishes a book, a club book changes |
+| `travel` | Travel | New destination idea added, booking deadline approaching |
+| `wish_price_alerts` | Link imports / Corners | A watched price drops/hits target |
+| `countdown` | Hub | Daily "N days/hours to go" digest while a countdown is active |
+| `corners` | Corners | Reaction, comment or help offer on your activity (already bundled, §2) |
+| `account` | Accounts/Audit | Security-relevant: password/PIN changed, new device, admin action on your account |
+
+Each category has two independent toggles (**in-app**, **push**) plus, where the source
+distinguishes it, an **assigned-to-me only** vs **everyone's** switch (doc 30 §7's
+"assigned-to-me versus household activity"). Sensible defaults ship enabled for everything except
+`household_activity` and `wish_price_alerts`, which default push-off/in-app-on (opt-in for push,
+to avoid a noisy first run).
+
+## 4. Data model
+
+```
+apps/notifications/
+  models.py: Notification (existing), + —
+    NotificationPreference   — (user, category) unique; in_app_enabled, push_enabled,
+                                mine_only (nullable — only meaningful for categories that support it)
+    UserNotificationSettings — one row per user; quiet_start/quiet_end (nullable TimeField,
+                                per-user per Q&A), morning_time (default 08:00, used for both the
+                                "morning of" reminder and the countdown digest)
+    PushDevice                — user, endpoint (unique), p256dh, auth, label, user_agent,
+                                created_at, last_seen_at, is_active
+    NotificationReminderLog   — idempotency marker: (source_node, record_type, record_id,
+                                lead_kind ∈ {24h, morning_of}) unique — the scheduled command
+                                checks this before sending so a re-run never double-sends
+```
+
+All four new models inherit `HouseholdBaseModel` per convention. `PushDevice`/
+`UserNotificationSettings`/`NotificationPreference` are addressed to **User** (D12 — the login
+holder receives notifications), matching the existing `Notification.recipient_user`.
+
+## 5. Central preference gate
+
+`create_notification`/`notify_person`/`notify_person_id` gain an optional `category: str`
+parameter (default `""` for the ~13 existing call sites that haven't been updated yet — an empty
+category always creates the in-app row, matching today's unconditional behaviour, but never
+triggers push, so nothing already shipped starts pushing to a phone without an explicit category
+being added deliberately). When `category` is set:
+
+1. Look up `NotificationPreference` for `(recipient_user, category)`. Missing row = defaults from
+   §3. `in_app_enabled=False` → the function returns `None`, nothing is created at all (matches
+   "fully customisable" literally — off means off, not "still logged, just hidden").
+2. If `push_enabled` and the user has active `PushDevice` rows and it isn't currently that user's
+   quiet hours (`UserNotificationSettings`, Household-local time, §2 Q&A: **push only** — the
+   in-app row above is unaffected by quiet hours), send Web Push to each device (§8).
+
+This keeps every call site simple — nodes pass a category string, the shared layer does the rest.
+
+## 6. Bundling burst activity
+
+New shared helper, generalising `_notify_reaction` (§2):
+
+```python
+def notify_bundled(user, *, category, key, title, message, source_node, action_url,
+                    window_minutes=60):
+```
+
+`key` replaces the reaction-specific `activity_key` — callers pass something that identifies the
+*thing* being bundled on (e.g. an Atlas list ID for "additions to this list", a room ID for room
+plan changes). Looks for an existing **unread** `Notification` with the same
+`(recipient, source_node, action_url)` created within `window_minutes` and updates its
+title/message rather than creating a new row — exactly the Corners mechanism, moved into shared
+code. `household_activity` and `corners` are the two categories that use this; everything else
+(reminders, countdown, direct assigned notifications) creates a fresh row per event, since those
+are inherently one-per-occurrence, not bursty.
+
+Window is **60 minutes** (§2 Q&A, matching the existing Corners behaviour exactly — no new
+constant to tune).
+
+## 7. Event-bus dispatcher
+
+New `apps/notifications/handlers.py`, subscribed via `NotificationsConfig.ready()` (matching
+`apps.achievements`/`apps.homestead`/`apps.solace`). Each event handler re-fetches the affected
+record through its node's normal permission-aware selector (never trusts the thin event payload
+for anything permission-relevant) and calls `notify_person`/`notify_bundled` for every household
+member who can see the result, excluding the actor.
+
+**Already publishable, just needs a subscriber:** `atlas.list_item_completed`,
+`fitness.session_completed`, `fitness.personal_record_set`, `meridian.task_approved`/`rejected`,
+`homestead.maintenance_completed`, `pets.treatment_completed`, `travel.idea_created` (already has
+its own inline notify call, §2 — leave as-is or migrate to the dispatcher, implementer's call).
+
+**Needs a new publish call added** (topic exists or is trivial to add, but nothing calls
+`publish()` for it today):
+- `atlas.list_item_created` — for "someone added to this list" (`household_activity`).
+- `scheduling.event_created`/`event_updated` — defined in `apps/scheduling/events.py` but never
+  called from `apps/scheduling/services.py`; wire the publish calls into `create_event`/
+  `update_event`.
+- `books.entry_finished` — new topic; `apps/books/events.py` exists but is currently empty. Fire
+  when a personal/club shelf entry's status changes to its "read"/history state.
+- `homestead.room_item_created` exists in the topic list already (check payload is sufficient)
+  for room-plan `household_activity` coverage.
+
+## 8. Scheduled reminders (appointments, assigned to-dos)
+
+New idempotent management command (D5 pattern, matching `solace_run_scheduled`/
+`link_imports_run_scheduled`), run hourly is enough — it only needs to catch the two fixed lead
+times, not arbitrary ones:
+
+- **24 hours before**: for every visible Calendar appointment/event and every Atlas item with a
+  due date, if `due_at` is between 23–25h away (hourly cron tolerance) and no
+  `NotificationReminderLog` row exists for `(record, "24h")`, notify assignees (or the whole
+  household if unassigned) under `appointments`/`assigned_tasks`, then log it.
+- **Morning of**: same sweep, but firing once per user at their `morning_time`
+  (`UserNotificationSettings`, default 08:00 Household-local) for anything due *that calendar
+  day*, logged under lead_kind `"morning_of"`.
+
+This is deliberately **not** the fully generic "configurable lead times" from doc 30 §7 — the
+owner asked for exactly these two fixed points. The model (`NotificationReminderLog.lead_kind`)
+leaves room to add more later without a redesign, but V1 ships only these two.
+
+## 9. Daily countdown digest
+
+Same command (or a lightweight second one), once per user per day at their `morning_time`: if the
+Hub Countdown widget is enabled and has a future `target_date`, send one push/in-app notification
+("3 days to go" / "14 hours to go" inside the final day) to everyone with `countdown` enabled.
+Idempotency: reuse `NotificationReminderLog` with `record_type="hub_countdown"`,
+`lead_kind=f"daily:{date.today()}"` so it can never double-send for the same calendar day even if
+the command runs twice.
+
+## 10. Web Push mechanics
+
+- **New dependency:** `pywebpush` (VAPID-signed Web Push from Python — the standard library for
+  this; no other viable option without hand-rolling ECDSA signing).
+- **VAPID keys**: generated once (`vapid_gen_keys` or `pywebpush`'s helper), stored as
+  `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` in `.env` — never in the database or
+  committed. The public key is served to the frontend to create the browser subscription.
+- **Frontend**: a service worker (`public/sw.js`) handling `push` (show notification) and
+  `notificationclick` (focus/open the deep link) events; a subscribe/unsubscribe flow gated
+  behind an explicit user action (never auto-prompt on login — browsers penalise unsolicited
+  permission prompts, and doc 30 already requires "explicit permission request initiated by the
+  user"); registers the subscription via `POST /notifications/devices/`.
+- **Payload safety (doc 30 §7, restated because it is a hard rule, not a suggestion):** push
+  payloads are deliberately sparse — a title and a generic message, never financial/health/
+  private record content. The service worker's `notificationclick` opens `action_url`, which
+  re-checks the session and record permission before showing anything — the payload itself is
+  never the source of truth. `solace`/`health`-sourced notifications either stay in-app-only
+  (recommended — these nodes are password-re-auth-gated, and a lock-screen push bypasses that
+  gate's spirit even with a sparse payload) or, if ever pushed, carry the most generic possible
+  text ("Money needs attention") with no amounts/names. This spec defaults to **in-app-only** for
+  anything sourced from a sensitive node; push for those categories is out of scope unless the
+  owner asks for it explicitly.
+- **Expiry**: a `410 Gone`/`404` from the push service on send deactivates that `PushDevice`
+  (`is_active=False`) rather than retrying it forever.
+
+## 11. API surface
+
+```
+GET/PATCH /api/v1/notifications/preferences/        — list/update all (category, in_app, push, mine_only)
+GET       /api/v1/notifications/settings/            — quiet hours + morning_time (self)
+PATCH     /api/v1/notifications/settings/
+GET       /api/v1/notifications/devices/              — this user's registered devices
+POST      /api/v1/notifications/devices/register/     — subscribe (endpoint + keys from the browser)
+DELETE    /api/v1/notifications/devices/<id>/          — revoke
+POST      /api/v1/notifications/devices/<id>/test/     — send one test push (doc 30 §7's "test control")
+```
+
+All self-service (a user manages their own preferences/devices/settings) — no admin override
+needed for V1; a parent managing a child's login can do so from that child's own session, same as
+today's profile editing.
+
+## 12. Delivery slices
+
+1. **Preference model + gate.** `NotificationPreference`/`UserNotificationSettings` +
+   migration, the `category` param on `create_notification`/`notify_person`, preferences
+   API + a simple settings-page UI. No push yet — in-app notifications become filterable/
+   quiet-hours-aware first, proving the gate before adding a delivery channel.
+2. **Web Push infrastructure.** VAPID keys, `PushDevice` model + register/unregister/test
+   endpoints, service worker, frontend subscribe flow, `pywebpush` send path wired into the gate
+   from slice 1.
+3. **Event-bus dispatcher + bundling.** `apps/notifications/handlers.py`, `notify_bundled`
+   extracted from Corners, the new/wired publish calls from §7, `household_activity` end to end.
+4. **Scheduled reminders + countdown digest.** The management command from §8/§9,
+   `NotificationReminderLog`, cron entry (matching the existing
+   `link_imports_run_scheduled` host-cron pattern from `docs/29_Core_Link_Import.md`).
+
+## 13. Acceptance criteria
+
+- Turn a category off (in-app): nothing appears for it anywhere, including the bell. Turn push
+  off for one category while leaving in-app on: the bell still gets it, no phone alert does.
+- Set quiet hours 10pm–7am; trigger a push-eligible event at 11pm — no push arrives until after
+  7am (or not at all, for a one-off event that isn't re-sent), but the in-app bell shows it
+  immediately.
+- Add five items to a shared shopping list within a minute: recipients with `household_activity`
+  on get **one** notification ("X added to Groceries"), not five, and it updates in place if a
+  sixth item is added 10 minutes later; a new one starts after the 60-minute window closes.
+- An appointment tomorrow at 3pm: assignees get a notification ~24h before and again the morning
+  of, each exactly once even if the reminder command runs multiple times in that window.
+- A household Countdown at "5 days to go": everyone with `countdown` enabled gets one push that
+  morning, not one per hour, and never twice for the same day.
+- A private Atlas list's additions never notify anyone who couldn't already see that list; a
+  Solace bill event never produces a push payload with an amount or bill name.
+- Revoke a device from Settings; it stops receiving push immediately and disappears from the
+  device list. A push to an expired/unsubscribed endpoint deactivates it automatically rather
+  than erroring on every future send.
+
+## 14. Deliberate exclusions
+
+Native iOS/Android push (APNs/FCM) beyond standards-based Web Push, SMS, email delivery,
+per-notification granularity beyond the category list in §3, arbitrary user-defined lead times
+(only the two fixed ones in §8 ship), engagement-style notification ranking/batching heuristics,
+and push for sensitive-node (Solace/Health) content beyond a generic "needs attention" text are
+not part of this package.

@@ -8,8 +8,10 @@
 > **Implementation status (v0.34.0):** appointments, Atlas Agenda, automatic dated-item sync,
 > Atlas People & birthdays, user-profile birth dates and independent pool schedule editing are
 > shipped. Atlas now also has a combined Appointments & events manager and shared in-place editors
-> for standalone schedule entries and Atlas-owned to-dos. Per-user phone notification preferences/delivery remain pending until the deployment is
-> served through HTTPS; the current HTTP installation cannot safely register Web Push.
+> for standalone schedule entries and Atlas-owned to-dos. **§7 and §8 slice 4 below (custom phone
+> notification preferences and the Web Push/PWA foundation) are superseded by the fuller
+> `docs/32_Core_Notifications_and_Push.md`, written 2026-08-12 once HTTPS on the LAN went live —
+> read that doc, not this section, before building notification preferences or push.**
 
 ## 1. Outcome
 
@@ -121,6 +123,8 @@ Do not manufacture historical occurrences when a cadence changes.
 
 ## 7. Custom phone notifications
 
+> **Superseded — see `docs/32_Core_Notifications_and_Push.md`.** Kept below for history only.
+
 Add shared notification preferences per user, with device subscriptions beneath the user rather
 than preferences duplicated in every node. Settings should offer:
 
@@ -150,8 +154,8 @@ unnecessary until measured volume or reliability warrants it.
    birthday occurrences and ages, and add People & birthdays.
 3. **Pool schedule editor:** presets, weekday/next-date preview, future-only update semantics and
    preserved completion history.
-4. **Preferences and PWA foundation:** preference model/UI, service worker, per-device Web Push
-   subscriptions, safe payloads, quiet hours and scheduled dispatcher.
+4. **Preferences and PWA foundation** — superseded, see `docs/32_Core_Notifications_and_Push.md`
+   §12 for the actual delivery slices.
 
 ## 9. Acceptance criteria
 

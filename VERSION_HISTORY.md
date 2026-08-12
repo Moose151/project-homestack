@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.34.8**
+> **Current version: 0.34.9**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,19 @@
 ---
 
 ## 0.34 — Discoverability and daily navigation
+
+### 0.34.9 — 2026-08-12 — Notifications & Push core spec (documentation only)
+- New `docs/32_Core_Notifications_and_Push.md`: full category taxonomy (12 categories, each
+  with independent in-app/push toggles and, where relevant, an assigned-to-me/household-wide
+  switch), the preference/quiet-hours/device data model, a central preference gate added to
+  `create_notification`/`notify_person`, a generalised version of the bundling mechanism Corner
+  reactions already use, an event-bus dispatcher design cataloguing which of the ~40 existing
+  domain events already fire versus which need a new publish call added, the two-fixed-lead-time
+  (24h-before/morning-of) scheduled reminder design, the daily countdown digest (reusing the
+  existing Hub Countdown widget, no new model), and Web Push mechanics (VAPID, `pywebpush`,
+  service worker, payload-safety rules, sensitive-node exclusions). Four delivery slices
+  proposed. `docs/30_Core_Daily_Coordination.md` §7/§8-slice-4 marked superseded, pointing here.
+  No code changed in this entry.
 
 ### 0.34.8 — 2026-08-12 — LAN-trusted HTTPS confirmed live (documentation only)
 - Owner completed the Nginx Proxy Manager + Pi-hole setup: proxy host live, Let's Encrypt
