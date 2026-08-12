@@ -3,22 +3,17 @@
 > **Status:** Recommended execution plan after completion of the PWA/Web Push implementation
 > (v0.34.10–v0.34.13).
 >
-> This document is intentionally practical. It does not replace the canonical Roadmap,
-> Architecture or Security documents. It translates their current direction into a clear answer
-> to: **what should HomeStack do next, in what order, and what needs to be true before moving on?**
->
-> Current architectural decisions remain authoritative in `00_README_and_Changelog.md`; current
-> sequencing remains authoritative in `04_Development_Roadmap.md`; security gates remain
-> authoritative in `05_Security_Architecture_Document.md`.
+> This document is practical guidance, not a replacement for the canonical Roadmap, Architecture
+> or Security documents. It answers: **what should HomeStack do next, in what order, and what needs
+> to be true before moving on?**
 
 ## 1. Recommendation
 
 HomeStack has reached the point where the highest-value next phase is **not another large node**.
-The application already has broad household functionality, trusted LAN HTTPS, a PWA/Web Push layer
-and real daily household use. The next engineering phase should make that application **dependable
-as household infrastructure**.
+It already has broad household functionality, trusted LAN HTTPS, a PWA/Web Push layer and real daily
+use. The next phase should make the application **dependable as household infrastructure**.
 
-The recommended sequence is now:
+Recommended sequence:
 
 1. **Deploy and validate the completed Web Push work on the live server.**
 2. **Production-serving and deployment hardening — primary engineering phase.**
@@ -27,31 +22,30 @@ The recommended sequence is now:
 5. **Add frontend/E2E testing and CI.**
 6. **Strengthen backup/recovery and operational health.**
 7. **Add stronger adult authentication before any public remote-access plan.**
-8. Then return to larger feature expansion such as Home Assistant, Hearth and later Health.
+8. Then return to feature expansion such as Home Assistant, Hearth and later Health.
 
-This is the recommended next step because HomeStack now contains important operational, financial
-and personal household data. Reliability, recovery and repeatable updates create more value than
-immediately adding another major feature area.
+Reliability, recovery and repeatable updates now create more value than immediately adding another
+major feature area.
 
 ---
 
 ## 2. Completed prerequisite — Web Push/PWA notifications
 
-The Web Push implementation is complete. Canonical implementation contract:
-`32_Core_Notifications_and_Push.md`.
+Canonical contract: `32_Core_Notifications_and_Push.md`.
 
 Shipped behaviour includes:
 
-- per-user category/channel preferences and quiet hours;
+- per-user category/channel preferences;
+- per-user quiet hours and configurable morning time;
 - per-device Web Push subscriptions;
 - VAPID delivery;
 - service-worker/PWA support;
-- lead-time settings;
 - sparse sensitive-safe lock-screen payloads;
 - permission/re-authentication checks after opening a deep link;
 - expired/revoked subscription handling;
 - household-activity bundling;
-- scheduled 24h/morning-of reminders and daily Hub countdown delivery;
+- fixed 24h/morning-of reminders for the bounded Calendar/Atlas scope;
+- daily Hub countdown delivery;
 - device test-push support.
 
 The implementation branch reported **875 backend tests green** and a clean frontend TypeScript
@@ -59,37 +53,27 @@ check.
 
 ### Live deployment follow-up
 
-This is no longer feature-development work, but it must be completed on the home server:
+This is operational rollout, not unfinished feature development:
 
-1. rebuild backend/frontend images and apply the notification migrations;
+1. rebuild backend/frontend images and apply notification migrations;
 2. configure `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT`;
 3. run `notifications_run_scheduled` at least hourly;
 4. validate at least two users/devices with different preferences;
-5. confirm sensitive sources do not leak protected lock-screen content;
-6. confirm notification deep links re-check current permissions;
-7. on iOS, test an **installed Home Screen PWA**, not an ordinary Safari tab.
+5. confirm quiet hours and the fixed 24h/morning/countdown behaviour;
+6. confirm sensitive sources cannot leak protected lock-screen content;
+7. confirm notification deep links re-check current permissions;
+8. on iOS, test an **installed Home Screen PWA**, not an ordinary Safari tab.
 
-Exact commands and operational notes are in `HANDOVER.md`.
+Exact commands are in `HANDOVER.md`.
 
 ---
 
 ## 3. Start here — production serving
 
-The live HomeStack deployment still uses development application servers. That is acceptable for
-the current LAN-only stage, but it should no longer be the long-term serving model for a system the
-household depends on.
+The live deployment still uses Django `runserver` and the Vite development server. This is the
+first engineering issue to remove.
 
-Current shape:
-
-```text
-Nginx Proxy Manager
-        |
-        +--> Vite development server
-        |
-        +--> Django runserver
-```
-
-Recommended production shape:
+Target shape:
 
 ```text
 LAN client
@@ -105,169 +89,134 @@ Nginx Proxy Manager :443
           PostgreSQL
 ```
 
-### 3.1 Backend production server
+### 3.1 Backend
 
-Replace Django `runserver` in the live production profile with a supported production WSGI server,
-with Gunicorn being the simplest recommended choice for the current Django architecture.
+Replace `runserver` in the live profile with a production WSGI server such as Gunicorn.
 
 What needs to happen:
 
 - add the production WSGI dependency;
 - define a production container command;
-- choose sensible worker/timeout settings for the small household workload;
-- preserve Django health checks and clear logging;
-- validate proxy headers and secure-cookie behaviour behind Nginx Proxy Manager;
-- keep the development Compose override using `runserver`/reload where useful.
+- use sensible worker/timeouts for the small household workload;
+- preserve health checks and useful logs;
+- validate proxy headers and secure-cookie behaviour behind NPM;
+- retain development `runserver`/reload in the development override.
 
-Do not introduce a new application architecture simply to replace `runserver`.
+### 3.2 Frontend
 
-### 3.2 Production frontend build
-
-Stop using the Vite development server as the live frontend server.
+Stop serving the live application through Vite dev server.
 
 What needs to happen:
 
-- run `npm ci` and `npm run build` in a build stage;
-- produce the Vite `dist` output;
-- serve that static output from a small production web server or an appropriate proxy path;
-- ensure SPA routes fall back correctly to `index.html`;
-- preserve `/api/` routing to Django;
-- verify PWA/service-worker and push behaviour from the final production build, not only `vite dev`.
+- `npm ci` + `npm run build` in a build stage;
+- serve the resulting `dist` from a small production web server/proxy path;
+- support SPA fallback to `index.html`;
+- preserve `/api/` routing;
+- verify service-worker/PWA/Web Push from the production build.
 
 ### 3.3 Production Django settings
 
-Confirm and deliberately select the live Django production settings rather than assuming the
-switch happened because documentation recommends it.
+Verify deliberately rather than assuming:
 
-At minimum verify:
-
-- `DJANGO_SETTINGS_MODULE` is the intended production module;
+- intended `DJANGO_SETTINGS_MODULE`;
 - production `DEBUG` behaviour;
-- `DJANGO_ALLOWED_HOSTS` includes the trusted HomeStack hostname;
-- `DJANGO_CSRF_TRUSTED_ORIGINS=https://homestack.moosesoftwares.com`;
-- secure session/CSRF cookie behaviour works through NPM;
-- secure-proxy handling matches NPM;
-- static/admin asset behaviour is explicitly solved;
-- secrets remain outside the repository.
+- allowed hosts and CSRF trusted origin;
+- secure session/CSRF cookies behind NPM;
+- proxy SSL handling;
+- static/admin asset handling;
+- secrets outside the repository.
 
-### Production-serving completion gate
+### Done when
 
-Do not call this phase complete until:
-
-- HomeStack is served without Django `runserver`;
-- HomeStack is served without the Vite development server;
-- login, logout, PIN login and password re-auth work through the trusted HTTPS origin;
-- at least one authenticated write succeeds through the HTTPS origin;
-- PWA/push still works from the production frontend build;
-- backend and frontend health/smoke checks pass after container recreation.
+- no Django `runserver` in the live profile;
+- no Vite dev server in the live profile;
+- login/PIN/password re-auth work through HTTPS;
+- an authenticated write succeeds through HTTPS;
+- production PWA/Web Push still works;
+- backend/frontend smoke checks pass after recreation.
 
 ---
 
-## 4. Tighten Docker networking and exposed ports
+## 4. Tighten Docker networking
 
-The long-term live topology should expose only the services that actually need LAN ingress.
-PostgreSQL should not be directly reachable from ordinary LAN clients, and Django/frontend should
-prefer communication through the reverse-proxy/container network rather than broadly published host
-ports.
+The production profile should expose only what needs LAN ingress.
 
-Recommended target:
+Target:
 
 ```text
-LAN
- |
- v
-Nginx Proxy Manager :443
- |
- +---- shared/private Docker network ----+
- |                                       |
- v                                       v
-HomeStack web                         Django API
-                                         |
-                                         v
-                                     PostgreSQL
+LAN -> NPM :443 -> HomeStack web/API -> PostgreSQL
 ```
 
 What needs to happen:
 
-- establish an explicit shared Docker network between NPM and the HomeStack ingress services;
-- make PostgreSQL internal-only in the production profile;
+- shared Docker network between NPM and HomeStack ingress services;
+- PostgreSQL internal-only;
 - remove unnecessary production host publication of `5432`, `8000` and `5173` once NPM can reach
-  the appropriate containers directly;
-- keep development-only port publication in a development override;
-- keep NPM admin port `81` LAN/admin-only;
-- do not introduce router port forwarding.
+  the containers directly;
+- keep development ports in a development override;
+- keep NPM admin `81` LAN/admin-only;
+- no router port forwarding.
 
 ### Done when
 
-A normal household client reaches HomeStack through the trusted HTTPS origin while database and
-internal application ports are no longer generally exposed to the LAN in the production profile.
+Household clients use the trusted HTTPS origin while database/internal app ports are not generally
+reachable from the LAN.
 
 ---
 
 ## 5. Create one supported deployment command
 
-The current manual update sequence is easy to perform incorrectly. HomeStack has already reached a
-stage where forgetting an image rebuild or migration can break the live household system.
-
-Create one supported command, for example:
+Create something like:
 
 ```bash
 ./scripts/deploy.sh
 ```
 
-The deployment workflow should perform:
+It should perform:
 
 1. preflight checks;
-2. verify/offer a current backup before risky changes;
-3. build production backend/frontend images;
-4. run database migrations safely;
+2. verify or create a current backup before risky work;
+3. build production images;
+4. run migrations;
 5. recreate/restart services;
 6. verify container health;
-7. verify backend health endpoint;
-8. verify the trusted HTTPS frontend/API origin;
-9. verify required scheduled services/commands;
-10. show deployed HomeStack version/commit;
-11. give clear failure/rollback guidance.
+7. verify backend and HTTPS frontend/API health;
+8. verify required scheduled jobs/configuration;
+9. display deployed version/commit;
+10. provide clear failure/rollback guidance.
 
-The script must fail loudly after a failed migration or failed health check rather than reporting
-success.
+The command must fail loudly after a failed migration/health check.
 
 ### Done when
 
-A routine HomeStack update no longer requires remembering a multi-command sequence from the
-Handover. One documented command performs the supported production deployment and verifies the
-result.
+A routine deployment no longer depends on remembering a multi-command handover sequence.
 
 ---
 
 ## 6. Add frontend testing and CI
 
-The backend has strong automated coverage. The next QA gap is the frontend and full browser flow.
-The objective is not thousands of UI tests; it is protection for workflows that could make the
-household system unusable if they regress.
-
 Recommended stack:
 
-- **Vitest** for frontend unit/component tests;
-- **React Testing Library** for user-visible component behaviour;
-- **Playwright** for a small number of complete browser flows;
-- **GitHub Actions** for automated verification on pull requests.
+- **Vitest**;
+- **React Testing Library**;
+- **Playwright**;
+- **GitHub Actions**.
 
-Initial high-value browser flows:
+High-value browser flows:
 
 - password login/logout;
 - avatar/PIN login;
 - sensitive re-authentication;
-- Hub navigation;
+- Hub/navigation;
 - Calendar/source deep links;
-- create/edit/complete an Atlas item;
+- Atlas create/edit/complete;
 - permission isolation between two users;
-- Solace sensitive lock/re-auth behaviour;
-- mobile navigation at a phone viewport;
+- Solace sensitive lock/re-auth;
+- phone-width navigation;
 - notification settings/device registration where practical;
 - one representative write from another important domain.
 
-Recommended CI checks:
+Recommended CI:
 
 ```text
 backend tests
@@ -280,151 +229,119 @@ selected Playwright smoke tests
 
 ### Done when
 
-A pull request cannot silently break the backend test suite, migration state, production frontend
-build or a small set of critical household browser workflows without CI reporting it.
+A PR cannot silently break migration state, the production frontend build or critical household
+browser flows without CI reporting it.
 
 ---
 
 ## 7. Strengthen backups and recovery
 
-HomeStack is becoming a source of truth for important household information. A backup stored only
-on the same server/storage device is not sufficient long-term protection.
+HomeStack contains important household data. A backup on the same server/storage device is not
+enough long term.
 
 What needs to happen:
 
-- retain the existing database + protected-media backup contract;
-- add at least one **encrypted copy off the primary HomeStack server/storage device**;
-- preferably keep another copy in a different physical failure domain later;
-- keep backup credentials/encryption keys outside ordinary user-facing configuration and outside
-  the repository;
-- record last successful local and off-server backup status;
-- retain checksums/integrity validation;
-- periodically perform an actual restore test;
-- keep `docs/restore.md` aligned with the real supported process.
+- retain database + protected-media backup consistency;
+- add at least one **encrypted copy off the primary server/storage device**;
+- keep backup credentials/keys outside the repository;
+- retain integrity/checksum verification;
+- record last successful local/off-server backup where useful;
+- periodically perform a real restore test;
+- keep `docs/restore.md` aligned with the real process.
 
 ### Done when
 
-Loss of the HomeStack server or its primary storage does not imply loss of the household database
-and attachments, and a recent backup has been successfully restored in a real test.
+Loss of the HomeStack server/primary storage does not imply loss of household data and a recent
+backup has been successfully restored in a real test.
 
 ---
 
-## 8. Add an operational System Health surface
+## 8. Add small operational health visibility
 
-Once deployment and backup jobs are dependable, HomeStack should be able to tell an administrator
-whether its own essential operational functions are healthy without requiring routine log reading.
+A future Admin → **System Health** surface should show HomeStack's own health, not replace Uptime
+Kuma/Dozzle.
 
-Recommended Admin → **System Health** information:
+Useful data:
 
-- installed HomeStack version/commit;
+- installed version/commit;
 - backend/database health;
-- available storage/disk warning state;
-- last successful local/off-server backup;
-- last restore-test date where tracked;
+- disk/storage warning state;
+- last local/off-server backup;
 - scheduled-command last-run/failure state;
 - notification dispatcher status;
-- Home Assistant bridge health once implemented;
-- links to Uptime Kuma/Dozzle rather than rebuilding them.
-
-Keep this intentionally small. HomeStack should expose the health of HomeStack, not become a full
-server-monitoring replacement.
+- Home Assistant health once implemented;
+- links to existing operations tools.
 
 ---
 
-## 9. Stronger adult authentication before public remote access
+## 9. Stronger adult authentication before public access
 
-LAN HTTPS is trusted, but HTTPS alone does not make HomeStack ready for public internet access.
+Trusted LAN HTTPS does not make HomeStack internet-ready.
 
-Before any Cloudflare Tunnel or other public remote-access path is enabled, complete the security
-gate in `05_Security_Architecture_Document.md`.
+Before Cloudflare Tunnel or other public remote access, satisfy
+`05_Security_Architecture_Document.md`, including:
 
-The recommended adult/admin improvement is **WebAuthn/passkeys or another strong second factor**
-while retaining simple PIN login for ordinary LAN/kiosk use where appropriate.
-
-Before public exposure:
-
-- production serving completed;
-- unnecessary service ports removed;
+- production serving;
+- reduced service exposure;
 - strong adult/admin passwords;
 - rate limiting/brute-force protection;
-- 2FA/passkey capability for privileged remote access;
-- sensitive-node re-authentication verified;
-- secure cookie/proxy configuration verified;
-- encrypted off-server backups operating;
-- explicit public-exposure threat-model/security review;
-- decision whether VPN-only access remains preferable.
+- passkeys/2FA or another strong second factor for privileged remote access;
+- sensitive-node re-auth verification;
+- secure proxy/cookie configuration;
+- encrypted off-server backups;
+- explicit threat-model/security review.
 
-Do **not** add router port forwarding as a shortcut around this gate.
+VPN-only remote access may still be preferable. Do not add router port forwarding as a shortcut.
 
 ---
 
-## 10. Feature work after the reliability phase
+## 10. Feature work after reliability
 
-Once production serving, deployment, recovery and QA are materially stronger, return to household
-feature expansion according to actual use.
+### Home Assistant
 
-### 10.1 Home Assistant
+Next major integration after the reliability baseline. Preserve D22:
 
-Home Assistant remains the recommended next major integration after reliability work. Keep D22 and
-`26_Node_Home_Assistant.md` intact:
-
-- Home Assistant owns devices, state, history and automations;
-- HomeStack owns People, permissions, household records and presentation mappings;
-- backend-only HA token;
-- explicit entity/control allowlists;
+- HA owns devices/state/history/automations;
+- HomeStack owns household records/People/permissions/presentation mappings;
+- backend-only token;
+- explicit allowlists;
 - read-only status first;
-- safe low-risk controls second;
+- safe controls second;
 - no generic integrations framework.
 
-### 10.2 Hearth / meal planning
+### Hearth
 
-Hearth remains a strong everyday domain:
+Recipes and meal planning should send missing ingredients into **Atlas Grocery**, not create a
+second grocery data store.
 
-- recipes;
-- meal plans;
-- dinner/weekly meal view;
-- recipe import;
-- ingredient scaling;
-- send missing ingredients into the existing **Atlas Grocery** list.
+### Documents browser
 
-Do not create another grocery/shopping data store.
+A central permission-aware discovery surface can aggregate shared attachments while keeping each
+file linked to its owning domain record. OCR remains later.
 
-### 10.3 Documents browser
+### Travel
 
-The shared attachment system already provides the security/storage foundation. A future first-class
-Documents surface can improve discoverability across manuals, receipts, insurance, school files,
-pet records, warranties and contracts while preserving the owning domain record as source of truth.
+Prefer finishing packing lists/protected travel documents before inventing another domain.
 
-### 10.4 Travel finishing work
+### Health
 
-Finish useful existing Travel slices rather than create another domain:
-
-- packing lists;
-- protected travel documents;
-- later optional photo/journal/map/flight enrichments where they provide real value.
-
-### 10.5 Health remains later
-
-Do not rush medical Health. It raises the highest privacy/sensitivity bar in the product.
-Production serving, reliable backups and stronger adult authentication should mature first.
-Fitness remains separate from medical Health under D24.
+Keep medical Health later. Production operation, recovery and stronger adult authentication should
+mature before introducing the highest-sensitivity domain. Fitness remains separate under D24.
 
 ---
 
-## 11. Infrastructure that should remain deferred
+## 11. Infrastructure to keep deferred
 
-Do not add these simply because HomeStack is becoming more mature:
+Do not add without demonstrated need:
 
-- Redis/Celery without a demonstrated queue/retry/concurrency need;
-- microservices;
-- Kubernetes;
+- Redis/Celery;
+- microservices/Kubernetes;
+- durable event broker;
 - generic plugin/integration marketplace;
-- generic automation/workflow engine;
-- durable event broker without evidence the D4 event interface is insufficient;
-- AI features without a clear household workflow they improve.
+- generic automation engine;
+- AI features without a clear household workflow.
 
-The current Django modular monolith remains appropriate for the workload. Improve its production
-operation before replacing it.
+The Django modular monolith remains appropriate. Improve its operation before replacing it.
 
 ---
 
@@ -432,18 +349,18 @@ operation before replacing it.
 
 ```text
 COMPLETED
-  Web Push / PWA notifications
+  Web Push / PWA implementation
         |
         v
-LIVE ROLLOUT FOLLOW-UP
+LIVE ROLLOUT
   VAPID + migrations + hourly dispatcher + real-device validation
         |
         v
-CURRENT RECOMMENDED ENGINEERING PHASE
+CURRENT ENGINEERING PHASE
   Production Django + production frontend
         |
         v
-  Private/tighter Docker networking
+  Tighter Docker networking
         |
         v
   One-command deployment + smoke checks
@@ -455,7 +372,7 @@ CURRENT RECOMMENDED ENGINEERING PHASE
   Encrypted off-server backups + restore testing
         |
         v
-  System Health / operational visibility
+  System Health visibility
         |
         v
   Passkeys/2FA + remote-access security gate
@@ -465,34 +382,22 @@ FEATURE EXPANSION
   Home Assistant / Hearth / Documents / Travel finishing
         |
         v
-LATER SENSITIVE WORK
+LATER
   Health
 ```
 
-Some tasks can overlap, but this is the preferred priority order. Major new feature work should not
-repeatedly displace production serving, deployment reliability and recovery.
+## 13. Reliability-phase exit criteria
 
----
+HomeStack can reasonably be treated as dependable household infrastructure when:
 
-## 13. Exit criteria for the reliability phase
-
-HomeStack can reasonably be described as dependable household infrastructure when all of the
-following are true:
-
-- production Django server in use;
-- production-built frontend in use;
-- trusted LAN HTTPS verified for real authenticated reads/writes;
-- PWA/Web Push verified from the production build on real household devices;
-- no unnecessary database/backend/frontend development ports exposed in the production profile;
+- production Django and frontend serving are in use;
+- trusted HTTPS works for real authenticated reads/writes;
+- PWA/Web Push works from the production build on real household devices;
+- unnecessary development/database ports are not exposed in production;
 - one supported deployment command builds, migrates, restarts and smoke-tests;
-- backend tests and migration checks run automatically;
-- frontend production build and critical UI flows run automatically;
+- backend/migration/frontend/critical browser checks run automatically;
 - at least one encrypted backup exists off the primary server/storage;
 - restore has been successfully tested;
 - administrators can see basic HomeStack operational health;
-- adult/admin authentication has a clear stronger-auth path before public access;
-- the public remote-access gate remains closed until the Security Architecture requirements are
-  deliberately satisfied.
-
-At that point, feature work such as Home Assistant and Hearth can proceed on a substantially more
-dependable foundation.
+- stronger adult authentication exists before public access;
+- the public-access gate remains closed until deliberately satisfied.
