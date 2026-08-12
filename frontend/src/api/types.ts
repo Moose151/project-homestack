@@ -605,6 +605,26 @@ export interface NotificationList {
   results: AppNotification[]
 }
 
+export type NotificationCategory =
+  | 'appointments' | 'assigned_tasks' | 'household_activity' | 'home_maintenance'
+  | 'meridian' | 'fitness' | 'books' | 'travel' | 'wish_price_alerts' | 'countdown'
+  | 'corners' | 'account'
+
+export interface NotificationPreference {
+  category: NotificationCategory
+  label: string
+  in_app_enabled: boolean
+  push_enabled: boolean
+  mine_only: boolean
+  supports_mine_only: boolean
+}
+
+export interface UserNotificationSettings {
+  quiet_start: string | null
+  quiet_end: string | null
+  morning_time: string
+}
+
 export interface MeridianRewardRequest {
   id: number
   reward_id: number

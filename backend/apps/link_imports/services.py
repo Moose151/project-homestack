@@ -132,6 +132,7 @@ def check_watch(watch: LinkWatch, *, previewer=None, now=None) -> bool:
                 watch.owner_person, title=f"Price drop: {watch.title}",
                 message=f"{watch.retailer or 'The shop'} dropped from ${previous} to ${price} {watch.currency}.",
                 source_node=watch.source_node, action_url="/corners/%s?tab=lists" % watch.owner_person_id,
+                category="wish_price_alerts",
             )
         watch.save()
         return new_alert
@@ -145,5 +146,6 @@ def check_watch(watch: LinkWatch, *, previewer=None, now=None) -> bool:
                 message="HomeStack could not read this shop for three checks. The saved item is unchanged.",
                 source_node=watch.source_node,
                 action_url=f"/corners/{watch.owner_person_id}?tab=lists",
+                category="wish_price_alerts",
             )
         return False

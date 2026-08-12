@@ -31,7 +31,7 @@ def _notify_assigned(acting_user: User, person_ids, *, title: str, message: str,
             continue  # don't notify yourself about your own item
         notifications.notify_person_id(
             person_id, title=title, message=message, source_node="education",
-            action_url=action_url,
+            action_url=action_url, category="assigned_tasks",
         )
 
 # ---------------------------------------------------------------------------

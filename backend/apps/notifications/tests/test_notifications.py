@@ -107,3 +107,119 @@ class NotificationApiTests(TestCase):
         self._login()
         resp = self.client.get(reverse("notification-list"))
         self.assertEqual(len(resp.json()["results"]), 0)
+
+
+class NotificationPreferenceGateTests(TestCase):
+    """docs/32_Core_Notifications_and_Push.md §5 — the central preference gate."""
+
+    def setUp(self):
+        self.user = _make_user("parent")
+
+    def test_blank_category_always_creates_matching_pre_existing_behaviour(self):
+        note = services.create_notification(self.user, title="T", message="M")
+        self.assertIsNotNone(note)
+
+    def test_missing_preference_row_defaults_to_enabled(self):
+        note = services.create_notification(self.user, title="T", message="M", category="meridian")
+        self.assertIsNotNone(note)
+
+    def test_disabled_category_suppresses_the_notification(self):
+        services.set_preference(
+            self.user, category="meridian", in_app_enabled=False, push_enabled=True,
+        )
+        note = services.create_notification(self.user, title="T", message="M", category="meridian")
+        self.assertIsNone(note)
+        self.assertEqual(Notification.objects.count(), 0)
+
+    def test_enabling_a_previously_disabled_category_restores_delivery(self):
+        services.set_preference(
+            self.user, category="meridian", in_app_enabled=False, push_enabled=True,
+        )
+        services.set_preference(
+            self.user, category="meridian", in_app_enabled=True, push_enabled=True,
+        )
+        note = services.create_notification(self.user, title="T", message="M", category="meridian")
+        self.assertIsNotNone(note)
+
+    def test_unknown_category_is_rejected(self):
+        with self.assertRaises(ValueError):
+            services.set_preference(
+                self.user, category="not_a_real_category", in_app_enabled=True, push_enabled=True,
+            )
+
+
+class NotificationPreferenceApiTests(TestCase):
+    def setUp(self):
+        self.user = _make_user("parent")
+
+    def _login(self):
+        self.client.post(
+            reverse("auth-pin-login"),
+            {"username": "parent", "pin": "1234"}, content_type="application/json",
+        )
+
+    def test_list_returns_all_categories_with_documented_defaults(self):
+        self._login()
+        resp = self.client.get(reverse("notification-preferences"))
+        self.assertEqual(resp.status_code, 200)
+        rows = {row["category"]: row for row in resp.json()}
+        self.assertEqual(len(rows), 12)
+        # docs/32 §3: household_activity and wish_price_alerts default push-off; the rest push-on.
+        self.assertFalse(rows["household_activity"]["push_enabled"])
+        self.assertFalse(rows["wish_price_alerts"]["push_enabled"])
+        self.assertTrue(rows["meridian"]["push_enabled"])
+        self.assertTrue(all(row["in_app_enabled"] for row in rows.values()))
+        self.assertTrue(rows["appointments"]["supports_mine_only"])
+        self.assertFalse(rows["corners"]["supports_mine_only"])
+
+    def test_patch_persists_and_is_reflected_on_next_get(self):
+        self._login()
+        resp = self.client.patch(
+            reverse("notification-preferences"),
+            [{"category": "meridian", "in_app_enabled": False, "push_enabled": False}],
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.json())
+        rows = {row["category"]: row for row in resp.json()}
+        self.assertFalse(rows["meridian"]["in_app_enabled"])
+        # Untouched categories keep their defaults, not reset to some blanket value.
+        self.assertTrue(rows["fitness"]["in_app_enabled"])
+
+    def test_preferences_are_self_only(self):
+        other = _make_user("other", role=User.Role.USER)
+        services.set_preference(other, category="meridian", in_app_enabled=False, push_enabled=False)
+        self._login()
+        resp = self.client.get(reverse("notification-preferences"))
+        rows = {row["category"]: row for row in resp.json()}
+        self.assertTrue(rows["meridian"]["in_app_enabled"])  # this user's own default, not other's
+
+
+class NotificationSettingsApiTests(TestCase):
+    def setUp(self):
+        self.user = _make_user("parent")
+
+    def _login(self):
+        self.client.post(
+            reverse("auth-pin-login"),
+            {"username": "parent", "pin": "1234"}, content_type="application/json",
+        )
+
+    def test_get_returns_defaults_before_any_row_exists(self):
+        self._login()
+        resp = self.client.get(reverse("notification-settings"))
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIsNone(data["quiet_start"])
+        self.assertIsNone(data["quiet_end"])
+        self.assertEqual(data["morning_time"], "08:00:00")
+
+    def test_patch_updates_quiet_hours(self):
+        self._login()
+        resp = self.client.patch(
+            reverse("notification-settings"),
+            {"quiet_start": "22:00", "quiet_end": "07:00"},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.json())
+        self.assertEqual(resp.json()["quiet_start"], "22:00:00")
+        self.assertEqual(resp.json()["quiet_end"], "07:00:00")

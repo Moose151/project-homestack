@@ -236,6 +236,7 @@ def create_list_suggestion(acting_user: User, atlas_list: AtlasList, **data) -> 
             atlas_list.owner_person, title=f"{person.name} suggested {suggestion.title}",
             message=f"Review the suggestion for {atlas_list.title}.", source_node="atlas",
             action_url=f"/corners/{atlas_list.owner_person_id}?tab=lists",
+            category="corners",
         )
     return suggestion
 

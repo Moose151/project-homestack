@@ -12,7 +12,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.notifications import selectors, services
-from apps.notifications.serializers import NotificationSerializer
+from apps.notifications.serializers import (
+    NotificationPreferenceSerializer,
+    NotificationPreferenceWriteSerializer,
+    NotificationSerializer,
+    UserNotificationSettingsSerializer,
+)
 from apps.permissions.drf import HomeStackPermission
 
 _Perm = HomeStackPermission.for_resource("notifications")
@@ -49,3 +54,38 @@ class NotificationReadAllView(APIView):
     def post(self, request: Request) -> Response:
         count = services.mark_all_read(request.user)
         return Response({"marked_read": count}, status=status.HTTP_200_OK)
+
+
+class NotificationPreferenceListView(APIView):
+    """Self-service: a user only ever reads/writes their own preferences."""
+
+    permission_classes = [_Perm]
+    permission_action = "view"
+
+    def get(self, request: Request) -> Response:
+        rows = selectors.list_preferences_for_user(request.user)
+        return Response(NotificationPreferenceSerializer(rows, many=True).data)
+
+    def patch(self, request: Request) -> Response:
+        serializer = NotificationPreferenceWriteSerializer(data=request.data, many=True)
+        serializer.is_valid(raise_exception=True)
+        services.set_preferences(request.user, serializer.validated_data)
+        return Response(NotificationPreferenceSerializer(
+            selectors.list_preferences_for_user(request.user), many=True,
+        ).data)
+
+
+class NotificationSettingsView(APIView):
+    permission_classes = [_Perm]
+    permission_action = "view"
+
+    def get(self, request: Request) -> Response:
+        return Response(
+            UserNotificationSettingsSerializer(services.get_or_create_settings(request.user)).data
+        )
+
+    def patch(self, request: Request) -> Response:
+        serializer = UserNotificationSettingsSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        obj = services.update_settings(request.user, **serializer.validated_data)
+        return Response(UserNotificationSettingsSerializer(obj).data)

@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.34.9**
+> **Current version: 0.34.10**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,27 @@
 ---
 
 ## 0.34 — Discoverability and daily navigation
+
+### 0.34.10 — 2026-08-12 — Notification preferences (docs/32 slice 1, on feature/push-notifications)
+- Every household member can now choose what they hear about: `GET/PATCH /notifications/preferences/`
+  covers 12 categories (Appointments, Assigned to-dos, Household activity, Home & maintenance,
+  Meridian, Fitness, Books, Travel, Wish & price alerts, Countdown, Corners, Account) each with
+  independent in-app/push toggles, plus an "only things assigned to me" switch on the two
+  categories where that applies. New Settings → **Your notifications** page, also reachable from
+  the profile editor for non-admin logins. `GET/PATCH /notifications/settings/` adds per-user
+  quiet hours and a morning-digest time, ready for the reminder/countdown slices to use.
+- The existing shared `create_notification`/`notify_person` gained an optional `category`
+  parameter that gates delivery against the new preferences — omitting it (every pre-existing
+  call site) behaves exactly as before, so nothing already shipped changed. Eight real call sites
+  across `achievements`, `atlas`, `education`, `fitness`, `link_imports`, `meridian`, `people`
+  (Corners) and `travel` now pass their real category, so preferences have an immediate,
+  testable effect rather than sitting inert. Solace stays uncategorised (sensitive-node push
+  exclusion, docs/32 §10). New `NotificationPreference`/`UserNotificationSettings` models,
+  migration `notifications.0002`. **836 backend tests green (18 new); frontend typecheck and
+  production build clean; migration applied to the live dev database.**
+- No push delivery yet — this is slice 1 of 4 from `docs/32_Core_Notifications_and_Push.md` §12
+  ("prove the gate before adding a delivery channel"). Built on `feature/push-notifications`,
+  kept separate from the parallel documentation-consolidation branch per the owner's instruction.
 
 ### 0.34.9 — 2026-08-12 — Notifications & Push core spec (documentation only)
 - New `docs/32_Core_Notifications_and_Push.md`: full category taxonomy (12 categories, each

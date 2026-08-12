@@ -74,5 +74,5 @@ def _notify_reaction(*, owner: Person, activity_key: str, activity: dict) -> Non
     else:
         notify_person(
             owner, title=title, message=f"Encouragement on {activity['title']}.",
-            source_node="corners", action_url=action_url,
+            source_node="corners", action_url=action_url, category="corners",
         )

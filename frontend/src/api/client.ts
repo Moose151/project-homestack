@@ -10,7 +10,8 @@ import type {
   KioskMeridian, KioskUser, LinkPreview, LinkWatch, MaintenanceTask, MeridianAllowanceRow, MeridianCategory,
   MeridianGoal, MeridianPointsResponse, MeridianReports, MeridianReward, MeridianRewardRequest,
   MeridianRoutine, MeridianSettings, MeridianTask, MeridianTaskCompletion,
-  MeridianWishlistItem, MeridianWishlistRequest, NodeInfo, NotificationList, Person,
+  MeridianWishlistItem, MeridianWishlistRequest, NodeInfo, NotificationList, NotificationPreference,
+  Person,
   PersonBadge, PersonalBookEntry, Pet, PetAppointment, PetTreatment, Pool, PoolStatus,
   PoolWrite, Property, RoomArea, RoomAreaType, RoomDetailResponse, RoomItemPriority,
   RoomItemStatus, RoomItemType, RoomListResponse, RoomPlanItem, RoomPlanMode, RoomPlanProduct,
@@ -21,7 +22,7 @@ import type {
   SolaceCategoryReport, SolaceChecklistItem, SolaceChecklistPreference, SolaceCloseoutResponse,
   SolaceCycleCloseout, SolaceCycleHistoryRow, SolaceHealth, SolaceIncomeAllocation,
   SolaceIncomeAllocationWrite, SolaceNow, SolacePayCyclePlan, SolacePayday, SolacePurchase,
-  SolaceSchedule, SolaceSearchResults, SolaceSettings, UtilityBill,
+  SolaceSchedule, SolaceSearchResults, SolaceSettings, UserNotificationSettings, UtilityBill,
   UtilityBillWrite, UtilityType, UtilityUsageResponse, WaterTest,
   WaterTestWrite, WikiCategory, WikiPage
 } from './types'
@@ -1287,4 +1288,12 @@ export const api = {
     _fetch(`/notifications/${id}/read/`, { method: 'POST' }),
   markAllNotificationsRead: (): Promise<unknown> =>
     _fetch('/notifications/read-all/', { method: 'POST' }),
+  getNotificationPreferences: (): Promise<NotificationPreference[]> =>
+    _fetch('/notifications/preferences/'),
+  updateNotificationPreferences: (rows: Partial<NotificationPreference>[]): Promise<NotificationPreference[]> =>
+    _fetch('/notifications/preferences/', { method: 'PATCH', body: JSON.stringify(rows) }),
+  getNotificationSettings: (): Promise<UserNotificationSettings> =>
+    _fetch('/notifications/settings/'),
+  updateNotificationSettings: (data: Partial<UserNotificationSettings>): Promise<UserNotificationSettings> =>
+    _fetch('/notifications/settings/', { method: 'PATCH', body: JSON.stringify(data) }),
 }
