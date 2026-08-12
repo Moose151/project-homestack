@@ -11,5 +11,5 @@ pywebpush==2.0.1
 # (config.settings.prod); whitenoise serves the collected /static/ files — mainly Django admin's
 # own CSS/JS, which stops being auto-served once DEBUG=False. Neither is used by the development
 # override, which still runs `runserver` with Django's own static handling.
-gunicorn==22.0.0
+gunicorn==26.0.0
 whitenoise==6.7.0

@@ -277,24 +277,27 @@ Before treating the live rollout as fully verified:
 The home server uses **Docker**, not Podman. Plain `docker compose` is the **production** stack;
 development needs the explicit override (see §2 and `docs/35_Production_Serving_and_Deployment.md`).
 
-After pulling code that changes baked images:
+After pulling code that changes baked images — validate the new image **before** promoting it:
 
 ```bash
 docker compose build homestack-backend homestack-frontend
+
+# One-off containers from the newly built image; the running containers are untouched, so a
+# non-zero exit means abandon the deploy with nothing to roll back.
+docker compose run --rm --no-deps homestack-backend python manage.py check     # prod config checks
+docker compose run --rm --no-deps homestack-backend python manage.py migrate
+
 docker compose up -d
+docker exec homestack-backend python manage.py showmigrations | tail -20
 ```
 
 Both images now bake application source *and build artefacts* — the frontend bundle and Django's
 collected static files. A `git pull` alone changes neither; always rebuild.
 
-After any deployment that may include migrations:
-
-```bash
-docker exec homestack-backend python manage.py migrate
-docker exec homestack-backend python manage.py showmigrations
-```
-
-Do not assume image rebuilds apply database migrations.
+Do not assume image rebuilds apply database migrations, and do not skip the `check` step on a
+release with no migrations — it is what rejects a bad `.env` while rollback is still free. Full
+procedure, including the destructive-migration exception, is in
+`docs/35_Production_Serving_and_Deployment.md` §11.
 
 Useful checks:
 

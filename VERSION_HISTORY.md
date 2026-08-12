@@ -12,7 +12,7 @@
 ## 0.35 — Production readiness and reliability
 
 ### 0.35.0 — 2026-08-12 — Production application serving (docs/35)
-- HomeStack stops running development servers in production. The backend runs **gunicorn**
+- HomeStack stops running development servers in production. The backend runs **gunicorn 26.0.0**
   (`config.wsgi:application`, threaded workers sized for one household, logs still on stdout for
   `docker logs`), and the frontend is a **production Vite build served by nginx** instead of
   `npm run dev`. `runserver` and the Vite dev server now exist only in the development override —
@@ -35,10 +35,17 @@
   only; uploads stay behind the permission-checked attachment path (D11).
 - Production settings verified rather than assumed, and now derive `https://<public hostname>`
   into both `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` so those need no hand-maintained `.env`
-  entries. New production-only deployment system checks (`apps/core/checks.py`) fail
-  `manage.py migrate` — already part of every deployment — on a placeholder secret key,
-  loopback-only allowed hosts or `DEBUG` enabled. Gunicorn does not run system checks, so a stale
-  value surfaces at deploy time instead of crash-looping a live container.
+  entries. New production-only deployment system checks (`apps/core/checks.py`) reject a
+  placeholder secret key, loopback-only allowed hosts or `DEBUG` enabled. Gunicorn does not run
+  system checks, so a stale value surfaces as a failed deployment command instead of crash-looping
+  a live container.
+- The documented deployment sequence runs `check` and `migrate` on the **newly built image via
+  `docker compose run --rm --no-deps`, before `docker compose up -d` promotes it**. A one-off
+  container neither stops nor replaces what is currently serving, so a bad production
+  configuration is rejected while the previous deployment is still up and abandoning the deploy
+  costs nothing — verified by running the new image against a deliberately broken environment and
+  confirming the serving container kept answering. Migrating before promotion is safe for the
+  additive migrations HomeStack ships; docs/35 §11.2 records the destructive-migration exception.
 - Two defects were found by testing the running containers rather than reading config, and fixed:
   nginx's `add_header` inheritance was silently dropping every security header on the locations
   that set their own `Cache-Control`, and `/manifest.json` was being served as `application/json`

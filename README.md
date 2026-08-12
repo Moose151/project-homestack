@@ -95,18 +95,23 @@ Default direct development endpoints:
 The production Compose file builds application source *and build artefacts* — the React bundle and
 Django's collected static files — into the images. A plain `git pull` replaces neither.
 
-Typical update sequence:
+Typical update sequence — the new image proves itself *before* it replaces the running containers:
 
 ```bash
 git pull
 docker compose build homestack-backend homestack-frontend
+
+# One-off containers from the new image. They do not touch what is currently serving,
+# so a non-zero exit here means simply abandon the deploy and fix .env.
+docker compose run --rm --no-deps homestack-backend python manage.py check
+docker compose run --rm --no-deps homestack-backend python manage.py migrate
+
 docker compose up -d
-docker exec homestack-backend python manage.py migrate
 curl -fsS https://homestack.moosesoftwares.com/api/v1/health/
 ```
 
-`migrate` also runs the production deployment checks and exits non-zero on a misconfigured `.env`,
-so do not skip it even when a release adds no migrations.
+The `check` step runs the production deployment checks and exits non-zero on a misconfigured
+`.env`, so do not skip it even when a release adds no migrations.
 
 Full deployment, smoke-test and rollback procedures are in
 [`docs/35_Production_Serving_and_Deployment.md`](docs/35_Production_Serving_and_Deployment.md).

@@ -50,6 +50,6 @@ loglevel = os.environ.get("GUNICORN_LOG_LEVEL", "info")
 # NPM sits in front, so its X-Forwarded-For is the only useful client address in the access log.
 access_log_format = '%({x-forwarded-for}i)s %(h)s "%(r)s" %(s)s %(b)s %(M)sms "%(a)s"'
 
-# `forwarded_allow_ips` is deliberately left at gunicorn's default (127.0.0.1). Django reads the
-# proxy's scheme itself via SECURE_PROXY_SSL_HEADER on the raw header, so HTTPS detection works
+# `forwarded_allow_ips` is deliberately left at gunicorn's default (127.0.0.1,::1). Django reads
+# the proxy's scheme itself via SECURE_PROXY_SSL_HEADER on the raw header, so HTTPS detection works
 # without gunicorn trusting X-Forwarded-* from arbitrary LAN addresses.

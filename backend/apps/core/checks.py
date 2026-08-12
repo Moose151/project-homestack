@@ -1,9 +1,14 @@
 """Deployment configuration checks for the production settings module.
 
-These run as ordinary Django system checks, which means `manage.py migrate` — already the step
-every deployment performs — fails loudly on a misconfigured live environment *before* the new
-containers are promoted. Gunicorn does not run system checks when it imports `config.wsgi`, so a
-stale value can never crash-loop an already-running container; it surfaces at deploy time instead.
+These run as ordinary Django system checks, so any management command surfaces them. The deployment
+sequence invokes them deliberately — `docker compose run --rm --no-deps homestack-backend
+manage.py check` against the newly built image — *before* `docker compose up -d` promotes it. A
+misconfigured live environment therefore fails while the previous containers are still serving,
+when abandoning the deploy costs nothing (docs/35_Production_Serving_and_Deployment.md §11.2).
+
+Gunicorn does not run system checks when it imports `config.wsgi`, which is deliberate: a stale
+value surfaces as a failed deployment command rather than crash-looping a container that is
+already live.
 
 They only fire under `config.settings.prod`. Development and test settings are deliberately
 permissive and must not be nagged about production concerns.

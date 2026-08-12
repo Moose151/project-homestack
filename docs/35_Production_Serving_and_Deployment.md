@@ -177,9 +177,15 @@ empty list is a warning, never a deployment-blocking error.
 ## 8. Deployment configuration checks
 
 `apps/core/checks.py` registers Django system checks that run only under `config.settings.prod`.
-Because gunicorn does not run system checks when importing `config.wsgi`, a stale value can never
-crash-loop a running container — it surfaces when `manage.py migrate` runs during deployment, which
-exits non-zero.
+
+They run on any management command, so the deployment sequence (§11.2) invokes them explicitly with
+`manage.py check` on the **newly built image, before `docker compose up -d` promotes it** — a bad
+production configuration is therefore rejected while the previous containers are still serving and
+rollback costs nothing.
+
+Gunicorn does not run system checks when it imports `config.wsgi`. That is deliberate: it means a
+configuration problem surfaces at deploy time as a failed command, rather than crash-looping a
+container that is already live.
 
 | ID | Level | Condition |
 |---|---|---|
@@ -256,20 +262,41 @@ restore path itself.
 
 ### 11.2 Deploy
 
+The order matters: the new image must **prove itself before it replaces the running containers**.
+`docker compose run --rm` starts a throwaway container from the newly built image — it does not
+stop, replace or touch the containers currently serving the household, and it publishes no ports.
+If it exits non-zero, the previous deployment is still up and nothing has been promoted.
+
 ```bash
 cd /opt/docker/project-homestack
 git fetch origin
 git checkout main && git pull
 
+# 1. Build the new images. Nothing is promoted yet; the old containers keep serving.
 docker compose build homestack-backend homestack-frontend
-docker compose up -d
 
-# Runs the production deployment checks; exits non-zero on a misconfigured environment.
-docker exec homestack-backend python manage.py migrate
+# 2. Run the production deployment checks on the NEW image against the real .env.
+#    Non-zero here means stop: fix .env per §9 and rebuild. Nothing has changed yet.
+docker compose run --rm --no-deps homestack-backend python manage.py check
+
+# 3. Apply migrations from the NEW image, still before promotion (see the caveat below).
+docker compose run --rm --no-deps homestack-backend python manage.py migrate
+
+# 4. Only now promote the new containers.
+docker compose up -d
 ```
 
-This change adds no migrations, but `migrate` is what runs the configuration checks, so do not
-skip it.
+`--no-deps` keeps Compose from restarting PostgreSQL, which is already running and healthy; the
+one-off container joins the same network and reaches it normally.
+
+Step 2 is not optional even for a release with no migrations — it is the step that rejects a bad
+production configuration while rollback is still free.
+
+> **Migrating before promotion** means the schema is upgraded while the *previous* code is still
+> serving. That is safe for additive migrations, which is what HomeStack has shipped so far, and it
+> is what makes a failed deploy cheap to abandon. For a release containing a destructive migration
+> (dropping or renaming a column the old code still reads), accept a brief outage instead:
+> `docker compose stop homestack-backend`, run the migration, then `docker compose up -d`.
 
 ### 11.3 Smoke test
 
@@ -331,8 +358,17 @@ frontend container does not invalidate them. The service worker re-registers on 
 
 ## 13. Rollback
 
-Rollback is "check out the previous commit and rebuild" — no data migration is involved and this
-change adds no migrations, so nothing has to be undone in the database.
+Rollback is "check out the previous commit and rebuild". This change adds no migrations, so nothing
+has to be undone in the database.
+
+Two cheaper outcomes come first, because §11.2 validates before promoting:
+
+- **`check` failed** — nothing was promoted and no schema changed. Fix `.env` per §9 and rebuild.
+- **`migrate` failed** — Django applies each migration in its own transaction, so the database is
+  at a consistent point and the previous containers are still serving. Resolve the migration
+  before promoting.
+
+Full rollback, once new containers are already live:
 
 ```bash
 cd /opt/docker/project-homestack
@@ -347,7 +383,7 @@ Symptom-specific guidance:
 | Symptom | Likely cause | Action |
 |---|---|---|
 | Backend restarts repeatedly | gunicorn cannot import the app, or PostgreSQL unreachable | `docker logs homestack-backend`; check `.env` database values |
-| `migrate` exits non-zero with `homestack.E0xx` | Live `.env` is missing a production value | Fix `.env` per §9, re-run `migrate`. Do not skip the check |
+| `check` exits non-zero with `homestack.E0xx` | Live `.env` is missing a production value | Fix `.env` per §9 and re-run. Nothing was promoted; do not work around the check |
 | App loads, every save fails CSRF | NPM is not forwarding the household `Host` | Set `DJANGO_CSRF_TRUSTED_ORIGINS`, recreate the backend |
 | Login appears to succeed then immediately logs out | Secure cookie over a non-HTTPS origin | Use the HTTPS hostname, not the LAN IP and port |
 | Frontend 404s on refresh of a deep link | Frontend image is not the `production` target | Rebuild `homestack-frontend`; confirm `docker compose ps` |
