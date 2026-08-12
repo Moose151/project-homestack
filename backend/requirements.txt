@@ -12,4 +12,4 @@ pywebpush==2.0.1
 # own CSS/JS, which stops being auto-served once DEBUG=False. Neither is used by the development
 # override, which still runs `runserver` with Django's own static handling.
 gunicorn==26.0.0
-whitenoise==6.7.0
+whitenoise==6.12.0

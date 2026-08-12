@@ -30,7 +30,7 @@
   It deliberately does **not** proxy `/api/` — that stays Nginx Proxy Manager's job — and answers
   `/api/` with a clear 404 so a misrouted proxy is obvious instead of returning HTML to a caller
   expecting JSON. It listens on the port the Vite dev server used, so **NPM needs no changes**.
-- **WhiteNoise** serves Django's static files, collected at image build time, so admin stays
+- **WhiteNoise 6.12.0** serves Django's static files, collected at image build time, so admin stays
   styled under `DEBUG=False` without a second static-serving architecture. It serves `STATIC_ROOT`
   only; uploads stay behind the permission-checked attachment path (D11).
 - Production settings verified rather than assumed, and now derive `https://<public hostname>`
