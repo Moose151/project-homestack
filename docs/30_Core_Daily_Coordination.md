@@ -1,8 +1,8 @@
 # Core Spec — Daily Coordination
 
 > **Current core contract.** Appointments, Atlas Agenda, automatic dated-item Calendar sync,
-> People/birthdays and editable pool schedules are shipped. Notification preferences/Web Push moved
-> to the dedicated `32_Core_Notifications_and_Push.md` specification and are the active follow-up.
+> People/birthdays, editable pool schedules and the notification/PWA follow-up are shipped.
+> Notification delivery mechanics are owned by `32_Core_Notifications_and_Push.md`.
 
 ## 1. Outcome
 
@@ -88,21 +88,23 @@ rewriting the past to match the new cadence.
 
 ## 7. Notifications handoff
 
-The original Web Push design that lived in this document is no longer authoritative.
+The original Web Push design that lived in this document is no longer authoritative. The dedicated
+notification implementation is shipped; use `32_Core_Notifications_and_Push.md` for:
 
-Use `32_Core_Notifications_and_Push.md` for:
-
-- notification taxonomy/categories;
-- per-user preferences;
-- quiet hours/lead times;
+- notification categories and per-user channel preferences;
+- per-user quiet hours and morning time;
 - per-device subscriptions;
-- service worker/PWA behavior;
+- service-worker/PWA behaviour;
 - VAPID/Web Push delivery;
-- sparse sensitive-safe payloads;
-- delivery retry/deactivation rules.
+- sensitive-node lock-screen protection;
+- one-hour household-activity bundling;
+- fixed 24h/morning-of reminders for the bounded Calendar/Atlas scope;
+- Hub countdown delivery;
+- subscription deactivation/failure behaviour.
 
-This coordination spec only defines what the notification is *about* and which source record owns
-the underlying fact.
+This coordination spec defines what a reminder/activity is *about* and which source record owns the
+underlying fact. Notifications never become the source of truth for the event/task/birthday/pool
+schedule itself.
 
 ## 8. Acceptance invariants
 
@@ -119,11 +121,14 @@ the underlying fact.
 - Changing a pool schedule does not rewrite completed history.
 - Private/sensitive records do not leak through Agenda, Calendar labels, Search, kiosk or
   notifications.
+- Notification delivery remains optional/best-effort and does not make the owning write depend on
+  a phone/browser push service.
 
 ## 9. Current status
 
-The coordination/data-projection slices in this document are shipped and in use. The remaining
-active coordination expansion is **Web Push/PWA notifications**, tracked separately in doc 32.
+The coordination/data-projection slices and their PWA/Web Push delivery follow-up are shipped.
+Remaining work here is ordinary live validation/bug fixing rather than a separate active
+coordination milestone.
 
 Future native mobile apps, SMS, external calendar sync, invitation/RSVP systems and address-book
 sync remain outside this core coordination contract.
