@@ -110,59 +110,68 @@ being added deliberately). When `category` is set:
 
 This keeps every call site simple — nodes pass a category string, the shared layer does the rest.
 
-## 6. Bundling burst activity
+## 6. Bundling burst activity — DONE (v0.34.12, `apps/notifications/services.py::notify_bundled`)
 
-New shared helper, generalising `_notify_reaction` (§2):
+Shared helper generalising `_notify_reaction` (§2):
 
 ```python
-def notify_bundled(user, *, category, key, title, message, source_node, action_url,
-                    window_minutes=60):
+def notify_bundled(user, *, title, message, source_node, action_url,
+                    category="", window_minutes=60):
 ```
 
-`key` replaces the reaction-specific `activity_key` — callers pass something that identifies the
-*thing* being bundled on (e.g. an Atlas list ID for "additions to this list", a room ID for room
-plan changes). Looks for an existing **unread** `Notification` with the same
-`(recipient, source_node, action_url)` created within `window_minutes` and updates its
-title/message rather than creating a new row — exactly the Corners mechanism, moved into shared
-code. `household_activity` and `corners` are the two categories that use this; everything else
-(reminders, countdown, direct assigned notifications) creates a fresh row per event, since those
-are inherently one-per-occurrence, not bursty.
+Looks for an existing **unread** `Notification` with the same `(recipient, source_node,
+action_url)` created within `window_minutes` and updates its title/message rather than creating a
+new row — exactly the Corners mechanism, moved into shared code. `action_url` already uniquely
+identifies the bundled *thing* (a list, an activity) in every real call site, so the separate
+`key` parameter this section originally sketched turned out to be redundant and was dropped
+during implementation. `household_activity` and `corners` are the two categories that use this;
+everything else (reminders, countdown, direct assigned notifications) creates a fresh row per
+event, since those are inherently one-per-occurrence, not bursty. Push is only attempted on the
+*first* notification of a burst — a later update within the window never re-pushes.
 
 Window is **60 minutes** (§2 Q&A, matching the existing Corners behaviour exactly — no new
 constant to tune).
 
-## 7. Event-bus dispatcher
+## 7. Event-bus dispatcher — DONE (v0.34.12)
 
-New `apps/notifications/handlers.py`, subscribed via `NotificationsConfig.ready()` (matching
+`apps/notifications/handlers.py`, subscribed via `NotificationsConfig.ready()` (matching
 `apps.achievements`/`apps.homestead`/`apps.solace`). Each event handler re-fetches the affected
-record through its node's normal permission-aware selector (never trusts the thin event payload
-for anything permission-relevant) and calls `notify_person`/`notify_bundled` for every household
-member who can see the result, excluding the actor.
+record through its own queryset and re-checks `apply_visibility` **per candidate recipient**
+(never trusts the thin event payload for anything permission-relevant), then calls
+`notify_bundled` under `household_activity` for every household member who can see the result,
+excluding the actor.
 
-**Already publishable, just needs a subscriber:** `atlas.list_item_completed`,
-`fitness.session_completed`, `fitness.personal_record_set`, `meridian.task_approved`/`rejected`,
-`homestead.maintenance_completed`, `pets.treatment_completed`, `travel.idea_created` (already has
-its own inline notify call, §2 — leave as-is or migrate to the dispatcher, implementer's call).
+**Wired and live** (three handlers cover the literal owner request — calendar/shopping-list/
+book examples; workout completion was already covered in slice 1):
+- `scheduling.event_created` — was defined but never actually called from
+  `apps/scheduling/services.py::create_event`; the publish call is now wired in.
+- `atlas.list_item_created` — new topic, published from `apps/atlas/services.py::create_list_item`.
+  Covers every list type (grocery/shopping/todo/checklist/general/wishlist), not just shopping —
+  a personal/private list's additions are excluded automatically by the visibility re-check, no
+  extra category-specific filtering needed.
+- `books.entry_finished` — new topic, published from `apps/books/services.py` when a
+  `PersonalBookEntry` transitions **into** `history` status (not fired again on every subsequent
+  save while already there).
 
-**Needs a new publish call added** (topic exists or is trivial to add, but nothing calls
-`publish()` for it today):
-- `atlas.list_item_created` — for "someone added to this list" (`household_activity`).
-- `scheduling.event_created`/`event_updated` — defined in `apps/scheduling/events.py` but never
-  called from `apps/scheduling/services.py`; wire the publish calls into `create_event`/
-  `update_event`.
-- `books.entry_finished` — new topic; `apps/books/events.py` exists but is currently empty. Fire
-  when a personal/club shelf entry's status changes to its "read"/history state.
-- `homestead.room_item_created` exists in the topic list already (check payload is sufficient)
-  for room-plan `household_activity` coverage.
+**Deliberately left unwired** (would double-notify or wasn't part of the literal request):
+`fitness.session_completed` already has its own direct `notify_*` call from slice 1
+(`category="fitness"`) — subscribing it here too would send two notifications for one workout.
+`atlas.list_item_completed`, `meridian.task_approved`/`rejected`, `homestead.maintenance_completed`,
+`pets.treatment_completed`, `homestead.room_item_created` and club-book status changes remain
+real, available extension points for this same dispatcher — add a handler + a `connect()` line
+when the household actually wants that surface, following the pattern in `handlers.py`.
+`travel.idea_created` keeps its existing inline notify call from before this spec (§2) rather
+than being migrated — no functional reason to touch working code.
 
-## 8. Scheduled reminders (appointments, assigned to-dos)
+## 8. Scheduled reminders (appointments, assigned to-dos) — DONE (v0.34.13)
 
-New idempotent management command (D5 pattern, matching `solace_run_scheduled`/
-`link_imports_run_scheduled`), run hourly is enough — it only needs to catch the two fixed lead
-times, not arbitrary ones:
+New idempotent management command `notifications_run_scheduled` (D5 pattern, matching
+`solace_run_scheduled`/`link_imports_run_scheduled`), `apps/notifications/tasks.py::
+run_due_reminders`, run hourly — it only needs to catch the two fixed lead times, not arbitrary
+ones:
 
 - **24 hours before**: for every visible Calendar appointment/event and every Atlas item with a
-  due date, if `due_at` is between 23–25h away (hourly cron tolerance) and no
+  due date, if `start_at` is between 23–25h away (hourly cron tolerance) and no
   `NotificationReminderLog` row exists for `(record, "24h")`, notify assignees (or the whole
   household if unassigned) under `appointments`/`assigned_tasks`, then log it.
 - **Morning of**: same sweep, but firing once per user at their `morning_time`
@@ -173,14 +182,39 @@ This is deliberately **not** the fully generic "configurable lead times" from do
 owner asked for exactly these two fixed points. The model (`NotificationReminderLog.lead_kind`)
 leaves room to add more later without a redesign, but V1 ships only these two.
 
-## 9. Daily countdown digest
+**Implementation notes (adjusted from the sketch above while building):**
+- **Sourced from `CalendarEvent`, not two separate sweeps.** Calendar single-source-of-truth
+  (D7) means every Atlas item with a `due_at` already mirrors into `CalendarEvent` via
+  `CalendarSyncMixin`, so one query covers both "Calendar appointment/event" and "Atlas item
+  with a due date" — no separate Atlas-model sweep needed. The category is derived from
+  `CalendarEvent.source_node`: unset (a standalone event) → `appointments`/`source_node=
+  "scheduling"`; `source_node.key == "atlas"` → `assigned_tasks`/`source_node="atlas"`.
+- **Scope is narrower than "every visible Calendar entry."** Other synced nodes (Solace,
+  Meridian, Homestead, Pets, Travel, Education) are deliberately excluded from the sweep —
+  Solace already runs its own reminder job (`solace_run_scheduled`) and is re-auth-gated
+  besides, and the owner's literal ask was appointments and assigned to-dos, not a generic
+  reminder layer for every node. Extending the sweep to another node is a one-line change to
+  `apps/notifications/tasks.py::_reminder_events`'s filter when actually wanted.
+- **`NotificationReminderLog.recipient_user` was added** (not in the original four-field
+  sketch) and is `null` for the 24h-before reminder — one log row locks the *event*, covering
+  every recipient at once, since the lead time itself doesn't depend on any individual's clock
+  — but is set per-recipient for morning-of (and the countdown digest, §9), since those fire at
+  a different real-world moment for each user's own `morning_time`.
+- **`mine_only` is enforced here, not inside `create_notification`.** The shared preference gate
+  only understands `in_app_enabled`/`push_enabled`; the reminder sweep itself filters recipients
+  down to assignees when a user's `mine_only` is set for the category, since only the caller
+  knows who's actually assigned to a given record.
 
-Same command (or a lightweight second one), once per user per day at their `morning_time`: if the
-Hub Countdown widget is enabled and has a future `target_date`, send one push/in-app notification
-("3 days to go" / "14 hours to go" inside the final day) to everyone with `countdown` enabled.
-Idempotency: reuse `NotificationReminderLog` with `record_type="hub_countdown"`,
-`lead_kind=f"daily:{date.today()}"` so it can never double-send for the same calendar day even if
-the command runs twice.
+## 9. Daily countdown digest — DONE (v0.34.13)
+
+Same command, `apps/notifications/tasks.py::run_countdown_digest`, checked once per user per
+hour but only fires at their own `morning_time`: if the Hub Countdown widget is enabled and has
+a future `target_date`, send one push/in-app notification ("3 days to go" / "14 hours to go"
+inside the final day) to everyone with `countdown` enabled. Idempotency: `NotificationReminderLog`
+with `record_type="HouseholdHubWidget"`, `lead_kind=f"daily:{date}"`, `recipient_user=user` so it
+can never double-send the same user for the same calendar day even if the command runs twice —
+and each household member gets it at their own morning time rather than everyone getting it at
+once.
 
 ## 10. Web Push mechanics
 
@@ -225,18 +259,45 @@ today's profile editing.
 
 ## 12. Delivery slices
 
-1. **Preference model + gate.** `NotificationPreference`/`UserNotificationSettings` +
-   migration, the `category` param on `create_notification`/`notify_person`, preferences
-   API + a simple settings-page UI. No push yet — in-app notifications become filterable/
-   quiet-hours-aware first, proving the gate before adding a delivery channel.
-2. **Web Push infrastructure.** VAPID keys, `PushDevice` model + register/unregister/test
-   endpoints, service worker, frontend subscribe flow, `pywebpush` send path wired into the gate
-   from slice 1.
-3. **Event-bus dispatcher + bundling.** `apps/notifications/handlers.py`, `notify_bundled`
-   extracted from Corners, the new/wired publish calls from §7, `household_activity` end to end.
-4. **Scheduled reminders + countdown digest.** The management command from §8/§9,
-   `NotificationReminderLog`, cron entry (matching the existing
-   `link_imports_run_scheduled` host-cron pattern from `docs/29_Core_Link_Import.md`).
+1. **Preference model + gate — DONE (v0.34.10).** `NotificationPreference`/
+   `UserNotificationSettings` + migration, the `category` param on `create_notification`/
+   `notify_person`, preferences API + a settings-page UI. Eight real call sites tagged with
+   categories so the gate has immediate effect.
+2. **Web Push infrastructure — DONE (v0.34.11).** VAPID keys (`manage.py generate_vapid_keys`),
+   `PushDevice` model + register/unregister/test endpoints, service worker (`public/sw.js`),
+   frontend subscribe flow (explicit user action, never auto-prompted), `pywebpush` send path
+   wired into the slice-1 gate — quiet hours, per-category push toggle, sensitive-node exclusion
+   (queries `HouseholdNode.requires_reauthentication` generically rather than hardcoding node
+   names) and automatic device deactivation on a 404/410 response are all enforced before a send
+   is attempted. A minimal `manifest.json` + `apple-mobile-web-app-capable` were added because
+   iOS only allows Web Push for an installed PWA, not a plain Safari tab.
+3. **Event-bus dispatcher + bundling — DONE (v0.34.12).** `apps/notifications/handlers.py`
+   (wired via `NotificationsConfig.ready()`, matching the achievements/homestead/solace pattern)
+   subscribes to `scheduling.event_created` (newly wired — was dead code before), the new
+   `atlas.list_item_created` and `books.entry_finished` topics. `notify_bundled()` extracted
+   from Corners into `apps/notifications/services.py`; Corners now calls it too instead of
+   duplicating the logic. Every handler re-fetches through the record's own queryset and
+   re-checks `apply_visibility` **per candidate recipient** before notifying, so a private list
+   or a surprise-hidden calendar event never leaks. Push only fires on the first notification of
+   a bundled burst, never on every update within the window. **Simplified from the original
+   design:** dropped the separate `key` parameter sketched below — `action_url` already
+   uniquely identifies the bundled thing (a list, an activity), exactly as the Corners
+   implementation this generalises always did, so a second identifier was redundant. Fitness
+   (`fitness.session_completed`) was deliberately **not** added to the dispatcher — it already
+   notifies directly (tagged `category="fitness"` in slice 1), and subscribing it here too would
+   double-notify. Home & maintenance / Meridian / Travel activity notifications beyond what
+   slice 1 already covers, and Homestead room-plan additions, remain a future extension of this
+   same dispatcher if wanted — not required by the original ask.
+4. **Scheduled reminders + countdown digest — DONE (v0.34.13).** New `notifications_run_scheduled`
+   management command (recommended hourly cron, matching the existing
+   `link_imports_run_scheduled`/`solace_run_scheduled` pattern) runs `run_due_reminders()` (§8)
+   and `run_countdown_digest()` (§9) in `apps/notifications/tasks.py`. New
+   `NotificationReminderLog` model (migration `notifications.0004`) — see §8's implementation
+   notes for how it ended up shaped slightly differently from the original four-field sketch
+   (a `recipient_user` column was added for per-user idempotency on morning-of/countdown).
+   Sourced entirely from `CalendarEvent` (D7 single-source-of-truth) rather than querying Atlas
+   models separately, since dated Atlas records already mirror there. This closes out the
+   Notifications & Push feature — all four slices are done on `feature/push-notifications`.
 
 ## 13. Acceptance criteria
 

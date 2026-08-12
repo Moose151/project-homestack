@@ -189,3 +189,13 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # --- Backups (D17) ---
 # Docker maps backup_data volume to /app/backups; dev/test fall back to BASE_DIR/backups.
 BACKUP_DIR = BASE_DIR / "backups"
+
+# --- Web Push (docs/32_Core_Notifications_and_Push.md §10) ---
+# Generate once with `manage.py generate_vapid_keys`. Empty means push is simply not attempted —
+# apps/notifications/services.py checks this before calling pywebpush, so a household that
+# hasn't generated keys yet keeps working with in-app notifications only.
+VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
+# RFC 8292 requires a contact URI/mailto in the VAPID claims so a push service can reach the
+# sender about problems; it is not shown to end users.
+VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:admin@example.com")

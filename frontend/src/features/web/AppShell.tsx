@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import type { CSSProperties } from 'react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
@@ -117,6 +117,9 @@ function ProfileEditor({ user, onSaved, onClose }: {
         >{busy ? 'Saving…' : 'Save'}</button>
         <button onClick={onClose} className="px-3 py-1.5 rounded-xl text-xs text-muted hover:text-ink">Cancel</button>
       </div>
+      <Link to="/settings/notifications" className="block text-xs font-bold text-primary hover:underline">
+        🔔 Notification settings →
+      </Link>
     </div>
   )
 }

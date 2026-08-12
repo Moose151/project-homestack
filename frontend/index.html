@@ -11,6 +11,10 @@
     <!-- iOS fills a transparent icon with black, so this one is drawn on the app's paper. -->
     <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-title" content="HomeStack" />
+    <!-- iOS only allows Web Push for an installed (Add to Home Screen) PWA — this meta tag is
+         what makes that installation open in standalone mode rather than a Safari tab. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#fffaf2" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#23232a" media="(prefers-color-scheme: dark)" />
   </head>

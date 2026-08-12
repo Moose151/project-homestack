@@ -3,6 +3,7 @@ from __future__ import annotations
 from django.db import transaction
 
 from apps.accounts.models import User
+from apps.books import events
 from apps.books.models import Book, BookClub, BookClubBook, BookClubMembership, BookClubQueueItem, BookRating, PersonalBookEntry
 from apps.core.models import get_active_household
 
@@ -93,6 +94,7 @@ def create_personal_entry(acting_user: User, *, book_id: int | None = None, book
             "position": position or 0,
         },
     )
+    previous_status = None if created else obj.status
     if not created and obj.deleted_at is not None:
         obj.deleted_at = None
     obj.status = status
@@ -100,16 +102,24 @@ def create_personal_entry(acting_user: User, *, book_id: int | None = None, book
         obj.position = position
     obj.updated_by = acting_user
     obj.save()
+    _notify_if_finished(obj, previous_status)
     return obj
 
 
 def update_personal_entry(acting_user: User, obj: PersonalBookEntry, **data) -> PersonalBookEntry:
+    previous_status = obj.status
     for key in ("status", "position"):
         if key in data:
             setattr(obj, key, data[key])
     obj.updated_by = acting_user
     obj.save()
+    _notify_if_finished(obj, previous_status)
     return obj
+
+
+def _notify_if_finished(obj: PersonalBookEntry, previous_status: str | None) -> None:
+    if previous_status != PersonalBookEntry.Status.HISTORY and obj.status == PersonalBookEntry.Status.HISTORY:
+        events.entry_finished(obj.id, obj.household_id)
 
 
 def delete_personal_entry(acting_user: User, obj: PersonalBookEntry) -> None:

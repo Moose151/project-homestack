@@ -1,12 +1,23 @@
 """Notifications tests (Milestone 2, Phase 2.15)."""
-from django.test import TestCase
+from datetime import datetime, time, timedelta
+from unittest.mock import patch
+
+from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.atlas.services import create_atlas_list, create_list_item
+from apps.books.services import create_personal_entry, update_personal_entry
+from apps.core.models import get_active_household
+from apps.hub.models import HouseholdHubWidget, HubWidget
 from apps.meridian import services as meridian
+from apps.nodes.models import HouseholdNode
 from apps.notifications import selectors, services
-from apps.notifications.models import Notification
+from apps.notifications.models import Notification, PushDevice, UserNotificationSettings
+from apps.notifications.tasks import run_countdown_digest, run_due_reminders
 from apps.people.models import Person
+from apps.scheduling.services import create_event
 
 
 def _make_user(username, role=User.Role.ADMIN, is_child=False):
@@ -107,3 +118,532 @@ class NotificationApiTests(TestCase):
         self._login()
         resp = self.client.get(reverse("notification-list"))
         self.assertEqual(len(resp.json()["results"]), 0)
+
+
+class NotificationPreferenceGateTests(TestCase):
+    """docs/32_Core_Notifications_and_Push.md §5 — the central preference gate."""
+
+    def setUp(self):
+        self.user = _make_user("parent")
+
+    def test_blank_category_always_creates_matching_pre_existing_behaviour(self):
+        note = services.create_notification(self.user, title="T", message="M")
+        self.assertIsNotNone(note)
+
+    def test_missing_preference_row_defaults_to_enabled(self):
+        note = services.create_notification(self.user, title="T", message="M", category="meridian")
+        self.assertIsNotNone(note)
+
+    def test_disabled_category_suppresses_the_notification(self):
+        services.set_preference(
+            self.user, category="meridian", in_app_enabled=False, push_enabled=True,
+        )
+        note = services.create_notification(self.user, title="T", message="M", category="meridian")
+        self.assertIsNone(note)
+        self.assertEqual(Notification.objects.count(), 0)
+
+    def test_enabling_a_previously_disabled_category_restores_delivery(self):
+        services.set_preference(
+            self.user, category="meridian", in_app_enabled=False, push_enabled=True,
+        )
+        services.set_preference(
+            self.user, category="meridian", in_app_enabled=True, push_enabled=True,
+        )
+        note = services.create_notification(self.user, title="T", message="M", category="meridian")
+        self.assertIsNotNone(note)
+
+    def test_unknown_category_is_rejected(self):
+        with self.assertRaises(ValueError):
+            services.set_preference(
+                self.user, category="not_a_real_category", in_app_enabled=True, push_enabled=True,
+            )
+
+
+class NotificationPreferenceApiTests(TestCase):
+    def setUp(self):
+        self.user = _make_user("parent")
+
+    def _login(self):
+        self.client.post(
+            reverse("auth-pin-login"),
+            {"username": "parent", "pin": "1234"}, content_type="application/json",
+        )
+
+    def test_list_returns_all_categories_with_documented_defaults(self):
+        self._login()
+        resp = self.client.get(reverse("notification-preferences"))
+        self.assertEqual(resp.status_code, 200)
+        rows = {row["category"]: row for row in resp.json()}
+        self.assertEqual(len(rows), 12)
+        # docs/32 §3: household_activity and wish_price_alerts default push-off; the rest push-on.
+        self.assertFalse(rows["household_activity"]["push_enabled"])
+        self.assertFalse(rows["wish_price_alerts"]["push_enabled"])
+        self.assertTrue(rows["meridian"]["push_enabled"])
+        self.assertTrue(all(row["in_app_enabled"] for row in rows.values()))
+        self.assertTrue(rows["appointments"]["supports_mine_only"])
+        self.assertFalse(rows["corners"]["supports_mine_only"])
+
+    def test_patch_persists_and_is_reflected_on_next_get(self):
+        self._login()
+        resp = self.client.patch(
+            reverse("notification-preferences"),
+            [{"category": "meridian", "in_app_enabled": False, "push_enabled": False}],
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.json())
+        rows = {row["category"]: row for row in resp.json()}
+        self.assertFalse(rows["meridian"]["in_app_enabled"])
+        # Untouched categories keep their defaults, not reset to some blanket value.
+        self.assertTrue(rows["fitness"]["in_app_enabled"])
+
+    def test_preferences_are_self_only(self):
+        other = _make_user("other", role=User.Role.USER)
+        services.set_preference(other, category="meridian", in_app_enabled=False, push_enabled=False)
+        self._login()
+        resp = self.client.get(reverse("notification-preferences"))
+        rows = {row["category"]: row for row in resp.json()}
+        self.assertTrue(rows["meridian"]["in_app_enabled"])  # this user's own default, not other's
+
+
+class NotificationSettingsApiTests(TestCase):
+    def setUp(self):
+        self.user = _make_user("parent")
+
+    def _login(self):
+        self.client.post(
+            reverse("auth-pin-login"),
+            {"username": "parent", "pin": "1234"}, content_type="application/json",
+        )
+
+    def test_get_returns_defaults_before_any_row_exists(self):
+        self._login()
+        resp = self.client.get(reverse("notification-settings"))
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIsNone(data["quiet_start"])
+        self.assertIsNone(data["quiet_end"])
+        self.assertEqual(data["morning_time"], "08:00:00")
+
+    def test_patch_updates_quiet_hours(self):
+        self._login()
+        resp = self.client.patch(
+            reverse("notification-settings"),
+            {"quiet_start": "22:00", "quiet_end": "07:00"},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.json())
+        self.assertEqual(resp.json()["quiet_start"], "22:00:00")
+        self.assertEqual(resp.json()["quiet_end"], "07:00:00")
+
+
+_VAPID_SETTINGS = dict(
+    VAPID_PUBLIC_KEY="test-public-key", VAPID_PRIVATE_KEY="test-private-key",
+    VAPID_SUBJECT="mailto:test@example.com",
+)
+
+
+class PushDeviceApiTests(TestCase):
+    def setUp(self):
+        self.user = _make_user("parent")
+        self.client.post(
+            reverse("auth-pin-login"),
+            {"username": "parent", "pin": "1234"}, content_type="application/json",
+        )
+
+    def test_vapid_public_key_endpoint(self):
+        with override_settings(**_VAPID_SETTINGS):
+            resp = self.client.get(reverse("notification-vapid-public-key"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["public_key"], "test-public-key")
+
+    def test_register_list_and_unregister_device(self):
+        resp = self.client.post(
+            reverse("notification-devices"),
+            {"endpoint": "https://push.example/abc", "keys": {"p256dh": "p", "auth": "a"}, "label": "My phone"},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.json())
+        device_id = resp.json()["id"]
+        listed = self.client.get(reverse("notification-devices"))
+        self.assertEqual(len(listed.json()), 1)
+        self.assertEqual(listed.json()[0]["label"], "My phone")
+        deleted = self.client.delete(reverse("notification-device-detail", args=[device_id]))
+        self.assertEqual(deleted.status_code, 204)
+        self.assertEqual(len(self.client.get(reverse("notification-devices")).json()), 0)
+
+    def test_register_rejects_missing_keys(self):
+        resp = self.client.post(
+            reverse("notification-devices"),
+            {"endpoint": "https://push.example/abc", "keys": {"p256dh": "p"}},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_devices_are_self_only(self):
+        other = _make_user("other", role=User.Role.USER)
+        services.register_push_device(other, endpoint="https://push.example/theirs", p256dh="p", auth="a")
+        resp = self.client.get(reverse("notification-devices"))
+        self.assertEqual(resp.json(), [])
+        # Can't delete someone else's device by guessing its ID either.
+        their_device = PushDevice.objects.get(endpoint="https://push.example/theirs")
+        deleted = self.client.delete(reverse("notification-device-detail", args=[their_device.id]))
+        self.assertEqual(deleted.status_code, 404)
+
+
+class PushDeliveryTests(TestCase):
+    """docs/32_Core_Notifications_and_Push.md §10 — the actual send path, webpush mocked."""
+
+    def setUp(self):
+        self.user = _make_user("parent")
+        self.device = PushDevice.objects.create(
+            household=self.user.household, user=self.user,
+            endpoint="https://push.example/abc", p256dh="p", auth="a",
+        )
+
+    def test_push_sent_when_configured_and_enabled(self):
+        with override_settings(**_VAPID_SETTINGS), patch("pywebpush.webpush") as mock_webpush:
+            services.create_notification(
+                self.user, title="T", message="M", category="meridian", source_node="meridian",
+            )
+        mock_webpush.assert_called_once()
+
+    def test_push_not_sent_without_vapid_configured(self):
+        with override_settings(VAPID_PUBLIC_KEY="", VAPID_PRIVATE_KEY=""), \
+             patch("pywebpush.webpush") as mock_webpush:
+            services.create_notification(
+                self.user, title="T", message="M", category="meridian", source_node="meridian",
+            )
+        mock_webpush.assert_not_called()
+
+    def test_push_not_sent_when_push_disabled(self):
+        services.set_preference(self.user, category="meridian", in_app_enabled=True, push_enabled=False)
+        with override_settings(**_VAPID_SETTINGS), patch("pywebpush.webpush") as mock_webpush:
+            services.create_notification(
+                self.user, title="T", message="M", category="meridian", source_node="meridian",
+            )
+        mock_webpush.assert_not_called()
+
+    def test_push_not_sent_during_quiet_hours(self):
+        UserNotificationSettings.objects.create(
+            household=self.user.household, user=self.user,
+            quiet_start=time(0, 0), quiet_end=time(23, 59),
+        )
+        with override_settings(**_VAPID_SETTINGS), patch("pywebpush.webpush") as mock_webpush:
+            services.create_notification(
+                self.user, title="T", message="M", category="meridian", source_node="meridian",
+            )
+        mock_webpush.assert_not_called()
+
+    def test_sensitive_source_never_pushes(self):
+        HouseholdNode.objects.filter(node__key="solace").update(requires_reauthentication=True)
+        with override_settings(**_VAPID_SETTINGS), patch("pywebpush.webpush") as mock_webpush:
+            services.create_notification(
+                self.user, title="T", message="M", category="meridian", source_node="solace",
+            )
+        mock_webpush.assert_not_called()
+
+    def test_device_deactivated_on_gone_response(self):
+        from pywebpush import WebPushException
+
+        class _Resp:
+            status_code = 410
+
+        with override_settings(**_VAPID_SETTINGS), \
+             patch("pywebpush.webpush", side_effect=WebPushException("gone", response=_Resp())):
+            services.create_notification(
+                self.user, title="T", message="M", category="meridian", source_node="meridian",
+            )
+        self.device.refresh_from_db()
+        self.assertFalse(self.device.is_active)
+
+    def test_no_devices_means_no_attempt(self):
+        self.device.delete()
+        with override_settings(**_VAPID_SETTINGS), patch("pywebpush.webpush") as mock_webpush:
+            services.create_notification(
+                self.user, title="T", message="M", category="meridian", source_node="meridian",
+            )
+        mock_webpush.assert_not_called()
+
+
+class PushDeviceTestEndpointTests(TestCase):
+    def setUp(self):
+        self.user = _make_user("parent")
+        self.device = PushDevice.objects.create(
+            household=self.user.household, user=self.user,
+            endpoint="https://push.example/abc", p256dh="p", auth="a",
+        )
+        self.client.post(
+            reverse("auth-pin-login"),
+            {"username": "parent", "pin": "1234"}, content_type="application/json",
+        )
+
+    def test_test_push_sends_immediately_bypassing_preferences(self):
+        services.set_preference(self.user, category="meridian", in_app_enabled=True, push_enabled=False)
+        with override_settings(**_VAPID_SETTINGS), patch("pywebpush.webpush") as mock_webpush:
+            resp = self.client.post(reverse("notification-device-test", args=[self.device.id]))
+        self.assertEqual(resp.status_code, 200, resp.json())
+        self.assertTrue(resp.json()["delivered"])
+        mock_webpush.assert_called_once()
+
+    def test_test_push_without_vapid_configured_is_a_clean_error(self):
+        with override_settings(VAPID_PUBLIC_KEY="", VAPID_PRIVATE_KEY=""):
+            resp = self.client.post(reverse("notification-device-test", args=[self.device.id]))
+        self.assertEqual(resp.status_code, 400)
+
+
+class HouseholdActivityDispatcherTests(TestCase):
+    """docs/32_Core_Notifications_and_Push.md §7 — event bus -> notification, visibility-safe."""
+
+    def setUp(self):
+        self.actor = _make_user("actor", role=User.Role.USER)
+        self.other = _make_user("other", role=User.Role.USER)
+
+    def _unread_for(self, user, source_node):
+        return Notification.objects.filter(recipient_user=user, source_node=source_node, is_read=False)
+
+    def test_calendar_event_creation_notifies_other_household_members(self):
+        create_event(self.actor, title="Dentist", start_at=timezone.now())
+        notes = self._unread_for(self.other, "scheduling")
+        self.assertEqual(notes.count(), 1)
+        self.assertIn("Dentist", notes.first().message)
+
+    def test_calendar_event_creator_is_not_notified(self):
+        create_event(self.actor, title="Dentist", start_at=timezone.now())
+        self.assertEqual(self._unread_for(self.actor, "scheduling").count(), 0)
+
+    def test_private_calendar_event_does_not_notify_others(self):
+        create_event(self.actor, title="Secret", start_at=timezone.now(), visibility="private")
+        self.assertEqual(self._unread_for(self.other, "scheduling").count(), 0)
+
+    def test_calendar_event_hidden_from_a_user_excludes_them(self):
+        create_event(self.actor, title="Surprise", start_at=timezone.now(), hidden_from_users=[self.other])
+        self.assertEqual(self._unread_for(self.other, "scheduling").count(), 0)
+
+    def test_atlas_list_additions_are_bundled_not_spammed(self):
+        atlas_list = create_atlas_list(self.actor, title="Groceries", list_type="grocery")
+        create_list_item(self.actor, atlas_list, title="Milk")
+        create_list_item(self.actor, atlas_list, title="Eggs")
+        create_list_item(self.actor, atlas_list, title="Bread")
+        notes = self._unread_for(self.other, "atlas")
+        self.assertEqual(notes.count(), 1)
+        self.assertIn("Groceries", notes.first().title)
+        self.assertEqual(notes.first().message, "Bread")  # updated in place to the latest addition
+
+    def test_private_atlas_list_does_not_notify_others(self):
+        atlas_list = create_atlas_list(self.actor, title="My wishlist", visibility="private")
+        create_list_item(self.actor, atlas_list, title="Something")
+        self.assertEqual(self._unread_for(self.other, "atlas").count(), 0)
+
+    def test_finishing_a_book_notifies_the_household(self):
+        entry = create_personal_entry(self.actor, book={"title": "Dune"}, status="reading")
+        update_personal_entry(self.actor, entry, status="history")
+        notes = self._unread_for(self.other, "books")
+        self.assertEqual(notes.count(), 1)
+        self.assertEqual(notes.first().message, "Dune")
+
+    def test_moving_within_history_does_not_renotify(self):
+        entry = create_personal_entry(self.actor, book={"title": "Dune"}, status="reading")
+        update_personal_entry(self.actor, entry, status="history")
+        services.mark_all_read(self.other)
+        update_personal_entry(self.actor, entry, status="history", position=1)
+        self.assertEqual(self._unread_for(self.other, "books").count(), 0)
+
+    def test_creating_directly_into_history_notifies(self):
+        create_personal_entry(self.actor, book={"title": "Dune"}, status="history")
+        self.assertEqual(self._unread_for(self.other, "books").count(), 1)
+
+    def test_disabling_household_activity_suppresses_all_sources(self):
+        services.set_preference(self.other, category="household_activity", in_app_enabled=False, push_enabled=False)
+        atlas_list = create_atlas_list(self.actor, title="Groceries", list_type="grocery")
+        create_list_item(self.actor, atlas_list, title="Milk")
+        create_event(self.actor, title="Dentist", start_at=timezone.now())
+        create_personal_entry(self.actor, book={"title": "Dune"}, status="history")
+        self.assertEqual(Notification.objects.filter(recipient_user=self.other, is_read=False).count(), 0)
+
+
+class ScheduledReminderTests(TestCase):
+    """docs/32_Core_Notifications_and_Push.md §8 — 24h-before + morning-of reminders."""
+
+    def setUp(self):
+        self.parent = _make_user("parent", role=User.Role.USER)
+        self.other = _make_user("other", role=User.Role.USER)
+
+    def test_24h_before_appointment_notifies_household(self):
+        due = timezone.now() + timedelta(hours=24)
+        create_event(self.parent, title="Dentist", start_at=due)
+        result = run_due_reminders()
+        self.assertEqual(result["24h"], 1)
+        for user in (self.parent, self.other):
+            notes = Notification.objects.filter(
+                recipient_user=user, source_node="scheduling", title="Coming up tomorrow",
+            )
+            self.assertEqual(notes.count(), 1)
+            self.assertEqual(notes.first().message, "Dentist")
+
+    def test_24h_reminder_is_idempotent(self):
+        due = timezone.now() + timedelta(hours=24)
+        create_event(self.parent, title="Dentist", start_at=due)
+        run_due_reminders()
+        run_due_reminders()
+        self.assertEqual(
+            Notification.objects.filter(source_node="scheduling", title="Coming up tomorrow").count(), 2,
+        )
+
+    def test_event_outside_24h_window_is_not_reminded(self):
+        due = timezone.now() + timedelta(hours=30)
+        create_event(self.parent, title="Later", start_at=due)
+        result = run_due_reminders()
+        self.assertEqual(result["24h"], 0)
+
+    def test_atlas_item_due_tomorrow_uses_assigned_tasks_category(self):
+        atlas_list = create_atlas_list(self.parent, title="Chores", list_type="todo")
+        due = timezone.now() + timedelta(hours=24)
+        create_list_item(self.parent, atlas_list, title="Take out bins", due_at=due)
+        run_due_reminders()
+        notes = Notification.objects.filter(
+            recipient_user=self.other, source_node="atlas", title="Coming up tomorrow",
+        )
+        self.assertEqual(notes.count(), 1)
+        self.assertEqual(notes.first().message, "Take out bins")
+
+    def test_mine_only_preference_skips_unassigned_events(self):
+        services.set_preference(
+            self.other, category="appointments", in_app_enabled=True, push_enabled=True, mine_only=True,
+        )
+        due = timezone.now() + timedelta(hours=24)
+        create_event(self.parent, title="Dentist", start_at=due)
+        run_due_reminders()
+        self.assertEqual(
+            Notification.objects.filter(
+                recipient_user=self.other, source_node="scheduling", title="Coming up tomorrow",
+            ).count(),
+            0,
+        )
+
+    def test_mine_only_still_notifies_when_assigned(self):
+        person = _make_person("Other", linked_user=self.other)
+        services.set_preference(
+            self.other, category="appointments", in_app_enabled=True, push_enabled=True, mine_only=True,
+        )
+        due = timezone.now() + timedelta(hours=24)
+        create_event(self.parent, title="Dentist", start_at=due, assigned_to_people=[person.id])
+        run_due_reminders()
+        self.assertEqual(
+            Notification.objects.filter(
+                recipient_user=self.other, source_node="scheduling", title="Coming up tomorrow",
+            ).count(),
+            1,
+        )
+
+    def test_disabled_category_receives_no_reminder(self):
+        services.set_preference(
+            self.other, category="appointments", in_app_enabled=False, push_enabled=False, mine_only=False,
+        )
+        due = timezone.now() + timedelta(hours=24)
+        create_event(self.parent, title="Dentist", start_at=due)
+        run_due_reminders()
+        self.assertEqual(
+            Notification.objects.filter(
+                recipient_user=self.other, source_node="scheduling", title="Coming up tomorrow",
+            ).count(),
+            0,
+        )
+
+    def test_morning_of_notifies_at_users_morning_time(self):
+        today = timezone.now().date()
+        due_at = timezone.make_aware(datetime.combine(today, time(15, 0)))
+        create_event(self.parent, title="Dentist", start_at=due_at)
+        morning_now = timezone.make_aware(datetime.combine(today, time(8, 0)))
+        result = run_due_reminders(now=morning_now)
+        self.assertEqual(result["morning_of"], 2)
+        notes = Notification.objects.filter(
+            recipient_user=self.other, source_node="scheduling", title="Due today",
+        )
+        self.assertEqual(notes.count(), 1)
+
+    def test_morning_of_respects_per_user_morning_time(self):
+        services.update_settings(self.other, morning_time=time(9, 0))
+        today = timezone.now().date()
+        due_at = timezone.make_aware(datetime.combine(today, time(15, 0)))
+        create_event(self.parent, title="Dentist", start_at=due_at)
+        eight_am = timezone.make_aware(datetime.combine(today, time(8, 0)))
+        run_due_reminders(now=eight_am)
+        self.assertEqual(
+            Notification.objects.filter(recipient_user=self.other, source_node="scheduling", title="Due today").count(), 0,
+        )
+        nine_am = timezone.make_aware(datetime.combine(today, time(9, 0)))
+        run_due_reminders(now=nine_am)
+        self.assertEqual(
+            Notification.objects.filter(recipient_user=self.other, source_node="scheduling", title="Due today").count(), 1,
+        )
+
+    def test_morning_of_is_idempotent_per_user(self):
+        today = timezone.now().date()
+        due_at = timezone.make_aware(datetime.combine(today, time(15, 0)))
+        create_event(self.parent, title="Dentist", start_at=due_at)
+        morning_now = timezone.make_aware(datetime.combine(today, time(8, 0)))
+        run_due_reminders(now=morning_now)
+        run_due_reminders(now=morning_now)
+        self.assertEqual(
+            Notification.objects.filter(recipient_user=self.other, source_node="scheduling", title="Due today").count(), 1,
+        )
+
+
+class CountdownDigestTests(TestCase):
+    """docs/32_Core_Notifications_and_Push.md §9 — daily countdown digest."""
+
+    def setUp(self):
+        self.parent = _make_user("parent", role=User.Role.USER)
+        self.other = _make_user("other", role=User.Role.USER)
+
+    def _enable_countdown(self, *, target_date, target_time="12:00"):
+        widget = HubWidget.objects.get(key="countdown")
+        return HouseholdHubWidget.objects.create(
+            household=get_active_household(), widget=widget, is_enabled=True,
+            settings_json={"title": "Trip", "target_date": target_date, "target_time": target_time},
+        )
+
+    def test_countdown_digest_sends_to_everyone_at_their_morning_time(self):
+        target_date = (timezone.now() + timedelta(days=5)).date().isoformat()
+        self._enable_countdown(target_date=target_date)
+        morning_now = timezone.make_aware(datetime.combine(timezone.now().date(), time(8, 0)))
+        result = run_countdown_digest(now=morning_now)
+        self.assertEqual(result["sent"], 2)
+        note = Notification.objects.get(recipient_user=self.other, source_node="hub")
+        self.assertIn("day", note.message)
+
+    def test_countdown_digest_is_idempotent_same_day(self):
+        target_date = (timezone.now() + timedelta(days=5)).date().isoformat()
+        self._enable_countdown(target_date=target_date)
+        morning_now = timezone.make_aware(datetime.combine(timezone.now().date(), time(8, 0)))
+        run_countdown_digest(now=morning_now)
+        run_countdown_digest(now=morning_now)
+        self.assertEqual(Notification.objects.filter(source_node="hub").count(), 2)
+
+    def test_no_countdown_widget_sends_nothing(self):
+        result = run_countdown_digest()
+        self.assertEqual(result["sent"], 0)
+
+    def test_disabled_countdown_widget_sends_nothing(self):
+        target_date = (timezone.now() + timedelta(days=5)).date().isoformat()
+        widget_row = self._enable_countdown(target_date=target_date)
+        widget_row.is_enabled = False
+        widget_row.save(update_fields=["is_enabled"])
+        result = run_countdown_digest()
+        self.assertEqual(result["sent"], 0)
+
+    def test_past_target_date_sends_nothing(self):
+        target_date = (timezone.now() - timedelta(days=1)).date().isoformat()
+        self._enable_countdown(target_date=target_date)
+        result = run_countdown_digest()
+        self.assertEqual(result["sent"], 0)
+
+    def test_countdown_disabled_category_is_skipped(self):
+        services.set_preference(
+            self.other, category="countdown", in_app_enabled=False, push_enabled=False, mine_only=False,
+        )
+        target_date = (timezone.now() + timedelta(days=5)).date().isoformat()
+        self._enable_countdown(target_date=target_date)
+        morning_now = timezone.make_aware(datetime.combine(timezone.now().date(), time(8, 0)))
+        run_countdown_digest(now=morning_now)
+        self.assertEqual(Notification.objects.filter(recipient_user=self.other, source_node="hub").count(), 0)
