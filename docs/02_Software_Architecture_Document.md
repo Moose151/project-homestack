@@ -1,243 +1,353 @@
 # Document 2 — Software Architecture Document (SAD)
 
-> Canonical. Supersedes all earlier SAD versions. Decisions referenced as D1–D23 live in
-> `00_README_and_Changelog.md`.
+> **Canonical architecture contract.** Product decisions D1–D24 live in
+> `00_README_and_Changelog.md`. Current deployment/work status lives in `HANDOVER.md`; historical
+> implementation chronology lives in `VERSION_HISTORY.md`.
 
-## 1. Purpose
+## 1. Architectural style
 
-Defines HomeStack's software architecture: a secure, API-first, modular household platform
-built as a **modular monolith**, run self-hosted on a single always-on home server, for one
-household. The architecture deliberately keeps a small number of future doors open (native
-clients, a possible self-hosted product) while avoiding work that a single household does not
-yet need.
+HomeStack is a **Django modular monolith** with one React frontend and one PostgreSQL database,
+self-hosted for one household.
 
-## 2. Architectural style
+This is deliberate. Domain separation is enforced through app boundaries, shared services and
+permission/event contracts without the operational cost of microservices.
 
-**Modular monolith.** One Django backend, internally separated into apps with clean
-boundaries. This gives the separation benefits of services without the operational cost of
-microservices — the right fit for one developer and one server.
+Primary rules:
 
-Cross-node communication uses **Django signals behind a thin internal event interface**
-(D4), not a durable message bus. The interface is shaped so a real bus could replace it later
-without touching node code, but no `event_bus_events` table, retry machinery or broker is
-built for V1.
+- one backend/API is the business-logic/security authority;
+- nodes own their domain records;
+- cross-node behaviour uses shared services and the thin events interface, not model imports;
+- shared projections (Hub, Calendar, Search, Corners, notifications) do not become second sources
+  of truth;
+- Redis/Celery/durable brokers are added only when a measured workload requires them.
 
-## 3. Technology stack
+## 2. Technology stack
 
-**Backend:** Python · Django · Django REST Framework · PostgreSQL.
-*Redis and Celery are deferred (D5)* until a feature genuinely needs background processing;
-early scheduled work (reminders) runs through a Django management command on cron.
+**Backend:** Python, Django, Django REST Framework, PostgreSQL.
 
-**Frontend:** React · TypeScript · Vite · TailwindCSS · a shared component library.
+**Frontend:** React, TypeScript, Vite, TailwindCSS and shared UI primitives.
 
-**Deployment:** Docker Compose on a Linux home server. Local network first; reverse proxy /
-HTTPS / VPN added before any remote access (see Security doc). No public exposure in early
-scope.
+**Current deployment:** Docker Compose on the Linux home server. LAN clients use trusted HTTPS at
+`homestack.moosesoftwares.com` through the existing Nginx Proxy Manager and Pi-hole local DNS.
+Public internet exposure is not enabled.
 
-**Mobile/desktop (later, undecided — D3):** the API-first design keeps React Native, Tauri/
-Electron, or a PWA all viable. A solid PWA is the likely first bridge to phones. This choice
-is deliberately deferred and does not block backend work.
+**Current live-serving caveat:** the container definitions still launch Django `runserver` and the
+Vite development server. A production-serving profile (production WSGI + built/static frontend)
+and tighter private container networking are explicit near-term hardening work, not a reason to
+redesign the application architecture.
 
-## 4. High-level architecture
+**Background jobs:** scheduled Django management commands/host scheduling. Redis/Celery are
+explicitly deferred (D5).
 
-```
-Clients:  Web app   ·   Kiosk UI        (later: PWA, native apps)
-                 │
-                 ▼
-Backend (Django, modular monolith)
-   ├─ Core services (accounts, people, permissions, scheduling, hub,
-   │                 notifications, attachments, audit, search, backups, nodes)
-   ├─ Node apps (atlas, home_wiki, pets, education, inventory, assets,
-   │             hearth, travel, projects, health, meridian, solace,
-   │             homestead, home_assistant)
-   └─ Internal event interface (signals; swappable for a real bus later)
-                 │
-                 ▼
-Storage:  PostgreSQL   ·   File storage volume   ·   Backup volume
-          (Redis/Celery added only when needed)
-```
+**Future clients:** PWA is the first phone bridge; native Android/iOS/desktop technology remains
+undecided until the product demonstrates a real need beyond the responsive/PWA client (D3).
 
-## 5. Backend app structure
+## 3. High-level architecture
 
-Core: `core`, `accounts`, `people`, `permissions`, `nodes`, `hub`, `scheduling`,
-`notifications`, `attachments`, `audit`, `search`, `backups`, `events` *(thin signal
-interface only)*.
-
-Nodes: `atlas`, `home_wiki`, `pets`, `education`, `inventory`, `assets`, `hearth`, `travel`,
-`projects`, `health`, `meridian`, `solace`, `homestead`, `home_assistant`.
-
-Notes:
-- The scheduling app is named **`scheduling`**, not `calendar`, to avoid colliding with
-  Python's stdlib `calendar` module (D16).
-- There is **no `households` app with multi-tenant behaviour**; a single household row is
-  seeded at install. The tenant column is carried by the base model instead (§7, D1).
-- Meridian and Solace are **first-class node apps** (D13), not under an `integrations` shell.
-  No external-link/iframe layer is built.
-- Home Assistant is a dedicated backend-only bridge node (D22), still not a generic
-  `integrations` shell. It uses supported Home Assistant APIs, stores selected mappings rather
-  than device state/history, and must never be required for other node writes to succeed.
-
-```
-backend/
-  manage.py
-  config/
-    settings/ (base.py, dev.py, prod.py, test.py)
-    urls.py  asgi.py  wsgi.py
-  apps/
-    core/  accounts/  people/  permissions/  nodes/  hub/  scheduling/
-    notifications/  attachments/  audit/  search/  backups/  events/
-    atlas/  home_wiki/  pets/  education/  inventory/  assets/  hearth/
-    travel/  projects/  health/  fitness/  meridian/  solace/  homestead/  home_assistant/
+```text
+Clients
+  responsive web / kiosk / PWA (native later if justified)
+        |
+        v
+LAN TLS + reverse proxy
+  Nginx Proxy Manager
+        |
+        v
+HomeStack frontend
+        |
+        v
+Django / DRF modular monolith
+  Core services
+    accounts, people, permissions, nodes, hub, scheduling,
+    notifications, attachments, audit, search, backups, events
+  Domain apps
+    atlas, meridian, education, home_wiki, pets, homestead,
+    solace, fitness, travel
+  Planned/deferred domain apps/specs
+    hearth, health, home_assistant, inventory/assets/projects as evidence requires
+        |
+        v
+PostgreSQL + protected media + backup storage
 ```
 
-## 6. The base model (D1, D12, D17)
+The repository may contain skeleton/spec artifacts for planned domains. Presence of a directory or
+spec does not itself mean a top-level node is active; the MSS/Roadmap/Handover define current
+product status.
 
-A shared abstract base model gives every user-facing table consistent behaviour and is the
-mechanism that keeps the tenant column cheap to carry:
+## 4. Backend boundaries
+
+### 4.1 Core platform apps
+
+- `core` — household/settings foundation.
+- `accounts` — authentication Users and login/admin account flows.
+- `people` — household Person profiles.
+- `permissions` — central role/per-user resolution and visibility rules.
+- `nodes` — node/capability registry and household enablement.
+- `hub` — configurable daily aggregation widgets.
+- `scheduling` — Calendar/event projections and scheduling helpers (D7/D16).
+- `notifications` — in-app notifications and the expanding Web Push delivery capability.
+- `attachments` — protected shared files.
+- `audit` — immutable security/administrative activity.
+- `search` — permission-aware global aggregation.
+- `backups` — database/media backup/restore records and services.
+- `events` — thin in-process publish/subscribe boundary (D4).
+- shared cross-domain capabilities such as achievements/link imports where their ownership is
+  genuinely platform-wide.
+
+### 4.2 Current domain apps
+
+- `atlas`
+- `meridian`
+- `education`
+- `home_wiki`
+- `pets`
+- `homestead`
+- `solace`
+- `fitness`
+- `travel`
+
+Home Assistant is a deliberate dedicated bridge when implemented; Hearth and Health are future
+major domains. Inventory/Assets/Projects remain evidence/capability-gated rather than automatic
+new navigation nodes.
+
+### 4.3 Layering inside an app
+
+Normal app structure follows the coding standards:
+
+```text
+models.py
+serializers.py
+selectors.py     # permission-filtered reads
+services.py      # writes/business transitions
+views.py         # thin request/response adaptation
+urls.py
+events.py / tasks.py where needed
+tests/
+```
+
+Do not move business logic into React or duplicate permission logic in individual views.
+
+## 5. Household base model (D1, D12)
+
+User-facing domain records use the shared household-scoped base-model convention: household,
+created/updated timestamps, created/updated Users and soft-delete support.
+
+Conceptually:
 
 ```python
 class HouseholdBaseModel(models.Model):
-    household    = models.ForeignKey("core.Household", on_delete=models.PROTECT)
-    created_at   = models.DateTimeField(auto_now_add=True)
-    updated_at   = models.DateTimeField(auto_now=True)
-    created_by   = models.ForeignKey("accounts.User", null=True, related_name="+", ...)
-    updated_by   = models.ForeignKey("accounts.User", null=True, related_name="+", ...)
-    deleted_at   = models.DateTimeField(null=True, blank=True)   # soft delete
+    household = models.ForeignKey("core.Household", on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey("accounts.User", null=True, related_name="+", ...)
+    updated_by = models.ForeignKey("accounts.User", null=True, related_name="+", ...)
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
-    objects = HouseholdManager()   # default-filters to the active household, hides soft-deleted
+    objects = HouseholdManager()
 
     class Meta:
         abstract = True
 ```
 
-- `created_by` / `updated_by` are **users** (ownership/audit). Record subjects/assignees are
-  **people** via explicit `assigned_to_person` / `person` fields (D12).
-- The default manager scopes to the single active household and excludes soft-deleted rows,
-  so node code never has to remember either concern. If multi-household is ever wanted, the
-  scoping already lives in one place.
+`created_by`/`updated_by`/audit actors are Users. Record subjects/assignees are People (D12).
 
-## 7. Permissions architecture (D10)
+The household column is retained even though runtime behaviour is one household per installation;
+it is not permission to implement SaaS tenancy.
 
-Permissions are **resolved centrally**, not checked ad hoc per view. Two pieces:
+## 6. Permissions architecture (D10)
 
-1. **A permission resolver** — one function that, given (user, action, resource/node),
-   returns allow/deny by combining: role, per-user overrides, node-enabled status, record
-   visibility, sensitivity, and current re-auth state.
-2. **A visibility queryset mixin** — applied in selectors so list endpoints only ever return
-   rows the requester may see (filtered by household, role, visibility, sensitivity, re-auth).
+Security is enforced centrally, not by frontend state or scattered per-view conditionals.
 
-Every endpoint passes through both. Permission tests are written **first**, before node
-features, because this is the security spine and the part that becomes critical the moment
-the app reaches families you don't know.
+The permission spine combines:
 
-## 8. Scheduling (Calendar) architecture (D7, D8, D23)
+- authentication/active-account state;
+- household scope;
+- role and per-user overrides;
+- node/capability enablement;
+- record visibility/sensitivity;
+- child/kiosk restrictions;
+- sensitive re-authentication where required.
 
-**Node records own their dates.** A single helper in the `scheduling` app creates, updates
-and deletes `calendar_events` derived from node records, and stores the resulting
-`calendar_event_id` back on the source row. Nodes call this helper on save/delete; they never
-hand-write calendar rows. This removes the double-source-of-truth drift between, e.g., a pet
-treatment's `next_due_at` and its calendar event.
+Selectors apply visibility before serialization. Derived services (Hub/Search/Calendar/Corners/
+notifications) must use the same source permission boundary rather than aggregate first and filter
+later.
 
-**Recurrence is expressed once** as an RRULE-style rule on the owning record, and the helper
-expands it for the calendar. No node keeps its own parallel `repeat_rule` format.
+Permission/security tests precede feature behaviour where access boundaries change.
 
-**Rotating two-state layers are calculated, not materialised (D23).** `RotatingSchedule` owns
-one anchored `P`/`S` cycle and its optional People. The selector expands only the requested
-date window and overlays any sparse `RotatingScheduleException` rows. It never creates daily
-`CalendarEvent` records. Conventional standalone and node-owned event recurrence remains RRULE
-(D8); this bounded model exists for alternating states that need both long forecasting and
-one-day swaps.
+## 7. Scheduling / Calendar (D7, D8, D23)
+
+**Owning records own dates.** Node/service records with dates sync into Calendar through the shared
+`scheduling` helper. Calendar projections carry source identifiers/deep links and are maintained
+from the owning data.
+
+Do not hand-write a duplicate date into Calendar from a node service.
+
+General recurrence uses the established RRULE-style `recurrence_rule` (D8).
+
+Generic alternating two-state schedules are the bounded D23 exception: a `RotatingSchedule`
+stores one anchored cycle and sparse date exceptions; selectors calculate only the requested
+window. They do not materialise endless daily `CalendarEvent` rows.
+
+Standalone Calendar-owned appointments/events remain valid owning records in `scheduling`.
+
+## 8. Hub, Search, Corners and notifications are projections
+
+These shared surfaces improve discoverability but do not own the underlying domain fact.
+
+- **Hub** — widget selectors return permitted summaries/actions.
+- **Search** — queries permission-filtered owning querysets; snippets are built only after
+  filtering.
+- **Corners** — person-centred activity/assignments/lists project owning records and preserve
+  visibility/deep-link boundaries.
+- **Notifications** — notification records/delivery link to source meaning but cannot bypass its
+  permissions; Web Push payloads stay sparse for sensitive content.
+
+Deleting/locking/changing visibility on a source record must not leave a derived surface that still
+reveals it.
 
 ## 9. Search architecture (D9)
 
-Search uses **PostgreSQL full-text search** (`tsvector` / `SearchVector`) over each node's
-permission-filtered queryset, combined through the same visibility mixin as everything else.
-No separately maintained `search_index` table to drift out of sync. OCR and semantic search
-remain parked.
+Use PostgreSQL full-text search where appropriate over each domain's permission-filtered queryset,
+with SQLite/test-safe fallbacks where required by the test strategy.
 
-## 10. Attachments architecture (D11)
+Do not maintain a separately synchronized universal `search_index` table. OCR/semantic search are
+future optional enrichments, not replacements for source permissions.
 
-One shared attachments service. Access is controlled by `visibility` + `sensitivity` fields
-on the attachment, reusing the central permission resolver. The per-row
-`attachment_permissions` ACL table from earlier drafts is **deferred** — two permission
-systems on one resource is a bug source. Sensitive downloads are audited.
+## 10. Attachments (D11)
 
-## 11. Internal event interface (D4)
+Files use the shared attachment service and visibility/sensitivity permission model.
+
+- protected downloads pass through application permission checks;
+- sensitive downloads are audited;
+- storage paths must not expose private files through an unauthenticated public media URL;
+- node/domain records link to attachments rather than inventing independent file-security models.
+
+A per-file ACL system is deferred unless real requirements outgrow the shared contract.
+
+## 11. Internal events interface (D4)
+
+Cross-domain reactions use a thin interface conceptually shaped as:
 
 ```python
-# apps/events/bus.py  — thin, swappable
-def publish(event_type: str, *, payload: dict): ...
-def subscribe(event_type: str, handler): ...
+publish(event_type, payload=...)
+subscribe(event_type, handler)
 ```
 
-Backed by Django signals for V1. Example flow (Hearth → Inventory → Atlas) is implemented as
-signal handlers, synchronously, within a request or a scheduled command. If volume or
-decoupling ever demands it, the same `publish/subscribe` surface can be re-pointed at Redis/
-Celery or a real broker without changing callers.
+The implementation is in-process Django signals. Synchronous handlers must fail safely and avoid
+creating circular domain dependencies.
 
-## 12. Frontend structure
+Do **not** introduce an `event_bus_events` table, retry broker or generic workflow engine merely for
+architectural symmetry. If push/HA/other background workloads later prove signals insufficient,
+change the implementation behind the boundary deliberately.
 
-```
-frontend/src/
-  app/  api/  components/{ui,layout,feedback}/
-  features/{auth,hub,scheduling,kiosk,atlas,homeWiki,pets,education,
-            inventory,assets,hearth,travel,projects,health,meridian,solace,settings}/
-  hooks/  theme/  types/  utils/
-```
+## 12. Frontend architecture
 
-All nodes consume the shared component library; no node invents its own visual style (see
-UI/UX doc).
+The React application is one product shell with shared navigation, authentication/session state,
+API client, responsive components, feedback/error states and design tokens.
 
-## 13. API design
+Domain pages/components should:
 
-Base path `/api/v1/`. Groups mirror core services and nodes. Session auth for web/kiosk;
-token auth added with native apps (D6). Full endpoint list lives in the API Specification.
+- call the shared API client;
+- reuse shared UI primitives;
+- work at phone/laptop sizes before bespoke kiosk polish unless the feature is kiosk-specific;
+- treat backend permission failures/reauth-required responses as authoritative;
+- keep route/query state stable enough for deep links from Calendar/Search/Corners/notifications.
 
-Every endpoint validates, via the central layer: authentication, household ownership,
-node-enabled status, role permission, record visibility, sensitive-node access, and
-re-authentication where required.
+The current Vite dev-server proxy can route `/api` during development. The planned production
+profile should build static assets and let the reverse-proxy/application routing be explicit rather
+than rely on a development server in production.
+
+## 13. API architecture
+
+Base path: `/api/v1/`.
+
+The API is the contract for web/kiosk/PWA/future native clients. Endpoints should use consistent
+error envelopes/status codes and keep write logic in services and read logic in selectors.
+
+A client cannot gain authority by knowing an object ID, deep link or notification payload; each
+request re-runs authentication/permission checks.
 
 ## 14. Kiosk architecture
 
-A dedicated frontend mode at `/kiosk` with states: ambient → avatar selection → PIN entry →
-personal dashboard → node kiosk view → timeout return. Primary kiosk nodes: Hub, Calendar,
-Atlas, Pets, Education, Hearth, Meridian. Restricted from the child kiosk by default: Solace,
-Health, Assets, sensitive Documents, Settings.
+Kiosk is a frontend mode over the same backend/security model, typically:
 
-## 15. Deployment architecture
+```text
+ambient -> avatar -> PIN -> personal/kiosk dashboard -> permitted workflow -> timeout
+```
 
-Docker Compose services (V1):
+Kiosk-safe APIs/widgets are deliberately constrained. Sensitive nodes are hidden by default and
+remain backend-locked even if UI navigation is manipulated.
 
-- `homestack-backend` (Django/DRF)
-- `homestack-frontend`
-- `homestack-postgres`
+## 15. Current deployment architecture
 
-Volumes: `postgres_data`, `media_data`, `backup_data`.
+Current household topology:
 
-`homestack-redis` and `homestack-celery-*` are added only when a feature requires them (D5).
-Access is local-network-only until HTTPS, a reverse proxy and the security checklist
-(Security doc §14) are satisfied.
+```text
+LAN client
+  -> Pi-hole: homestack.moosesoftwares.com -> 192.168.1.125
+  -> Nginx Proxy Manager :443
+       Let's Encrypt certificate via Cloudflare DNS challenge
+  -> HomeStack frontend/backend containers
+  -> PostgreSQL
+```
 
-## 16. Backups & restore (D17)
+HomeStack itself does not manage the Cloudflare DNS token; NPM owns that certificate credential.
+No public router port forwarding is required for DNS-01 certificate issuance/renewal.
 
-Backup = `pg_dump` of the database **plus** a tarball of the media volume, recorded in the
-`backups` table with checksum and status. **Restore is a defined, documented procedure**
-(stop app or enter maintenance, `pg_restore`, unpack media, verify checksums, restart),
-with expected downtime stated. Restore requires admin re-authentication. Restore is treated
-as a first-class, tested feature, not an afterthought.
+### 15.1 Near-term deployment hardening
 
-## 17. Build order (summary)
+The architecture target is:
 
-Foundation → Hub + Calendar → Atlas → native Meridian → Home Wiki + Pets + Education →
-security maturation → native Solace → remaining nodes. Full detail and "done when" criteria
-are in the Development Roadmap.
+- production WSGI server for Django;
+- built/static frontend instead of Vite dev server;
+- private Docker network between NPM/application/database where practical;
+- PostgreSQL not exposed directly to the LAN;
+- one supported deploy command that builds, migrates, restarts and smoke-tests safely.
 
-## 18. Meridian & Solace migration architecture (D13, D14)
+Keep a development profile/override for hot reload and direct development ports.
 
-Both are rebuilt as native node apps that use HomeStack's shared Users/People, scheduling,
-attachments and permissions from day one. Their **proven business logic is reused** (reward/
-points calculation; bill recurrence and payday-checklist behaviour); only the shell —
-models, serializers, views — is rebuilt to fit the shared services. A **one-time import
-script** migrates each app's live household data. No iframe/external-link integration is
-built, since the destination is native. Meridian migrates early (no sensitive data); Solace
-migrates after the security foundation is mature.
+## 16. Backups and restore (D17)
+
+A HomeStack backup consists of database data plus protected media and integrity metadata. Restore is
+a defined sensitive operation, not an afterthought.
+
+Requirements:
+
+- admin authorization and re-authentication for restore;
+- checksums/integrity verification;
+- documented stop/restore/restart procedure;
+- periodic real restore testing;
+- near-term encrypted off-server/off-primary-storage copy.
+
+## 17. Legacy Meridian/Solace relationship (D13/D14)
+
+Meridian and Solace are native HomeStack domains, not integrations.
+
+Their proven behaviour informed the native implementation, while HomeStack rebuilt the shell around
+shared Users/People/permissions/Calendar/attachments/audit.
+
+Import tooling remains useful for repeatable migration scenarios, but import is not a mandatory
+architectural step for every installation. The live household chose fresh manual entry for Solace
+rather than importing its old database.
+
+## 18. Home Assistant boundary (D22)
+
+When the bridge is implemented:
+
+- Home Assistant owns devices/entities/live state/history/areas/automations;
+- HomeStack owns household records/People/tasks/Calendar/permissions/presentation mappings;
+- HomeStack stores only selected mapping/control/event metadata;
+- HA credentials are backend deployment secrets;
+- reads/actions are allowlisted, permission-checked and bounded;
+- HA failure cannot block unrelated HomeStack writes.
+
+No generic `integrations` app, iframe or arbitrary HA service-call proxy is authorized by D22.
+
+## 19. Architecture evolution rule
+
+Before introducing a new infrastructure component or boundary, identify the concrete failure mode
+in the current architecture that it solves. Prefer strengthening the existing modular-monolith,
+permissions, scheduling, events and deployment contracts over adding parallel systems.
+
+Current architectural priorities are operational maturity (production serving/network/deploy/
+backup), Web Push delivery and then the bounded Home Assistant bridge — not a microservice rewrite.
