@@ -225,13 +225,18 @@ today's profile editing.
 
 ## 12. Delivery slices
 
-1. **Preference model + gate.** `NotificationPreference`/`UserNotificationSettings` +
-   migration, the `category` param on `create_notification`/`notify_person`, preferences
-   API + a simple settings-page UI. No push yet — in-app notifications become filterable/
-   quiet-hours-aware first, proving the gate before adding a delivery channel.
-2. **Web Push infrastructure.** VAPID keys, `PushDevice` model + register/unregister/test
-   endpoints, service worker, frontend subscribe flow, `pywebpush` send path wired into the gate
-   from slice 1.
+1. **Preference model + gate — DONE (v0.34.10).** `NotificationPreference`/
+   `UserNotificationSettings` + migration, the `category` param on `create_notification`/
+   `notify_person`, preferences API + a settings-page UI. Eight real call sites tagged with
+   categories so the gate has immediate effect.
+2. **Web Push infrastructure — DONE (v0.34.11).** VAPID keys (`manage.py generate_vapid_keys`),
+   `PushDevice` model + register/unregister/test endpoints, service worker (`public/sw.js`),
+   frontend subscribe flow (explicit user action, never auto-prompted), `pywebpush` send path
+   wired into the slice-1 gate — quiet hours, per-category push toggle, sensitive-node exclusion
+   (queries `HouseholdNode.requires_reauthentication` generically rather than hardcoding node
+   names) and automatic device deactivation on a 404/410 response are all enforced before a send
+   is attempted. A minimal `manifest.json` + `apple-mobile-web-app-capable` were added because
+   iOS only allows Web Push for an installed PWA, not a plain Safari tab.
 3. **Event-bus dispatcher + bundling.** `apps/notifications/handlers.py`, `notify_bundled`
    extracted from Corners, the new/wired publish calls from §7, `household_activity` end to end.
 4. **Scheduled reminders + countdown digest.** The management command from §8/§9,

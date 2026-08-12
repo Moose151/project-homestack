@@ -625,6 +625,14 @@ export interface UserNotificationSettings {
   morning_time: string
 }
 
+export interface PushDevice {
+  id: number
+  label: string
+  user_agent: string
+  last_seen_at: string
+  created_at: string
+}
+
 export interface MeridianRewardRequest {
   id: number
   reward_id: number

@@ -117,3 +117,29 @@ class UserNotificationSettings(HouseholdBaseModel):
 
     def __str__(self) -> str:
         return f"{self.user_id} notification settings"
+
+
+class PushDevice(HouseholdBaseModel):
+    """One browser Web Push subscription (docs/32 §4/§10). Several rows per user is normal —
+    phone, laptop, tablet each subscribe separately."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="push_devices"
+    )
+    endpoint = models.CharField(max_length=500, unique=True)
+    p256dh = models.CharField(max_length=255)
+    auth = models.CharField(max_length=255)
+    label = models.CharField(max_length=120, blank=True, default="")
+    user_agent = models.CharField(max_length=255, blank=True, default="")
+    last_seen_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "push device"
+        ordering = ["-last_seen_at"]
+
+    def __str__(self) -> str:
+        return self.label or self.endpoint[:40]

@@ -1,7 +1,18 @@
 {
-  "current_version": "0.34.10",
-  "source_sha256": "d75eafa08dd33d1c389e1bb28f377386dcd654c519c5183a39c66b21bba1d0cf",
+  "current_version": "0.34.11",
+  "source_sha256": "3a9916f099ef181c55c1ea4b8591b186b41011d074f8b9a2c5e33b63a950d76a",
   "releases": [
+    {
+      "version": "0.34.11",
+      "date": "2026-08-12",
+      "title": "Web Push infrastructure (docs/32 slice 2, on feature/push-notifications)",
+      "changes": [
+        "Push notifications actually work now, end to end. `manage.py generate_vapid_keys` generates a server keypair; a new `PushDevice` model plus `GET/POST /notifications/devices/`, `DELETE /notifications/devices/<id>/` and `POST /notifications/devices/<id>/test/` let a device register, list itself, be revoked and send itself a test push. A new `apps/notifications/push.py` module sends via `pywebpush`, wired into the slice-1 gate: a push is only attempted when VAPID keys are configured, the category's push toggle is on, the recipient isn't in their quiet hours, and the source node isn't re-auth-gated (checked generically against `HouseholdNode.requires_reauthentication`, so Solace/Health stay in-app-only without hardcoding node names). A `404`/`410` response from the push service deactivates that device automatically instead of retrying it forever.",
+        "Frontend: `public/sw.js` (a minimal service worker — `push` shows the notification, `notificationclick` focuses or opens the deep link), `public/manifest.json` + `apple-mobile-web-app-capable` in `index.html` (iOS only allows Web Push for an installed PWA, not a plain browser tab), and an explicit, user-initiated \"Enable push on this device\" flow on the notifications settings page — request permission, subscribe via the browser's PushManager, register the subscription. Never auto-prompts. New Devices card lists registered devices with Test/Revoke actions.",
+        "**849 backend tests green (13 new); frontend typecheck and production build clean; migration `notifications.0003` applied to the live dev database.** New dependency: `pywebpush==2.0.1`. Still on `feature/push-notifications`, not merged to `main`.",
+        "Payloads are deliberately sparse per docs/32 §10 (a title/body and a deep link only) — nothing financial, health or otherwise sensitive is ever placed in a push payload."
+      ]
+    },
     {
       "version": "0.34.10",
       "date": "2026-08-12",

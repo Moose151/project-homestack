@@ -3,7 +3,12 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from apps.notifications.models import NotificationCategory, Notification, UserNotificationSettings
+from apps.notifications.models import (
+    NotificationCategory,
+    Notification,
+    PushDevice,
+    UserNotificationSettings,
+)
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -38,3 +43,23 @@ class UserNotificationSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserNotificationSettings
         fields = ["quiet_start", "quiet_end", "morning_time"]
+
+
+class PushDeviceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PushDevice
+        fields = ["id", "label", "user_agent", "last_seen_at", "created_at"]
+        read_only_fields = fields
+
+
+class PushDeviceRegisterSerializer(serializers.Serializer):
+    """Shape of the browser's PushSubscription.toJSON(), plus an optional friendly label."""
+
+    endpoint = serializers.CharField(max_length=500)
+    keys = serializers.DictField(child=serializers.CharField())
+    label = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
+
+    def validate_keys(self, value):
+        if "p256dh" not in value or "auth" not in value:
+            raise serializers.ValidationError("Subscription keys must include p256dh and auth.")
+        return value

@@ -11,7 +11,7 @@ import type {
   MeridianGoal, MeridianPointsResponse, MeridianReports, MeridianReward, MeridianRewardRequest,
   MeridianRoutine, MeridianSettings, MeridianTask, MeridianTaskCompletion,
   MeridianWishlistItem, MeridianWishlistRequest, NodeInfo, NotificationList, NotificationPreference,
-  Person,
+  Person, PushDevice,
   PersonBadge, PersonalBookEntry, Pet, PetAppointment, PetTreatment, Pool, PoolStatus,
   PoolWrite, Property, RoomArea, RoomAreaType, RoomDetailResponse, RoomItemPriority,
   RoomItemStatus, RoomItemType, RoomListResponse, RoomPlanItem, RoomPlanMode, RoomPlanProduct,
@@ -1296,4 +1296,13 @@ export const api = {
     _fetch('/notifications/settings/'),
   updateNotificationSettings: (data: Partial<UserNotificationSettings>): Promise<UserNotificationSettings> =>
     _fetch('/notifications/settings/', { method: 'PATCH', body: JSON.stringify(data) }),
+  getVapidPublicKey: (): Promise<{ public_key: string }> =>
+    _fetch('/notifications/vapid-public-key/'),
+  getPushDevices: (): Promise<PushDevice[]> => _fetch('/notifications/devices/'),
+  registerPushDevice: (data: { endpoint: string; keys: { p256dh: string; auth: string }; label?: string }): Promise<PushDevice> =>
+    _fetch('/notifications/devices/', { method: 'POST', body: JSON.stringify(data) }),
+  unregisterPushDevice: (id: number): Promise<void> =>
+    _fetch(`/notifications/devices/${id}/`, { method: 'DELETE' }),
+  testPushDevice: (id: number): Promise<{ delivered: boolean }> =>
+    _fetch(`/notifications/devices/${id}/test/`, { method: 'POST' }),
 }

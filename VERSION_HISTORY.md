@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.34.10**
+> **Current version: 0.34.11**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,30 @@
 ---
 
 ## 0.34 — Discoverability and daily navigation
+
+### 0.34.11 — 2026-08-12 — Web Push infrastructure (docs/32 slice 2, on feature/push-notifications)
+- Push notifications actually work now, end to end. `manage.py generate_vapid_keys` generates a
+  server keypair; a new `PushDevice` model plus `GET/POST /notifications/devices/`,
+  `DELETE /notifications/devices/<id>/` and `POST /notifications/devices/<id>/test/` let a
+  device register, list itself, be revoked and send itself a test push. A new
+  `apps/notifications/push.py` module sends via `pywebpush`, wired into the slice-1 gate: a push
+  is only attempted when VAPID keys are configured, the category's push toggle is on, the
+  recipient isn't in their quiet hours, and the source node isn't re-auth-gated (checked
+  generically against `HouseholdNode.requires_reauthentication`, so Solace/Health stay in-app-only
+  without hardcoding node names). A `404`/`410` response from the push service deactivates that
+  device automatically instead of retrying it forever.
+- Frontend: `public/sw.js` (a minimal service worker — `push` shows the notification,
+  `notificationclick` focuses or opens the deep link), `public/manifest.json` +
+  `apple-mobile-web-app-capable` in `index.html` (iOS only allows Web Push for an installed PWA,
+  not a plain browser tab), and an explicit, user-initiated "Enable push on this device" flow on
+  the notifications settings page — request permission, subscribe via the browser's PushManager,
+  register the subscription. Never auto-prompts. New Devices card lists registered devices with
+  Test/Revoke actions.
+- **849 backend tests green (13 new); frontend typecheck and production build clean; migration
+  `notifications.0003` applied to the live dev database.** New dependency: `pywebpush==2.0.1`.
+  Still on `feature/push-notifications`, not merged to `main`.
+- Payloads are deliberately sparse per docs/32 §10 (a title/body and a deep link only) — nothing
+  financial, health or otherwise sensitive is ever placed in a push payload.
 
 ### 0.34.10 — 2026-08-12 — Notification preferences (docs/32 slice 1, on feature/push-notifications)
 - Every household member can now choose what they hear about: `GET/PATCH /notifications/preferences/`

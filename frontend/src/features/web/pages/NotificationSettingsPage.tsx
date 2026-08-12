@@ -1,12 +1,36 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../../api/client'
-import type { NotificationPreference, UserNotificationSettings } from '../../../api/types'
+import type { NotificationPreference, PushDevice, UserNotificationSettings } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { PageHeader } from '../../../components/PageHeader'
+import { confirmDialog } from '../../../components/Dialogs'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
+
+const PUSH_SUPPORTED = typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window
+
+// applicationServerKey must be a Uint8Array, not the base64url string the API returns. Built via
+// `new Uint8Array(n)` + indexed writes (not Uint8Array.from) so it's ArrayBuffer- rather than
+// the wider ArrayBufferLike-backed, matching what lib.dom's PushSubscriptionOptionsInit expects.
+function urlBase64ToUint8Array(base64url: string): Uint8Array<ArrayBuffer> {
+  const padding = '='.repeat((4 - (base64url.length % 4)) % 4)
+  const base64 = (base64url + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const raw = atob(base64)
+  const bytes = new Uint8Array(raw.length)
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i)
+  return bytes
+}
+
+function deviceLabelFromUserAgent(ua: string): string {
+  if (/iPhone/.test(ua)) return 'iPhone'
+  if (/iPad/.test(ua)) return 'iPad'
+  if (/Android/.test(ua)) return 'Android device'
+  if (/Macintosh/.test(ua)) return 'Mac'
+  if (/Windows/.test(ua)) return 'Windows PC'
+  return 'This device'
+}
 
 function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) {
   return (
@@ -26,17 +50,62 @@ function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; labe
 export function NotificationSettingsPage() {
   const [rows, setRows] = useState<NotificationPreference[]>([])
   const [settings, setSettings] = useState<UserNotificationSettings | null>(null)
+  const [devices, setDevices] = useState<PushDevice[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [savingSettings, setSavingSettings] = useState(false)
+  const [subscribing, setSubscribing] = useState(false)
+  const [busyDeviceId, setBusyDeviceId] = useState<number | null>(null)
+  const [testedDeviceId, setTestedDeviceId] = useState<number | null>(null)
+
+  const loadDevices = () => api.getPushDevices().then(setDevices).catch(e => setError(errMsg(e)))
 
   useEffect(() => {
-    Promise.all([api.getNotificationPreferences(), api.getNotificationSettings()])
-      .then(([prefRows, settingsRow]) => { setRows(prefRows); setSettings(settingsRow) })
+    Promise.all([api.getNotificationPreferences(), api.getNotificationSettings(), api.getPushDevices()])
+      .then(([prefRows, settingsRow, deviceRows]) => { setRows(prefRows); setSettings(settingsRow); setDevices(deviceRows) })
       .catch(e => setError(errMsg(e)))
       .finally(() => setLoading(false))
   }, [])
+
+  const enablePushOnThisDevice = async () => {
+    setSubscribing(true); setError(null)
+    try {
+      if (!PUSH_SUPPORTED) throw new Error('This browser does not support push notifications.')
+      const permission = await Notification.requestPermission()
+      if (permission !== 'granted') throw new Error('Notification permission was not granted.')
+      const registration = await navigator.serviceWorker.ready
+      const { public_key: publicKey } = await api.getVapidPublicKey()
+      if (!publicKey) throw new Error('Push is not configured on this server yet.')
+      let subscription = await registration.pushManager.getSubscription()
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        })
+      }
+      const json = subscription.toJSON() as { endpoint: string; keys?: { p256dh: string; auth: string } }
+      if (!json.keys) throw new Error('The browser did not return subscription keys.')
+      await api.registerPushDevice({
+        endpoint: json.endpoint, keys: json.keys,
+        label: deviceLabelFromUserAgent(navigator.userAgent),
+      })
+      await loadDevices()
+    } catch (e) { setError(errMsg(e)) } finally { setSubscribing(false) }
+  }
+
+  const revokeDevice = async (device: PushDevice) => {
+    if (!(await confirmDialog({ title: `Stop push on "${device.label || 'this device'}"?`, confirmLabel: 'Revoke' }))) return
+    setBusyDeviceId(device.id)
+    try { await api.unregisterPushDevice(device.id); await loadDevices() }
+    catch (e) { setError(errMsg(e)) } finally { setBusyDeviceId(null) }
+  }
+
+  const testDevice = async (device: PushDevice) => {
+    setBusyDeviceId(device.id); setTestedDeviceId(null)
+    try { await api.testPushDevice(device.id); setTestedDeviceId(device.id) }
+    catch (e) { setError(errMsg(e)) } finally { setBusyDeviceId(null) }
+  }
 
   const setRow = (category: string, patch: Partial<NotificationPreference>) =>
     setRows(prev => prev.map(row => row.category === category ? { ...row, ...patch } : row))
@@ -77,6 +146,42 @@ export function NotificationSettingsPage() {
           <button onClick={() => setError(null)} aria-label="Dismiss">×</button>
         </div>
       )}
+
+      <Card title="Devices">
+        <p className="text-sm text-muted mb-3">
+          Push notifications go to devices you've enabled here — each phone, tablet or computer
+          you use HomeStack on needs its own. Requires an explicit permission prompt; nothing is
+          enabled automatically.
+        </p>
+        {!PUSH_SUPPORTED ? (
+          <p className="text-sm text-muted-strong">This browser doesn't support push notifications.</p>
+        ) : (
+          <Button onClick={enablePushOnThisDevice} loading={subscribing} className="mb-4">
+            Enable push on this device
+          </Button>
+        )}
+        {devices.length === 0 ? (
+          <p className="text-sm text-muted">No devices enabled yet.</p>
+        ) : (
+          <ul className="space-y-2">
+            {devices.map(device => (
+              <li key={device.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line px-3 py-2.5">
+                <div>
+                  <div className="text-sm font-semibold text-ink">{device.label || 'Device'}</div>
+                  <div className="text-xs text-muted">
+                    Last seen {new Date(device.last_seen_at).toLocaleDateString()}
+                    {testedDeviceId === device.id && <span className="ml-2 font-semibold text-success">Test sent ✓</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => testDevice(device)} loading={busyDeviceId === device.id}>Test</Button>
+                  <Button size="sm" variant="ghost" onClick={() => revokeDevice(device)} loading={busyDeviceId === device.id}>Revoke</Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       <Card title="Quiet hours">
         <p className="text-sm text-muted mb-3">
@@ -121,8 +226,7 @@ export function NotificationSettingsPage() {
 
       <Card title="Categories">
         <p className="text-sm text-muted mb-4">
-          In-app always shows in the bell. Push goes to your phone once notifications are set up
-          on it — the toggle is ready now, delivery is coming soon.
+          In-app always shows in the bell. Push goes to every device you've enabled above.
         </p>
         <div className="space-y-4">
           {rows.map(row => (

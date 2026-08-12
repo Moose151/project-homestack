@@ -43,6 +43,12 @@ def create_notification(
         action_url=action_url,
     )
     note.save()
+    if category:
+        from apps.notifications import push
+        push.send_push_to_user(
+            recipient_user, category=category, source_node=source_node,
+            title=title, message=message, action_url=action_url,
+        )
     return note
 
 
@@ -127,3 +133,18 @@ def update_settings(user, **data) -> UserNotificationSettings:
     settings_obj.updated_by = user
     settings_obj.save()
     return settings_obj
+
+
+def register_push_device(user, **kwargs):
+    from apps.notifications import push
+    return push.register_device(user, **kwargs)
+
+
+def unregister_push_device(user, device_id: int) -> bool:
+    from apps.notifications import push
+    return push.unregister_device(user, device_id)
+
+
+def send_test_push(device) -> bool:
+    from apps.notifications import push
+    return push.send_test_push(device)

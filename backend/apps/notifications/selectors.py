@@ -7,6 +7,7 @@ from apps.notifications.models import (
     NotificationCategory,
     NotificationPreference,
     PUSH_OFF_BY_DEFAULT,
+    PushDevice,
 )
 
 
@@ -40,3 +41,11 @@ def list_preferences_for_user(user) -> list[dict]:
             "supports_mine_only": value in MINE_ONLY_CATEGORIES,
         })
     return rows
+
+
+def list_devices(user) -> list[PushDevice]:
+    return list(PushDevice.objects.filter(user=user, is_active=True))
+
+
+def get_device(user, pk: int) -> PushDevice | None:
+    return PushDevice.objects.filter(user=user, pk=pk).first()
