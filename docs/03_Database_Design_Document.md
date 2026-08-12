@@ -1,259 +1,277 @@
-# Document 4 — Database Design Document (DDD)
+# Document 3 — Database Design Document
 
-> Canonical. Supersedes all earlier DDD versions. Decisions D1–D23 in `00_README_and_Changelog.md`.
+> **Canonical database-design contract.** The exact physical schema is defined by the current
+> Django models and migrations. This document defines the stable modelling conventions and domain
+> ownership rules; it must not become a second manually maintained copy of every model field.
 
-## 1. Purpose
+## 1. Database role
 
-Defines the PostgreSQL schema for HomeStack. The database supports a single household (with a
-carried tenant column for future-proofing), users and people, central permissions, the node
-registry, scheduling (calendar), notifications, attachments, search, audit, backups, and the
-confirmed nodes.
+HomeStack uses PostgreSQL as the durable source of truth for one self-hosted household. The schema
+supports shared platform services plus independently owned household domains inside one modular
+monolith.
 
-## 2. Conventions
+The database design prioritizes:
 
-### 2.1 Base fields (all user-facing tables)
-Via the `HouseholdBaseModel` (see Architecture §6), every user-facing table has:
-`id`, `household_id`, `created_at`, `updated_at`, `created_by_id`, `updated_by_id`,
-`deleted_at` (soft delete).
+- one owning record for each household fact;
+- household scoping and soft-delete consistency;
+- clear User-versus-Person relationships;
+- central visibility/sensitivity enforcement;
+- source-linked Calendar/Hub/Search/notification projections;
+- migrations as the authoritative physical-schema history.
 
-- `household_id` is present on every table but, in single-household mode, always points to the
-  one seeded household. Carried deliberately (D1); never exposed in the UI.
-- `created_by_id` / `updated_by_id` → **users** (ownership/audit).
-- Record subjects/assignees → **people**, via explicit `*_person_id` fields (D12).
+## 2. Authoritative physical schema
 
-### 2.2 Dates, recurrence, calendar (D7, D8)
-- Node records own their dates. The scheduling helper derives `calendar_events` from them and
-  writes back `calendar_event_id`. Tables that surface on the calendar carry a nullable
-  `calendar_event_id` rather than duplicating event fields.
-- Recurrence is a single RRULE-style string on the owning record. No parallel `repeat_rule`
-  formats; where a node needs recurrence it uses `recurrence_rule`.
+When this document and code disagree about a concrete field/table/index, the authoritative order is:
 
-### 2.3 Removed / deferred vs. earlier drafts
-- **`event_bus_events`** table — **removed** for V1 (D4); decoupling uses signals.
-- **`attachment_permissions`** ACL table — **deferred** (D11); attachments use
-  `visibility` + `sensitivity`.
-- **`search_index`** table — **removed** (D9); search uses Postgres FTS over live querysets.
-  (A generated `tsvector` column may be added per searchable table instead.)
-- Multi-household tables (signup/tenant management) — **not built**; one `households` row is
-  seeded.
+1. applied/current Django migrations;
+2. current Django models;
+3. this document's modelling contract;
+4. older milestone specs/checklists.
 
-## 3. Core tables
+Do not copy hundreds of model fields into this document merely to mirror code. That caused previous
+documentation drift as the product evolved quickly.
 
-### households
-`id`, `name`, `slug`, `timezone`, `default_locale`, `created_at`, `updated_at`.
-Exactly one active row in single-household mode.
+## 3. Household-scoped base model (D1/D12)
 
-### users
-`id`, `household_id`, `display_name`, `username`, `email`, `avatar`, `pin_hash`,
-`password_hash`, `role`, `is_active`, `is_child_account`, `colour`, `last_login_at`,
-base fields.
-PIN and password hashed with **Argon2id**. `role` ∈ {admin, manager, user, guest}.
+Normal user-facing records inherit the shared `HouseholdBaseModel` convention, providing the
+household anchor, timestamps, created/updated Users and soft deletion.
 
-### people
-`id`, `household_id`, `linked_user_id` (nullable), `display_name`, `preferred_name`,
-`avatar`, `colour`, `date_of_birth`, `profile_type` ∈ {adult, child, other}, `notes`,
-base fields.
-A person may have no login (`linked_user_id` null). People are the subjects/assignees across
-nodes.
+Conceptually:
 
-### roles
-`id`, `household_id`, `name`, `description`, `is_system_role`, timestamps.
+```python
+household
+created_at
+updated_at
+created_by       # User
+updated_by       # User
+deleted_at
+```
 
-### permissions
-`id`, `code`, `name`, `description`, `scope`, timestamps.
+The default manager hides soft-deleted rows and provides the single-household scoping hook.
 
-### role_permissions
-`id`, `role_id`, `permission_id`, `created_at`.
+Exceptions are deliberate global/catalogue rows where household ownership would be incorrect
+(e.g. some static/global catalogues).
 
-### user_permissions
-`id`, `user_id`, `permission_id`, `is_granted`, timestamps.
-Per-user overrides consumed by the central resolver (Architecture §7).
+## 4. Users and People (D12)
 
-## 4. Node registry
+The schema deliberately separates:
 
-### nodes
-`id`, `key`, `name`, `description`, `icon`, `is_core`, `is_enabled_by_default`,
-`requires_setup`, `supports_kiosk`, `supports_sensitive_lock`, timestamps.
-Keys: atlas, home_wiki, pets, education, inventory, assets, hearth, travel, projects, health,
-fitness, meridian, solace.
+- **User** — login/authentication identity and audit actor;
+- **Person** — household subject/assignee/profile.
 
-### household_nodes
-`id`, `household_id`, `node_id`, `is_enabled`, `is_hidden`, `requires_reauthentication`,
-`display_order`, `custom_name`, `custom_icon`, timestamps.
+Rules:
 
-### node_settings
-`id`, `household_id`, `node_id`, `key`, `value_json`, timestamps.
+- `created_by`, `updated_by`, reviewer, completer and audit actor fields point to Users;
+- assignee/subject/profile relationships point to People;
+- a Person may have no linked User;
+- do not replace Person relationships with Users merely because current household members happen
+  to have accounts.
 
-## 5. Hub
+## 5. Visibility and sensitivity
 
-### hub_widgets
-`id`, `key`, `name`, `description`, `source_node_id`, `supports_kiosk`, timestamps.
+Domain records that can be restricted use the shared visibility/sensitivity model defined by the
+permission architecture. The exact fields/enums are owned by the corresponding mixins/models.
 
-### household_hub_widgets
-`id`, `household_id`, `widget_id`, `is_enabled`, `display_order`, `size`, `settings_json`,
-timestamps.
+Derived records/surfaces must not weaken this boundary. In particular:
 
-### user_hub_widgets
-`id`, `user_id`, `widget_id`, `is_enabled`, `display_order`, `settings_json`, timestamps.
+- Calendar source projections carry enough ownership/security metadata to filter correctly;
+- attachment access is permission-checked at download time;
+- Search/Hub/Corners/notifications query the owning data through permission-aware selectors;
+- sensitive derived content is not duplicated into an easier-to-access table.
 
-## 6. Scheduling (calendar)
+## 6. Calendar/source ownership (D7/D8/D23)
 
-> App/table prefix `scheduling`, not `calendar` (D16). Table names kept as `calendar_events`
-> for readability; the Django app is `scheduling`.
+### 6.1 Node-owned dates
 
-### calendar_events
-`id`, `household_id`, `title`, `description`, `start_at`, `end_at`, `is_all_day`, `timezone`,
-`recurrence_rule`, `source_node_id`, `source_record_type`, `source_record_id`,
-`created_by_id`, `assigned_to_person_id`, `colour`, `visibility`, `sensitivity`, `location`,
-base fields.
+The domain record owns its semantic date/time and recurrence. Where a Calendar mirror is required,
+the shared scheduling helper creates/updates/removes the corresponding `CalendarEvent` projection
+and preserves source linkage.
 
-Generated and kept in sync by the scheduling helper from owning node records. `source_*`
-identifies the originating record so the helper can update/delete in step.
+Do not create a second editable copy of a node date in Calendar.
 
-- `visibility` ∈ {private, household, role_restricted, user_restricted, sensitive}
-- `sensitivity` ∈ {normal, financial, health, document, private}
+### 6.2 Standalone Calendar records
 
-### calendar_event_attendees
-`id`, `calendar_event_id`, `person_id`, `response_status`, timestamps.
+Calendar-owned appointments/events are valid first-class records in `scheduling`; these are their
+own source of truth rather than projections from another domain.
 
-### rotating_schedules (D23)
-`id`, `household_id`, `title`, `primary_label`, `secondary_label`, `anchor_date`,
-`cycle_pattern` (2–62 `P`/`S` characters), `primary_colour`, `secondary_colour`, `visibility`,
-`is_active`, base fields. Optional subjects use the `rotating_schedules_people` many-to-many
-join to `people`. A schedule is a calculated Calendar layer; it does not generate daily event
-rows.
+### 6.3 Recurrence
 
-### rotating_schedule_exceptions (D23)
-`id`, `household_id`, `schedule_id`, `date`, `state` ∈ {primary, secondary}, `note`, base fields.
-Unique on (`schedule_id`, `date`), including soft-deleted rows so the service restores/reuses a
-prior exception. Deleting an exception restores the canonical cycle for that date.
+General recurrence uses the established RRULE-style `recurrence_rule` representation.
 
-## 7. Notifications
+### 6.4 Rotating schedules (D23)
 
-### notifications
-`id`, `household_id`, `user_id`, `person_id`, `title`, `message`, `notification_type`,
-`source_node_id`, `source_record_type`, `source_record_id`, `due_at`, `read_at`,
-`dismissed_at`, `priority`, timestamps.
+Generic two-state alternating schedules are calculated from one anchored cycle plus sparse
+exceptions. They do not materialize one database row per future day.
 
-## 8. Attachments (D11)
+## 7. Core data families
 
-### attachments
-`id`, `household_id`, `uploaded_by_id`, `filename`, `original_filename`, `file_path`,
-`mime_type`, `file_size`, `checksum`, `linked_node_id`, `linked_record_type`,
-`linked_record_id`, `visibility`, `sensitivity`, base fields.
-Access via `visibility` + `sensitivity` through the central resolver. No per-row ACL table in
-V1. Sensitive downloads audited.
+The current database includes the following platform-owned families (exact models live in code):
 
-## 9. Tags & categories
+- household/settings;
+- Users/authentication;
+- People;
+- roles/permissions/per-user overrides;
+- node/capability registry and household enablement;
+- Hub widget configuration;
+- scheduling/Calendar and rotating schedules;
+- notifications;
+- attachments;
+- audit logs;
+- backup records;
+- shared achievements where cross-domain;
+- safe link-import/cache/watch data where cross-domain.
 
-### tags
-`id`, `household_id`, `name`, `colour`, timestamps.
+These are shared services. Domain apps should not re-create parallel role, notification, file,
+calendar or audit systems.
 
-### tag_links
-`id`, `tag_id`, `linked_node_id`, `linked_record_type`, `linked_record_id`, `created_at`.
+## 8. Current domain-owned data families
 
-### categories
-`id`, `household_id`, `node_id`, `name`, `colour`, `icon`, `display_order`, base fields.
+### Atlas
 
-## 10. Audit
+Owns household notes/lists/items/reminders and the shared Grocery/Shopping list records. Dated work
+can project to Calendar. Atlas remains the owner even when an item appears in Agenda, Hub, Search or
+a Person's Corner.
 
-### audit_logs
-`id`, `household_id`, `user_id`, `action`, `target_node_id`, `target_record_type`,
-`target_record_id`, `ip_address`, `user_agent`, `metadata_json`, `created_at`.
-(No `search_index` table — see §2.3.)
+### Meridian
 
-## 11. Backups (D17)
+Owns household task/routine/reward/economy workflows: tasks/completions, points ledger, reward
+catalogue/requests, routines/streak-related state, goals/wishes and related settings/history.
+Cross-domain achievements remain shared rather than Meridian-only where D20 applies.
 
-### backups
-`id`, `household_id`, `created_by_id`, `backup_type`, `file_path`, `file_size`, `checksum`,
-`status`, `started_at`, `completed_at`, `error_message`, `metadata_json`.
-`metadata_json` records the matching media-tarball path and the schema version so restore can
-verify compatibility. Restore is a documented procedure (Architecture §16), not a table.
+### Education
 
-## 12–18. Node tables
+Owns institutions, academic profiles/courses, assessments, class/timetable records, education
+events and associated education notes/files where implemented.
 
-The node table definitions (Atlas, Home Wiki, Pets, Education, Inventory, Assets, Hearth,
-Travel, Projects, Health) carry over from the previous DDD **with these global adjustments**
-applied uniformly:
+### Home Wiki
 
-1. All inherit the base fields via `HouseholdBaseModel` (§2.1).
-2. Any field that previously duplicated a calendar event is replaced by a nullable
-   `calendar_event_id` populated by the scheduling helper (§2.2). Node records keep their own
-   semantic date(s) (e.g. `next_due_at`) as the source of truth.
-3. Any per-node `repeat_rule` is renamed/normalised to `recurrence_rule` (RRULE).
-4. Assignee/subject fields use `*_person_id`; ownership/audit uses the base `created_by`/
-   `updated_by` users.
+Owns persistent household reference pages/categories and their presentation flags. Page revision
+history remains future unless/until implemented in migrations.
 
-Representative examples (full set retained from prior DDD):
+### Pets
 
-- **Atlas:** `atlas_notes`, `atlas_lists` (`list_type` ∈ todo/grocery/checklist/shopping/
-  general), `atlas_list_items` (`assigned_to_person_id`, `completed_by_id` → user),
-  `atlas_reminders` (`recurrence_rule`, `calendar_event_id`).
-- **Home Wiki:** `wiki_pages` (`is_kiosk_safe`, `visibility`); `wiki_page_versions` deferred
-  but schema-anticipated.
-- **Pets:** `pets`, `pet_treatments` (`next_due_at` source of truth, `recurrence_rule`,
-  `calendar_event_id`), `pet_appointments`, `pet_weight_logs`. *(No household-specific
-  assumptions — D15.)*
-- **Education:** `education_institutions`, `education_courses` (`person_id`),
-  `education_assessments` (`assigned_to_person_id`, `calendar_event_id`), `education_events`.
-- **Inventory:** `inventory_locations`, `inventory_items` (`low_stock_threshold`,
-  `expiry_date`).
-- **Assets:** `assets` (`asset_type` enum), `asset_maintenance_records`
-  (`recurrence_rule`, `calendar_event_id`), `asset_documents`, `vehicle_details` (only when
-  `asset_type = vehicle`).
-- **Hearth:** `hearth_recipes`, `hearth_recipe_ingredients`, `hearth_meal_plans`
-  (`assigned_to_person_id`, `calendar_event_id`).
-- **Travel:** `travel_trips`, `travel_bookings` (`calendar_event_id`),
-  `travel_packing_items` (`assigned_to_person_id`).
-- **Projects:** `projects` (`owner_person_id`), `project_tasks` (`assigned_to_person_id`,
-  `calendar_event_id`), `project_notes`.
-- **Health:** `health_records`, `health_medications`, `health_appointments`
-  (`calendar_event_id`, `sensitivity = health`). Built only after security maturation; all
-  rows sensitive by default.
+Owns pet profiles, treatments/care schedules, appointments and pet-specific records. Recurring due
+work remains Pet-owned and syncs to Calendar rather than Calendar becoming the pet-treatment store.
 
-## 19. Meridian & Solace tables (D13, D14)
+### Homestead
 
-No `external_apps` / `integrations` tables — the iframe layer is not built. Instead, native
-node tables are created when each is migrated:
+Owns the home/property domain: property/rooms/areas, room plans, maintenance, appliances, service
+providers, cover/cost context, pools/spas, utility usage and floor-plan association data. Finance
+records remain Solace-owned when they are actual financial schedule/budget facts.
 
-- **Meridian (early):** tasks, task approvals, points ledger, rewards, reward requests,
-  categories, achievements/streaks — rebuilt on shared Users/People, with reused reward logic.
-- **Solace (after security):** bills, paydays, planned purchases, buckets/set-asides,
-  subscriptions, payday-checklist items — rebuilt on shared services, `sensitivity =
-  financial`, re-auth required, reused recurrence/checklist logic.
+### Solace / Money
 
-Each migration includes a one-time import script mapping the existing app's data onto these
-tables and onto HomeStack users/people.
+Owns finance: bills/occurrences, pay cycles, buckets/allocation, planned purchases and other
+implemented Money records. Old standalone-Solace schema names should not be carried into this
+specification if the native models have since changed.
 
-## 20. Home Assistant bridge tables (D22; later)
+### Fitness & Training
 
-The dedicated bridge persists only household presentation/control/event mappings:
+Owns exercise catalogue/custom exercises, programs, workout/session snapshots, session exercises/
+sets and personal-record/history data. It must not absorb medical Health data (D24).
 
-- `home_assistant_entity_mappings` — `entity_id`, label/group/order, presentation overrides,
-  visibility, kiosk-safe/enabled/controllable flags.
-- `home_assistant_action_mappings` — fixed allowlisted domain/service/entity target, bounded
-  service data, confirmation/re-auth/kiosk policy, visibility and enabled state.
-- `home_assistant_event_mappings` — approved HomeStack source event, `homestack_`-prefixed target
-  event and a non-sensitive payload-field allowlist.
+### Travel
 
-Current state, attributes, recorder history and access tokens are **not stored in these tables**.
-The deployment secret owns the Home Assistant token; existing audit tables record configuration
-and control activity with secret redaction.
+Owns trips/ideas, participants/visibility choices, bookings/cost planning and itinerary/Things-to-do
+records. Dated itinerary/book-by/trip information can project into Calendar but remains Travel-owned.
 
-## 21. V1 database scope
+## 9. Planned/evidence-gated domain data
 
-Core: `households` (single row), `users`, `people`, `roles`, `permissions`,
-`role_permissions`, `user_permissions`, `nodes`, `household_nodes`, `node_settings`,
-`hub_widgets`, `household_hub_widgets`, `user_hub_widgets`, `calendar_events`,
-`calendar_event_attendees`, `notifications`, `attachments`, `tags`, `tag_links`,
-`categories`, `audit_logs`, `backups`.
+### Home Assistant (D22)
 
-Nodes in V1: Atlas tables, `wiki_pages`, Pets tables, Education tables, and the **native
-Meridian** tables.
+When implemented, persist only HomeStack's mapping/presentation/control/event configuration. Do not
+mirror all Home Assistant entity state, attributes or recorder history into PostgreSQL.
 
-Post-V1 scope originally included Inventory, Assets, Hearth, Travel, Projects, Health, native
-Solace and Homestead (Solace/Homestead have since shipped). The Home Assistant bridge is planned
-for M5.5; the roadmap/handover holds live delivery status.
+Credentials remain deployment secrets, not database rows intended for ordinary API/UI access.
 
-Not created: `event_bus_events`, `attachment_permissions`, `search_index`, `external_apps` or a
-generic `integrations` table.
+### Hearth
+
+Future recipe/meal-plan data may be durable in Hearth. Generated shopping output should target the
+existing Atlas Grocery data rather than introduce a parallel grocery database.
+
+### Health
+
+Future medical data is sensitive by default and remains separate from Fitness.
+
+### Inventory / Assets / Projects
+
+Do not create large new schema families merely because old design documents proposed them. Their
+current status is capability/evidence-gated by the MSS/Roadmap. Add migrations only after the domain
+boundary is approved by real product need.
+
+## 10. Attachments (D11)
+
+Attachments use the shared file/security capability rather than a unique attachment table per
+node.
+
+Important database rules:
+
+- retain owning/source linkage;
+- keep checksum/metadata needed for integrity and safe delivery;
+- enforce visibility/sensitivity through application permissions;
+- do not add an `attachment_permissions` ACL table unless the shared model proves insufficient;
+- physical file storage is not made public merely because an attachment row exists.
+
+## 11. Search (D9)
+
+There is no separately synchronized universal `search_index` source of truth. Search is built from
+permission-filtered live domain querysets, using PostgreSQL FTS where appropriate and test-safe
+fallbacks where required.
+
+Domain-specific FTS indexes/generated vectors may exist as implementation details; they do not
+change record ownership.
+
+## 12. Events (D4)
+
+There is no required `event_bus_events` durability table. Cross-domain event delivery uses the thin
+in-process events interface.
+
+If a future broker/durable queue is introduced, its persistence is infrastructure delivery state,
+not a new source of truth for the domain facts carried in events.
+
+## 13. Backups (D17)
+
+Backup records track backup state/metadata/integrity information while the actual backup contains
+both database data and protected media as defined by the backup service.
+
+Restore remains an administrative operation, not merely a model transition. Database design must
+remain compatible with migration-based restoration/upgrades.
+
+## 14. Migration rules
+
+- Every schema change ships as a Django migration.
+- Data migrations should be idempotent where practical and must respect the single-household
+  structure.
+- Do not edit an already-applied migration to change current production behaviour; add a new
+  migration.
+- Deployment must run `python manage.py migrate` after new migrations reach the server.
+- CI/verification should include migration-drift checks (`makemigrations --check`).
+- Import scripts for legacy apps are operational tools, not substitutes for migrations.
+
+## 15. Testing implications
+
+The automated backend suite may run against SQLite for speed while production uses PostgreSQL.
+Code using PostgreSQL-specific search/functions must provide the established test-safe fallback or
+an explicit PostgreSQL integration test path.
+
+Do not weaken production constraints merely to satisfy SQLite.
+
+## 16. Removed/deferred schema concepts
+
+Unless a later explicit decision supersedes D1–D24, do not create:
+
+- SaaS tenant/signup/billing schema;
+- `event_bus_events` as a speculative durable bus;
+- universal synchronized `search_index` table;
+- generic `integrations`/`external_apps` ownership layer;
+- parallel attachment ACL system;
+- duplicate Calendar stores inside nodes;
+- a database mirror of all Home Assistant state/history.
+
+## 17. Documentation rule for schema
+
+When a new model ships, update the owning domain specification if the model changes the domain
+contract. Do **not** expand this document into a complete field-by-field generated schema copy.
+
+For exact current columns/constraints/indexes, inspect Django models and migrations. This keeps the
+design documentation stable while the physical schema continues to evolve safely.
