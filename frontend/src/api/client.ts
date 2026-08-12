@@ -1,6 +1,7 @@
 import type {
   AcademicProfile, AcademicProfileResponse, AdminUser, Appliance, AssessmentFile,
   AssessmentNote, AtlasList, AtlasListItem, AtlasListSuggestion, AtlasNote, AtlasReminder, AtlasSearchResults,
+  Backup, ClassRepeat,
   Attachment, AttachmentSensitivity, AttachmentVisibility, AuthUser, Badge, Book, BookClub, BookLinkPreview,
   BookRating, BookShelfStatus, BooksUser, CalendarEvent, CalendarEventWrite, ClubBookEntry,
   ClubQueueItem, CornerResponse, EducationAssessment, EducationClassSession, EducationCourse, EducationEvent,
@@ -45,6 +46,11 @@ type AssessmentWrite = Partial<{
 type ClassSessionWrite = Partial<{
   title: string; course_id: number | null; student_id: number | null; location: string
   start_at: string; end_at: string | null; recurrence_rule: string; visibility: string
+  /** Friendlier than end_at when adding a class; the server turns it into end_at. */
+  duration_minutes: number
+  /** With repeat_until, creates one class per occurrence instead of a single row. */
+  repeat: ClassRepeat | ''
+  repeat_until: string | null
 }>
 
 type EventWrite = Partial<{
@@ -824,12 +830,20 @@ export const api = {
 
   getClassSessions: (params?: { course?: number }): Promise<EducationClassSession[]> =>
     _fetch(`/education/classes/${params?.course ? `?course=${params.course}` : ''}`),
-  createClassSession: (data: ClassSessionWrite): Promise<EducationClassSession> =>
+  /** Returns every class created — one for a single class, several for a repeating series. */
+  createClassSession: (data: ClassSessionWrite): Promise<EducationClassSession[]> =>
     _fetch('/education/classes/', { method: 'POST', body: JSON.stringify(data) }),
   updateClassSession: (id: number, data: ClassSessionWrite): Promise<EducationClassSession> =>
     _fetch(`/education/classes/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteClassSession: (id: number): Promise<void> =>
     _fetch(`/education/classes/${id}/`, { method: 'DELETE' }),
+  /** Removes every remaining class sharing this one's series_key. */
+  deleteClassSeries: (id: number): Promise<{ deleted: number }> =>
+    _fetch(`/education/classes/${id}/?series=1`, { method: 'DELETE' }),
+
+  getBackups: (): Promise<Backup[]> => _fetch('/backups/'),
+  /** Runs synchronously and needs recent password re-authentication. */
+  createBackup: (): Promise<Backup> => _fetch('/backups/', { method: 'POST' }),
 
   getEducationEvents: (params?: { upcoming?: boolean; course?: number }): Promise<EducationEvent[]> => {
     const q = new URLSearchParams()

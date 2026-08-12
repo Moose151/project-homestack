@@ -223,7 +223,7 @@ class BudgetBucketSerializer(serializers.ModelSerializer):
     class Meta:
         model = BudgetBucket
         fields = [
-            "id", "name", "purpose", "category", "target_amount", "current_amount",
+            "id", "name", "purpose", "target_amount", "current_amount",
             "remaining_amount", "progress_percent", "allocation_method", "allocation_value",
             "rounding_increment", "cap_to_remaining", "is_active", "position",
             "notes", "visibility", "sensitivity", "created_at", "updated_at",

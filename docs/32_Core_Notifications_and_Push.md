@@ -121,7 +121,7 @@ The fixed taxonomy is:
 
 | Category | Purpose |
 |---|---|
-| `appointments` | Calendar appointments/events |
+| `appointments` | Calendar appointments/events, including someone adding one |
 | `assigned_tasks` | Atlas/assigned due items |
 | `household_activity` | Shared household changes/activity |
 | `home_maintenance` | Homestead maintenance-related notifications |
@@ -261,12 +261,25 @@ related edits.
 
 Current event-driven household activity handlers include:
 
-- Calendar event created;
+- Calendar event created — classified as `appointments`, not `household_activity`, so it
+  pushes by default (see below);
 - Atlas list item created;
 - Books personal entry finished.
 
 Handlers re-fetch the actual record and run permission/visibility checks for each candidate
 recipient. They never trust the event payload as an authorization decision.
+
+### Why a calendar addition is not `household_activity`
+
+Something landing on the shared household calendar is an appointment, and `appointments` is the
+category this taxonomy already describes as "Calendar appointments/events". It was originally
+dispatched as `household_activity`, whose default is push **off** — so a household that believed
+it had everything switched on still got only a silent in-app row when a partner added a dentist
+appointment. Adding an item to a shopping list stays `household_activity`, where the quieter
+default is the right call.
+
+Bundling still applies: several events added for the same day within an hour update one
+notification and buzz a phone once.
 
 ## 9. Scheduled reminders
 

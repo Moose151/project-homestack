@@ -86,6 +86,15 @@ multiple overlapping occurrence rebuilds.
 The forecast projects expected Bills-bucket transfers against included bill occurrences over the
 configured future window.
 
+**A bucket funds the bills account when its `purpose` is `bills`** — the value the bucket form
+sets. Both the forecast and the pay-cycle plan's set-aside total previously decided this by looking
+for the substring "bill" in a free-text `category` field that the form never populated, so both
+came out as zero: the forecast showed bills leaving the account with no pay arriving, and the plan
+reported a shortfall equal to the entire required amount however the household had set its buckets
+up. `category` has been removed from `BudgetBucket` (migration `solace.0011`, which first promotes
+any bucket whose old category said "bill" to `purpose=bills`). The plan's set-aside total counts
+`bills` and `purchases`.
+
 It can expose the implemented combination of:
 
 - running projected balance;

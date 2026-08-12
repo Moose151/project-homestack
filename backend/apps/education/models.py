@@ -254,7 +254,15 @@ class EducationAssessmentFile(HouseholdBaseModel):
 
 
 class EducationClassSession(CalendarSyncMixin, HouseholdBaseModel):
-    """A timetabled class/lecture, usually recurring weekly via `recurrence_rule` (D8)."""
+    """One timetabled class/lecture — a single real occurrence with its own calendar event.
+
+    A repeating class is stored as one row per occurrence, generated from a start, an interval
+    and a last date, and tied together by `series_key`. It is not stored as a single row carrying
+    an unbounded RRULE: nothing in HomeStack expands `recurrence_rule` on read (the calendar lists
+    real `CalendarEvent` rows), so a "weekly" class used to appear on the timetable exactly once.
+    A term of classes is bounded and finite, which is what D8's carve-out for bounded series
+    describes — the same shape as D23 rotations rather than an open-ended repeating event.
+    """
 
     title = models.CharField(max_length=255, blank=True, default="")  # e.g. "Lecture", "Tutorial"
     course = models.ForeignKey(
@@ -275,6 +283,9 @@ class EducationClassSession(CalendarSyncMixin, HouseholdBaseModel):
     start_at = models.DateTimeField()
     end_at = models.DateTimeField(null=True, blank=True)
     recurrence_rule = models.CharField(max_length=512, blank=True, default="")
+    # Shared by every occurrence generated from one "repeats until" request, so the timetable can
+    # show them as one class and delete/keep them together. Null for a one-off class.
+    series_key = models.UUIDField(null=True, blank=True, db_index=True)
     calendar_event_id = models.PositiveBigIntegerField(null=True, blank=True)
     visibility = models.CharField(
         max_length=20, choices=Visibility.choices, default=Visibility.HOUSEHOLD

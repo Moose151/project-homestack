@@ -45,7 +45,7 @@ _PURCHASE_FIELDS = {
     "status", "priority", "notes", "visibility", "sensitivity",
 }
 _BUCKET_FIELDS = {
-    "name", "purpose", "category", "target_amount", "current_amount", "allocation_method",
+    "name", "purpose", "target_amount", "current_amount", "allocation_method",
     "allocation_value", "rounding_increment", "cap_to_remaining", "is_active", "position",
     "notes", "visibility", "sensitivity",
 }

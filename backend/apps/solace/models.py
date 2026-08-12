@@ -326,8 +326,10 @@ class BudgetBucket(HouseholdBaseModel):
         OTHER = "other", "Other"
 
     name = models.CharField(max_length=200)
+    # The single meaning of "what is this bucket for". A free-text `category` used to sit
+    # alongside this saying almost the same thing, which was both confusing to fill in and the
+    # hidden input to bills forecasting; it was removed in migration solace.0022.
     purpose = models.CharField(max_length=20, choices=Purpose.choices, default=Purpose.OTHER)
-    category = models.CharField(max_length=100, blank=True, default="")
     target_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     current_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     allocation_method = models.CharField(

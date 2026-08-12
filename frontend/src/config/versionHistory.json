@@ -1,7 +1,23 @@
 {
-  "current_version": "0.35.0",
-  "source_sha256": "8a7af6ee9b7388596e6b39267a236de16621099547aa14228fc1e1a2e676b633",
+  "current_version": "0.35.1",
+  "source_sha256": "d6cd3711b400824388f0ad8e7305d7ab05a3e9b52bbeac622b56a01d9c654516",
   "releases": [
+    {
+      "version": "0.35.1",
+      "date": "2026-08-12",
+      "title": "Bills forecasting, timetable repeats, Corners calendar and household fixes",
+      "changes": [
+        "**The bills forecast was ignoring every pay cycle.** It decided which buckets fund the bills account by looking for the substring \"bill\" in `BudgetBucket.category` — a free-text field the bucket form never populated, because the form sets `purpose`. So the forecast counted bills going out and nothing coming in, which is exactly the \"is it even seeing my income?\" the owner asked about. Fixing it uncovered the same broken check a second time in the pay-cycle plan's set-aside total, which had likewise always been `0.00` and reported a shortfall equal to the entire required amount. Both now read `purpose`.",
+        "**Buckets reworked.** The duplicate free-text `category` is gone (migration `solace.0011`, which first promotes any bucket whose old category said \"bill\" to `purpose=bills`, so a household that happened to type the right word keeps the behaviour it had). The bucket card showed `category || 'Set-aside'`, so with category always empty **every** bucket read \"Set-aside\" — it now shows what the bucket is for. A bucket with no goal shows its balance instead of a 0% progress bar reading \"$0.00 of $0.00\". The nine-field single-row add form is now grouped into name/what for, funded each pay, and an optional goal, with \"What for\" explaining what it actually changes. \"Cap to remaining pay\" is renamed to \"Give this bucket whatever is left over\" and no longer defaults on for every new bucket — only one bucket can hold it (the service clears the flag on the others), so defaulting it on meant the setting silently moved to whichever bucket was saved last.",
+        "**A class ticked \"repeats weekly\" only ever appeared once.** `recurrence_rule` was stored but nothing in HomeStack expands an RRULE on read — the Calendar lists real `CalendarEvent` rows. A class is now entered as first class, how long it runs, how often (weekly through monthly) and last class, and the server generates one real session per occurrence, tied together by `series_key`. Stepping happens in the household timezone so a 9am class stays 9am across a daylight-saving change; a series is capped at 120 so a mistyped year is refused rather than quietly creating hundreds of calendar events; the timetable groups a series into one row and can delete the whole thing or one class.",
+        "**Adding to the shared calendar now reaches phones.** It was dispatched as `household_activity`, whose default is push **off**, so a household with \"everything turned on\" got a silent in-app row when a partner added an appointment. It is now `appointments` — the category the taxonomy already describes as \"Calendar appointments/events\" — which pushes by default. Adding to a shopping list stays `household_activity`, where the quieter default is right.",
+        "**The Calendar had no Corners provider at all**, so adding an event never appeared in anyone's recent activity and an appointment assigned to someone never reached their assignments. Both do now, with the usual per-viewer visibility checks, and node-backed events are left to the node that owns them so nothing is listed twice.",
+        "**Added the missing backup button.** The backup API has existed since Milestone 1 but nothing in the app ever called it, so Manage HomeStack had no way to run one. There is now a Backups card showing the last run and recent history, asking for the password only when the server says the elevation has expired.",
+        "Month view gained a per-day **+** for adding an event straight onto that date, instead of opening the day first or changing the date inside the modal.",
+        "Investigated the reported \"search needs Enter\": every search bar already searches as you type (300ms debounce, 2-character minimum), so nothing was changed — confirmed with the owner.",
+        "**927 backend tests, 926 green (24 new); frontend `tsc` and production build clean; two migrations (`solace.0011`, `education.0007`).** The one error is the pre-existing `attachments.test_storage_path_is_not_served_as_public_media`, which fails identically on unmodified `main` under the local Python 3.14 toolchain."
+      ]
+    },
     {
       "version": "0.35.0",
       "date": "2026-08-12",

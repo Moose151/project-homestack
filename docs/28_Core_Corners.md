@@ -59,6 +59,9 @@ providers should include:
 - Fitness sessions completed and household-visible personal bests.
 - Meridian tasks/routines completed, rewards received, badges earned and wishlist milestones.
 - Atlas list/to-do items added or completed by the person.
+- Calendar events the person added, and events assigned to them under Assigned. Standalone
+  events only — a node-backed event is projected by the node that owns the record, so the
+  mirrored `CalendarEvent` would otherwise list the same thing twice.
 - Homestead room-plan items/products added, chosen, purchased or completed.
 - Later nodes may contribute their own deliberately safe activity summaries.
 

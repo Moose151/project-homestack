@@ -89,6 +89,25 @@ def _bool(value) -> bool:
     return bool(int(value or 0))
 
 
+def _bucket_purpose(bucket_type: str | None) -> str:
+    """Map the legacy app's free-text bucket_type onto BudgetBucket.Purpose.
+
+    The legacy column was free text, so this matches on a contained word rather than equality
+    ("Bills account", "bill", "BILLS" all land on bills) and falls back to Other rather than
+    inventing a purpose it cannot infer.
+    """
+    text = (bucket_type or "").casefold()
+    for token, purpose in (
+        ("bill", BudgetBucket.Purpose.BILLS),
+        ("saving", BudgetBucket.Purpose.SAVINGS),
+        ("spend", BudgetBucket.Purpose.SPENDING),
+        ("purchase", BudgetBucket.Purpose.PURCHASES),
+    ):
+        if token in text:
+            return purpose
+    return BudgetBucket.Purpose.OTHER
+
+
 def _parse_date(value: str | None) -> date | None:
     if not value:
         return None
@@ -527,7 +546,7 @@ class Command(BaseCommand):
             create_bucket(
                 system_user,
                 name=row["name"],
-                category=row.get("bucket_type") or "",
+                purpose=_bucket_purpose(row.get("bucket_type")),
                 target_amount=Decimal("0.00"),
                 current_amount=Decimal("0.00"),
                 allocation_method=(

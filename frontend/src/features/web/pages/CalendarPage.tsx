@@ -1120,9 +1120,25 @@ export function CalendarPage() {
                 return (
                   <div key={i} onClick={() => { setAnchor(d); setView('day') }}
                     style={occurrence ? { borderTop: `4px solid ${occurrence.colour}` } : undefined}
-                    className={`min-h-[112px] border-b border-r border-line p-1 cursor-pointer hover:brightness-95 ${inMonth ? '' : 'opacity-45'}`}>
-                    <div className={`text-xs font-semibold mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday(d) ? 'bg-primary text-white' : inMonth ? 'text-ink' : 'text-muted'}`}>
-                      {d.getDate()}
+                    className={`group relative min-h-[112px] border-b border-r border-line p-1 cursor-pointer hover:brightness-95 ${inMonth ? '' : 'opacity-45'}`}>
+                    <div className="mb-1 flex items-start justify-between gap-1">
+                      <div className={`text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full ${isToday(d) ? 'bg-primary text-white' : inMonth ? 'text-ink' : 'text-muted'}`}>
+                        {d.getDate()}
+                      </div>
+                      {/* Adding an event on a specific day previously meant opening that day
+                          first, or changing the date inside the modal. Kept faint until the cell
+                          is hovered or the button focused, so the grid still reads as a month. */}
+                      {canEditCalendar && (
+                        <button
+                          type="button"
+                          onClick={event => { event.stopPropagation(); openNew(d) }}
+                          className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-lg text-sm font-bold text-muted opacity-0 transition-opacity hover:bg-primary-soft hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
+                          aria-label={`Add an event on ${d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}`}
+                          title="Add an event on this day"
+                        >
+                          +
+                        </button>
+                      )}
                     </div>
                     <div className="flex flex-col gap-0.5">
                       {occurrence?.is_override && <span className="px-1 text-[9px] font-bold text-primary">SWAP</span>}
