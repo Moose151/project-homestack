@@ -33,14 +33,16 @@ Public internet exposure is not enabled.
 
 **Current live-serving caveat:** the container definitions still launch Django `runserver` and the
 Vite development server. A production-serving profile (production WSGI + built/static frontend)
-and tighter private container networking are explicit near-term hardening work, not a reason to
-redesign the application architecture.
+and tighter private container networking are the current recommended engineering work, not a
+reason to redesign the application architecture.
 
-**Background jobs:** scheduled Django management commands/host scheduling. Redis/Celery are
-explicitly deferred (D5).
+**Background jobs:** scheduled Django management commands/host scheduling. The shipped notification
+system follows this pattern with the idempotent `notifications_run_scheduled` command. Redis/Celery
+remain explicitly deferred (D5).
 
-**Future clients:** PWA is the first phone bridge; native Android/iOS/desktop technology remains
-undecided until the product demonstrates a real need beyond the responsive/PWA client (D3).
+**Clients:** responsive web/kiosk plus the shipped PWA/service-worker/Web Push path. Native
+Android/iOS/desktop technology remains undecided until the product demonstrates a real need beyond
+the responsive/PWA client (D3).
 
 ## 3. High-level architecture
 
@@ -86,7 +88,8 @@ product status.
 - `nodes` — node/capability registry and household enablement.
 - `hub` — configurable daily aggregation widgets.
 - `scheduling` — Calendar/event projections and scheduling helpers (D7/D16).
-- `notifications` — in-app notifications and the expanding Web Push delivery capability.
+- `notifications` — in-app notifications, per-user preferences, push-device ownership, PWA/Web
+  Push delivery, bundling and scheduled reminder/countdown delivery.
 - `attachments` — protected shared files.
 - `audit` — immutable security/administrative activity.
 - `search` — permission-aware global aggregation.
@@ -199,7 +202,7 @@ These shared surfaces improve discoverability but do not own the underlying doma
 - **Corners** — person-centred activity/assignments/lists project owning records and preserve
   visibility/deep-link boundaries.
 - **Notifications** — notification records/delivery link to source meaning but cannot bypass its
-  permissions; Web Push payloads stay sparse for sensitive content.
+  permissions; Web Push remains sparse and blocks re-auth-gated source content from push.
 - **Calendar** — projects source dates while source records retain semantic ownership.
 
 Deleting/locking/changing visibility on a source record must not leave a derived surface that still
@@ -241,9 +244,10 @@ subscribe(event_type, handler)
 The implementation is in-process Django signals. Synchronous handlers must fail safely and avoid
 creating circular domain dependencies.
 
-Do **not** introduce an `event_bus_events` table, retry broker or generic workflow engine merely for
-architectural symmetry. If push/HA/other background workloads later prove signals insufficient,
-change the implementation behind the boundary deliberately.
+Notifications now consume selected events for permission-rechecked household-activity bundling.
+This does not change D4: there is still no durable events table/broker. If future push/HA/background
+workloads prove synchronous signals insufficient, change the implementation deliberately behind the
+boundary.
 
 ## 12. Frontend architecture
 
@@ -258,9 +262,9 @@ Domain pages/components should:
 - treat backend permission failures/reauth-required responses as authoritative;
 - keep route/query state stable enough for deep links from Calendar/Search/Corners/notifications.
 
-The current Vite dev-server proxy can route `/api` during development. The planned production
-profile should build static assets and let the reverse-proxy/application routing be explicit rather
-than rely on a development server in production.
+The shipped service-worker/PWA path adds background notification delivery but does not create a
+second client-side source of truth. The current Vite dev server remains a development tool; the
+production profile should build static assets and serve them without relying on Vite dev serving.
 
 ## 13. API architecture
 
@@ -302,7 +306,14 @@ LAN client
 HomeStack itself does not manage the Cloudflare DNS token; NPM owns that certificate credential.
 No public router port forwarding is required for DNS-01 certificate issuance/renewal.
 
-### 15.1 Near-term deployment hardening
+### 15.1 Current operational addition: Web Push
+
+The merged notification implementation requires deployment-held VAPID credentials and an hourly
+scheduled command. These are ordinary HomeStack backend deployment concerns; they do not require
+Redis/Celery or a new service architecture. See `32_Core_Notifications_and_Push.md` and
+`HANDOVER.md`.
+
+### 15.2 Near-term deployment hardening
 
 The architecture target is:
 
@@ -358,5 +369,6 @@ failure mode/problem in the current architecture that it solves. Prefer strength
 modular-monolith, permissions, scheduling, events and deployment contracts over adding parallel
 systems.
 
-Current architectural priorities are operational maturity (production serving/network/deploy/
-backup), Web Push delivery and then the bounded Home Assistant bridge — not a microservice rewrite.
+Current architectural priorities are **production serving, tighter networking, safer deployment,
+automated frontend/E2E verification and stronger recovery**, followed by the bounded Home Assistant
+bridge—not a microservice rewrite.
