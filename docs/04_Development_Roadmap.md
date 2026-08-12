@@ -39,7 +39,7 @@ work:
 | Travel baseline | Complete | Trips/ideas, booking/cost planning, itinerary/Things to do, Calendar/notification/Corner integration. |
 | Grocery + Shopping | Complete | Dedicated shared Atlas Grocery and Shopping surfaces. |
 | LAN HTTPS | Complete | Trusted `https://homestack.moosesoftwares.com` via Nginx Proxy Manager + Cloudflare DNS challenge + Pi-hole local DNS. |
-| PWA / Web Push | Complete v0.34.10–v0.34.13 | Per-user preferences, per-device subscriptions, VAPID delivery, PWA/service worker, quiet hours, bundling, scheduled reminders/countdown and sensitive-safe payloads. |
+| PWA / Web Push | Complete v0.34.10–v0.34.13 | Per-user preferences, per-device subscriptions, VAPID delivery, PWA/service worker, quiet hours, bundling, fixed 24h/morning reminders, countdown and sensitive-safe payloads. |
 
 Historical sub-phases and release numbers are intentionally omitted here; see `VERSION_HISTORY.md`.
 
@@ -55,12 +55,12 @@ Shipped outcomes include:
 - per-user notification preferences by category/channel;
 - per-device Web Push subscriptions;
 - VAPID/Web Push delivery from the backend;
-- quiet hours and configurable lead times;
+- quiet hours and a per-User morning time;
 - sparse payloads with automatic exclusion of sensitive re-auth-required source content from
   lock-screen push;
 - deep links that still re-check normal session/permission/re-authentication state;
 - household-activity bundling;
-- scheduled 24h/morning-of reminders and Hub countdown delivery;
+- fixed 24h/morning-of reminders for the bounded Calendar/Atlas scope and Hub countdown delivery;
 - expired/revoked subscription handling and a device test-push flow.
 
 The completed branch reported **875 backend tests green** and a clean frontend TypeScript check.
