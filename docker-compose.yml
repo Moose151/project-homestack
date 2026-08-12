@@ -1,5 +1,7 @@
 # HomeStack — base stack (Milestone 1, Phase 1.0).
-# THREE services only: postgres, backend, frontend.
+# THREE services only: postgres, backend, frontend. LAN-trusted HTTPS is handled by the
+# already-running Nginx Proxy Manager + Pi-hole outside this compose file (Security doc §14) —
+# see .env.example for the DJANGO_ALLOWED_HOSTS/CSRF_TRUSTED_ORIGINS wiring it needs.
 # No Redis/Celery yet — deliberately deferred until a feature needs them (D5).
 
 services:

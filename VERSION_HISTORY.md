@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.34.6**
+> **Current version: 0.34.7**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,25 @@
 ---
 
 ## 0.34 — Discoverability and daily navigation
+
+### 0.34.7 — 2026-08-12 — LAN-trusted HTTPS via Nginx Proxy Manager + Cloudflare DNS Challenge
+- `homestack.moosesoftwares.com` gets a real Let's Encrypt certificate through the home server's
+  existing **Nginx Proxy Manager** (DNS Challenge, Cloudflare) — no router port forwarding is
+  ever required to issue or renew it. **Pi-hole** resolves the hostname locally to the server's
+  LAN IP so it never routes publicly. Nothing in this repo terminates TLS; NPM proxies the
+  hostname straight to the frontend container, and the frontend's own dev-server proxy continues
+  to forward `/api` to the backend internally, so no path-splitting/custom locations are needed.
+  HomeStack stays LAN-only — this only replaces a plain-HTTP LAN certificate with a
+  browser-trusted one, which Web Push and installed-PWA support need (especially on iOS).
+- `.env.example` documents `HOMESTACK_PUBLIC_HOSTNAME` and recommends `config.settings.prod` for
+  the real server, which already has the right `SECURE_PROXY_SSL_HEADER`/secure-cookie handling
+  sitting unused while it runs `dev`. `frontend/vite.config.ts` allows the public hostname
+  through Vite's Host-header check. Noted a real side effect of the `prod` switch: Django admin's
+  CSS/JS only auto-serves under `DEBUG=1`, so `/admin/` will render unstyled after the switch
+  unless static serving (e.g. whitenoise) is added — flagged for the owner to decide, not fixed
+  here since Django admin isn't part of normal HomeStack use.
+- **Not yet live** — pending the owner's NPM proxy host + Pi-hole DNS record, both configured
+  outside this repo; see `docs/05_Security_Architecture_Document.md` §14.
 
 ### 0.34.6 — 2026-08-12 — Travel itinerary and day-trip/multi-day-trip type
 - Trips now have a **Things to do** section: itinerary items with a title, location and notes,
