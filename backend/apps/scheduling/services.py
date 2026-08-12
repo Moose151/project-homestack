@@ -8,6 +8,7 @@ from __future__ import annotations
 from apps.accounts.models import User
 from apps.core.assignment import apply_assignees, pop_assignees
 from apps.core.models import get_active_household
+from apps.scheduling import events
 from apps.scheduling.models import CalendarEvent, RotatingSchedule, RotatingScheduleException
 
 
@@ -24,6 +25,7 @@ def create_event(acting_user: User, **data) -> CalendarEvent:
     event.save()
     apply_assignees(event, people)
     event.hidden_from_users.set(hidden_users)
+    events.event_created(event.id, household.id)
     return event
 
 

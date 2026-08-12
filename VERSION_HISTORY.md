@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.34.11**
+> **Current version: 0.34.12**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,25 @@
 ---
 
 ## 0.34 — Discoverability and daily navigation
+
+### 0.34.12 — 2026-08-12 — Cross-user activity notifications, bundled (docs/32 slice 3, on feature/push-notifications)
+- The literal owner request now works: adding to a shared calendar, a shopping/grocery list, or
+  finishing a book notifies the rest of the household — bundled, not spammed. Adding five items
+  to a shopping list in one sitting produces **one** notification that updates in place, not
+  five; a new one only starts after the 60-minute window closes. Workout completions already
+  notified the household from the preferences slice, so weren't duplicated here.
+- `notify_bundled()` extracted from Corner reactions into `apps/notifications/services.py` —
+  Corners now calls the shared version too instead of a second copy of the same logic. New
+  `apps/notifications/handlers.py` (subscribed via `NotificationsConfig.ready()`, matching
+  `apps.achievements`/`apps.homestead`/`apps.solace`) turns three domain events into
+  `household_activity` notifications: `scheduling.event_created` (was defined but never actually
+  called — now wired into `create_event`), the new `atlas.list_item_created`, and the new
+  `books.entry_finished` (fires only on the transition into "Read", not every subsequent save).
+  Every handler re-checks `apply_visibility` **per candidate recipient** before notifying — a
+  private list or a surprise-hidden calendar event never leaks to someone who couldn't already
+  see it.
+- **859 backend tests green (10 new); no migration (no model changes this slice); frontend
+  unaffected.** Still on `feature/push-notifications`, not merged to `main`.
 
 ### 0.34.11 — 2026-08-12 — Web Push infrastructure (docs/32 slice 2, on feature/push-notifications)
 - Push notifications actually work now, end to end. `manage.py generate_vapid_keys` generates a

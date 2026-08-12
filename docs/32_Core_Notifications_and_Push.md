@@ -110,50 +110,58 @@ being added deliberately). When `category` is set:
 
 This keeps every call site simple — nodes pass a category string, the shared layer does the rest.
 
-## 6. Bundling burst activity
+## 6. Bundling burst activity — DONE (v0.34.12, `apps/notifications/services.py::notify_bundled`)
 
-New shared helper, generalising `_notify_reaction` (§2):
+Shared helper generalising `_notify_reaction` (§2):
 
 ```python
-def notify_bundled(user, *, category, key, title, message, source_node, action_url,
-                    window_minutes=60):
+def notify_bundled(user, *, title, message, source_node, action_url,
+                    category="", window_minutes=60):
 ```
 
-`key` replaces the reaction-specific `activity_key` — callers pass something that identifies the
-*thing* being bundled on (e.g. an Atlas list ID for "additions to this list", a room ID for room
-plan changes). Looks for an existing **unread** `Notification` with the same
-`(recipient, source_node, action_url)` created within `window_minutes` and updates its
-title/message rather than creating a new row — exactly the Corners mechanism, moved into shared
-code. `household_activity` and `corners` are the two categories that use this; everything else
-(reminders, countdown, direct assigned notifications) creates a fresh row per event, since those
-are inherently one-per-occurrence, not bursty.
+Looks for an existing **unread** `Notification` with the same `(recipient, source_node,
+action_url)` created within `window_minutes` and updates its title/message rather than creating a
+new row — exactly the Corners mechanism, moved into shared code. `action_url` already uniquely
+identifies the bundled *thing* (a list, an activity) in every real call site, so the separate
+`key` parameter this section originally sketched turned out to be redundant and was dropped
+during implementation. `household_activity` and `corners` are the two categories that use this;
+everything else (reminders, countdown, direct assigned notifications) creates a fresh row per
+event, since those are inherently one-per-occurrence, not bursty. Push is only attempted on the
+*first* notification of a burst — a later update within the window never re-pushes.
 
 Window is **60 minutes** (§2 Q&A, matching the existing Corners behaviour exactly — no new
 constant to tune).
 
-## 7. Event-bus dispatcher
+## 7. Event-bus dispatcher — DONE (v0.34.12)
 
-New `apps/notifications/handlers.py`, subscribed via `NotificationsConfig.ready()` (matching
+`apps/notifications/handlers.py`, subscribed via `NotificationsConfig.ready()` (matching
 `apps.achievements`/`apps.homestead`/`apps.solace`). Each event handler re-fetches the affected
-record through its node's normal permission-aware selector (never trusts the thin event payload
-for anything permission-relevant) and calls `notify_person`/`notify_bundled` for every household
-member who can see the result, excluding the actor.
+record through its own queryset and re-checks `apply_visibility` **per candidate recipient**
+(never trusts the thin event payload for anything permission-relevant), then calls
+`notify_bundled` under `household_activity` for every household member who can see the result,
+excluding the actor.
 
-**Already publishable, just needs a subscriber:** `atlas.list_item_completed`,
-`fitness.session_completed`, `fitness.personal_record_set`, `meridian.task_approved`/`rejected`,
-`homestead.maintenance_completed`, `pets.treatment_completed`, `travel.idea_created` (already has
-its own inline notify call, §2 — leave as-is or migrate to the dispatcher, implementer's call).
+**Wired and live** (three handlers cover the literal owner request — calendar/shopping-list/
+book examples; workout completion was already covered in slice 1):
+- `scheduling.event_created` — was defined but never actually called from
+  `apps/scheduling/services.py::create_event`; the publish call is now wired in.
+- `atlas.list_item_created` — new topic, published from `apps/atlas/services.py::create_list_item`.
+  Covers every list type (grocery/shopping/todo/checklist/general/wishlist), not just shopping —
+  a personal/private list's additions are excluded automatically by the visibility re-check, no
+  extra category-specific filtering needed.
+- `books.entry_finished` — new topic, published from `apps/books/services.py` when a
+  `PersonalBookEntry` transitions **into** `history` status (not fired again on every subsequent
+  save while already there).
 
-**Needs a new publish call added** (topic exists or is trivial to add, but nothing calls
-`publish()` for it today):
-- `atlas.list_item_created` — for "someone added to this list" (`household_activity`).
-- `scheduling.event_created`/`event_updated` — defined in `apps/scheduling/events.py` but never
-  called from `apps/scheduling/services.py`; wire the publish calls into `create_event`/
-  `update_event`.
-- `books.entry_finished` — new topic; `apps/books/events.py` exists but is currently empty. Fire
-  when a personal/club shelf entry's status changes to its "read"/history state.
-- `homestead.room_item_created` exists in the topic list already (check payload is sufficient)
-  for room-plan `household_activity` coverage.
+**Deliberately left unwired** (would double-notify or wasn't part of the literal request):
+`fitness.session_completed` already has its own direct `notify_*` call from slice 1
+(`category="fitness"`) — subscribing it here too would send two notifications for one workout.
+`atlas.list_item_completed`, `meridian.task_approved`/`rejected`, `homestead.maintenance_completed`,
+`pets.treatment_completed`, `homestead.room_item_created` and club-book status changes remain
+real, available extension points for this same dispatcher — add a handler + a `connect()` line
+when the household actually wants that surface, following the pattern in `handlers.py`.
+`travel.idea_created` keeps its existing inline notify call from before this spec (§2) rather
+than being migrated — no functional reason to touch working code.
 
 ## 8. Scheduled reminders (appointments, assigned to-dos)
 
@@ -237,8 +245,23 @@ today's profile editing.
    names) and automatic device deactivation on a 404/410 response are all enforced before a send
    is attempted. A minimal `manifest.json` + `apple-mobile-web-app-capable` were added because
    iOS only allows Web Push for an installed PWA, not a plain Safari tab.
-3. **Event-bus dispatcher + bundling.** `apps/notifications/handlers.py`, `notify_bundled`
-   extracted from Corners, the new/wired publish calls from §7, `household_activity` end to end.
+3. **Event-bus dispatcher + bundling — DONE (v0.34.12).** `apps/notifications/handlers.py`
+   (wired via `NotificationsConfig.ready()`, matching the achievements/homestead/solace pattern)
+   subscribes to `scheduling.event_created` (newly wired — was dead code before), the new
+   `atlas.list_item_created` and `books.entry_finished` topics. `notify_bundled()` extracted
+   from Corners into `apps/notifications/services.py`; Corners now calls it too instead of
+   duplicating the logic. Every handler re-fetches through the record's own queryset and
+   re-checks `apply_visibility` **per candidate recipient** before notifying, so a private list
+   or a surprise-hidden calendar event never leaks. Push only fires on the first notification of
+   a bundled burst, never on every update within the window. **Simplified from the original
+   design:** dropped the separate `key` parameter sketched below — `action_url` already
+   uniquely identifies the bundled thing (a list, an activity), exactly as the Corners
+   implementation this generalises always did, so a second identifier was redundant. Fitness
+   (`fitness.session_completed`) was deliberately **not** added to the dispatcher — it already
+   notifies directly (tagged `category="fitness"` in slice 1), and subscribing it here too would
+   double-notify. Home & maintenance / Meridian / Travel activity notifications beyond what
+   slice 1 already covers, and Homestead room-plan additions, remain a future extension of this
+   same dispatcher if wanted — not required by the original ask.
 4. **Scheduled reminders + countdown digest.** The management command from §8/§9,
    `NotificationReminderLog`, cron entry (matching the existing
    `link_imports_run_scheduled` host-cron pattern from `docs/29_Core_Link_Import.md`).

@@ -1,7 +1,17 @@
 {
-  "current_version": "0.34.11",
-  "source_sha256": "3a9916f099ef181c55c1ea4b8591b186b41011d074f8b9a2c5e33b63a950d76a",
+  "current_version": "0.34.12",
+  "source_sha256": "b106aa0d5de71d236b55f67b8ec310247b71a3daf3f43671ca0cdba778e8f449",
   "releases": [
+    {
+      "version": "0.34.12",
+      "date": "2026-08-12",
+      "title": "Cross-user activity notifications, bundled (docs/32 slice 3, on feature/push-notifications)",
+      "changes": [
+        "The literal owner request now works: adding to a shared calendar, a shopping/grocery list, or finishing a book notifies the rest of the household — bundled, not spammed. Adding five items to a shopping list in one sitting produces **one** notification that updates in place, not five; a new one only starts after the 60-minute window closes. Workout completions already notified the household from the preferences slice, so weren't duplicated here.",
+        "`notify_bundled()` extracted from Corner reactions into `apps/notifications/services.py` — Corners now calls the shared version too instead of a second copy of the same logic. New `apps/notifications/handlers.py` (subscribed via `NotificationsConfig.ready()`, matching `apps.achievements`/`apps.homestead`/`apps.solace`) turns three domain events into `household_activity` notifications: `scheduling.event_created` (was defined but never actually called — now wired into `create_event`), the new `atlas.list_item_created`, and the new `books.entry_finished` (fires only on the transition into \"Read\", not every subsequent save). Every handler re-checks `apply_visibility` **per candidate recipient** before notifying — a private list or a surprise-hidden calendar event never leaks to someone who couldn't already see it.",
+        "**859 backend tests green (10 new); no migration (no model changes this slice); frontend unaffected.** Still on `feature/push-notifications`, not merged to `main`."
+      ]
+    },
     {
       "version": "0.34.11",
       "date": "2026-08-12",

@@ -4,13 +4,17 @@ from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.atlas.services import create_atlas_list, create_list_item
+from apps.books.services import create_personal_entry, update_personal_entry
 from apps.meridian import services as meridian
 from apps.nodes.models import HouseholdNode
 from apps.notifications import selectors, services
 from apps.notifications.models import Notification, PushDevice, UserNotificationSettings
 from apps.people.models import Person
+from apps.scheduling.services import create_event
 
 
 def _make_user(username, role=User.Role.ADMIN, is_child=False):
@@ -382,3 +386,73 @@ class PushDeviceTestEndpointTests(TestCase):
         with override_settings(VAPID_PUBLIC_KEY="", VAPID_PRIVATE_KEY=""):
             resp = self.client.post(reverse("notification-device-test", args=[self.device.id]))
         self.assertEqual(resp.status_code, 400)
+
+
+class HouseholdActivityDispatcherTests(TestCase):
+    """docs/32_Core_Notifications_and_Push.md §7 — event bus -> notification, visibility-safe."""
+
+    def setUp(self):
+        self.actor = _make_user("actor", role=User.Role.USER)
+        self.other = _make_user("other", role=User.Role.USER)
+
+    def _unread_for(self, user, source_node):
+        return Notification.objects.filter(recipient_user=user, source_node=source_node, is_read=False)
+
+    def test_calendar_event_creation_notifies_other_household_members(self):
+        create_event(self.actor, title="Dentist", start_at=timezone.now())
+        notes = self._unread_for(self.other, "scheduling")
+        self.assertEqual(notes.count(), 1)
+        self.assertIn("Dentist", notes.first().message)
+
+    def test_calendar_event_creator_is_not_notified(self):
+        create_event(self.actor, title="Dentist", start_at=timezone.now())
+        self.assertEqual(self._unread_for(self.actor, "scheduling").count(), 0)
+
+    def test_private_calendar_event_does_not_notify_others(self):
+        create_event(self.actor, title="Secret", start_at=timezone.now(), visibility="private")
+        self.assertEqual(self._unread_for(self.other, "scheduling").count(), 0)
+
+    def test_calendar_event_hidden_from_a_user_excludes_them(self):
+        create_event(self.actor, title="Surprise", start_at=timezone.now(), hidden_from_users=[self.other])
+        self.assertEqual(self._unread_for(self.other, "scheduling").count(), 0)
+
+    def test_atlas_list_additions_are_bundled_not_spammed(self):
+        atlas_list = create_atlas_list(self.actor, title="Groceries", list_type="grocery")
+        create_list_item(self.actor, atlas_list, title="Milk")
+        create_list_item(self.actor, atlas_list, title="Eggs")
+        create_list_item(self.actor, atlas_list, title="Bread")
+        notes = self._unread_for(self.other, "atlas")
+        self.assertEqual(notes.count(), 1)
+        self.assertIn("Groceries", notes.first().title)
+        self.assertEqual(notes.first().message, "Bread")  # updated in place to the latest addition
+
+    def test_private_atlas_list_does_not_notify_others(self):
+        atlas_list = create_atlas_list(self.actor, title="My wishlist", visibility="private")
+        create_list_item(self.actor, atlas_list, title="Something")
+        self.assertEqual(self._unread_for(self.other, "atlas").count(), 0)
+
+    def test_finishing_a_book_notifies_the_household(self):
+        entry = create_personal_entry(self.actor, book={"title": "Dune"}, status="reading")
+        update_personal_entry(self.actor, entry, status="history")
+        notes = self._unread_for(self.other, "books")
+        self.assertEqual(notes.count(), 1)
+        self.assertEqual(notes.first().message, "Dune")
+
+    def test_moving_within_history_does_not_renotify(self):
+        entry = create_personal_entry(self.actor, book={"title": "Dune"}, status="reading")
+        update_personal_entry(self.actor, entry, status="history")
+        services.mark_all_read(self.other)
+        update_personal_entry(self.actor, entry, status="history", position=1)
+        self.assertEqual(self._unread_for(self.other, "books").count(), 0)
+
+    def test_creating_directly_into_history_notifies(self):
+        create_personal_entry(self.actor, book={"title": "Dune"}, status="history")
+        self.assertEqual(self._unread_for(self.other, "books").count(), 1)
+
+    def test_disabling_household_activity_suppresses_all_sources(self):
+        services.set_preference(self.other, category="household_activity", in_app_enabled=False, push_enabled=False)
+        atlas_list = create_atlas_list(self.actor, title="Groceries", list_type="grocery")
+        create_list_item(self.actor, atlas_list, title="Milk")
+        create_event(self.actor, title="Dentist", start_at=timezone.now())
+        create_personal_entry(self.actor, book={"title": "Dune"}, status="history")
+        self.assertEqual(Notification.objects.filter(recipient_user=self.other, is_read=False).count(), 0)

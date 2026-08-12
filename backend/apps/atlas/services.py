@@ -5,6 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.atlas import events
 from apps.atlas.models import AtlasContact, AtlasList, AtlasListItem, AtlasListSuggestion, AtlasNote, AtlasReminder
 from apps.core.assignment import apply_assignees, pop_assignees
 from apps.core.models import get_active_household
@@ -113,6 +114,7 @@ def create_list_item(acting_user: User, atlas_list: AtlasList, **data) -> AtlasL
     apply_assignees(item, people)
     sync_event_for(item)
     _finish_product_item(acting_user, item, cache_image=cache_image, watch_enabled=watch_enabled)
+    events.list_item_created(item.id, household.id)
     return item
 
 
