@@ -1,7 +1,7 @@
 # Recommended Next Steps — Production Readiness & Reliability
 
-> **Status:** Recommended execution plan after completion of the PWA/Web Push implementation
-> (v0.34.10–v0.34.13).
+> **Status:** Updated after the successful live production-serving rollout of v0.35.0 on
+> **12 August 2026**.
 >
 > This document is practical guidance, not a replacement for the canonical Roadmap, Architecture
 > or Security documents. It answers: **what should HomeStack do next, in what order, and what needs
@@ -16,13 +16,16 @@ use. The next phase should make the application **dependable as household infras
 Recommended sequence:
 
 1. ~~**Deploy and validate the completed Web Push work on the live server.**~~ — done, live.
-2. ~~**Production-serving and deployment hardening.**~~ — done, v0.35.0 (§3).
-3. **Tighten container/network exposure — current phase.**
+2. ~~**Production-serving and deployment hardening.**~~ — done and live, v0.35.0 (§3).
+3. **Tighten container/network exposure — current infrastructure phase.**
 4. **Automate deployment and smoke validation.**
 5. **Add frontend/E2E testing and CI.**
 6. **Strengthen backup/recovery and operational health.**
 7. **Add stronger adult authentication before any public remote-access plan.**
 8. Then return to feature expansion such as Home Assistant, Hearth and later Health.
+
+Small bug fixes and UI polish can continue in parallel where they do not change this reliability
+sequence.
 
 Reliability, recovery and repeatable updates now create more value than immediately adding another
 major feature area.
@@ -46,42 +49,28 @@ Shipped behaviour includes:
 - household-activity bundling;
 - fixed 24h/morning-of reminders for the bounded Calendar/Atlas scope;
 - daily Hub countdown delivery;
-- device test-push support.
+- device test-push support;
+- generated browser/platform device naming, user-editable friendly names and an admin household
+  push-device overview.
 
-The implementation branch reported **875 backend tests green** and a clean frontend TypeScript
-check.
+The notification implementation is deployed on the live server. VAPID is configured, the hourly
+scheduled dispatcher is active, existing push subscriptions survived the production-serving
+transition, device registration/listing works from the production frontend, and real test pushes
+were received successfully after the v0.35.0 rollout.
 
-### Live deployment follow-up
-
-This is operational rollout, not unfinished feature development:
-
-1. rebuild backend/frontend images and apply notification migrations;
-2. configure `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT`;
-3. run `notifications_run_scheduled` at least hourly;
-4. validate at least two users/devices with different preferences;
-5. confirm quiet hours and the fixed 24h/morning/countdown behaviour;
-6. confirm sensitive sources cannot leak protected lock-screen content;
-7. confirm notification deep links re-check current permissions;
-8. on iOS, test an **installed Home Screen PWA**, not an ordinary Safari tab.
-
-Exact commands are in `HANDOVER.md`.
+Longer-running behavioural validation such as quiet-hour timing and reminder timing should continue
+through ordinary household use, but the rollout itself is complete.
 
 ---
 
-## 3. Production serving — **completed (v0.35.0)**
+## 3. Production serving — **completed and live (v0.35.0)**
 
-> Implemented and validated locally; canonical detail now lives in
-> `35_Production_Serving_and_Deployment.md`, which also carries the deployment, smoke-test and
-> rollback procedures. The section below is retained as the original plan and its outcome.
->
-> Delivered: gunicorn for Django; `npm ci` + `npm run build` served from nginx with SPA fallback;
-> WhiteNoise for Django admin static; production/development Compose separation with
-> `DJANGO_SETTINGS_MODULE` pinned per profile; production deployment system checks.
->
-> Deliberately unchanged: published host ports and Nginx Proxy Manager configuration, so the
-> change can be rolled back by rebuilding the previous commit. **§4 below is now the next step.**
+Canonical detail: `35_Production_Serving_and_Deployment.md`.
 
-Target shape:
+The production-serving change was merged and deployed to the live home server on 12 August 2026.
+The old Django development server and Vite development server are no longer in the live path.
+
+Live shape:
 
 ```text
 LAN client
@@ -89,65 +78,72 @@ LAN client
     v
 Nginx Proxy Manager :443
     |
-    +--> production-built React static application
+    +--> /api/* -> Gunicorn -> Django -> PostgreSQL
     |
-    +--> production WSGI Django application
-              |
-              v
-          PostgreSQL
+    `--> /*     -> nginx -> production React/Vite build
 ```
 
-### 3.1 Backend
+Delivered:
 
-Replace `runserver` in the live profile with a production WSGI server such as Gunicorn.
+- Gunicorn 26.0.0 serving `config.wsgi:application` on the backend;
+- `gthread` worker model sized for the household workload;
+- production React build produced with `npm ci` + `npm run build`;
+- nginx serving the built frontend with SPA fallback;
+- explicit caching rules for hashed assets, brand assets, the PWA manifest and `sw.js`;
+- WhiteNoise 6.12.0 serving collected Django static/admin assets;
+- production/development Compose separation;
+- `DJANGO_SETTINGS_MODULE=config.settings.prod` pinned by the production Compose profile;
+- production configuration checks for hosts, secrets, `DEBUG` and cookie/CSRF configuration;
+- pre-promotion validation using throwaway containers from the newly built image;
+- documented migration compatibility rule: backwards-compatible/additive migrations may run before
+  promotion; destructive migrations require a brief planned backend outage;
+- rollback procedure based on the known-good commit and image rebuild.
 
-What needs to happen:
+Deliberately unchanged in v0.35.0:
 
-- add the production WSGI dependency;
-- define a production container command;
-- use sensible worker/timeouts for the small household workload;
-- preserve health checks and useful logs;
-- validate proxy headers and secure-cookie behaviour behind NPM;
-- retain development `runserver`/reload in the development override.
+- Nginx Proxy Manager routing;
+- host publication of PostgreSQL/backend/frontend ports;
+- Docker network topology;
+- router configuration.
 
-### 3.2 Frontend
+### Live validation completed
 
-Stop serving the live application through Vite dev server.
+The live deployment passed all of the following after promotion:
 
-What needs to happen:
+- backend and frontend container health checks;
+- Gunicorn startup with three `gthread` workers;
+- HTTPS backend health endpoint;
+- HTTPS frontend load;
+- password login and logout;
+- avatar/PIN login;
+- authenticated create/edit persistence;
+- sensitive-node password re-authentication and Solace access;
+- direct refresh of React deep links;
+- `/sw.js` with `Cache-Control: no-cache`;
+- `/manifest.json` with `application/manifest+json`;
+- PWA brand assets;
+- existing push-device listing and admin push-device view;
+- real Web Push delivery from the production build;
+- scheduled notification management command;
+- no pending database migrations at deployment time.
 
-- `npm ci` + `npm run build` in a build stage;
-- serve the resulting `dist` from a small production web server/proxy path;
-- support SPA fallback to `index.html`;
-- preserve `/api/` routing;
-- verify service-worker/PWA/Web Push from the production build.
+The pre-deployment backup and rollback commit were also verified before promotion.
 
-### 3.3 Production Django settings
-
-Verify deliberately rather than assuming:
-
-- intended `DJANGO_SETTINGS_MODULE`;
-- production `DEBUG` behaviour;
-- allowed hosts and CSRF trusted origin;
-- secure session/CSRF cookies behind NPM;
-- proxy SSL handling;
-- static/admin asset handling;
-- secrets outside the repository.
-
-### Done when
-
-- no Django `runserver` in the live profile;
-- no Vite dev server in the live profile;
-- login/PIN/password re-auth work through HTTPS;
-- an authenticated write succeeds through HTTPS;
-- production PWA/Web Push still works;
-- backend/frontend smoke checks pass after recreation.
+**§4 below is now the next infrastructure step.**
 
 ---
 
-## 4. Tighten Docker networking
+## 4. Tighten Docker networking — **current phase**
 
 The production profile should expose only what needs LAN ingress.
+
+Current live state intentionally retained from the pre-v0.35.0 deployment:
+
+- PostgreSQL is published on host port `5432`;
+- backend/Gunicorn is published on host port `8000`;
+- frontend/nginx is published on host port `5173`;
+- NPM reaches the application through those existing host ports;
+- household users access HomeStack through `https://homestack.moosesoftwares.com`.
 
 Target:
 
@@ -157,18 +153,23 @@ LAN -> NPM :443 -> HomeStack web/API -> PostgreSQL
 
 What needs to happen:
 
-- shared Docker network between NPM and HomeStack ingress services;
-- PostgreSQL internal-only;
+- create/use an appropriate shared Docker network between NPM and the HomeStack ingress services;
+- make PostgreSQL internal-only in production;
 - remove unnecessary production host publication of `5432`, `8000` and `5173` once NPM can reach
-  the containers directly;
-- keep development ports in a development override;
+  the required containers directly;
+- preserve explicit development port publication in the development override;
+- verify NPM can still route `/api/*` to the backend and all other paths to the frontend;
 - keep NPM admin `81` LAN/admin-only;
+- keep HomeStack LAN-only;
 - no router port forwarding.
+
+Validation should include HTTPS login/PIN, an authenticated write, deep-link refresh, sensitive
+re-authentication, PWA/service-worker loading and a real push test after the network change.
 
 ### Done when
 
 Household clients use the trusted HTTPS origin while database/internal app ports are not generally
-reachable from the LAN.
+reachable from the LAN, and NPM reaches HomeStack only through the intended Docker-network paths.
 
 ---
 
@@ -180,24 +181,29 @@ Create something like:
 ./scripts/deploy.sh
 ```
 
-It should perform:
+The successful v0.35.0 manual rollout establishes the sequence this command should automate:
 
-1. preflight checks;
-2. verify or create a current backup before risky work;
-3. build production images;
-4. run migrations;
-5. recreate/restart services;
-6. verify container health;
-7. verify backend and HTTPS frontend/API health;
-8. verify required scheduled jobs/configuration;
-9. display deployed version/commit;
-10. provide clear failure/rollback guidance.
+1. confirm a current, complete backup and record the known-good commit;
+2. fetch/pull the intended release;
+3. build production images without replacing the live containers;
+4. run production configuration checks in a throwaway container from the **new** backend image;
+5. inspect/apply migrations from the new image before promotion when migrations are backwards
+   compatible;
+6. stop the old backend before destructive/incompatible migrations when required;
+7. promote the new containers only after checks/migrations succeed;
+8. verify container health;
+9. verify backend and HTTPS frontend/API health;
+10. run deep-link/PWA/scheduled-job smoke checks;
+11. display deployed version/commit;
+12. provide clear failure/rollback guidance.
 
-The command must fail loudly after a failed migration/health check.
+The command must fail loudly before promotion when configuration checks or migrations fail, and must
+not silently continue after a failed health check.
 
 ### Done when
 
-A routine deployment no longer depends on remembering a multi-command handover sequence.
+A routine deployment no longer depends on remembering the multi-command procedure proven during the
+v0.35.0 rollout.
 
 ---
 
@@ -235,6 +241,11 @@ frontend production build
 selected Playwright smoke tests
 ```
 
+The production-serving PR finished with 908 backend tests, 907 green under the contributor's local
+Python 3.14 environment, with the one remaining attachments test failure reproduced unchanged on
+`main`. The live image is Python 3.12. CI should ultimately run in the supported project/runtime
+version so local interpreter drift cannot obscure the real result.
+
 ### Done when
 
 A PR cannot silently break migration state, the production frontend build or critical household
@@ -247,7 +258,12 @@ browser flows without CI reporting it.
 HomeStack contains important household data. A backup on the same server/storage device is not
 enough long term.
 
-What needs to happen:
+The v0.35.0 rollout verified that the existing backup service can create a complete PostgreSQL dump
+plus media archive with checksums, and a pre-deployment copy was also made outside the Docker volume
+on the host. That protects against a bad application deployment, but it does **not** protect against
+loss of the server or its storage.
+
+What still needs to happen:
 
 - retain database + protected-media backup consistency;
 - add at least one **encrypted copy off the primary server/storage device**;
@@ -289,8 +305,8 @@ Trusted LAN HTTPS does not make HomeStack internet-ready.
 Before Cloudflare Tunnel or other public remote access, satisfy
 `05_Security_Architecture_Document.md`, including:
 
-- production serving;
-- reduced service exposure;
+- production serving — **complete**;
+- reduced service exposure — **next infrastructure phase**;
 - strong adult/admin passwords;
 - rate limiting/brute-force protection;
 - passkeys/2FA or another strong second factor for privileged remote access;
@@ -360,16 +376,16 @@ COMPLETED
   Web Push / PWA implementation
         |
         v
-COMPLETED — LIVE ROLLOUT
-  VAPID + migrations + hourly dispatcher + real-device validation
+COMPLETED — LIVE
+  VAPID + hourly dispatcher + real-device push validation
         |
         v
-COMPLETED (v0.35.0)
-  Production Django + production frontend
+COMPLETED — LIVE (v0.35.0, 12 Aug 2026)
+  Gunicorn backend + built React/nginx frontend + production checks
         |
         v
 CURRENT ENGINEERING PHASE
-  Tighter Docker networking
+  Tighter Docker/network exposure
         |
         v
   One-command deployment + smoke checks
@@ -399,14 +415,14 @@ LATER
 
 HomeStack can reasonably be treated as dependable household infrastructure when:
 
-- production Django and frontend serving are in use;
-- trusted HTTPS works for real authenticated reads/writes;
-- PWA/Web Push works from the production build on real household devices;
-- unnecessary development/database ports are not exposed in production;
-- one supported deployment command builds, migrates, restarts and smoke-tests;
-- backend/migration/frontend/critical browser checks run automatically;
-- at least one encrypted backup exists off the primary server/storage;
-- restore has been successfully tested;
-- administrators can see basic HomeStack operational health;
-- stronger adult authentication exists before public access;
-- the public-access gate remains closed until deliberately satisfied.
+- [x] production Django and frontend serving are in use;
+- [x] trusted HTTPS works for real authenticated reads/writes;
+- [x] PWA/Web Push works from the production build on a real household device;
+- [ ] unnecessary development/database ports are not exposed in production;
+- [ ] one supported deployment command builds, validates, migrates, promotes and smoke-tests;
+- [ ] backend/migration/frontend/critical browser checks run automatically;
+- [ ] at least one encrypted backup exists off the primary server/storage;
+- [ ] restore has been successfully tested;
+- [ ] administrators can see basic HomeStack operational health;
+- [ ] stronger adult authentication exists before public access;
+- [x] the public-access gate remains closed until deliberately satisfied.
