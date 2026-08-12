@@ -39,9 +39,9 @@ HomeStack is a Django modular monolith.
 Core/shared apps include the authentication/People/permissions/nodes/Hub/scheduling/notifications/
 attachments/audit/search/backups/events spine plus genuinely shared capabilities.
 
-Current domain apps include Atlas, Meridian, Education, Home Wiki, Pets, Homestead, Solace,
-Fitness and Travel. Home Assistant/Hearth/Health and evidence-gated capabilities follow their
-roadmap status.
+Current domain apps include **Atlas, Meridian, Education, Home Wiki, Pets, Books, Homestead,
+Solace, Fitness and Travel**. Home Assistant/Hearth/Health and evidence-gated capabilities follow
+their roadmap status.
 
 Rules:
 
@@ -50,6 +50,8 @@ Rules:
 - no SaaS tenant-management app (D1/D2).
 - no generic integrations app merely for Home Assistant (D22).
 - Fitness is separate from medical Health (D24).
+- a shipped domain such as Books remains a domain even if an older planning document omitted it;
+  confirm the actual node registry/models/routes before redesigning ownership.
 
 ## 4. Backend app layering
 
@@ -80,6 +82,10 @@ logic in views.
 Selectors own reads/query construction and apply visibility/permission filtering before data is
 serialized or aggregated.
 
+Selectors may also enforce domain-specific ownership/membership constraints in addition to central
+permissions. Example: Books personal entries are User-scoped, and Book Club selectors only return
+clubs the current User belongs to.
+
 ### Services
 
 Services own writes and business transitions. They stamp ownership/audit fields, coordinate
@@ -101,16 +107,25 @@ catalogue/global row not to be household-owned.
 - soft delete uses the shared model/manager conventions;
 - do not hand-roll household filtering differently in each domain.
 
+D12 does not mean every personal record must reference a Person. Genuinely login-specific state can
+correctly use User ownership when that is the product meaning. Books provides a concrete example:
+`PersonalBookEntry` and `BookRating` belong to the authenticated User; household task assignees and
+record subjects continue to use People.
+
 ## 6. Permissions (D10)
 
 Never make frontend hiding or an ad-hoc view conditional the security boundary.
 
 - use the central resolver/permission classes;
 - filter records in selectors through the shared visibility/sensitivity model;
+- add domain ownership/membership filtering where the model requires it;
 - write permission/security tests first when adding a new protected operation;
 - re-check source permission when data is exposed through Hub, Calendar, Search, Corners,
   notifications or attachments;
 - sensitive resources may intentionally use not-found behavior to avoid existence disclosure.
+
+Knowing a record ID must not bypass User ownership, club membership, Person visibility or any other
+source constraint.
 
 ## 7. Cross-domain dependencies (D4)
 
@@ -125,6 +140,9 @@ Use:
 
 Do not solve a one-off dependency by creating a generic integration/workflow framework.
 
+Shared enrichment is another example: Books/Atlas/Homestead reuse the bounded Link Import service
+instead of each implementing its own URL scraper.
+
 ## 8. Calendar/date rules (D7/D8/D23)
 
 - owning domain record keeps its semantic date;
@@ -135,6 +153,9 @@ Do not solve a one-off dependency by creating a generic integration/workflow fra
 
 Test create, update, clear/delete and permission propagation for Calendar-linked records.
 
+Do not add dates/Calendar projections merely because every other node has them. Books currently has
+no inherent Calendar contract, which is valid.
+
 ## 9. Search (D9)
 
 Search runs over permission-filtered owning data.
@@ -144,7 +165,10 @@ Search runs over permission-filtered owning data.
 - do not introduce a manually synchronized universal search table;
 - snippets are created only after filtering inaccessible records.
 
-## 10. Attachments (D11)
+Books is a current example of the established PostgreSQL/SQLite search pattern over title, author,
+genre, ISBN and description.
+
+## 10. Attachments and external enrichment (D11)
 
 Use the shared attachment capability.
 
@@ -153,6 +177,9 @@ Use the shared attachment capability.
 - do not expose private files through a raw public media route;
 - preserve owning record/linkage;
 - do not add a second ACL scheme unless the canonical attachment model is explicitly changed.
+
+For public URL/ISBN/product metadata, use the shared safe Link Import boundary. Preview/external
+metadata is not authority to overwrite user-confirmed source records.
 
 ## 11. Frontend standards
 
@@ -174,6 +201,9 @@ Responsive priority:
 
 Management tables should normally become cards/stacked records on small screens rather than rely on
 horizontal scrolling.
+
+A domain does not need kiosk support simply because it is a node. Respect the node registry's
+surface contract; Books currently has `supports_kiosk=False`.
 
 ## 12. TypeScript/API client
 
@@ -201,8 +231,8 @@ refer to them.
 Required according to feature risk:
 
 - model/service/selector behavior;
-- permission/visibility tests;
-- Calendar sync create/update/delete/clear;
+- permission/visibility/ownership/membership tests;
+- Calendar sync create/update/delete/clear where applicable;
 - event side effects and deduplication/idempotency;
 - sensitive re-auth/audit behavior;
 - regression tests for bugs found in live use;
@@ -221,7 +251,8 @@ front-end testing infrastructure should focus on high-value flows rather than br
 
 Important cross-cutting flows deserve real browser/device validation: login/session, sensitive
 reauth, Calendar/source deep links, push notifications, mobile navigation and critical household
-writes.
+writes. Domain-specific access flows such as one User being unable to open a Book Club they are not
+a member of also deserve focused regression tests.
 
 ## 15. Migrations
 
@@ -289,6 +320,7 @@ When work ships:
 - update the owning node/core spec if its contract changed;
 - update `VERSION_HISTORY.md` for release chronology;
 - update MSS/Roadmap/Security only if their stable/current contract changed;
+- add a missing canonical domain spec if a real shipped node was previously undocumented;
 - remove shipped work from the Parking Lot;
 - keep `HANDOVER.md` limited to current state, deployment, known issues and next work.
 
@@ -297,7 +329,7 @@ When work ships:
 A feature is not done until the applicable items are handled:
 
 - backend model/service/selector/API;
-- permission/visibility/security behavior;
+- permission/visibility/security/ownership behavior;
 - Calendar/Hub/Search/Corners/notifications integration where relevant;
 - responsive frontend flow;
 - loading/empty/error feedback;
