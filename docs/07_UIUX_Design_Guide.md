@@ -48,6 +48,7 @@ Examples of current destinations include:
 - School & study / Education;
 - Household guide / Home Wiki;
 - Pets;
+- Books;
 - Our home / Homestead;
 - Tasks & rewards / Meridian;
 - Money / Solace;
@@ -182,7 +183,15 @@ approvals and monitoring.
 
 **Education:** deadline/timetable clarity; Study defaults to the current linked Person.
 
+**Home Wiki:** fast search and readable durable household reference; kiosk-safe pages stay simple.
+
 **Pets:** visual pet identity plus quick treatment/appointment action.
+
+**Books:** shelf/card-oriented reading experience rather than a library-management table. Personal
+Want to Read / Reading / Read should be immediately understandable; Book Club colour/context,
+member ratings and up-next ordering should make shared reading obvious without duplicating the
+User's personal rating. URL/ISBN enrichment is a helper, not the main interaction. Books currently
+has no kiosk surface, so do not force one merely for consistency.
 
 **Homestead:** warm spatial/property organisation; rooms/floor plan/plans should feel connected to
 the home rather than an asset register.
@@ -211,6 +220,10 @@ ambient -> avatar -> PIN -> personal dashboard -> permitted workflow -> timeout
 
 Kiosk defaults to large, simple, low-typing interactions. Child-accessible content can include
 Tasks & rewards, Education, Pets, Calendar and simple Atlas/Grocery household actions as permitted.
+
+A domain is not required to have a kiosk surface simply because it is a node. Books currently
+registers `supports_kiosk=False`; preserve that until a real shared-kiosk reading workflow is
+wanted.
 
 Sensitive by default: Money, medical Health, protected documents, administrative settings and
 other finance/private records.
@@ -265,7 +278,7 @@ Before shipping a screen/workflow, verify:
 - Are advanced/admin options progressively disclosed?
 - Do loading/empty/error states exist?
 - Do dark mode and keyboard/touch interactions work?
-- Is current-Person identity correct?
+- Is current-Person/User identity correct for the record type?
 - Are disabled/unauthorized actions/destinations represented clearly?
 - Can sensitive information leak through summaries, widgets, activity, Search, Calendar or
   notifications?
