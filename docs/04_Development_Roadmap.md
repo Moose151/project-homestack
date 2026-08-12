@@ -19,7 +19,8 @@ current design has a demonstrated limit.
 
 ## 2. Completed foundation
 
-The following roadmap stages are **complete** and should not be treated as active work:
+The following roadmap stages are **complete** and should not be treated as active implementation
+work:
 
 | Stage | Status | Result |
 |---|---|---|
@@ -34,52 +35,47 @@ The following roadmap stages are **complete** and should not be treated as activ
 | Homestead expansion | Complete baseline | Property, maintenance, appliances, cover/costs, rooms/plans, pools/spas, utilities and interactive floor plan. |
 | Fitness & Training | Complete / in use | D24 social training node separate from medical Health. |
 | Corners + safe link import | Complete baseline | Person-centred summaries, lists/wishes/reactions and bounded URL/ISBN/product preview/cache/watch capability. |
-| Daily coordination | Complete except push | Appointments, Agenda, dated Atlas sync, birthdays/People and editable pool schedules shipped. |
+| Daily coordination | Complete | Appointments, Agenda, dated Atlas sync, birthdays/People, editable pool schedules and push delivery foundation shipped. |
 | Travel baseline | Complete | Trips/ideas, booking/cost planning, itinerary/Things to do, Calendar/notification/Corner integration. |
 | Grocery + Shopping | Complete | Dedicated shared Atlas Grocery and Shopping surfaces. |
 | LAN HTTPS | Complete | Trusted `https://homestack.moosesoftwares.com` via Nginx Proxy Manager + Cloudflare DNS challenge + Pi-hole local DNS. |
+| PWA / Web Push | Complete v0.34.10–v0.34.13 | Per-user preferences, per-device subscriptions, VAPID delivery, PWA/service worker, quiet hours, bundling, scheduled reminders/countdown and sensitive-safe payloads. |
 
 Historical sub-phases and release numbers are intentionally omitted here; see `VERSION_HISTORY.md`.
 
-## 3. Active milestone — PWA notifications / Web Push
+## 3. Completed milestone — PWA notifications / Web Push
 
-**Status:** active implementation work as of 2026-08-12.
+**Status:** implementation complete as of 2026-08-12.
 
 Canonical specification: `32_Core_Notifications_and_Push.md`.
 
-### Goal
+Shipped outcomes include:
 
-Turn the existing in-app notification capability into useful per-person phone notifications over
-the now-trusted HTTPS origin, without leaking sensitive details to lock screens or creating a
-second notification source of truth.
-
-### Required outcomes
-
-- installable/responsive PWA behaviour where required for target devices;
-- per-user notification preferences by category;
+- PWA/service-worker support for phone push;
+- per-user notification preferences by category/channel;
 - per-device Web Push subscriptions;
 - VAPID/Web Push delivery from the backend;
-- quiet-hours and lead-time behaviour;
-- safe sparse payloads, especially for financial/health/private records;
-- tap/deep-link back into the owning HomeStack record;
-- permission re-check when the notification is opened;
-- subscription expiry/unregister handling;
-- tests for cross-user isolation and sensitive payloads.
+- quiet hours and configurable lead times;
+- sparse payloads with automatic exclusion of sensitive re-auth-required source content from
+  lock-screen push;
+- deep links that still re-check normal session/permission/re-authentication state;
+- household-activity bundling;
+- scheduled 24h/morning-of reminders and Hub countdown delivery;
+- expired/revoked subscription handling and a device test-push flow.
 
-### Done when
+The completed branch reported **875 backend tests green** and a clean frontend TypeScript check.
+Live operational rollout still requires the VAPID configuration, migrations, scheduled command and
+real-device validation listed in `HANDOVER.md`; those are deployment follow-ups, not unfinished
+feature architecture.
 
-At least two household users/devices can independently opt into different notification categories,
-receive a real push while HomeStack is not open, tap it into the correct permitted location, and
-no sensitive record detail is exposed to an unauthorised or locked surface.
+## 4. Active engineering milestone — production operation hardening
 
-Do not merge an alternative notification architecture into this roadmap while the dedicated push
-branch is in progress; reconcile this document to the actual shipped implementation after that
-branch lands.
+**Status:** recommended primary engineering workstream.
 
-## 4. Near-term engineering milestone — production operation hardening
+Practical execution plan: `34_Recommended_Next_Steps.md`.
 
-This should be treated as the next major engineering stream alongside/after push, before public
-remote access is considered.
+HomeStack is now broad enough and important enough that dependable serving, deployment and recovery
+create more value than immediately adding another major node.
 
 ### 4.1 Production serving
 
@@ -108,27 +104,29 @@ Keep a development Compose profile/override that exposes developer-friendly port
 Create one supported deployment command/script that performs the required sequence safely:
 
 1. preflight/working-tree checks;
-2. optional/current backup;
+2. backup or verified recent backup;
 3. image build;
 4. migrations;
 5. service recreation/restart;
 6. backend health check;
 7. frontend/HTTPS smoke check;
-8. clear failure output and rollback guidance.
+8. scheduled-service verification where relevant;
+9. clear failure output and rollback guidance.
 
 This exists to remove recurring human errors such as pulling new code without rebuilding or
 forgetting a migration.
 
 ### 4.4 CI and frontend automated testing
 
-Add CI when practical for:
+Add CI for:
 
 - backend tests;
 - migration drift (`makemigrations --check`);
 - frontend typecheck;
 - frontend production build;
-- frontend unit tests for critical state/components;
-- a small Playwright suite for login, permissions, Hub/Calendar and sensitive re-auth flows.
+- frontend unit/component tests for critical state/components;
+- a small Playwright suite for login, permissions, Hub/Calendar, notifications and sensitive
+  re-auth flows.
 
 ### Done when
 
@@ -159,8 +157,7 @@ Add an admin-focused HomeStack system-health page only if it can remain simple. 
 - backend/database health;
 - free disk/storage condition;
 - last successful HomeStack backup and off-server copy status;
-- scheduled-command last-run/failure status;
-- push dispatcher status once shipped;
+- scheduled-command last-run/failure status, including notification dispatcher status;
 - Home Assistant bridge health once shipped;
 - links to existing external operations tools (for example Uptime Kuma/Dozzle) rather than
   rebuilding those tools inside HomeStack.
@@ -191,7 +188,8 @@ A VPN-only remote path may remain the preferred option even after the checklist 
 
 ## 7. Milestone 5.5 — Home Assistant bridge (important, D22)
 
-**Sequence:** after working push notifications; do not build a generic integrations platform.
+**Sequence:** after the production/recovery baseline is stronger. HTTPS and working Web Push are
+already shipped prerequisites. Do not build a generic integrations platform.
 
 Canonical specification: `26_Node_Home_Assistant.md`.
 
@@ -284,8 +282,8 @@ Health must remain separate from Fitness & Training (D24). Candidate scope:
 
 ## 10. Native clients / offline
 
-PWA is the first phone bridge. Do not choose React Native/Tauri/other native technology until the
-responsive/PWA product proves what capabilities are actually missing.
+PWA is now the first shipped phone bridge. Do not choose React Native/Tauri/other native technology
+until the responsive/PWA product proves what capabilities are actually missing.
 
 Native apps should reuse the existing API/business/permission model rather than introduce a second
 backend or local source of truth.
@@ -309,8 +307,9 @@ Only pursue when real household use demonstrates the need:
 
 As of 2026-08-12:
 
-1. **Finish Web Push/PWA notifications** (active branch/workstream).
-2. **Production-serving/deployment/network hardening.**
+1. **Deploy/validate the completed Web Push work on the live server** (VAPID, migrations, hourly
+   dispatcher and real-device checks; operational follow-up, not feature development).
+2. **Production-serving/deployment/network hardening** — primary engineering workstream.
 3. **Encrypted off-server backup + basic operational health.**
 4. **Home Assistant M5.5.**
 5. **Hearth / other everyday feature work according to household demand.**
