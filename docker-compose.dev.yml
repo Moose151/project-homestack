@@ -1,20 +1,40 @@
 # HomeStack — development override.
-# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
-# Bind-mounts source for hot reload on backend and frontend.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# Turns the production base back into a development stack: Django `runserver` with autoreload and
+# the Vite dev server with hot module reload, both bind-mounting source so an edit is live without
+# rebuilding an image. Never use this on the live server.
 
 services:
   homestack-backend:
     # Podman rootless: container root maps to your host UID — no user: override needed.
     # Docker: add `user: "${UID:-1000}:${GID:-1000}"` here to avoid root-owned files.
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
     volumes:
       - ./backend:/app:z
       - media_data:/app/media
       - backup_data:/app/backups
     environment:
+      # Overrides the production pin in the base file. Development settings auto-derive permissive
+      # CSRF origins and serve /static/ through Django's own DEBUG handler, so no WhiteNoise and
+      # no collectstatic are involved here.
+      DJANGO_SETTINGS_MODULE: config.settings.dev
       DJANGO_DEBUG: "1"
+    healthcheck:
+      # runserver's reloader restarts on every edit; a failing probe mid-restart is noise here.
+      disable: true
 
   homestack-frontend:
+    build:
+      # Context repeated rather than relying on Compose merging it in from the base file — the
+      # override must be unambiguous about which image it is building.
+      context: ./frontend
+      target: development
+    # vite.config.ts reads HOMESTACK_PUBLIC_HOSTNAME for its allowedHosts list.
+    env_file: .env
     volumes:
       - ./frontend:/app:z
       # Keep the container's own node_modules (don't let the bind mount hide it).
       - /app/node_modules
+    healthcheck:
+      disable: true
