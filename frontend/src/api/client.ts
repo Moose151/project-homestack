@@ -216,7 +216,7 @@ type InstitutionWrite = Partial<{
 }>
 
 type ItemWrite = Partial<{
-  title: string; notes: string; quantity: string; position: number
+  title: string; notes: string; quantity: string; priority: string; position: number
   due_at: string | null; assigned_to_person_ids: number[]
   product_url: string; source_image_url: string; retailer: string; unit_price: string | null
   currency: string; cache_image: boolean; price_watch_enabled: boolean

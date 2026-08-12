@@ -17,6 +17,7 @@ import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
 import { sourcePath } from '../../../lib/sourceLinks'
 import { EventModal } from './CalendarPage'
+import { ShoppingTab } from './atlas/ShoppingTab'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -637,7 +638,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-function SearchResults({ results }: { results: AtlasSearchResults }) {
+// Grocery and Shopping are their own tabs now; everything else still lives under Lists.
+function listTabFor(listType: string): 'lists' | 'grocery' | 'shopping' {
+  if (listType === 'grocery') return 'grocery'
+  if (listType === 'shopping') return 'shopping'
+  return 'lists'
+}
+
+function SearchResults({ results, lists }: { results: AtlasSearchResults; lists: AtlasList[] }) {
   const empty = !results.notes.length && !results.lists.length && !results.items.length && !results.reminders.length
   if (empty) return <EmptyState icon="🔍" title="No matches" hint="Try a different word, or check another list." />
 
@@ -646,7 +654,7 @@ function SearchResults({ results }: { results: AtlasSearchResults }) {
       {results.lists.length > 0 && (
         <Section title="Lists">
           {results.lists.map(l => (
-            <Link key={`l${l.id}`} to="/atlas?tab=lists" className="group block">
+            <Link key={`l${l.id}`} to={`/atlas?tab=${listTabFor(l.list_type)}`} className="group block">
               <Card className="transition-colors group-hover:border-primary/40">
                 <span className="text-sm font-medium text-ink">{l.title}</span>
                 <span className="text-xs text-muted capitalize"> · {l.list_type}</span>
@@ -657,11 +665,14 @@ function SearchResults({ results }: { results: AtlasSearchResults }) {
       )}
       {results.items.length > 0 && (
         <Section title="List items">
-          {results.items.map(i => (
-            <Link key={`i${i.id}`} to="/atlas?tab=lists" className="block min-h-11 rounded-xl bg-sunken px-3 py-2.5 text-sm text-ink transition-colors hover:bg-primary-soft">
-              {i.quantity && <span className="text-muted-strong mr-1.5">{i.quantity}×</span>}{i.title}
-            </Link>
-          ))}
+          {results.items.map(i => {
+            const parentType = lists.find(l => l.id === i.atlas_list_id)?.list_type ?? 'general'
+            return (
+              <Link key={`i${i.id}`} to={`/atlas?tab=${listTabFor(parentType)}`} className="block min-h-11 rounded-xl bg-sunken px-3 py-2.5 text-sm text-ink transition-colors hover:bg-primary-soft">
+                {i.quantity && <span className="text-muted-strong mr-1.5">{i.quantity}×</span>}{i.title}
+              </Link>
+            )
+          })}
         </Section>
       )}
       {results.notes.length > 0 && (
@@ -791,10 +802,84 @@ function PeopleBirthdaysTab({ people, onError }: { people: Person[]; onError: (m
   </div>
 }
 
-type Tab = 'agenda' | 'schedule' | 'lists' | 'notes' | 'reminders' | 'people'
-const TAB_KEYS: Tab[] = ['agenda', 'schedule', 'lists', 'notes', 'reminders', 'people']
+// ---------------------------------------------------------------------------
+// Grocery tab — the plain-quantity list type, kept simple (no link/price/
+// priority) so a future Hearth/meal-planning pass can populate it from a
+// meal plan's ingredient list without fighting shopping-list-only fields.
+// ---------------------------------------------------------------------------
 
-const LIST_TYPES = Object.entries(LIST_TYPE_META).map(([key, m]) => ({ key, label: m.label, icon: m.icon }))
+function GroceryTab({ lists, people, defaultAssignee, focusedListId, focusedItemId, onListCreated, onListDeleted, onError }: {
+  lists: AtlasList[]
+  people: Person[]
+  defaultAssignee: number[]
+  focusedListId: number
+  focusedItemId: number
+  onListCreated: (list: AtlasList) => void
+  onListDeleted: (id: number) => void
+  onError: (message: string) => void
+}) {
+  const groceryLists = lists.filter(l => l.list_type === 'grocery')
+  const [creating, setCreating] = useState(false)
+  const [title, setTitle] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const create = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!title.trim()) return
+    setBusy(true)
+    try {
+      const list = await api.createList({ title: title.trim(), list_type: 'grocery' })
+      const full = await api.getList(list.id)
+      onListCreated(full)
+      setTitle(''); setCreating(false)
+    } catch (err) { onError(errMsg(err)) } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {creating ? (
+        <form onSubmit={create} className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-3 sm:flex-row">
+          <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Grocery list name…" className="flex-1" autoFocus />
+          <div className="flex gap-2">
+            <Button type="button" variant="ghost" onClick={() => { setCreating(false); setTitle('') }} className="flex-1 sm:flex-none">Cancel</Button>
+            <Button type="submit" loading={busy} disabled={!title.trim()} className="flex-1 sm:flex-none">Create</Button>
+          </div>
+        </form>
+      ) : (
+        <Button size="sm" onClick={() => setCreating(true)} className="self-start">+ New grocery list</Button>
+      )}
+
+      {groceryLists.length === 0 ? (
+        <EmptyState
+          icon="🛒"
+          title="No grocery lists yet"
+          hint="A grocery list can later be filled automatically from a meal plan once Hearth ships."
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {groceryLists.map(list => (
+            <ListCard
+              key={list.id}
+              list={list}
+              people={people}
+              defaultAssignee={defaultAssignee}
+              focusedItemId={list.id === focusedListId ? focusedItemId : undefined}
+              onDeleted={onListDeleted}
+              onError={onError}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+type Tab = 'agenda' | 'schedule' | 'lists' | 'grocery' | 'shopping' | 'notes' | 'reminders' | 'people'
+const TAB_KEYS: Tab[] = ['agenda', 'schedule', 'lists', 'grocery', 'shopping', 'notes', 'reminders', 'people']
+
+const LIST_TYPES = Object.entries(LIST_TYPE_META)
+  .filter(([key]) => key !== 'grocery' && key !== 'shopping')
+  .map(([key, m]) => ({ key, label: m.label, icon: m.icon }))
 
 export function AtlasPage() {
   const { user } = useAuth()
@@ -825,6 +910,11 @@ export function AtlasPage() {
   }, [loading, focusedListId, focusedItemId])
 
   const defaultAssignee = personIdForUser(people, user?.id)
+  // Grocery and Shopping now have their own dedicated tabs; the generic Lists tab keeps
+  // everything else (to-do, checklist, general, wishlist).
+  const otherLists = lists.filter(l => l.list_type !== 'grocery' && l.list_type !== 'shopping')
+  const groceryCount = lists.filter(l => l.list_type === 'grocery').length
+  const shoppingCount = lists.filter(l => l.list_type === 'shopping').length
 
   // Debounced Atlas-wide search.
   useEffect(() => {
@@ -887,7 +977,7 @@ export function AtlasPage() {
         />
       </div>
 
-      <CaptureBar lists={lists} onCapture={capture} />
+      <CaptureBar lists={otherLists} onCapture={capture} />
 
       <SearchField
         value={query}
@@ -904,7 +994,7 @@ export function AtlasPage() {
       )}
 
       {results !== null ? (
-        <SearchResults results={results} />
+        <SearchResults results={results} lists={lists} />
       ) : (
         <>
           {/* Tabs */}
@@ -912,7 +1002,9 @@ export function AtlasPage() {
             tabs={[
               { key: 'agenda', label: 'agenda' },
               { key: 'schedule', label: 'appointments & events' },
-              { key: 'lists', label: 'lists', badge: lists.length || undefined },
+              { key: 'lists', label: 'lists', badge: otherLists.length || undefined },
+              { key: 'grocery', label: 'grocery', badge: groceryCount || undefined },
+              { key: 'shopping', label: 'shopping', badge: shoppingCount || undefined },
               { key: 'notes', label: 'notes' },
               { key: 'reminders', label: 'reminders' },
               { key: 'people', label: 'people & birthdays' },
@@ -949,16 +1041,16 @@ export function AtlasPage() {
 
               {loading ? (
                 <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
-              ) : lists.length === 0 ? (
+              ) : otherLists.length === 0 ? (
                 <EmptyState
                   icon="🗒"
                   title="No lists yet"
-                  hint="Make a shared list for groceries, errands or anything else."
+                  hint="Make a shared list for errands, chores or anything else. Groceries and shopping have their own tabs."
                   action={<Button onClick={() => setCreatingList(true)}>Create your first list</Button>}
                 />
               ) : (
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                  {lists.map(list => (
+                  {otherLists.map(list => (
                     <ListCard
                       key={`${list.id}:${cardRefresh[list.id] ?? 0}`}
                       list={list}
@@ -972,6 +1064,25 @@ export function AtlasPage() {
                 </div>
               )}
             </div>
+          ) : tab === 'grocery' ? (
+            <GroceryTab
+              lists={lists}
+              people={people}
+              defaultAssignee={defaultAssignee}
+              focusedListId={focusedListId}
+              focusedItemId={focusedItemId}
+              onListCreated={list => setLists(prev => [list, ...prev])}
+              onListDeleted={id => setLists(prev => prev.filter(l => l.id !== id))}
+              onError={setError}
+            />
+          ) : tab === 'shopping' ? (
+            <ShoppingTab
+              lists={lists}
+              people={people}
+              onListCreated={list => setLists(prev => [list, ...prev])}
+              onListDeleted={id => setLists(prev => prev.filter(l => l.id !== id))}
+              onError={setError}
+            />
           ) : tab === 'notes' ? (
             <NotesTab key={`notes-${captureTick}`} onError={setError} />
           ) : tab === 'reminders' ? (

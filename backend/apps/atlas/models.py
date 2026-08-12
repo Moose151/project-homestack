@@ -90,12 +90,20 @@ class AtlasList(HouseholdBaseModel):
 class AtlasListItem(CalendarSyncMixin, HouseholdBaseModel):
     """An item within an AtlasList, optionally assigned and completable."""
 
+    class Priority(models.TextChoices):
+        LOW = "low", "Low"
+        MEDIUM = "medium", "Medium"
+        HIGH = "high", "High"
+
     atlas_list = models.ForeignKey(
         AtlasList, on_delete=models.CASCADE, related_name="items"
     )
     title = models.CharField(max_length=255)
     notes = models.TextField(blank=True, default="")
     quantity = models.CharField(max_length=50, blank=True, default="")  # grocery/shopping (e.g. "2", "500g")
+    # Blank means "not set" rather than a real priority — only the shopping-list UI surfaces
+    # this, so a todo/grocery/checklist item left blank never shows a fabricated priority.
+    priority = models.CharField(max_length=10, choices=Priority.choices, blank=True, default="")
     product_url = models.CharField(max_length=1000, blank=True, default="")
     source_image_url = models.CharField(max_length=1000, blank=True, default="")
     image_attachment = models.ForeignKey(

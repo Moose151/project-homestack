@@ -548,3 +548,22 @@ class AtlasListItemFieldTests(TestCase):
         self.assertEqual(body["quantity"], "2 L")
         self.assertIsNotNone(body["due_at"])
         self.assertEqual(body["atlas_list_id"], self.list.pk)
+
+    def test_priority_defaults_blank_and_is_settable(self):
+        item = create_list_item(self.admin, self.list, title="Vacuum cleaner")
+        self.assertEqual(item.priority, "")
+        url = reverse(
+            "atlas-list-item-detail", kwargs={"list_id": self.list.pk, "item_id": item.pk}
+        )
+        resp = self.client.patch(url, {"priority": "high"}, content_type="application/json")
+        self.assertEqual(resp.status_code, 200, resp.json())
+        self.assertEqual(resp.json()["priority"], "high")
+        item.refresh_from_db()
+        self.assertEqual(item.priority, "high")
+
+    def test_priority_rejects_unknown_value(self):
+        url = reverse("atlas-list-item-list", kwargs={"list_id": self.list.pk})
+        resp = self.client.post(
+            url, {"title": "Vacuum cleaner", "priority": "urgent"}, content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)

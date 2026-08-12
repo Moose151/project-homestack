@@ -33,7 +33,7 @@ class AtlasListItemSerializer(AssigneeSerializerMixin, serializers.ModelSerializ
     class Meta:
         model = AtlasListItem
         fields = [
-            "id", "atlas_list_id", "title", "notes", "quantity", "position", "due_at", "calendar_event_id",
+            "id", "atlas_list_id", "title", "notes", "quantity", "priority", "position", "due_at", "calendar_event_id",
             "product_url", "source_image_url", "cached_image_url", "image_attachment_id",
             "retailer", "unit_price", "currency", "imported_at",
             "price_watch", "cache_image", "price_watch_enabled",
@@ -88,7 +88,7 @@ class AtlasListItemWriteSerializer(AssigneeSerializerMixin, serializers.ModelSer
     class Meta:
         model = AtlasListItem
         fields = [
-            "title", "notes", "quantity", "position", "due_at", "assigned_to_person_ids",
+            "title", "notes", "quantity", "priority", "position", "due_at", "assigned_to_person_ids",
             "product_url", "source_image_url", "retailer", "unit_price", "currency",
             "cache_image", "price_watch_enabled",
         ]

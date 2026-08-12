@@ -1,7 +1,18 @@
 {
-  "current_version": "0.34.4",
-  "source_sha256": "057f112c36e584f356b795361ba8948283f9910c1e2a7e657c1d108d62a51535",
+  "current_version": "0.34.5",
+  "source_sha256": "2aa41907ce1f3aca7dc7698e0c97c9cb35ed3cbeba0a785fd5610ffca390c9d8",
   "releases": [
+    {
+      "version": "0.34.5",
+      "date": "2026-08-12",
+      "title": "Dedicated Grocery and Shopping tabs in Atlas",
+      "changes": [
+        "Atlas' generic Lists tab is split: Grocery and Shopping are now first-class tabs, and any existing lists of those types move there automatically (no data migration — the tab body just filters `list_type`). The Lists tab keeps to-do, checklist, general and wishlist.",
+        "**Grocery** stays deliberately simple (name, quantity, assignee) so a future Hearth/meal-planning pass can populate it from a meal plan's ingredient list without fighting shopping-only fields — the node spec already anticipated this handoff (`docs/11_Node_Atlas.md`).",
+        "**Shopping** gets the room-project shopping-list treatment: paste a link and \"Fill\" extracts title/price/image/shop through the existing safe link-import boundary, plus quantity, priority (low/medium/high, a high badge shown on the card) and an optional price-drop watch — the home for an ordinary household item (a vacuum cleaner) that isn't a room project or a personal wish.",
+        "Added `AtlasListItem.priority` (blank by default; only the Shopping UI sets it) — migration `atlas.0007`. Search results and quick-capture now route to the correct tab instead of a stale \"Lists\" link. **822 backend tests green (2 new); frontend typecheck and production build clean.**"
+      ]
+    },
     {
       "version": "0.34.4",
       "date": "2026-08-12",

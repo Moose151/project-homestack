@@ -53,6 +53,7 @@ export interface AtlasListItem {
   title: string
   notes: string
   quantity: string
+  priority: '' | 'low' | 'medium' | 'high'
   position: number
   due_at: string | null
   calendar_event_id: number | null

@@ -121,7 +121,7 @@ def update_list_item(acting_user: User, item: AtlasListItem, **data) -> AtlasLis
     cache_image = data.pop("cache_image", False)
     watch_enabled = data.pop("price_watch_enabled", None)
     allowed = {
-        "title", "notes", "quantity", "position", "due_at", "product_url",
+        "title", "notes", "quantity", "priority", "position", "due_at", "product_url",
         "source_image_url", "retailer", "unit_price", "currency",
     }
     for key, val in data.items():

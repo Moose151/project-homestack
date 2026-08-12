@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.34.4**
+> **Current version: 0.34.5**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,21 @@
 ---
 
 ## 0.34 — Discoverability and daily navigation
+
+### 0.34.5 — 2026-08-12 — Dedicated Grocery and Shopping tabs in Atlas
+- Atlas' generic Lists tab is split: Grocery and Shopping are now first-class tabs, and any
+  existing lists of those types move there automatically (no data migration — the tab body just
+  filters `list_type`). The Lists tab keeps to-do, checklist, general and wishlist.
+- **Grocery** stays deliberately simple (name, quantity, assignee) so a future Hearth/meal-planning
+  pass can populate it from a meal plan's ingredient list without fighting shopping-only fields —
+  the node spec already anticipated this handoff (`docs/11_Node_Atlas.md`).
+- **Shopping** gets the room-project shopping-list treatment: paste a link and "Fill" extracts
+  title/price/image/shop through the existing safe link-import boundary, plus quantity, priority
+  (low/medium/high, a high badge shown on the card) and an optional price-drop watch — the home
+  for an ordinary household item (a vacuum cleaner) that isn't a room project or a personal wish.
+- Added `AtlasListItem.priority` (blank by default; only the Shopping UI sets it) — migration
+  `atlas.0007`. Search results and quick-capture now route to the correct tab instead of a stale
+  "Lists" link. **822 backend tests green (2 new); frontend typecheck and production build clean.**
 
 ### 0.34.4 — 2026-08-12 — Household-timezone bill occurrences and a Solace performance pass
 - Fixed a real-use defect: bills due "today" in household-local time (e.g. a utility cost linked

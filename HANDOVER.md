@@ -441,10 +441,10 @@ list — the natural future home for a grocery list too.
 
 ## 6. Active tasks — real-use fixes and the next owner-requested features
 
-**Current state (2026-08-12):** v0.34.4 has 820 backend tests green, a clean frontend production
+**Current state (2026-08-12):** v0.34.5 has 822 backend tests green, a clean frontend production
 build and no migration drift. **Deploy, Solace cutover (manual entry, not import), Fitness and
 the partner acceptance pass are all done** — HomeStack is deployed on the home server and in
-daily use. The active work is now real-use fixes reported from that daily use, plus two
+daily use. The active work is now real-use fixes reported from that daily use, plus
 owner-requested features, in this order:
 
 1. **Solace performance pass — DONE (v0.34.4).** `SolaceBootstrapView` fanned out to ~14
@@ -462,18 +462,19 @@ owner-requested features, in this order:
    the same class of bug v0.29.7 fixed for pay-cycle/Now comparisons, but that pass missed the
    occurrence-generation engine itself. Fixed by reading `Bill.household.timezone` directly,
    independent of Django's active timezone.
-3. **Travel itinerary + trip type — NOT STARTED (owner request, 2026-08-12).** Add itinerary
+3. **General household Grocery + Shopping tabs — DONE (v0.34.5, owner request 2026-08-12).**
+   Split Atlas' generic Lists tab: **Grocery** is a dedicated tab kept deliberately simple
+   (name/quantity/assignee) so a future Hearth/meal-planning pass can populate it from a meal
+   plan's ingredient list, per the handoff the node spec already anticipated
+   (`docs/11_Node_Atlas.md`). **Shopping** is a dedicated tab with the room-project shopping-list
+   treatment: paste-a-link "Fill" import (reusing the existing safe link-import boundary),
+   quantity, a new `AtlasListItem.priority` field (low/medium/high, migration `atlas.0007`) and an
+   optional price-drop watch — the home for an ordinary household item (a vacuum cleaner) that
+   isn't a room project or a personal Corner wish. New `frontend/.../pages/atlas/ShoppingTab.tsx`.
+4. **Travel itinerary + trip type — NOT STARTED (owner request, 2026-08-12).** Add itinerary
    items to a Trip: each either assigned to a specific day of the trip or left as an unassigned
    "option to do". Add a Trip `trip_type` of day-trip vs multi-day-trip. See `docs/19_Node_Travel.md`
    for the existing Trip/component model before adding fields.
-4. **General household shopping list — NOT STARTED (owner request, 2026-08-12).** The owner
-   wants somewhere to put an ordinary household item (e.g. a vacuum cleaner) with a link/price
-   that is neither a personal Corner wish nor tied to a Homestead room project. Owner's own
-   answer: a general household shopping list — likely the same home a future grocery list would
-   use. Atlas already has list types `todo/grocery/shopping/checklist/general` (v0.7.2) and the
-   product-preview/link-import boundary already exists (v0.31.0, used by Corner wishes and
-   Homestead room plan products) — investigate wiring link/price capture onto an Atlas
-   `shopping`/`grocery` list item before inventing a new model.
 
 **Deferred / on hold, not active work right now:**
 - Pool-care band verification against the pool shop's guidance — blocked until the household
@@ -702,6 +703,7 @@ Backend tests run on SQLite; prod/dev is Postgres — guard Postgres-only featur
 | 2026-08-11 | Assistant | Acceptance fixes | **Trip deletion, linked My Corner resolution and book-club layout fixed as v0.34.2.** Added a confirmed Delete action to trip detail using the existing protected Travel endpoint. Corrected the People read contract from `linked_user` to documented `linked_user_id`, which lets My Corner recognise an already-linked login and restores linked-user consumers such as Travel surprise selection. Reflowed Book club settings so the shared 24-swatch colour picker uses the card width rather than a five-rem column. Added the People API regression. **817 backend tests green; frontend production build clean; no migration drift.** | Rebuild both images and hard-refresh. Open Nick's My Corner, delete the test trip from its detail page, and check Book clubs on phone and desktop. |
 | 2026-08-11 | Assistant | Books UX | **Book-club settings made dismissible as v0.34.3.** Club name, colour and member management are collapsed by default behind Edit club, have an explicit Close action and collapse when the selected club changes. **Frontend production build clean; backend unchanged; no migration.** | Rebuild the frontend and hard-refresh; confirm Edit club/Close on phone and desktop. |
 | 2026-08-12 | Assistant | Real-use fixes | **Status correction + Solace timezone/performance fixes shipped as v0.34.4 (owner report from live daily use).** HomeStack is deployed on the home server and in daily use; the owner started Solace from bills entered manually rather than via `import_solace`, and Fitness/partner acceptance are both done — corrected §5/§6 accordingly, which had gone stale describing an undeployed app. **Bug fix:** bills due "today" in household-local time (e.g. Homestead-linked utility costs) could silently not appear in Money → Now. `apps/solace/bill_schedule.py` (plus `forecast.py`/`tasks.py`) compared occurrence windows against Django's active timezone, which stays UTC inside Docker since nothing activates a request-local one — the same class of bug v0.29.7 fixed for pay-cycle/Now comparisons, but that pass missed the occurrence-generation engine itself (the existing Brisbane-timezone tests all happened to wrap themselves in `timezone.override`, masking the gap). Added `bill_schedule.household_timezone(household)` and read it directly from `Bill.household`/the caller everywhere date math happens. **Performance fix:** diagnosed why Solace "takes a few seconds to load" — `SolaceBootstrapView` fans out to ~14 sub-views per request, and four of them (Bills, Health, Cycle closeout, Forecast) each independently re-ran full per-bill occurrence reconciliation over heavily overlapping windows (up to 4x redundant delete/diff/bulk-create work per bill per page load). Added a request-scoped cache (`_ensure_bills_reconciled` in `views.py`) that reconciles each bill's widest requested window once per request; narrower calls from other sub-views become no-ops. Regenerated the stale `versionHistory.json` manifest. **820 backend tests green (3 new); no migration; no frontend change.** Also retired a stale memory entry ("revisit Atlas + Hub after Meridian") that had already been resolved back in M2.5 (2026-06-25) but was still surfacing in project memory. | Owner-requested and queued, in this order: (1) done — Solace performance + Now timezone; (2) Travel itinerary (day-assignable or unassigned "option to do" items) + day-trip/multi-day-trip type on Trips; (3) a general (non-personal, non-room) household shopping list, likely the future grocery-list home too — Atlas already has `shopping`/`grocery` list types (v0.7.2) and the link/price preview boundary already exists (v0.31.0); investigate wiring it onto an Atlas list item before inventing a new model. HTTPS + phone push notifications ("needs to be sorted soon") remain the gate before Home Assistant M5.5. |
+| 2026-08-12 | Assistant | Atlas | **Dedicated Grocery and Shopping tabs shipped as v0.34.5 (owner request — Atlas work prioritised ahead of Travel itinerary).** Split Atlas' generic Lists tab: existing/new `grocery`- and `shopping`-typed lists now render under their own tabs (client-side filter by `list_type`, no data migration needed) instead of being mixed into the generic Lists tab, which now keeps to-do/checklist/general/wishlist. **Grocery** stays deliberately simple (name/quantity/assignee, reusing the existing `ListCard`) so a future Hearth/meal-planning pass can populate it from a meal plan's ingredient list, matching the handoff `docs/11_Node_Atlas.md` already anticipated. **Shopping** gets the room-project shopping-list treatment in a new `pages/atlas/ShoppingTab.tsx`: paste-a-link "Fill" import through the existing safe link-import boundary (`api.previewProductLink`, already used by Corners/Homestead room products), image, shop, price, quantity, a new `AtlasListItem.priority` field (low/medium/high, blank by default, migration `atlas.0007`; only the Shopping UI sets it) with a high-priority badge, inline edit and an optional price-drop watch. Search results and quick-capture's todo-list picker now exclude/route around grocery+shopping so links don't land on a tab that no longer shows the match. **822 backend tests green (2 new); frontend typecheck and production build clean; migration applied to the live dev database.** Not yet verified in a live browser (no browser tool available this session) — worth a click-through before relying on it daily. | Give the new tabs a look in-browser. Then continue the owner's queue: Travel itinerary (day-assignable or unassigned "option to do" items) + day-trip/multi-day-trip type on Trips. HTTPS + phone push notifications ("needs to be sorted soon") remain the gate before Home Assistant M5.5. |
 
 ### Session notes (free-form, optional)
 
