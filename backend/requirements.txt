@@ -6,3 +6,10 @@ psycopg[binary]==3.2.1
 python-dateutil==2.9.0.post0
 openpyxl==3.1.5
 pywebpush==2.0.1
+
+# Production serving. gunicorn replaces `runserver` in the production container
+# (config.settings.prod); whitenoise serves the collected /static/ files — mainly Django admin's
+# own CSS/JS, which stops being auto-served once DEBUG=False. Neither is used by the development
+# override, which still runs `runserver` with Django's own static handling.
+gunicorn==22.0.0
+whitenoise==6.7.0

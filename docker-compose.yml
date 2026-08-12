@@ -1,8 +1,16 @@
-# HomeStack — base stack (Milestone 1, Phase 1.0).
+# HomeStack — production stack. This is what the live home server runs.
+#
+#   docker compose up -d --build          production (gunicorn + built React served by nginx)
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build   development
+#
 # THREE services only: postgres, backend, frontend. LAN-trusted HTTPS is handled by the
-# already-running Nginx Proxy Manager + Pi-hole outside this compose file (Security doc §14) —
-# see .env.example for the DJANGO_ALLOWED_HOSTS/CSRF_TRUSTED_ORIGINS wiring it needs.
-# No Redis/Celery yet — deliberately deferred until a feature needs them (D5).
+# already-running Nginx Proxy Manager + Pi-hole outside this compose file (Security doc §13) —
+# NPM routes /api/ to the backend and everything else to the frontend. No TLS terminates here.
+# No Redis/Celery (D5).
+#
+# Host port publication is unchanged from the pre-production-serving stack on purpose. Reducing
+# exposed ports is a separate, later change (docs/34_Recommended_Next_Steps.md §4) so that this
+# one can be rolled back without touching NPM.
 
 services:
   homestack-postgres:
@@ -27,6 +35,11 @@ services:
     build: ./backend
     container_name: homestack-backend
     env_file: .env
+    environment:
+      # Pinned here, not in .env, so a development value left in the live environment file cannot
+      # silently put the production server back on development settings. The development override
+      # sets it back to config.settings.dev.
+      DJANGO_SETTINGS_MODULE: config.settings.prod
     volumes:
       - media_data:/app/media
       - backup_data:/app/backups
@@ -35,14 +48,28 @@ services:
     depends_on:
       homestack-postgres:
         condition: service_healthy
+    healthcheck:
+      # No curl in python:slim; urllib is already there. prod settings always allow 127.0.0.1.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/', timeout=5).status == 200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
 
   homestack-frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      target: production
     container_name: homestack-frontend
-    env_file: .env
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5173/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     depends_on:
       - homestack-backend
     restart: unless-stopped

@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.34.14**
+> **Current version: 0.35.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,58 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.35 — Production readiness and reliability
+
+### 0.35.0 — 2026-08-12 — Production application serving (docs/35)
+- HomeStack stops running development servers in production. The backend runs **gunicorn**
+  (`config.wsgi:application`, threaded workers sized for one household, logs still on stdout for
+  `docker logs`), and the frontend is a **production Vite build served by nginx** instead of
+  `npm run dev`. `runserver` and the Vite dev server now exist only in the development override —
+  which keeps bind-mounted hot reload, so no developer rebuilds a production image to edit a
+  component.
+- **`docker-compose.yml` is now the production stack**, with `docker-compose.dev.yml` as the
+  development override. The live server's existing `docker compose up -d` therefore keeps working
+  and now means production. `DJANGO_SETTINGS_MODULE` is pinned in each file's `environment:`
+  block, which outranks `.env` — a stale development value in the live environment file can no
+  longer put production on development settings.
+- The frontend nginx serves **SPA fallback** (a refresh on `/calendar`, `/books`,
+  `/settings/notifications`, `/homestead/...` returns the app, not a 404), `/sw.js` as `no-cache`
+  so a deploy cannot leave a stale service worker handling push, `/manifest.json` as
+  `application/manifest+json`, hashed `/assets/` immutable for a year and `index.html` `no-store`.
+  It deliberately does **not** proxy `/api/` — that stays Nginx Proxy Manager's job — and answers
+  `/api/` with a clear 404 so a misrouted proxy is obvious instead of returning HTML to a caller
+  expecting JSON. It listens on the port the Vite dev server used, so **NPM needs no changes**.
+- **WhiteNoise** serves Django's static files, collected at image build time, so admin stays
+  styled under `DEBUG=False` without a second static-serving architecture. It serves `STATIC_ROOT`
+  only; uploads stay behind the permission-checked attachment path (D11).
+- Production settings verified rather than assumed, and now derive `https://<public hostname>`
+  into both `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` so those need no hand-maintained `.env`
+  entries. New production-only deployment system checks (`apps/core/checks.py`) fail
+  `manage.py migrate` — already part of every deployment — on a placeholder secret key,
+  loopback-only allowed hosts or `DEBUG` enabled. Gunicorn does not run system checks, so a stale
+  value surfaces at deploy time instead of crash-looping a live container.
+- Two defects were found by testing the running containers rather than reading config, and fixed:
+  nginx's `add_header` inheritance was silently dropping every security header on the locations
+  that set their own `Cache-Control`, and `/manifest.json` was being served as `application/json`
+  off its file extension. A third assumption was corrected outright — an empty
+  `CSRF_TRUSTED_ORIGINS` was initially treated as a fatal error, but a real gunicorn container
+  behind a TLS proxy showed writes succeed anyway, because Django accepts the origin it derives
+  from `Host` plus `X-Forwarded-Proto`. Treating it as fatal would have blocked a working
+  deployment, so it is a warning.
+- Validated end to end against a self-signed TLS proxy reproducing the live NPM topology: HTTPS
+  login, `Secure; HttpOnly; SameSite=Lax` session cookie, an authenticated Atlas write, rejection
+  of a foreign-origin write, sensitive-node re-authentication still demanded, logout, deep-link
+  refresh, service worker and PWA assets, and Django admin assets. Both Compose profiles were
+  built and run.
+- **908 backend tests, 907 green (17 new); frontend `tsc` and production build clean; both Docker
+  images build; no new migrations.** The one error is the pre-existing
+  `attachments.test_storage_path_is_not_served_as_public_media`, which fails identically on
+  unmodified `main` under the local Python 3.14 toolchain and is unrelated to this change.
+- Deliberately **not** included: published-port reduction, Docker network redesign, CI, or any
+  public exposure. Ports and NPM configuration are untouched so this can be rolled back by
+  rebuilding the previous commit. Deployment, smoke-test and rollback procedures are in
+  `docs/35_Production_Serving_and_Deployment.md`.
 
 ## 0.34 — Discoverability and daily navigation
 

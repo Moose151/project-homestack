@@ -15,9 +15,9 @@ use. The next phase should make the application **dependable as household infras
 
 Recommended sequence:
 
-1. **Deploy and validate the completed Web Push work on the live server.**
-2. **Production-serving and deployment hardening — primary engineering phase.**
-3. **Tighten container/network exposure.**
+1. ~~**Deploy and validate the completed Web Push work on the live server.**~~ — done, live.
+2. ~~**Production-serving and deployment hardening.**~~ — done, v0.35.0 (§3).
+3. **Tighten container/network exposure — current phase.**
 4. **Automate deployment and smoke validation.**
 5. **Add frontend/E2E testing and CI.**
 6. **Strengthen backup/recovery and operational health.**
@@ -68,10 +68,18 @@ Exact commands are in `HANDOVER.md`.
 
 ---
 
-## 3. Start here — production serving
+## 3. Production serving — **completed (v0.35.0)**
 
-The live deployment still uses Django `runserver` and the Vite development server. This is the
-first engineering issue to remove.
+> Implemented and validated locally; canonical detail now lives in
+> `35_Production_Serving_and_Deployment.md`, which also carries the deployment, smoke-test and
+> rollback procedures. The section below is retained as the original plan and its outcome.
+>
+> Delivered: gunicorn for Django; `npm ci` + `npm run build` served from nginx with SPA fallback;
+> WhiteNoise for Django admin static; production/development Compose separation with
+> `DJANGO_SETTINGS_MODULE` pinned per profile; production deployment system checks.
+>
+> Deliberately unchanged: published host ports and Nginx Proxy Manager configuration, so the
+> change can be rolled back by rebuilding the previous commit. **§4 below is now the next step.**
 
 Target shape:
 
@@ -352,14 +360,15 @@ COMPLETED
   Web Push / PWA implementation
         |
         v
-LIVE ROLLOUT
+COMPLETED — LIVE ROLLOUT
   VAPID + migrations + hourly dispatcher + real-device validation
         |
         v
-CURRENT ENGINEERING PHASE
+COMPLETED (v0.35.0)
   Production Django + production frontend
         |
         v
+CURRENT ENGINEERING PHASE
   Tighter Docker networking
         |
         v

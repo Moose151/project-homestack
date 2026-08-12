@@ -231,14 +231,36 @@ Confirmed during HTTPS rollout:
 
 - local DNS resolution to `192.168.1.125`;
 - valid Let's Encrypt certificate;
-- frontend HTTP 200 through the HTTPS hostname after Vite `allowedHosts` configuration;
+- frontend HTTP 200 through the HTTPS hostname;
 - `/api/v1/health/` HTTP 200 through the HTTPS hostname.
+
+### 13.1 Production serving (v0.35.0)
+
+The live path is gunicorn for Django and a built React bundle served by nginx; NPM's routing and
+the published ports are unchanged. `35_Production_Serving_and_Deployment.md` is canonical.
+
+Security-relevant properties, verified against a running gunicorn container behind a TLS proxy
+rather than assumed:
+
+- `DEBUG=False` is hardcoded in production settings and cannot be re-enabled from `.env`;
+- the session cookie is issued `HttpOnly; SameSite=Lax; Secure`;
+- `SECURE_PROXY_SSL_HEADER` makes Django treat proxied requests as secure, so secure cookies are
+  actually sent;
+- a same-origin authenticated write succeeds; a write carrying a foreign `Origin` is rejected;
+- sensitive-node password re-authentication is still demanded after the change;
+- logout invalidates the session;
+- WhiteNoise serves `STATIC_ROOT` only — uploads remain behind the permission-checked attachment
+  download path (D11) and gain no static URL;
+- gunicorn keeps its default `forwarded_allow_ips`, so it does not trust `X-Forwarded-*` from
+  arbitrary LAN addresses;
+- production deployment checks (`apps/core/checks.py`) fail `manage.py migrate` on a placeholder
+  secret key, loopback-only allowed hosts, or `DEBUG` enabled.
 
 Still verify/retain as deployment hygiene:
 
-- real login plus at least one state-changing request over HTTPS;
-- production secure-cookie/proxy settings when the live server moves to production serving;
-- no accidental public router forwarding.
+- repeat real login plus a state-changing request over HTTPS after each deployment;
+- no accidental public router forwarding;
+- no Content-Security-Policy on the frontend yet.
 
 ## 14. Public/remote access gate
 
@@ -254,7 +276,8 @@ Do not approve public exposure until all of the following are satisfied and revi
 - [x] audit coverage for sensitive/admin operations;
 - [x] tested local backup/restore capability;
 - [x] Web Push sensitive-source lock-screen protection;
-- [ ] production application serving (no Django `runserver` / Vite dev server as live path);
+- [x] production application serving (gunicorn + built static frontend; no `runserver` / Vite dev
+      server in the live path — `35_Production_Serving_and_Deployment.md`);
 - [ ] unnecessary direct host/container ports removed/restricted;
 - [ ] secure-cookie/proxy production settings verified live;
 - [ ] brute-force/rate-limit protections reviewed for login/re-auth endpoints;

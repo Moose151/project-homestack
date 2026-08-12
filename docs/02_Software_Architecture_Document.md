@@ -31,10 +31,11 @@ Primary rules:
 `homestack.moosesoftwares.com` through the existing Nginx Proxy Manager and Pi-hole local DNS.
 Public internet exposure is not enabled.
 
-**Current live-serving caveat:** the container definitions still launch Django `runserver` and the
-Vite development server. A production-serving profile (production WSGI + built/static frontend)
-and tighter private container networking are the current recommended engineering work, not a
-reason to redesign the application architecture.
+**Live serving:** the base Compose file is the production stack — gunicorn for Django, a built
+React bundle served by nginx, and WhiteNoise for Django's own static files. `runserver` and the
+Vite dev server exist only in the development override. Tighter private container networking is
+the remaining recommended engineering work, not a reason to redesign the application architecture.
+See `35_Production_Serving_and_Deployment.md`.
 
 **Background jobs:** scheduled Django management commands/host scheduling. The shipped notification
 system follows this pattern with the idempotent `notifications_run_scheduled` command. Redis/Celery
@@ -263,8 +264,9 @@ Domain pages/components should:
 - keep route/query state stable enough for deep links from Calendar/Search/Corners/notifications.
 
 The shipped service-worker/PWA path adds background notification delivery but does not create a
-second client-side source of truth. The current Vite dev server remains a development tool; the
-production profile should build static assets and serve them without relying on Vite dev serving.
+second client-side source of truth. The Vite dev server is a development tool only; production
+serves a built bundle from nginx with SPA fallback, so a refreshed deep link still returns the
+application.
 
 ## 13. API architecture
 
@@ -299,8 +301,9 @@ LAN client
   -> Pi-hole: homestack.moosesoftwares.com -> 192.168.1.125
   -> Nginx Proxy Manager :443
        Let's Encrypt certificate via Cloudflare DNS challenge
-  -> HomeStack frontend/backend containers
-  -> PostgreSQL
+       |
+       +-- /api/*  -> homestack-backend   gunicorn -> Django -> PostgreSQL
+       +-- /*      -> homestack-frontend  nginx -> built React bundle
 ```
 
 HomeStack itself does not manage the Cloudflare DNS token; NPM owns that certificate credential.
@@ -315,15 +318,17 @@ Redis/Celery or a new service architecture. See `32_Core_Notifications_and_Push.
 
 ### 15.2 Near-term deployment hardening
 
-The architecture target is:
+Done in v0.35.0:
 
-- production WSGI server for Django;
-- built/static frontend instead of Vite dev server;
+- production WSGI server for Django (gunicorn);
+- built/static frontend instead of the Vite dev server;
+- a development override retaining hot reload and direct development ports.
+
+Still outstanding:
+
 - private Docker network between NPM/application/database where practical;
 - PostgreSQL not exposed directly to the LAN;
 - one supported deploy command that builds, migrates, restarts and smoke-tests safely.
-
-Keep a development profile/override for hot reload and direct development ports.
 
 ## 16. Backups and restore (D17)
 

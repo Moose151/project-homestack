@@ -50,10 +50,16 @@ Current HomeStack services are:
 - `homestack-backend` — Django/DRF.
 - `homestack-frontend` — React/TypeScript/Vite.
 
-The current base stack still runs Django `runserver` and the Vite development server. This is the
-main production-readiness issue now that Web Push is shipped. The next engineering phase should
-replace those development servers with a production WSGI/static frontend path and tighten container
-network exposure.
+The base Compose file is the **production** stack: the backend runs **gunicorn** and the frontend
+serves a **built React bundle from nginx**. Django `runserver` and the Vite dev server now exist
+only in `docker-compose.dev.yml`. Django's static files are collected at image build time and
+served by WhiteNoise, so admin stays styled under `DEBUG=False`.
+
+`docs/35_Production_Serving_and_Deployment.md` is canonical for how this is served, deployed,
+smoke-tested and rolled back.
+
+The remaining production-readiness work is container/network exposure — published ports are
+deliberately unchanged for now — plus a single supported deploy command and CI.
 
 ### Live HTTPS environment
 
@@ -65,9 +71,12 @@ DJANGO_ALLOWED_HOSTS=...,192.168.1.125,homestack.moosesoftwares.com
 DJANGO_CSRF_TRUSTED_ORIGINS=https://homestack.moosesoftwares.com
 ```
 
-`config.settings.prod` is the recommended live setting module because it already contains the
-secure-proxy/cookie behaviour expected behind NPM. Confirm the actual live value before assuming
-that switch has happened.
+`config.settings.prod` is now **pinned by `docker-compose.yml`** in the backend service's
+`environment:` block, which takes precedence over `.env`. A stale `DJANGO_SETTINGS_MODULE` in the
+live environment file can no longer put production on development settings.
+
+Production settings derive `https://$HOMESTACK_PUBLIC_HOSTNAME` into both `ALLOWED_HOSTS` and
+`CSRF_TRUSTED_ORIGINS`, so those entries no longer have to be maintained by hand.
 
 ---
 
@@ -104,6 +113,7 @@ Important newer/current specs:
 - `32_Core_Notifications_and_Push.md` — shipped notification/PWA contract.
 - `33_Node_Books.md` — shipped Books domain.
 - `34_Recommended_Next_Steps.md` — practical production-readiness/reliability plan.
+- `35_Production_Serving_and_Deployment.md` — how production is served, deployed and rolled back.
 
 `VERSION_HISTORY.md` is the release chronology. Do not duplicate that history here.
 
@@ -154,9 +164,12 @@ Major shipped areas include:
 - **PWA/Web Push notifications (v0.34.10–v0.34.13)** — preferences, per-device subscriptions,
   VAPID delivery, quiet hours, household-activity bundling, fixed 24h/morning reminders,
   countdown digest, sensitive-safe push gating and service-worker/PWA support.
+- **Production serving (v0.35.0)** — gunicorn, a built React bundle on nginx with SPA fallback,
+  WhiteNoise static/admin handling, verified production settings and an explicit dev/prod Compose
+  split. See `docs/35_Production_Serving_and_Deployment.md`.
 
-The completed notification branch reported **875 backend tests green** and a clean frontend
-TypeScript check. Live deployment/device validation is still required below.
+Web Push is live and validated on real devices; VAPID and the hourly `notifications_run_scheduled`
+job are configured on the server.
 
 ---
 
@@ -168,7 +181,7 @@ Use `docs/34_Recommended_Next_Steps.md` for the practical plan and
 
 Recommended order:
 
-1. replace Django `runserver` and Vite dev serving with production serving;
+1. ~~replace Django `runserver` and Vite dev serving with production serving~~ — **done, v0.35.0**;
 2. reduce unnecessary LAN-exposed database/backend/frontend ports;
 3. create one supported deploy command with migration + smoke validation;
 4. add frontend unit/E2E testing and CI;
@@ -261,7 +274,8 @@ Before treating the live rollout as fully verified:
 
 ## 8. General deployment workflow
 
-The home server uses **Docker**, not Podman.
+The home server uses **Docker**, not Podman. Plain `docker compose` is the **production** stack;
+development needs the explicit override (see §2 and `docs/35_Production_Serving_and_Deployment.md`).
 
 After pulling code that changes baked images:
 
@@ -269,6 +283,9 @@ After pulling code that changes baked images:
 docker compose build homestack-backend homestack-frontend
 docker compose up -d
 ```
+
+Both images now bake application source *and build artefacts* — the frontend bundle and Django's
+collected static files. A `git pull` alone changes neither; always rebuild.
 
 After any deployment that may include migrations:
 
@@ -295,10 +312,14 @@ Before risky migrations/data changes, take or verify a backup according to `docs
 
 ## 9. Known deployment/security follow-ups
 
-- Confirm the live server is actually using the intended production Django settings.
-- Confirm a real authenticated **write** over the trusted HTTPS origin, not only health checks.
-- Complete the Web Push VAPID/cron/real-device rollout above.
-- Solve production static/admin assets as part of the production-serving work.
+- Reduce LAN-exposed database/backend/frontend ports — deliberately unchanged by v0.35.0 so that
+  the production-serving change could be rolled back without touching Nginx Proxy Manager.
+- Django admin is reachable only on the backend port: NPM routes just `/api/` to the backend, so
+  `/admin/` falls through to the SPA. Its assets are correct; reaching it over HTTPS needs two
+  optional NPM locations (`docs/35_Production_Serving_and_Deployment.md` §10). Note that secure
+  cookies mean admin login over plain HTTP will not work, and turning them off is not an
+  acceptable workaround.
+- No Content-Security-Policy on the frontend yet; it needs authoring against the real bundle.
 - HomeStack remains LAN-only; do not add router port forwarding as a shortcut.
 - If remote access is pursued, follow `05_Security_Architecture_Document.md` rather than assuming
   HTTPS alone makes the app internet-ready.
