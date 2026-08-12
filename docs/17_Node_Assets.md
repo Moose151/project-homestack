@@ -1,76 +1,199 @@
-# Node Spec — Assets
+# Capability Spec — Assets & Vehicles (former Assets plan)
 
-> Canonical feature scope. **Recommended as an optional Homestead → Assets & vehicles capability,
-> not a separate top-level node** (owner discussion, 2026-08-11). Home appliances/warranties are
-> already implemented in Homestead under D21. See `31_Core_Manage_HomeStack.md`.
+> **Status:** future proposal, not implemented as a current top-level node. Home appliances,
+> warranties, rooms and home maintenance already belong to Homestead (D21). The preferred future
+> direction is an optional **Homestead → Assets & vehicles** capability for remaining non-home
+> asset/vehicle scope, if real household use justifies it.
 
-## 1. Purpose & philosophy
+## 1. Purpose
 
-Manages household assets, valuables, vehicles, appliances, warranties, service records and
-maintenance reminders — consolidating several would-be nodes into one domain. Answers: *"What
-do we own, what needs maintaining, and what records do we need for it?"* Replaces separate
-Vehicles, Warranties, Appliances, Tools and Home-Maintenance nodes.
+Assets & vehicles would answer:
 
-## 2. Asset types
+- What significant non-home items/vehicles do we own?
+- What identifying/warranty/service records matter?
+- What maintenance/registration/insurance action is due?
 
-vehicle · appliance · electronics · tool · furniture · outdoor/garden · camping · home_system ·
-other. Vehicle-specific fields appear only when `asset_type = vehicle`.
+It should not duplicate Homestead's existing home appliance/property records simply to create a
+more generic asset catalogue.
 
-## 3. Belongs / does not belong
+## 2. Ownership boundaries
 
-**Belongs:** car registration/service/insurance; appliance warranties; serial numbers; manuals;
-receipts; service reminders; smoke-alarm replacement; camping gear details.
-**Not:** consumable stock → Inventory; general notes → Atlas/Home Wiki; project work →
-Projects; financial planning → Solace; sensitive human-health equipment → Health.
+### Already owned by Homestead
 
-## 4. Key features
+Do not recreate these in Assets:
 
-**Asset profile** — name, type, category, brand, model, serial number, purchase date, purchase
-price (optional), warranty expiry, location, notes, photo, attachments; `visibility`.
-**Maintenance** — type, `due_at`, `recurrence_rule`, `last_done_at`, provider, cost (optional),
-notes, `calendar_event_id`.
-**Documents** — receipt, manual, warranty, insurance, registration, service report (via shared
-attachments).
-**Vehicle details** (vehicles only) — registration number, registration/insurance due dates,
-VIN, odometer, service interval, tyre details.
+- home appliances;
+- home-system equipment;
+- appliance warranty/manual/serial context;
+- room/property association;
+- ordinary home maintenance;
+- home service providers;
+- household cover/cost context already modelled by Homestead/Solace.
 
-## 5. Permissions (sensitive)
+### Potential Assets & vehicles ownership
 
-Role-based visibility. General assets may be household-visible; vehicles and expensive/financial
-assets manager/admin only; **children don't see Assets by default**. Registration, VIN,
-insurance, serials and receipts are treated as sensitive (Security doc §11).
+- vehicles;
+- tools;
+- electronics/valuable equipment not naturally Homestead room/appliance records;
+- camping/outdoor equipment where structured ownership/service detail is useful;
+- registration/service/insurance context for vehicles;
+- serial/VIN/identifying information;
+- non-home warranty/service history;
+- protected related documents.
 
-## 6. Hub / Calendar / Notifications
+### Belongs elsewhere
 
-Widgets: maintenance due · warranty expiring · vehicle registration due · insurance renewal ·
-recently added. Calendar (via helper): registration, insurance, warranty expiry, scheduled
-service, maintenance, smoke-alarm checks, filter replacement; `recurrence_rule`.
-Notifications: upcoming maintenance · warranty expiry · registration · insurance · service
-overdue.
+- consumables/stock → future Stock & storage capability;
+- ordinary shopping wish → Atlas Shopping/Corner;
+- finance/payment schedule → Solace;
+- project work → existing owning domain, with Projects still evidence-gated;
+- medical equipment/records needing medical privacy → Health;
+- binary files → shared Attachments.
 
-## 7. Events (signals)
+## 3. Capability position
 
-Publishes: `asset_created`, `asset_warranty_expiring`, `asset_maintenance_due`,
-`vehicle_registration_due`, `asset_document_added`.
-Consumes: `attachment_uploaded`, `project_completed`, `inventory_item_used`.
-Example: receipt uploaded → Assets links it to an asset → warranty reminder created. Also:
-`asset_manual_added` lets Home Wiki link the manual to a reference page.
+If implemented, Assets & vehicles should normally appear inside Homestead/Manage HomeStack as an
+optional protected capability rather than another top-level navigation item.
 
-## 8. Search / Kiosk
+This is a presentation/product direction, not permission to reuse Homestead appliance rows for
+vehicles indiscriminately. The data model should preserve clear type-specific fields and security.
 
-FTS over asset names, serials, models, warranty info, service notes, document metadata —
-permission-enforced. Not a primary kiosk node; kiosk may show safe maintenance reminders only;
-children never see vehicles/warranties/purchase details by default.
+Do not build a separate Assets node now and assume later consolidation will be free; the preferred
+direction should be respected from the first implementation.
 
-## 9. Data model
+## 4. Candidate records
 
-`assets`, `asset_maintenance_records` (`recurrence_rule`, `calendar_event_id`),
-`asset_documents`, `vehicle_details` (vehicles only). Inherit `HouseholdBaseModel`.
+Only add models when the capability is approved.
 
-## 10. Scope & completion
+### Asset / Vehicle
 
-Initial: asset profiles · types · attachments · warranty expiry · maintenance reminders ·
-vehicle registration/service reminders · calendar integration · Hub widget · basic permissions.
-Complete when users create assets, attach documents, track warranty/maintenance dates, and see
-reminders on Hub and Calendar. Future: cost tracking, provider list, odometer-based reminders,
-QR labels, depreciation, maintenance templates, warranty-claim/insurance trackers.
+Potential common fields:
+
+- name/type/category;
+- brand/model;
+- serial/identifier;
+- purchase date/value context where useful;
+- location;
+- notes;
+- image/attachments;
+- visibility/sensitivity.
+
+Vehicle-specific fields can include:
+
+- registration;
+- VIN;
+- registration/insurance due dates;
+- odometer/service interval;
+- tyre/service notes.
+
+Avoid a sparse universal table full of irrelevant nullable fields if actual vehicle/tool workflows
+need cleaner subtype models.
+
+### Maintenance / service history
+
+Potential fields:
+
+- owning asset/vehicle;
+- service/maintenance type;
+- due date/recurrence;
+- last-completed/service date;
+- provider;
+- notes;
+- optional cost context;
+- Calendar projection where meaningful.
+
+## 5. Permissions and sensitivity
+
+This capability is more sensitive than ordinary household lists.
+
+Examples requiring stronger access consideration:
+
+- VIN/registration identifiers;
+- insurance/policy information;
+- expensive asset serials/receipts;
+- purchase-value/history;
+- protected documents.
+
+Children should not see this capability by default. General household members may receive only the
+safe maintenance reminder/detail their permission allows.
+
+Do not assume that placing it visually under Homestead makes every field household-visible.
+
+## 6. Calendar / notifications
+
+Meaningful owner dates can project through the shared scheduling helper:
+
+- registration renewal;
+- insurance renewal;
+- scheduled service;
+- warranty expiry;
+- recurring maintenance.
+
+Notifications use the shared Notifications/Web Push system and must avoid exposing protected
+identifiers/financial detail on lock screens.
+
+## 7. Hub and Search
+
+Potential Hub summaries:
+
+- maintenance due;
+- warranty/registration/insurance expiry;
+- vehicle service overdue.
+
+Search should be permission-aware, particularly for serial/VIN/registration/document metadata.
+
+Neither Hub nor Search becomes an easier route to protected asset information.
+
+## 8. Attachments
+
+Receipts, manuals, warranties, insurance/registration documents and service reports use the shared
+protected attachment service.
+
+A file's raw storage path is never authorization.
+
+Home Wiki may link to a safe manual/reference page, but the structured asset record remains owned by
+this capability/Homestead boundary.
+
+## 9. Events and cross-domain relationships
+
+Use D4/shared services rather than model imports.
+
+Possible future interactions:
+
+- maintenance completed → publish an asset/vehicle event;
+- Solace → link financial budget/bill context without Assets owning payment history;
+- future Projects → reference a vehicle/asset if a real project workflow later exists;
+- Home Assistant → selected status only where the dedicated HA bridge owns that integration.
+
+## 10. Mobile / kiosk
+
+Responsive web/mobile should prioritize quick access to service/registration/warranty information
+and history.
+
+This is not a primary kiosk/child domain. A safe maintenance reminder may surface through Hub/
+Calendar, but detailed vehicle/value/identifier screens remain restricted.
+
+## 11. Future enhancements
+
+Only after a useful basic capability exists:
+
+- odometer-driven maintenance;
+- QR labels;
+- warranty claims;
+- depreciation/reporting;
+- richer insurance tracking;
+- maintenance templates;
+- cost-of-ownership analysis.
+
+Finance analysis should still use/coordinate with Solace rather than silently create a second
+budget ledger.
+
+## 12. Implementation gate
+
+Do not implement because an early HomeStack plan contained an Assets node. Implement only when the
+household has enough non-home vehicle/tool/valuable-item workflows that Homestead's existing home
+records and Atlas notes are insufficient.
+
+If approved, completion means the household can manage the selected non-home assets/vehicles,
+protect identifiers/documents, track meaningful due dates and surface safe reminders—without
+recreating Homestead's already-owned home-appliance/warranty data.
