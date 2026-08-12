@@ -18,7 +18,7 @@ than duplicated here. `HANDOVER.md` describes only current operating/development
 | `01_Master_Software_Specification.md` | What HomeStack is, current node model and stable product boundaries. |
 | `04_Development_Roadmap.md` | Current sequencing, gates and genuinely future milestones. |
 | `05_Security_Architecture_Document.md` | Authoritative authentication, permission, sensitivity, HTTPS and remote-access contract. |
-| `34_Recommended_Next_Steps.md` | Practical recommended execution plan: finish Web Push, then production serving, deployment/network hardening, CI, backups and stronger operational readiness before major new feature expansion. |
+| `34_Recommended_Next_Steps.md` | Practical recommended execution plan: production serving, deployment/network hardening, CI, backups and stronger operational readiness before major new feature expansion. |
 | `VERSION_HISTORY.md` (repo root) | Historical feature/release chronology. |
 
 ### Architecture and implementation contracts
@@ -56,13 +56,16 @@ than duplicated here. `HANDOVER.md` describes only current operating/development
 - `29_Core_Link_Import.md`
 - `30_Core_Daily_Coordination.md`
 - `31_Core_Manage_HomeStack.md`
-- `32_Core_Notifications_and_Push.md`
+- `32_Core_Notifications_and_Push.md` — shipped PWA/Web Push notification contract.
 - `33_Node_Books.md` — shipped personal reading + shared Book Clubs node; added to the canonical
   set during the 2026-08-12 documentation reconciliation because the implementation existed but
   older node-model docs omitted it.
+- `34_Recommended_Next_Steps.md` — current practical execution plan for production readiness and
+  reliability.
 
 Milestone checklists remain useful as historical implementation/acceptance records but are not the
-best source for current priorities. Current priorities come from `HANDOVER.md` and the Roadmap.
+best source for current priorities. Current priorities come from `HANDOVER.md`, the Roadmap and the
+recommended next-steps plan.
 
 ## 2. Source-of-truth precedence
 
@@ -224,10 +227,17 @@ Home Wiki, Pets, **Books**, Homestead, Solace/Money, Fitness & Training, Travel,
 import, Grocery/Shopping and the daily-coordination capabilities. Trusted LAN HTTPS is live at
 `homestack.moosesoftwares.com` through Nginx Proxy Manager and Pi-hole.
 
-The active implementation workstream is PWA/Web Push notifications. Home Assistant is intentionally
-next only after that work is functioning. Public internet exposure is not enabled.
+**PWA/Web Push notifications are now shipped** (v0.34.10–v0.34.13), including per-user preferences,
+per-device subscriptions, VAPID delivery, service-worker/PWA support, household-activity bundling
+and scheduled reminder/countdown delivery. Live deployment still requires the VAPID/cron/device
+validation described in `../HANDOVER.md`.
 
-For exact current work and deployment commands, read `../HANDOVER.md`.
+The recommended primary engineering workstream is now **production readiness and reliability**.
+Home Assistant remains an important planned bridge after the production/recovery baseline is
+stronger. Public internet exposure is not enabled.
+
+For exact current work and deployment commands, read `../HANDOVER.md` and
+`34_Recommended_Next_Steps.md`.
 
 ## 5. Documentation maintenance rule
 
