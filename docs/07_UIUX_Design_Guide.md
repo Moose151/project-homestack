@@ -1,183 +1,276 @@
-# Document 3 — UI/UX Design Guide
+# Document 7 — UI/UX Design Guide
 
-> Canonical. Supersedes all earlier UI/UX docs. Decisions D1–D23 in `00_README_and_Changelog.md`.
+> **Canonical interface contract.** HomeStack should feel like one household product across Hub,
+> nodes, mobile web and kiosk. Current product status belongs in `HANDOVER.md`; this guide defines
+> stable experience rules.
 
-## 1. Purpose
+## 1. Experience goals
 
-Defines HomeStack's interface and experience standards. HomeStack must feel like **one
-family-oriented platform**, not a set of separate apps.
+HomeStack should feel:
 
-## 2. Design philosophy
+- warm and household-oriented;
+- calm rather than dense;
+- modern but not ornamental;
+- touch-friendly;
+- understandable without knowing internal node names;
+- consistent between domains;
+- safe for shared/child surfaces;
+- responsive from phone to desktop.
 
-Should feel: warm, friendly, calm, modern, touch-friendly, family-oriented, kiosk-ready.
-Should not feel: corporate, dense, technical, enterprise-like.
+It should not feel like enterprise software, a database admin tool, or several unrelated apps
+sharing one login.
 
-Guiding rule: **experience consistency matters more than feature count.**
+**Experience consistency matters more than feature count.**
 
-Colour entry uses the shared HomeStack palette: a broad set of named-by-position visual swatches
-with pressed state and keyboard labels, plus the native custom picker for unrestricted colours.
-Calendar events may clear an explicit colour to inherit their Person/whole-family colour. Do not
-replace a palette with an unlabelled tiny colour well or maintain different palettes per node.
+## 2. Responsive web is the primary everyday surface
 
-## 3. Navigation model
+Current priority is the responsive web/PWA experience used on phones and laptops. Kiosk remains a
+first-class supported surface, but ordinary adult workflows must not be designed desktop-first and
+then squeezed onto mobile.
 
-Any person-scoped destination labelled as the user's own—such as **My Corner** or **Study**—first
-resolves the signed-in User's linked Person. Alphabetic order is never an identity default. A
-visible person switcher may then move to another permitted member; an unlinked User gets an
-explicit selection/setup state rather than somebody else's data by default.
+- **Phone:** one-column flow, compact contextual navigation, bottom/app-style shell, large touch
+  targets, progressive disclosure.
+- **Tablet:** touch-first layout with room for side-by-side content where useful.
+- **Desktop:** sidebar navigation, wider management/report layouts and denser comparison where
+  genuinely helpful.
+- **Kiosk:** large simple cards, minimal typing, avatar/PIN entry, clear session ownership and
+  automatic timeout.
 
-Navigation leads with the household task in plain language; the node name is supporting context,
-not required vocabulary. Current shipped examples are: Home (Hub) · Calendar · Lists & notes
-(Atlas) · School & study (Education) · Books · Household guide (Home Wiki) · Pets · Our home
-(Homestead) · Tasks & rewards (Meridian) · Money (Solace). Future nodes follow the same rule.
+## 3. Navigation
 
-Desktop groups permission-aware destinations by purpose: Start here, Plan & organise, Household
-and Money. Mobile keeps four user-configurable shortcuts plus More; More is always a complete,
-descriptive directory of every available destination, not merely an overflow list. Admin routes
-use task labels such as People & access and Manage HomeStack. Hidden or disabled nodes never
-appear.
+Navigation uses household language first and internal node names second.
 
-Documents are not a separate nav item — they live in the shared Documents/Attachments service
-surfaced inside each node. Children get a simplified navigation (§4).
+Examples of current destinations include:
 
-## 4. Child / kiosk primary navigation
+- Home / Hub;
+- Calendar;
+- Lists & notes / Atlas;
+- School & study / Education;
+- Household guide / Home Wiki;
+- Pets;
+- Our home / Homestead;
+- Tasks & rewards / Meridian;
+- Money / Solace;
+- Fitness & Training;
+- Travel;
+- My Corner / household member Corners;
+- Manage HomeStack / People & access for administrative tasks.
 
-Children primarily see: Tasks (Meridian) · Education · Pets · Meals (Hearth) · Calendar ·
-simple Atlas lists.
+A Person-scoped destination labelled **My** must resolve the signed-in User's linked Person first.
+Alphabetical order is never identity. If no Person is linked, show an explicit setup/selection
+state rather than another member's information.
 
-Children do **not** see by default: Solace · Health · Assets · sensitive Documents · Settings
-· admin pages.
+Desktop groups destinations by purpose. Mobile keeps a small user-configurable shortcut set plus a
+complete **More** directory. Hidden/disabled/unauthorized destinations are not shown, but backend
+permissions remain authoritative.
 
-## 5. Shared design system
+The global shell owns app navigation. Hub is a daily information/action surface, not a second copy
+of the sidebar.
 
-Every node uses shared components — buttons, cards, forms, modals, tables, lists, widgets,
-notifications, avatars, PIN pad, calendar cards, empty states, error states, kiosk cards. No
-node creates its own visual style. This is enforced in code review (Coding Standards §"node
-checklist").
+## 4. Shared design system
 
-## 6. Colour & identity
+Every domain uses shared components/tokens for:
 
-Each person has a colour used across Calendar and Hub. Each node may have an icon/accent
-colour, but the global HomeStack design language stays consistent. Suggested node accents:
-Atlas blue · Home Wiki warm neutral · Pets green · Education purple · Inventory teal · Assets
-slate · Hearth orange/red · Travel sky blue · Projects amber · Health red/pink · Meridian gold
-· Solace teal/green · Homestead warm terracotta · Home Assistant blue · Fitness coral/red.
+- buttons/actions;
+- cards/surfaces;
+- forms/fields;
+- modals/sheets/dialogs;
+- tabs/section navigation;
+- tables/list cards;
+- badges/status;
+- empty/loading/error states;
+- notifications;
+- avatars/People selectors;
+- calendar/event presentation;
+- confirmation/destructive actions.
 
-### 6a. The logo (added 2026-08-10)
+A node may have an accent/identity but does not invent a separate visual language.
 
-Three marks, each with one job. Sources in `brand/`, web assets in `frontend/public/brand/`
-(rebuilt by `scripts/build_brand_assets.py`), and every use goes through
-`components/Logo.tsx` so sizes and alt text are decided once.
+## 5. HomeStack brand
 
-- **Mark** (the house with the stack) — the sidebar header, the kiosk ambient screen, the
-  favicon and the app icons. Used wherever space is tight or the word "HomeStack" is already
-  written beside it, in which case the image is `aria-hidden` rather than repeating the name.
-- **Wordmark** — a wide strip where the name must carry itself. Light-toned, so it belongs on
-  dark surfaces first.
-- **Lockup** (mark above the name) — **one per surface**, on the screen that introduces the app:
-  the web sign-in page. Not a page decoration.
+Brand source assets live in `brand/`; generated web assets live under
+`frontend/public/brand/`. Use the shared `Logo` component rather than hand-cropping/resizing source
+renders at each call site.
 
-Check any replacement against both the paper and the dark surface, and at 36px as well as full
-size — the sidebar draws it small, and a mark that dissolves there is the wrong mark.
+- **Mark:** compact house/stack icon for shell/favicon/app-icon contexts.
+- **Wordmark:** name-only treatment where appropriate.
+- **Lockup:** introductory/sign-in presentation, not repeated decorative branding on every page.
 
-## 7. Layouts
+Any replacement should remain legible at small shell sizes and on both light/dark surfaces.
 
-- **Mobile:** single column, bottom navigation, large tap targets, fast actions.
-- **Tablet:** two-column, touch-first.
-- **Desktop:** sidebar navigation, widget grid, more detail.
-- **Kiosk:** large cards, minimal typing, avatar login, automatic timeout, ambient mode.
+## 6. Colour and identity
 
-The global shell owns destination navigation. Hub should not repeat the same navigation as a
-second launchpad; it should prioritise useful household widgets, summaries and next actions.
-Shared page headings show one clear title and supporting sentence, and shared tabs use a compact
-section picker on phones and a segmented control where space allows.
+People colours are useful for Calendar/household recognition. Nodes may have accent colours, but
+status must never be communicated by colour alone.
 
-Dense management tables are desktop tools, not mobile layouts. Below the large desktop
-breakpoint, management records must become readable cards with the same information and actions;
-horizontal scrolling is reserved for genuinely tabular comparison, not routine editing. Forms
-ask for the common minimum first and place less-used scheduling, visibility or rule fields in a
-clearly labelled progressive section. The mobile shell already identifies the current
-destination, so a page may omit a second large title when doing so materially improves the
-first-screen workspace.
+Colour inputs use the shared labelled palette plus custom choice where needed. Calendar rows may
+inherit Person/source colour when no explicit event colour is chosen.
 
-## 8. Kiosk UX
+Avoid maintaining separate colour pickers/palettes per node.
 
-States: ambient → avatar selection → PIN entry → personal dashboard → node kiosk view →
-timeout return.
+## 7. Mobile interaction rules
 
-Kiosk-safe widgets: date/time, weather (future), calendar, meals, pet reminders, homework,
-birthdays, travel countdowns, simple tasks.
+- Minimum touch target should normally be ~44px for primary/compact tap controls where practical.
+- Routine editing must not require horizontal table scrolling.
+- Dense desktop tables should become readable cards below the desktop breakpoint unless true
+  column comparison is essential.
+- Put the common fields/actions first; advanced recurrence/visibility/admin fields use progressive
+  disclosure.
+- Keep destructive actions separated and confirmed where recovery is difficult.
+- Surface failed actions beside the workflow; do not rely on silent console errors.
+- Preserve URL/deep-link state for tabs/detail records where notifications, Calendar, Search or
+  Corners link into them.
 
-Not kiosk-safe by default: bills, health, sensitive documents, financial events, admin
-settings. Opening a sensitive node on kiosk requires re-auth and a shortened timeout
-(Security doc §6–7).
+## 8. Forms
 
-## 9. Node UI expectations (brief)
+Forms should ask for the minimum useful record first.
 
-Atlas: fast lists/checklists/groceries/notes. Home Wiki: readable reference + emergency info.
-Pets: pet cards, photos, treatment reminders. Education: homework cards, deadlines, events.
-Inventory: low-stock cards, expiry alerts. Assets: asset cards, maintenance reminders,
-documents. Hearth: meal cards, recipes, dinner tonight. Travel: trip cards, countdowns,
-itinerary, packing. Projects: project cards, milestones, task boards. Health: secure, private,
-minimal exposure. Meridian: kid-friendly reward/task cards with celebrations. Solace:
-restricted, clear finance dashboard. Homestead: warm home/room cards and obvious source links.
-Home Assistant: calm grouped status first, safe controls second, and unmistakable stale/offline
-state; one-column touch-friendly cards on phones.
+Use:
 
-## 10. Positive experience
+- explicit labels (not placeholder-only fields);
+- saved entity selectors rather than duplicate free-text identity/institution/person data;
+- inline validation with actionable messages;
+- sensible defaults without silently assuming another household member;
+- Cancel that does not submit;
+- clear optional/advanced grouping;
+- confirmation when a state transition has non-obvious downstream effects.
 
-Small moments of delight: "✓ Great job!" on task complete, "⭐ Assignment complete!" on
-homework, gentle confirmations on pet/medication logging. Future: achievements, badges,
-streaks, celebrations (Meridian). Children should enjoy using HomeStack.
+## 9. Calendar UX
 
-## 11. Accessibility
+Calendar is a shared timeline rather than a node-specific page.
 
-Support: dark mode, large text, high contrast, colour-blind-safe status indicators, keyboard
-navigation, screen readers, large touch targets. Status is never conveyed by colour alone.
+- Month/week/day/agenda remain understandable on phone and desktop.
+- Person/source colours have nearby labels/legend support.
+- Node-owned events deep-link to the owning record; editing occurs at the source unless the event
+  is Calendar-owned.
+- Rotating schedules (D23) show the calculated state distinctly from normal event cards and visibly
+  mark exceptions.
+- Month browsing should preserve context: selecting a day can open detail/sheet without unexpectedly
+  replacing the entire month view.
 
-### 11.1 Rotating Calendar schedules (D23)
+## 10. Hub UX
 
-Setup explains the anchor date in plain language and shows a tappable preview of every day in
-the cycle; the common 2/2/3/2/2/3 shared-care pattern may be pre-filled, but labels, People,
-colours and every state remain editable. Month view uses a continuous two-colour strip along
-the top of each otherwise-neutral day cell, with a nearby labelled legend; moving between months
-recalculates every visible strip.
-Week, day and agenda views may use labelled status badges. An exception carries a visible swap
-marker, so status is not conveyed by colour alone. Phones retain a compact seven-column month
-overview for the rotation. The complete six-week grid is the primary phone Month surface and may
-run edge-to-edge to preserve useful cell width. A day may show one compact coloured event label
-and a count rather than expanding into an agenda. Tapping a date opens that day's rotations and
-events in a bottom sheet; entering full Day view remains a separate explicit action, so the Month
-layout does not change while browsing. Horizontal swipe may move between months, but arrow and
-Today controls remain present and keyboard-accessible. Event labels may use person/source colours,
-while the care strip remains separate and labelled nearby. Setup/exception editing uses the
-shared bottom sheet with at least 44px action targets. Changing one date must say explicitly that
-other dates are unaffected and must offer “restore repeating plan”.
+Hub answers "what needs attention today?" rather than "what features exist?".
 
-## 12. Pre-release UX checklist
+Widgets should be:
 
-Before shipping a screen, confirm: does it feel like HomeStack? Is it touch-friendly? Usable
-on mobile? Safe on kiosk? Dark-mode supported? Are permissions reflected clearly (and is
-nothing sensitive leaking into a child/kiosk view)? Is it simple enough for its target users?
+- permission-aware;
+- glanceable;
+- action-oriented where appropriate;
+- calm in empty/normal states;
+- sized/orderable without turning into a dashboard-design tool;
+- safe for the surface (web vs kiosk).
 
-### 12.1 Household account and navigation consistency
+Do not expose sensitive counts/titles/amounts merely because a widget itself is visible.
 
-- Navigation discovery is permission-aware as well as node-enable-aware. Do not show a
-  destination, quick action, search destination or contributed Hub widget that the current user
-  cannot open.
-- Apply the same rule within a destination: hide protected tabs, actions and cross-node links when
-  the current account cannot use the owning node, while keeping the backend permission check as
-  the authority. Do not lead a user into a predictable access-denied dead end.
-- A trusted adult partner normally uses the **manager** role. Sensitive Money access is a separate,
-  explicit account choice and must not require promoting that person to administrator.
-- The mobile shell already names the active destination. Page headers are normally desktop-only on
-  first-level screens; keep them on mobile only when they carry unique context or an action that is
-  not available elsewhere.
-- Management lists use readable cards below the desktop breakpoint when each row contains actions
-  and descriptive content. Retain a desktop table for efficient comparison; reserve horizontal
-  scrolling on phones for genuinely tabular reports.
-- Label form controls explicitly, surface failed actions beside the workflow, give touch actions
-  at least a 40–44px target and confirm removal when the effect is destructive or difficult to
-  reconstruct.
-- Use `docs/PARTNER_PILOT_READINESS.md` as the release gate for visible nodes and single-entry
-  cross-node workflows.
+## 11. Corners / People-centred UX
+
+Corners aggregate permitted information about a Person without taking ownership from source nodes.
+
+- My Corner defaults to the current User's linked Person.
+- Activity links open the exact owning record where permitted.
+- Expanded detail re-checks permission before display.
+- Suggestions/reactions should feel household-friendly without becoming a noisy social network.
+
+## 12. Node-specific direction
+
+**Atlas:** fastest path to ordinary household notes/lists; Grocery deliberately simple; Shopping
+supports richer product/link context.
+
+**Meridian:** playful/kid-friendly where the child interacts; efficient adult cockpit for setup,
+approvals and monitoring.
+
+**Education:** deadline/timetable clarity; Study defaults to the current linked Person.
+
+**Pets:** visual pet identity plus quick treatment/appointment action.
+
+**Homestead:** warm spatial/property organisation; rooms/floor plan/plans should feel connected to
+the home rather than an asset register.
+
+**Solace/Money:** sensitive, clear and calm; prioritize "what needs doing / what is safe" over dense
+finance jargon.
+
+**Fitness & Training:** large live-workout controls, previous-performance context, fast set editing
+and readable history; do not visually imply medical Health.
+
+**Travel:** project-like trip page, progressive booking sections, clear booked/planned state,
+Things-to-do grouped by day plus unscheduled options.
+
+**Home Assistant (future):** status first, safe controls second, explicit stale/offline state.
+
+**Hearth (future):** recipe/meal enjoyment and direct handoff to Atlas Grocery rather than a
+separate shopping experience.
+
+## 13. Kiosk UX and security
+
+Typical state:
+
+```text
+ambient -> avatar -> PIN -> personal dashboard -> permitted workflow -> timeout
+```
+
+Kiosk defaults to large, simple, low-typing interactions. Child-accessible content can include
+Tasks & rewards, Education, Pets, Calendar and simple Atlas/Grocery household actions as permitted.
+
+Sensitive by default: Money, medical Health, protected documents, administrative settings and
+other finance/private records.
+
+Kiosk UI hiding is not security; backend permissions and sensitive re-auth remain authoritative.
+
+## 14. PWA / notification UX
+
+Web Push should be useful rather than noisy:
+
+- ask for notification permission in context, not immediately on first page load;
+- explain why notifications are useful before the browser permission prompt;
+- preferences are per User and can vary by category/device;
+- quiet hours and lead times are understandable household settings;
+- lock-screen text is deliberately sparse for sensitive/private items;
+- tapping a notification opens the exact relevant HomeStack destination and then re-checks access;
+- an unavailable/expired subscription degrades without making the rest of Notifications unusable.
+
+Canonical delivery/security detail: `32_Core_Notifications_and_Push.md`.
+
+## 15. Feedback and delight
+
+Use small feedback moments where they support household motivation (task completion, assignment
+completion, workout finish, etc.) but avoid turning every action into a celebration.
+
+Feedback should clearly answer:
+
+- Did the action work?
+- What changed?
+- Is anything else required?
+
+## 16. Accessibility
+
+Required baseline:
+
+- keyboard navigation for web/admin flows;
+- semantic labels/accessible names;
+- screen-reader-compatible controls;
+- visible focus states;
+- sufficient contrast in light/dark mode;
+- status not encoded by colour alone;
+- large touch targets;
+- text/layout that survives reasonable browser zoom/font scaling.
+
+## 17. Pre-release UX checklist
+
+Before shipping a screen/workflow, verify:
+
+- Does it feel like HomeStack rather than a one-off app?
+- Is the phone experience intentional rather than merely responsive CSS?
+- Are common actions obvious and fast?
+- Are advanced/admin options progressively disclosed?
+- Do loading/empty/error states exist?
+- Do dark mode and keyboard/touch interactions work?
+- Is current-Person identity correct?
+- Are disabled/unauthorized actions/destinations represented clearly?
+- Can sensitive information leak through summaries, widgets, activity, Search, Calendar or
+  notifications?
+- Does a deep link return the user to a stable, meaningful location?
+
+The old partner-pilot checklist is historical acceptance evidence now that two-account/real-device
+acceptance has been completed; new UX findings should be handled as ordinary bugs/feature work,
+not by re-running that historical gate.
