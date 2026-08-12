@@ -1,206 +1,254 @@
 # Core Spec — Hub
 
-> Canonical. **Core service, not an opt-in node.** The Hub ships in every install and cannot be
-> disabled. Global rules from `00_README_and_Changelog.md` apply: base-model inheritance where
-> records are household data, central permission resolver + visibility mixin (D10), node
-> decoupling via the `events` signal interface (D4 — the Hub never imports another node's
-> models), people-vs-users rule (D12), shared design system. The Hub **owns no household
-> content of its own** — it is a read-mostly aggregation and presentation surface over other
-> nodes and core services.
+> **Status:** shipped core service and daily landing surface. Hub is always present, is not an
+> opt-in node, and owns no household domain records. It aggregates permitted information from core
+> services and enabled domains.
 
 ## 1. Purpose
 
-The Hub is HomeStack's landing surface — the first screen on web and the post-login screen on
-kiosk. It answers one question: ***"What needs attention today?"*** It pulls the most relevant,
-permitted, time-sensitive items from across enabled nodes (Atlas reminders and to-dos, Meridian
-tasks, upcoming Calendar events, Home Wiki favourites, notifications, …) into one configurable,
-permission-aware dashboard so the household never has to open each node to know what matters.
+Hub answers: **What needs attention today?**
 
-## 2. Philosophy
+It provides one calm, configurable household landing page containing the most useful permitted
+summaries and actions without requiring a person to open every domain individually.
 
-The Hub is a **window, not a store**. It never owns domain data; every card is sourced from a
-node or core service and rendered through a widget. Configurable but calm: each household and
-each user tailors which widgets show, in what order and size, but the default is a quiet,
-glanceable "today" view. It is **not** the Calendar (the full timeline lives in `scheduling`),
-**not** a notification centre (that's Notifications), and **not** a node — it has no opt-in
-toggle and no node-specific business logic.
+Hub is:
 
-## 3. What belongs on the Hub
+- a read-mostly aggregation surface;
+- configurable per household and per User;
+- permission-aware;
+- responsive on phone/desktop;
+- capable of a simplified kiosk-safe presentation.
 
-Today/soon items that need a human's attention: reminders due, my to-dos, household shopping
-list, today's Meridian tasks and points summary, upcoming calendar events, Home Wiki favourites
-and emergency shortcut, unread notification summary, quick-add/quick-capture, greeting + date.
-Each is a **widget** backed by a node or core service.
+Hub is **not** Calendar, Notifications, Search or a second copy of any node's data.
 
-## 4. What does NOT belong on the Hub
+## 2. Ownership rule
 
-Full node UIs (open the node), the complete calendar (Calendar view), the full notification log
-(Notifications), any data the Hub would "own". The Hub never persists domain records, never
-writes `calendar_events`, never re-implements a node's logic, and never bypasses the resolver to
-show something a user shouldn't see.
+Hub stores only widget catalogue/configuration state. Widget content remains owned by the source
+domain/core service.
 
-## 5. Primary users
+A Hub card must never become the only copy of a task, event, bill, reminder, workout, trip or other
+household fact.
 
-Admins, managers, users, permitted child accounts, kiosk users. Every authenticated session
-lands on a Hub. Child and kiosk sessions get a simplified, kiosk-safe widget set only
-(`supports_kiosk = True`).
+Derived content is assembled after permission/visibility filtering. If the source becomes hidden,
+locked, deleted or inaccessible, Hub must stop revealing it.
 
-## 6. Key features
+## 3. Widget model
 
-**Widget catalogue (`HubWidget`)** — the global, seeded list of available widget types. Each
-has `key`, `name`, `description`, optional `source_node` (FK → `nodes.Node`, null for core
-widgets), `supports_kiosk`, `display_order`. Adding a widget to HomeStack = seeding a row +
-providing its data via a selector. Seeded today: `atlas_todos`, `atlas_reminders` (both
-kiosk-safe); the Meridian/Calendar/Home Wiki widgets are added by their respective nodes.
+The established configuration families are:
 
-**Household configuration (`HouseholdHubWidget`)** — which catalogue widgets the household has
-enabled, plus per-household `display_order`, `size` (small/medium/large) and `settings_json`.
+- **`HubWidget`** — global catalogue/seed row describing a widget type, optional source node,
+  kiosk support and default order;
+- **`HouseholdHubWidget`** — household enablement/order/size/settings;
+- **`UserHubWidget`** — per-User hide/order/settings overrides.
 
-**Per-user overrides (`UserHubWidget`)** — a user may hide or reorder widgets for their own Hub
-(`is_enabled`, `display_order`, `settings_json`) without affecting other members.
-Desktop users can drag the live cards or configuration rows while Tune mode is open; mobile and
-keyboard users retain labelled arrow controls. Both paths update optimistically and persist the
-complete effective order through one atomic batch request rather than one request per widget.
+The exact fields are defined by current Django models/migrations.
 
-**Resolution** — at request time the Hub composes: catalogue → household-enabled → user
-overrides → (kiosk filter) → each widget's selector runs **permission-filtered** for the
-current user → assembled, ordered widget payloads.
+The effective widget set resolves approximately as:
 
-**Kiosk mode** — `GET /hub/kiosk/` returns only `supports_kiosk = True` widgets, simplified for
-touch and children.
+```text
+widget catalogue
+ -> enabled node/core availability
+ -> household configuration
+ -> User overrides
+ -> kiosk-safe filter when applicable
+ -> source selector/content provider
+ -> permission/visibility filtering
+ -> ordered payload
+```
 
-**Quick add / quick capture** — foundational: rapid add of a note/list-item/reminder/to-do from
-the Hub, delegating to the owning node's services (richer later).
+## 4. Current configuration UX — shipped
 
-**Ambient / utility widgets (non-node)** — not every widget is backed by a node. The Hub can
-also host standalone "ambient" widgets that make it feel like a home dashboard / family
-noticeboard rather than just a task list. These are `HubWidget` rows with `source_node = null`
-and their own small payload/settings (`settings_json`), no domain data of their own. Candidates:
-- **Clock** — time + date, configurable format/timezone (kiosk-safe; a natural ambient-screen
-  element).
-- **Weather** — local conditions + short forecast. Needs an external data source, so it's the
-  one ambient widget that implies new infra (an outbound API call / API key in `settings_json`,
-  caching). Park until that's wanted; respects "no infra before a feature needs it" (D5).
-- **Photo / family slideshow** — rotating household photos via the shared attachment service
-  (kiosk-friendly noticeboard feel; permission/sensitivity aware).
-- **Greeting / on-this-day / quote / countdown** — small delight widgets. A countdown stores a
-  target date **and time** in Household local time. If only a date is entered, save noon as the
-  explicit default and explain that choice in the editor. At 48 hours remaining it changes from
-  whole days to hours (rounding up while future, so it does not show zero early), then shows
-  reached/elapsed treatment after the target. Existing date-only countdown settings migrate to
-  local noon rather than midnight.
-These follow every Hub rule: seeded catalogue row, permission- and kiosk-filtered, own no domain
-data, write no calendar rows. Most are local/offline; **weather is the exception** (external
-fetch) and is explicitly parked until requested.
+Household/admin configuration and per-User customization are part of the current product, not a
+future V1 placeholder.
 
-## 7. Permissions
+The implemented UI/API supports the current combination of:
 
-Resource: `hub` (`hub.view`). Access to the Hub surface itself is broad (all authenticated
-roles), but **each widget's contents are resolved through the central resolver + visibility
-mixin (D10)** against the requesting user — a child never sees a widget or item they aren't
-permitted, even if the household enabled it. No ad-hoc permission checks in the Hub view; the
-view is thin and delegates to `hub.services.get_hub_widgets(user, kiosk_mode=…)`.
+- household widget enable/disable;
+- order;
+- size;
+- per-User hide/reorder;
+- responsive/keyboard-friendly ordering controls;
+- optimistic updates where supported;
+- atomic/effective ordering behavior rather than requiring a separate page refresh for every move.
 
-## 8. Node integration (how nodes contribute widgets)
+Do not document widget configuration as "the next API surface" again; exact routes live in the Hub
+URLconfs/tests.
 
-A node contributes to the Hub by: (1) seeding a `HubWidget` row with `source_node` set and
-`supports_kiosk` as appropriate; (2) exposing a selector that returns its widget payload,
-already permission-filtered; (3) the Hub service calling that selector during resolution. The
-Hub **never imports node models** — it reads through the node's selector / the events interface
-(D4). Disabling a node hides its widgets automatically.
+## 5. What belongs on Hub
 
-## 9. Calendar integration
+Useful glanceable/today-oriented examples include:
 
-The Hub **reads** upcoming events from `scheduling` for an "upcoming events" widget; it **never
-writes** `calendar_events` and never owns dates (D7). Dated items shown on the Hub are owned by
-their node and surfaced via the scheduling helper.
+- Atlas to-dos/reminders and quick capture;
+- Calendar upcoming/today items;
+- Meridian task/reward/points summaries;
+- Education deadlines/events;
+- Pets care/appointments;
+- Homestead maintenance/home attention;
+- Solace/Money information only for Users with the required finance access/elevation contract;
+- Fitness recent/training summary where useful;
+- Travel countdown/booking attention;
+- Home Wiki favourites/emergency shortcuts;
+- Notifications summary;
+- small core/ambient widgets such as clock, greeting/quote/countdown where implemented.
+
+A shipped node does **not** need a Hub widget merely to prove it is a valid node. Books currently
+has no requirement to invent a widget if personal shelves/Book Clubs do not produce meaningful
+"needs attention today" information. Add a Books widget only for a real useful workflow.
+
+## 6. What does not belong on Hub
+
+- full domain management screens;
+- the complete Calendar;
+- the full Notifications history;
+- unrestricted Search results;
+- duplicate persisted copies of source records;
+- sensitive information that would not be visible in the owning domain;
+- speculative widgets added only because every node is expected to have one.
+
+## 7. Permissions (D10)
+
+Hub surface access is broad for authenticated household Users, but each widget and each returned
+item must respect its source security boundary.
+
+Rules:
+
+- run source content through permission-aware selectors/services;
+- filter sensitive/private records before titles/counts/snippets are assembled;
+- node enablement/visibility is respected;
+- a child/kiosk User never gains content because an adult enabled the widget globally;
+- sensitive-node locked state must not leak bill names/amounts/health detail through Hub;
+- frontend hiding is not authorization.
+
+Avoid ad-hoc permission checks in the Hub view. Keep request handlers thin and central/source
+selectors authoritative.
+
+## 8. Node/core integration (D4)
+
+A domain may contribute Hub content by registering/seeding a widget and exposing a bounded content
+provider/selector through the established Hub integration pattern.
+
+Hub must not import another node's models simply to query its data. Use the existing decoupled
+service/selector/event boundary.
+
+If a node is disabled, its widgets disappear without deleting the node's underlying data.
+
+## 9. Calendar
+
+Hub may read upcoming permitted events from `scheduling` but never writes Calendar rows.
+
+A dated Hub item links to the Calendar-owned or node-owned source according to D7. Hub does not
+create another editable deadline/date field.
 
 ## 10. Notifications
 
-The Hub may show an unread-notifications **summary** widget (count + most recent), reading from
-the Notifications service. The full list and read/mark-all actions live in Notifications, not
-the Hub.
+Hub can show an unread/recent notification summary. The Notifications service owns notification
+state and Web Push delivery/preferences.
 
-## 11. Events (signals)
+Push implementation belongs to `32_Core_Notifications_and_Push.md`; Hub may provide a shortcut or
+summary but must not manage device subscriptions itself.
 
-The Hub is primarily a **consumer/aggregator** and is intentionally lightweight on the bus. It
-does not need to subscribe to node events for V1 (it composes live at request time via
-selectors). Future: cache/invalidate widget payloads in response to node events
-(`*_created/_completed/_due`) once performance demands it (D5 — not before).
+## 11. Quick actions
 
-## 12. Search
+Quick capture/add actions are useful when they delegate immediately to the owning domain service.
 
-The Hub has no search of its own; search is global (`search`, Postgres FTS, D9). The Hub may
-host a search entry point/quick-link widget that hands off to global search,
-permission-filtered.
+Examples:
 
-## 13. Attachments
+- Atlas note/to-do/reminder;
+- permitted simple source-specific actions exposed deliberately by a widget.
 
-None. The Hub stores no files. Widgets that reference attachments link to the owning node's
-records via the shared attachment service.
+Do not implement broad cross-domain write logic inside Hub merely for convenience.
 
-## 14. Kiosk
+## 12. Ambient / utility widgets
 
-The post-PIN kiosk dashboard **is** a Hub (`GET /hub/kiosk/`): large widget cards, only
-kiosk-safe widgets, simplified for children, minimal typing, clear visual states, touch-first,
-inactivity timeout back to avatar select. Today's kiosk Hub renders the Atlas to-dos and
-reminders widgets; Meridian task/celebration cards are added by Meridian's kiosk widgets.
+Non-domain widgets can exist with `source_node = null` where they make the household dashboard more
+useful or pleasant.
 
-## 15. Mobile / web
+Current/local examples can include clock, greeting/quote and countdown behavior. A countdown stores
+an explicit target date/time; date-only entry should use/explain a consistent household-local
+fallback rather than silently depend on server timezone.
 
-Web: greeting + date header, responsive widget grid (size-aware), quick-add button, sensible
-defaults, dark-mode aware, large tap targets. Per-user hide/reorder. Offline parked.
+Future external-data widgets such as weather should be added only with a clear provider/cache/
+secret/failure strategy. Do not add infrastructure merely to fill visual space.
 
-## 16. Progressive detail
+## 13. Search
 
-Basic: default widget set, glanceable today view. Standard: household enable/disable, order and
-size per household, kiosk-safe subset. Detailed: per-user hide/reorder, per-widget settings
-(`settings_json`), quick-add, future drag-and-drop layout and cached payloads.
+Hub has no independent search database. The global Search service owns search aggregation. Hub can
+host/open the global Search interaction.
 
-## 17. Data model
+## 14. Attachments
 
-`hub_widgets` (`HubWidget`: `key` unique, `name`, `description`, `source_node` FK nullable,
-`supports_kiosk`, `display_order` — **catalogue/seed data, plain model, not household-scoped**).
-`household_hub_widgets` (`HouseholdHubWidget`: `household` FK, `widget` FK, `is_enabled`,
-`display_order`, `size`, `settings_json`; unique `(household, widget)`).
-`user_hub_widgets` (`UserHubWidget`: `user` FK, `widget` FK, `is_enabled`, `display_order`,
-`settings_json`; unique `(user, widget)`).
+Hub stores no files. A widget can reference an owning record/attachment only through the shared
+protected attachment/source route.
 
-The Hub holds **only configuration** — no domain records. Widget *contents* are always fetched
-live from the owning node's selectors. Shared services used: permissions resolver, scheduling
-(read), notifications (read), each node's selectors.
+## 15. Kiosk
 
-## 18. API
+The kiosk post-login dashboard uses the Hub concept but requests/renders only kiosk-safe content.
 
-`GET /api/v1/hub/` — assembled, permission-filtered, ordered widgets for the current user (web).
-`GET /api/v1/hub/kiosk/` — same, filtered to `supports_kiosk = True`, simplified for kiosk.
-Both delegate to `hub.services.get_hub_widgets(user, kiosk_mode)`. Widget enable/order/size
-configuration endpoints (household + per-user) are the next API surface (parked until the
-Atlas + Hub UX pass).
+Kiosk rules:
 
-## 19. V1 scope
+- large cards/touch targets;
+- minimal typing;
+- current Person/User context clear;
+- only widgets explicitly safe for kiosk;
+- automatic session timeout/return to avatar selection;
+- no finance/Health/protected document leakage.
 
-Widget catalogue + seed · household enable/order/size · per-user hide/reorder · permission-aware
-resolution · kiosk-safe subset · web Hub + kiosk Hub · Atlas to-dos/reminders widgets live ·
-node-contributed widgets (Meridian/Calendar/Home Wiki) as those nodes land. **Not in V1:**
-drag-and-drop layout editor, cached/event-invalidated payloads, AI "smart" prioritisation,
-cross-household templates, ambient/utility widgets (clock/photo/greeting are low-effort and
-local; **weather** needs an external data source + caching and is parked until requested — D5).
+A node with `supports_kiosk=False` remains absent; Hub does not override the node's surface contract.
 
-## 20. Risks & mitigation
+## 16. Responsive web
 
-Risk: the Hub becoming a second home for node logic, leaking unpermitted content, or growing
-slow as nodes multiply. Mitigation: strict read-only aggregation (owns no data, writes no
-calendar); every widget payload runs through the resolver/visibility mixin; nodes contribute via
-selectors/events only (no cross-imports, D4); defer caching until measured need (D5); keep the
-default view calm and kiosk-safe by default.
+Phone and desktop use the same product hierarchy with different density:
 
-## 21. Completion criteria
+- clear greeting/date/current-person context;
+- responsive size-aware grid;
+- fast common actions;
+- per-User hide/reorder controls that remain accessible without drag-and-drop;
+- loading/error/empty state per widget where practical so one failing source does not make the whole
+  Hub unusable.
 
-The Hub shows the right "today" items per user and per role; households enable/disable, order and
-size widgets; users hide/reorder their own; kiosk shows only kiosk-safe widgets simplified for
-children; every widget is permission-filtered (no leaks to children/guests); Atlas and
-node-contributed widgets render live; the Hub owns no domain data and writes no calendar rows;
-follows the shared design system.
-</content>
-</invoke>
+## 17. Performance and failure isolation
+
+Hub can become expensive because it aggregates many domains.
+
+Rules:
+
+- do not add caching/brokers before measurement (D5);
+- source failures should degrade their widget instead of blocking unrelated content where possible;
+- use existing server timing/slow-request evidence before optimizing;
+- avoid repeated expensive source reconciliation within the same request when an owning domain
+  already provides a request-scoped/cache-safe solution;
+- if future caching is introduced, it must preserve permission/user/node configuration boundaries.
+
+## 18. API contract
+
+Exact current route names are defined by Hub URLconfs/tests. Major API concepts are:
+
+- assembled web Hub payload;
+- kiosk-safe Hub payload;
+- household widget configuration;
+- per-User widget overrides/order/settings.
+
+Do not maintain another obsolete endpoint inventory in this spec.
+
+## 19. Data ownership
+
+Hub-owned persistent data is configuration/catalogue only. Domain payloads are computed/read from
+their owners.
+
+That invariant allows a source record to be corrected once and immediately appear correctly in Hub,
+Calendar, Search, Corners and Notifications without synchronized copies.
+
+## 20. Completion state
+
+Hub's current useful baseline is shipped:
+
+- configurable widget catalogue;
+- household and per-User customization;
+- permission-aware resolution;
+- responsive web Hub;
+- kiosk-safe subset;
+- quick capture and useful core/domain summaries;
+- ambient/delight widgets already implemented where appropriate.
+
+Future Hub work should be driven by observed relevance/performance/UX needs, not by a rule that every
+node must contribute a widget.
