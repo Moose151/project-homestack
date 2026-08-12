@@ -18,5 +18,9 @@ def list_item_completed(item_id: int, household_id: int, completed_by_id: int) -
     })
 
 
+def list_item_created(item_id: int, household_id: int) -> None:
+    publish("atlas.list_item_created", payload={"item_id": item_id, "household_id": household_id})
+
+
 def reminder_created(reminder_id: int, household_id: int) -> None:
     publish("atlas.reminder_created", payload={"reminder_id": reminder_id, "household_id": household_id})

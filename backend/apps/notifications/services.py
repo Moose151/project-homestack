@@ -7,15 +7,35 @@ simply skipped).
 """
 from __future__ import annotations
 
+from datetime import timedelta
+
+from django.utils import timezone
+
 from apps.core.models import get_active_household
-from apps.notifications.models import Notification
+from apps.notifications.models import (
+    Notification,
+    NotificationCategory,
+    NotificationPreference,
+    UserNotificationSettings,
+)
 
 
 def create_notification(
     recipient_user, *, title: str, message: str,
     level: str = Notification.Level.INFO, source_node: str = "", action_url: str = "",
+    category: str = "",
 ) -> Notification | None:
+    """Create the in-app notification, gated by the recipient's preference for `category`.
+
+    `category=""` (the default) bypasses the gate entirely — every call site written before
+    docs/32_Core_Notifications_and_Push.md existed keeps behaving exactly as it always has.
+    A real category checks NotificationPreference.in_app_enabled; a missing row defaults to
+    enabled (docs/32 §3/§5), so setting a category is additive, never silently suppressive,
+    until the household actually turns something off.
+    """
     if recipient_user is None:
+        return None
+    if category and not _in_app_enabled(recipient_user, category):
         return None
     note = Notification(
         household=get_active_household(),
@@ -27,6 +47,59 @@ def create_notification(
         action_url=action_url,
     )
     note.save()
+    if category:
+        from apps.notifications import push
+        push.send_push_to_user(
+            recipient_user, category=category, source_node=source_node,
+            title=title, message=message, action_url=action_url,
+        )
+    return note
+
+
+def _in_app_enabled(recipient_user, category: str) -> bool:
+    pref = NotificationPreference.objects.filter(user=recipient_user, category=category).first()
+    return pref.in_app_enabled if pref else True
+
+
+def notify_bundled(
+    user, *, title: str, message: str, source_node: str, action_url: str,
+    category: str = "", window_minutes: int = 60,
+) -> Notification | None:
+    """Collapse a burst of the same kind of event into one evolving notification.
+
+    Generalises the pattern Corner reactions pioneered (apps/people/corner_services.py): an
+    existing **unread** Notification with the same (recipient, source_node, action_url) created
+    within `window_minutes` gets its title/message updated in place instead of a new row being
+    created — so someone adding twenty items to a shared list in one sitting produces one
+    notification, not twenty (docs/32 §6). Goes through the same category gate as
+    create_notification first — a disabled category means no notification at all, not a silent
+    update to nothing. Push is only attempted on the *first* notification of a burst; updating an
+    existing one never re-pushes, so a flurry of activity buzzes a phone once, not repeatedly.
+    """
+    if user is None:
+        return None
+    if category and not _in_app_enabled(user, category):
+        return None
+    cutoff = timezone.now() - timedelta(minutes=window_minutes)
+    existing = Notification.objects.filter(
+        recipient_user=user, source_node=source_node, action_url=action_url,
+        is_read=False, created_at__gte=cutoff,
+    ).first()
+    if existing:
+        existing.title = title
+        existing.message = message
+        existing.save(update_fields=["title", "message", "updated_at"])
+        return existing
+    note = Notification.objects.create(
+        household=get_active_household(), recipient_user=user, title=title,
+        message=message, source_node=source_node, action_url=action_url,
+    )
+    if category:
+        from apps.notifications import push
+        push.send_push_to_user(
+            user, category=category, source_node=source_node,
+            title=title, message=message, action_url=action_url,
+        )
     return note
 
 
@@ -57,3 +130,67 @@ def mark_read(notification: Notification) -> Notification:
 
 def mark_all_read(user) -> int:
     return Notification.objects.filter(recipient_user=user, is_read=False).update(is_read=True)
+
+
+def set_preference(
+    user, *, category: str, in_app_enabled: bool, push_enabled: bool, mine_only: bool = False,
+) -> NotificationPreference:
+    if category not in NotificationCategory.values:
+        raise ValueError("Unknown notification category.")
+    pref, _ = NotificationPreference.objects.update_or_create(
+        user=user, category=category,
+        defaults={
+            "in_app_enabled": in_app_enabled,
+            "push_enabled": push_enabled,
+            "mine_only": mine_only,
+            "household": get_active_household(),
+            "created_by": user,
+            "updated_by": user,
+        },
+    )
+    return pref
+
+
+def set_preferences(user, rows: list[dict]) -> list[NotificationPreference]:
+    return [
+        set_preference(
+            user,
+            category=row["category"],
+            in_app_enabled=row.get("in_app_enabled", True),
+            push_enabled=row.get("push_enabled", True),
+            mine_only=row.get("mine_only", False),
+        )
+        for row in rows
+    ]
+
+
+def get_or_create_settings(user) -> UserNotificationSettings:
+    settings_obj, _ = UserNotificationSettings.objects.get_or_create(
+        user=user, defaults={"household": get_active_household(), "created_by": user, "updated_by": user},
+    )
+    return settings_obj
+
+
+def update_settings(user, **data) -> UserNotificationSettings:
+    settings_obj = get_or_create_settings(user)
+    for field in {"quiet_start", "quiet_end", "morning_time"}:
+        if field in data:
+            setattr(settings_obj, field, data[field])
+    settings_obj.updated_by = user
+    settings_obj.save()
+    return settings_obj
+
+
+def register_push_device(user, **kwargs):
+    from apps.notifications import push
+    return push.register_device(user, **kwargs)
+
+
+def unregister_push_device(user, device_id: int) -> bool:
+    from apps.notifications import push
+    return push.unregister_device(user, device_id)
+
+
+def send_test_push(device) -> bool:
+    from apps.notifications import push
+    return push.send_test_push(device)

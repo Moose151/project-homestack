@@ -328,7 +328,7 @@ def approve_task_completion(
     notifications.notify_person_id(
         person_id, title="Task approved",
         message=f"'{task.title}' was approved — you earned {awarded} points.",
-        level=notifications.Notification.Level.SUCCESS, source_node="meridian",
+        level=notifications.Notification.Level.SUCCESS, source_node="meridian", category="meridian",
     )
     events.task_approved(task.id, task.household_id, person_id, awarded)
     return completion
@@ -361,7 +361,7 @@ def reject_task_completion(
     notifications.notify_person_id(
         completion.person_id, title="Task not approved",
         message=f"'{task.title}' was sent back" + (f": {reason}" if reason else "."),
-        level=notifications.Notification.Level.WARNING, source_node="meridian",
+        level=notifications.Notification.Level.WARNING, source_node="meridian", category="meridian",
     )
     completion.status = MeridianTaskCompletion.Status.REJECTED
     completion.reviewed_at = timezone.now()
@@ -551,7 +551,7 @@ def award_allowances(*, on: date | None = None) -> int:
         notifications.notify_person_id(
             allowance.person_id, title="Allowance",
             message=f"You received your weekly allowance of {allowance.amount} points.",
-            level=notifications.Notification.Level.SUCCESS, source_node="meridian",
+            level=notifications.Notification.Level.SUCCESS, source_node="meridian", category="meridian",
         )
         awarded += 1
     return awarded
@@ -931,7 +931,7 @@ def approve_reward_request(acting_user: User, req: MeridianRewardRequest) -> Mer
     notifications.notify_person_id(
         req.requested_by_person_id, title="Reward approved",
         message=f"Your reward '{req.reward.name}' was approved!",
-        level=notifications.Notification.Level.SUCCESS, source_node="meridian",
+        level=notifications.Notification.Level.SUCCESS, source_node="meridian", category="meridian",
     )
     events.reward_approved(req.id, req.household_id, req.requested_by_person_id, req.points_spent)
     return req
@@ -954,7 +954,7 @@ def reject_reward_request(acting_user: User, req: MeridianRewardRequest, *, reas
         req.requested_by_person_id, title="Reward not approved",
         message=f"'{req.reward.name}' was declined" + (f": {reason}" if reason else ".")
         + f" Your {req.points_spent} points were refunded.",
-        level=notifications.Notification.Level.WARNING, source_node="meridian",
+        level=notifications.Notification.Level.WARNING, source_node="meridian", category="meridian",
     )
     return req
 

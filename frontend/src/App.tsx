@@ -23,6 +23,7 @@ const UsersPage = lazy(() => import('./features/web/pages/UsersPage').then(m => 
 const SettingsPage = lazy(() => import('./features/web/pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
 const NodeGuidePage = lazy(() => import('./features/web/pages/NodeGuidePage').then(m => ({ default: m.NodeGuidePage })))
 const VersionHistoryPage = lazy(() => import('./features/web/pages/VersionHistoryPage').then(m => ({ default: m.VersionHistoryPage })))
+const NotificationSettingsPage = lazy(() => import('./features/web/pages/NotificationSettingsPage').then(m => ({ default: m.NotificationSettingsPage })))
 const KioskApp = lazy(() => import('./features/kiosk/KioskApp').then(m => ({ default: m.KioskApp })))
 
 function RouteFallback() {
@@ -68,6 +69,7 @@ function WebRoutes({ isAdmin }: { isAdmin: boolean }) {
         {isAdmin && <Route path="/settings" element={<Deferred><SettingsPage /></Deferred>} />}
         <Route path="/settings/guides/:nodeKey" element={<Deferred><NodeGuidePage /></Deferred>} />
         <Route path="/settings/version-history" element={<Deferred><VersionHistoryPage /></Deferred>} />
+        <Route path="/settings/notifications" element={<Deferred><NotificationSettingsPage /></Deferred>} />
         <Route path="*" element={<Navigate to="/hub" replace />} />
       </Route>
     </Routes>

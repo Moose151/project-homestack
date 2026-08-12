@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.34.9**
+> **Current version: 0.34.13**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,94 @@
 ---
 
 ## 0.34 — Discoverability and daily navigation
+
+### 0.34.13 — 2026-08-12 — Scheduled reminders + countdown digest (docs/32 slice 4, on feature/push-notifications — closes out Notifications & Push)
+- Appointments and assigned to-dos now get a genuine reminder: once ~24 hours before they're due
+  and again the morning of, each exactly once even if the hourly cron job overlaps or re-runs.
+  Sourced straight from `CalendarEvent` rather than a separate Atlas query — dated Atlas items
+  already mirror there (D7 single source of truth), so one sweep naturally covers both a
+  standalone calendar appointment (`appointments` category) and an Atlas to-do with a due date
+  (`assigned_tasks`). Deliberately scoped to just those two sources for V1, not every synced
+  node — Solace already runs its own reminder job and is re-auth-gated besides.
+- Anyone with an active Hub Countdown widget now gets a daily "3 days to go" push/in-app nudge at
+  their own morning time, not everyone's at once — new per-user idempotency (a `recipient_user`
+  column added to `NotificationReminderLog`, one small deviation from the original doc sketch)
+  means two people with different `morning_time` settings each get exactly one digest a day, at
+  the time that's actually morning for them.
+- New `NotificationReminderLog` model (migration `notifications.0004`), `apps/notifications/
+  tasks.py` (`run_due_reminders`, `run_countdown_digest`), and the `notifications_run_scheduled`
+  management command (recommended hourly cron, matching the existing `solace_run_scheduled`/
+  `link_imports_run_scheduled` pattern — not yet added to the live server's crontab, that's a
+  deploy step for the owner). A user's `mine_only` preference (assigned-to-me vs. everyone's) is
+  enforced by the reminder sweep itself rather than the shared preference gate, since only the
+  sweep knows who's actually assigned to a given record.
+- **875 backend tests green (16 new); no frontend changes this slice; migration
+  `notifications.0004` applied to the live dev database.** This closes out all four Notifications
+  & Push delivery slices — still on `feature/push-notifications`, not yet merged to `main`.
+
+### 0.34.12 — 2026-08-12 — Cross-user activity notifications, bundled (docs/32 slice 3, on feature/push-notifications)
+- The literal owner request now works: adding to a shared calendar, a shopping/grocery list, or
+  finishing a book notifies the rest of the household — bundled, not spammed. Adding five items
+  to a shopping list in one sitting produces **one** notification that updates in place, not
+  five; a new one only starts after the 60-minute window closes. Workout completions already
+  notified the household from the preferences slice, so weren't duplicated here.
+- `notify_bundled()` extracted from Corner reactions into `apps/notifications/services.py` —
+  Corners now calls the shared version too instead of a second copy of the same logic. New
+  `apps/notifications/handlers.py` (subscribed via `NotificationsConfig.ready()`, matching
+  `apps.achievements`/`apps.homestead`/`apps.solace`) turns three domain events into
+  `household_activity` notifications: `scheduling.event_created` (was defined but never actually
+  called — now wired into `create_event`), the new `atlas.list_item_created`, and the new
+  `books.entry_finished` (fires only on the transition into "Read", not every subsequent save).
+  Every handler re-checks `apply_visibility` **per candidate recipient** before notifying — a
+  private list or a surprise-hidden calendar event never leaks to someone who couldn't already
+  see it.
+- **859 backend tests green (10 new); no migration (no model changes this slice); frontend
+  unaffected.** Still on `feature/push-notifications`, not merged to `main`.
+
+### 0.34.11 — 2026-08-12 — Web Push infrastructure (docs/32 slice 2, on feature/push-notifications)
+- Push notifications actually work now, end to end. `manage.py generate_vapid_keys` generates a
+  server keypair; a new `PushDevice` model plus `GET/POST /notifications/devices/`,
+  `DELETE /notifications/devices/<id>/` and `POST /notifications/devices/<id>/test/` let a
+  device register, list itself, be revoked and send itself a test push. A new
+  `apps/notifications/push.py` module sends via `pywebpush`, wired into the slice-1 gate: a push
+  is only attempted when VAPID keys are configured, the category's push toggle is on, the
+  recipient isn't in their quiet hours, and the source node isn't re-auth-gated (checked
+  generically against `HouseholdNode.requires_reauthentication`, so Solace/Health stay in-app-only
+  without hardcoding node names). A `404`/`410` response from the push service deactivates that
+  device automatically instead of retrying it forever.
+- Frontend: `public/sw.js` (a minimal service worker — `push` shows the notification,
+  `notificationclick` focuses or opens the deep link), `public/manifest.json` +
+  `apple-mobile-web-app-capable` in `index.html` (iOS only allows Web Push for an installed PWA,
+  not a plain browser tab), and an explicit, user-initiated "Enable push on this device" flow on
+  the notifications settings page — request permission, subscribe via the browser's PushManager,
+  register the subscription. Never auto-prompts. New Devices card lists registered devices with
+  Test/Revoke actions.
+- **849 backend tests green (13 new); frontend typecheck and production build clean; migration
+  `notifications.0003` applied to the live dev database.** New dependency: `pywebpush==2.0.1`.
+  Still on `feature/push-notifications`, not merged to `main`.
+- Payloads are deliberately sparse per docs/32 §10 (a title/body and a deep link only) — nothing
+  financial, health or otherwise sensitive is ever placed in a push payload.
+
+### 0.34.10 — 2026-08-12 — Notification preferences (docs/32 slice 1, on feature/push-notifications)
+- Every household member can now choose what they hear about: `GET/PATCH /notifications/preferences/`
+  covers 12 categories (Appointments, Assigned to-dos, Household activity, Home & maintenance,
+  Meridian, Fitness, Books, Travel, Wish & price alerts, Countdown, Corners, Account) each with
+  independent in-app/push toggles, plus an "only things assigned to me" switch on the two
+  categories where that applies. New Settings → **Your notifications** page, also reachable from
+  the profile editor for non-admin logins. `GET/PATCH /notifications/settings/` adds per-user
+  quiet hours and a morning-digest time, ready for the reminder/countdown slices to use.
+- The existing shared `create_notification`/`notify_person` gained an optional `category`
+  parameter that gates delivery against the new preferences — omitting it (every pre-existing
+  call site) behaves exactly as before, so nothing already shipped changed. Eight real call sites
+  across `achievements`, `atlas`, `education`, `fitness`, `link_imports`, `meridian`, `people`
+  (Corners) and `travel` now pass their real category, so preferences have an immediate,
+  testable effect rather than sitting inert. Solace stays uncategorised (sensitive-node push
+  exclusion, docs/32 §10). New `NotificationPreference`/`UserNotificationSettings` models,
+  migration `notifications.0002`. **836 backend tests green (18 new); frontend typecheck and
+  production build clean; migration applied to the live dev database.**
+- No push delivery yet — this is slice 1 of 4 from `docs/32_Core_Notifications_and_Push.md` §12
+  ("prove the gate before adding a delivery channel"). Built on `feature/push-notifications`,
+  kept separate from the parallel documentation-consolidation branch per the owner's instruction.
 
 ### 0.34.9 — 2026-08-12 — Notifications & Push core spec (documentation only)
 - New `docs/32_Core_Notifications_and_Push.md`: full category taxonomy (12 categories, each

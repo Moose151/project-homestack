@@ -87,7 +87,7 @@ def _notify_idea(user, idea):
     hidden_ids = set(idea.hidden_from_users.values_list("id", flat=True))
     for recipient in User.objects.filter(is_active=True).exclude(pk=user.pk).exclude(pk__in=hidden_ids):
         if resolve_permission(recipient, "view", "travel"):
-            create_notification(recipient, title=f"New place to go: {idea.title}", message=f"{user.display_name} added {idea.destination}.", source_node="travel", action_url="/travel?tab=ideas")
+            create_notification(recipient, title=f"New place to go: {idea.title}", message=f"{user.display_name} added {idea.destination}.", source_node="travel", action_url="/travel?tab=ideas", category="travel")
 
 
 @transaction.atomic

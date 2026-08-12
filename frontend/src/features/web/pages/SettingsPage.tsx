@@ -183,6 +183,16 @@ export function SettingsPage() {
         </div>
       </Card>
 
+      <Card title="Your notifications">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-ink">Notification preferences</p>
+            <p className="text-xs text-muted">Personal — what you get notified about, and quiet hours. Applies to your login only.</p>
+          </div>
+          <Link to="/settings/notifications" className="flex-shrink-0 text-sm font-bold text-primary hover:underline">Manage →</Link>
+        </div>
+      </Card>
+
       <Card title="Family colour">
         <p className="text-sm text-muted mb-3">
           The accent used on the calendar for "Whole family" events and tasks (anything not

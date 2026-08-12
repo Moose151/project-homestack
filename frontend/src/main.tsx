@@ -11,6 +11,12 @@ if (stored === 'true' || (stored === null && prefersDark)) {
   document.documentElement.classList.add('dark')
 }
 
+// Registering is inert on its own — no prompts, no subscription — it just makes the worker
+// available for the explicit, user-initiated "enable push" flow (docs/32_Core_Notifications_and_Push.md §10).
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {})
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
