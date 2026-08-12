@@ -79,20 +79,20 @@ old `.docx` conflicts with the canonical docs, the canonical docs win.
 
 Read these first:
 
-- `00_README_and_Changelog.md` — architectural/product decisions (D1+).
-- `01_Master_Software_Specification.md` — product vision, node model and scope.
+- `00_README_and_Changelog.md` — architectural/product decisions (D1–D24) and documentation map.
+- `01_Master_Software_Specification.md` — product vision, current node model and scope.
 - `02_Software_Architecture_Document.md` — modular-monolith architecture and shared boundaries.
 - `03_Database_Design_Document.md` — schema conventions.
 - `04_Development_Roadmap.md` — remaining roadmap and gates.
 - `05_Security_Architecture_Document.md` — authentication, permissions, sensitive data and
   remote-access gate.
-- `06_API_Specification.md` — API conventions/endpoints.
+- `06_API_Specification.md` — API conventions/route ownership.
 - `07_UIUX_Design_Guide.md` — responsive/kiosk design rules.
 - `08_Coding_Standards_and_Project_Structure.md` — mandatory code structure and conventions.
 - `09_Node_Model_Decision_Record.md` — why HomeStack uses a deliberately small node set.
 - `10_Future_Features_Parking_Lot.md` — deferred ideas; not authority to create new nodes.
 
-Important newer specs:
+Important newer/current specs:
 
 - `23_Core_Hub.md`
 - `24_Core_Calendar.md`
@@ -104,6 +104,8 @@ Important newer specs:
 - `30_Core_Daily_Coordination.md`
 - `31_Core_Manage_HomeStack.md`
 - `32_Core_Notifications_and_Push.md`
+- `33_Node_Books.md` — shipped personal reading / Book Clubs domain; added to the canonical set
+  during documentation reconciliation because the implementation pre-dated its canonical spec.
 
 `VERSION_HISTORY.md` is the historical release record. Do not duplicate that history here.
 
@@ -182,12 +184,13 @@ Major shipped areas include:
 - Native Meridian household tasks/rewards/points workflows.
 - Education for courses, assessments, timetable/events and study workflows.
 - Home Wiki and Pets.
+- **Books** with personal reading shelves, per-User rating/notes and shared Book Clubs/up-next queue.
 - Homestead including rooms/planning, maintenance, appliances, services, improvements, costs &
   cover, pools/spas, utility usage and the interactive floor plan.
 - Native Solace/Money with bills, pay cycles, budget/allocation and household finance workflows.
 - Fitness & Training as a separate non-medical node.
 - Travel with trips, bookings/costs, trip type and itinerary items.
-- Corners, suggestions/reactions and shared link-import/product-watch infrastructure.
+- Corners, suggestions/reactions and shared link-import/product/book enrichment/watch infrastructure.
 - Manage HomeStack guides/version history and household configuration surfaces.
 - LAN-trusted HTTPS at `homestack.moosesoftwares.com`.
 
