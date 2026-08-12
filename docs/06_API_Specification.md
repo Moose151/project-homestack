@@ -1,283 +1,343 @@
 # Document 6 — API Specification
 
-> Canonical. Supersedes all earlier API docs. Decisions D1–D23 in `00_README_and_Changelog.md`.
+> **Canonical API contract.** Exact currently registered routes are defined by Django URLconfs and
+> tested API behaviour. This document defines stable conventions, security requirements and route
+> ownership. Avoid maintaining a second brittle copy of every endpoint as the application evolves.
 
-## 1. Purpose & conventions
+## 1. Base contract
 
-REST API for HomeStack. Base path `/api/v1/`.
+Base path:
 
-- **Auth:** Django **session** auth (web/kiosk). Token auth added with native apps (D6).
-- **Routes:** lowercase kebab-case.
-- **Every endpoint** passes through the central layer and validates: authentication,
-  household ownership, node-enabled status, role permission, record visibility,
-  sensitive-node access, and re-authentication where required (D10).
-- **No generic `/integrations/` or external-app endpoints** — Meridian and Solace are native
-  nodes (D13), while Home Assistant has a dedicated `/home-assistant/` bridge contract (D22).
-  No iframe layer or arbitrary service-call proxy is built.
-- **No `/events/` endpoints** — the event interface is internal signals (D4).
-
-## 2. Authentication
-
-```
-POST /api/v1/auth/pin-login/
-POST /api/v1/auth/password-login/
-POST /api/v1/auth/logout/
-GET  /api/v1/auth/me/
-POST /api/v1/auth/reauth/          # password-based; grants short-lived elevated state
-```
-Re-auth applies to: Solace, Health, sensitive Documents/Attachments (and optionally specific
-Assets/People fields). *(No `/auth/refresh/` in V1 — that returns with token auth.)*
-
-## 3. Core APIs
-
-**Users**
-```
-GET   /api/v1/users/
-POST  /api/v1/users/
-GET   /api/v1/users/{user_id}/
-PATCH /api/v1/users/{user_id}/
-POST  /api/v1/users/{user_id}/disable/
-POST  /api/v1/users/{user_id}/change-pin/
+```text
+/api/v1/
 ```
 
-**Household** (single household)
-```
-GET   /api/v1/household/
-PATCH /api/v1/household/
+Current web/kiosk/PWA clients use Django session authentication. Native token authentication is
+future work (D6).
+
+The API is the business/security boundary. React components, deep links, notification payloads and
+kiosk state never grant authority by themselves.
+
+## 2. Route ownership
+
+Top-level route groups map to the owning core service or domain, for example:
+
+```text
+/api/v1/auth/
+/api/v1/users/
+/api/v1/people/
+/api/v1/household/
+/api/v1/nodes/
+/api/v1/hub/
+/api/v1/calendar/
+/api/v1/notifications/
+/api/v1/attachments/
+/api/v1/search/
+/api/v1/backups/
+/api/v1/audit-logs/
+
+/api/v1/atlas/
+/api/v1/meridian/
+/api/v1/education/
+/api/v1/wiki/
+/api/v1/pets/
+/api/v1/homestead/
+/api/v1/solace/
+/api/v1/fitness/
+/api/v1/travel/
 ```
 
-**People**
-```
-GET    /api/v1/people/
-POST   /api/v1/people/
-GET    /api/v1/people/{person_id}/
-PATCH  /api/v1/people/{person_id}/
-DELETE /api/v1/people/{person_id}/
+Future Home Assistant routes live under a dedicated Home Assistant namespace. Do not create a
+generic `/integrations/` API merely to host it (D22).
+
+There is no public/internal HTTP `/events/` bus API; D4 events are an application-internal boundary.
+
+## 3. Exact route source of truth
+
+For exact current method/path names, use:
+
+1. `backend/config/urls.py`;
+2. each registered `backend/apps/*/urls.py`;
+3. view/API tests;
+4. this document for cross-cutting contract.
+
+When a route ships or is removed, update the owning node/core spec and tests. Do not leave obsolete
+endpoint lists here (for example a removed native-Solace concept) merely because it appeared in an
+earlier design.
+
+## 4. Authentication endpoints
+
+The authentication API includes the current session/PIN/password flows, conceptually:
+
+```text
+PIN login
+password login
+logout
+current user/session (`me`)
+password re-authentication / sensitive elevation
+kiosk-safe login-user discovery where deliberately unauthenticated
 ```
 
-**Permissions**
-```
-GET   /api/v1/permissions/me/
-GET   /api/v1/permissions/roles/
-PATCH /api/v1/permissions/roles/{role}/
-```
+Important rules:
 
-**Nodes**
-```
-GET   /api/v1/nodes/
-POST  /api/v1/nodes/{node_key}/enable/
-POST  /api/v1/nodes/{node_key}/disable/
-PATCH /api/v1/nodes/{node_key}/settings/
-```
+- login endpoints are the only places that accept credentials for establishing/elevating a
+  session;
+- re-auth uses adult password rather than PIN;
+- failed login/reauth must not disclose unnecessary account/security detail;
+- brute-force/rate-limit hardening is required before public remote exposure;
+- CSRF/session cookie behaviour must match the deployed HTTPS/proxy settings.
 
-## 4. Hub & kiosk
-```
-GET   /api/v1/hub/
-PATCH /api/v1/hub/widgets/
-GET   /api/v1/kiosk/hub/
-GET   /api/v1/kiosk/ambient/
-```
+## 5. Authorization and visibility (D10)
 
-## 5. Scheduling (calendar)
-```
-GET    /api/v1/calendar/events/
-POST   /api/v1/calendar/events/
-GET    /api/v1/calendar/events/{event_id}/
-PATCH  /api/v1/calendar/events/{event_id}/
-DELETE /api/v1/calendar/events/{event_id}/
-GET    /api/v1/calendar/rotations/
-POST   /api/v1/calendar/rotations/
-GET    /api/v1/calendar/rotations/{schedule_id}/
-PATCH  /api/v1/calendar/rotations/{schedule_id}/
-DELETE /api/v1/calendar/rotations/{schedule_id}/
-GET    /api/v1/calendar/rotation-occurrences/?start=YYYY-MM-DD&end=YYYY-MM-DD
-PUT    /api/v1/calendar/rotations/{schedule_id}/exceptions/{date}/
-DELETE /api/v1/calendar/rotations/{schedule_id}/exceptions/{date}/
-```
-Node-derived events are created/updated/deleted by the scheduling helper when their source
-record changes (D7); direct event writes are for standalone calendar entries only.
-Rotations use one anchored two-state pattern and are expanded for an end-exclusive date range
-of at most 400 days (D23). `PUT` creates or replaces the single-day exception; `DELETE` restores
-the repeating plan. These endpoints use the same `scheduling.*` permissions and visibility
-filter as events.
+Every protected request is subject to the applicable combination of:
 
-## 6. Notifications
-```
-GET  /api/v1/notifications/
-POST /api/v1/notifications/{notification_id}/read/
-POST /api/v1/notifications/{notification_id}/dismiss/
-```
+- authentication;
+- active User status;
+- household scope;
+- role/per-user permission;
+- node/capability enablement;
+- record visibility/sensitivity;
+- child/kiosk restrictions;
+- current sensitive re-authentication state.
 
-## 7. Attachments
-```
-POST   /api/v1/attachments/
-GET    /api/v1/attachments/
-GET    /api/v1/attachments/{attachment_id}/download/
-DELETE /api/v1/attachments/{attachment_id}/
-```
-Access via `visibility`/`sensitivity` (D11). Sensitive downloads audited.
+List endpoints must filter inaccessible records in selectors/querysets rather than serialize them
+and remove them later.
 
-## 8. Search
-```
-GET /api/v1/search/?q=term
-```
-Postgres FTS, permission-aware (D9).
+For sensitive resources, returning 404 instead of confirming an inaccessible record's existence may
+be appropriate where the existing contract uses that behaviour.
 
-## 9. Audit & backups
-```
-GET  /api/v1/audit-logs/
-GET  /api/v1/backups/
-POST /api/v1/backups/
-GET  /api/v1/backups/{backup_id}/download/
-POST /api/v1/backups/{backup_id}/restore/    # requires admin re-authentication
-```
+## 6. Users and People
 
-## 10. Atlas
-```
-GET/POST/GET/PATCH/DELETE  /api/v1/atlas/notes/[{note_id}/]
-GET/POST/GET/PATCH/DELETE  /api/v1/atlas/lists/[{list_id}/]
-POST   /api/v1/atlas/lists/{list_id}/items/
-PATCH  /api/v1/atlas/list-items/{item_id}/
-POST   /api/v1/atlas/list-items/{item_id}/complete/
-POST   /api/v1/atlas/list-items/{item_id}/uncomplete/
-DELETE /api/v1/atlas/list-items/{item_id}/
-GET/POST/PATCH/DELETE       /api/v1/atlas/reminders/[{reminder_id}/]
-```
+User/account routes own login-capable accounts, roles, PIN/password resets, activation state and
+Person linkage.
 
-## 11. Home Wiki
-```
-GET/POST/GET/PATCH/DELETE  /api/v1/wiki/pages/[{page_id}/]
-GET/POST/PATCH/DELETE       /api/v1/wiki/categories/[{category_id}/]
-POST /api/v1/wiki/pages/{page_id}/favourite/
-POST /api/v1/wiki/pages/{page_id}/unfavourite/
-GET  /api/v1/kiosk/wiki/
-GET  /api/v1/kiosk/wiki/emergency/
-```
+People routes own household profiles used as record subjects/assignees.
 
-## 12. Pets
-```
-GET/POST/GET/PATCH/DELETE  /api/v1/pets/[{pet_id}/]
-GET/POST  /api/v1/pets/{pet_id}/treatments/
-POST      /api/v1/pet-treatments/{treatment_id}/mark-done/
-GET/POST  /api/v1/pets/{pet_id}/appointments/
-PATCH/DELETE /api/v1/pet-appointments/{appointment_id}/
-```
+Do not use User IDs as a substitute for Person IDs in domain APIs simply because most current
+household members have both (D12).
 
-## 13. Education
-```
-GET/POST  /api/v1/education/institutions/
-GET/POST  /api/v1/education/courses/
-GET/POST  /api/v1/education/assessments/
-PATCH     /api/v1/education/assessments/{assessment_id}/
-POST      /api/v1/education/assessments/{assessment_id}/complete/
-GET/POST/PATCH/DELETE  /api/v1/education/events/[{event_id}/]
-```
+## 7. Nodes / Manage HomeStack
 
-## 14. Meridian (native — D13)
-Migrated early; uses shared Users/People, scheduling, permissions.
-```
-GET/POST/GET/PATCH/DELETE  /api/v1/meridian/tasks/[{task_id}/]
-POST   /api/v1/meridian/tasks/{task_id}/complete/
-POST   /api/v1/meridian/tasks/{task_id}/approve/
-POST   /api/v1/meridian/tasks/{task_id}/reject/
-GET    /api/v1/meridian/points/                 # per-person ledger/summary
-GET/POST  /api/v1/meridian/rewards/
-POST   /api/v1/meridian/rewards/{reward_id}/request/
-POST   /api/v1/meridian/reward-requests/{request_id}/approve/
-GET    /api/v1/kiosk/meridian/                  # kid task/reward cards
-```
+Node/settings APIs expose the household's enabled/hidden/locked/configured domain state subject to
+administrative permission.
 
-## 15. Solace (native — D13; after security maturation)
-Sensitive; re-auth required; hidden from children/users by default; access audited.
-```
-GET/POST/GET/PATCH/DELETE  /api/v1/solace/bills/[{bill_id}/]
-POST   /api/v1/solace/bills/{bill_id}/paid/
-GET/POST/PATCH/DELETE  /api/v1/solace/paydays/[{payday_id}/]
-GET/POST/PATCH/DELETE  /api/v1/solace/purchases/[{purchase_id}/]
-GET/POST/PATCH/DELETE  /api/v1/solace/buckets/[{bucket_id}/]
-GET/POST/PATCH/DELETE  /api/v1/solace/subscriptions/[{subscription_id}/]
-GET/POST/PATCH/DELETE  /api/v1/solace/checklist/[{item_id}/]
-GET    /api/v1/solace/plan/                   # current pay-cycle transfer calculation
-POST   /api/v1/solace/plan/checklist/         # idempotently generate cycle transfers
-GET    /api/v1/solace/schedule/?start=&end=   # bill occurrences + expected income
-POST   /api/v1/solace/occurrences/{id}/{paid|unpaid|skip}/
-GET    /api/v1/solace/search/?q=
-```
+Rules:
 
-## 16. Homestead
+- disabling/hiding a node does not delete its data;
+- node configuration does not bypass per-record permissions;
+- proposed future capability consolidation must preserve data and security when a capability is
+  hidden/restored.
 
-The ordinary Homestead CRUD routes follow the node spec. Protected home-finance routes require
-both Homestead and Solace permissions plus password re-authentication.
+## 8. Hub
 
-```
-GET/POST/PATCH/DELETE /api/v1/homestead/maintenance/[{task_id}/]
-POST /api/v1/homestead/maintenance/{task_id}/complete/
-POST /api/v1/homestead/maintenance/{task_id}/track-cost/  # one linked Solace bill
-GET/POST/PATCH/DELETE /api/v1/homestead/insurance/[{policy_id}/]
-GET/POST/PATCH/DELETE /api/v1/homestead/costs/[{cost_id}/]
-```
+Hub endpoints return permission-aware widget content and widget configuration. Each widget's data is
+computed from source selectors rather than copied into an independent Hub data store.
 
-## 17. Home Assistant bridge (planned — D22/M5.5)
+Kiosk Hub requests receive only kiosk-safe permitted widget content.
 
-Backend-only credentials; endpoints never return the Home Assistant URL/token or arbitrary raw
-attributes/service payloads. Full contract: `26_Node_Home_Assistant.md`.
+## 9. Calendar / scheduling (D7/D8/D23)
 
-```
-GET  /api/v1/home-assistant/health/
-POST /api/v1/home-assistant/health/test/
-GET  /api/v1/home-assistant/entities/discover/
-GET/POST/PATCH/DELETE /api/v1/home-assistant/entity-mappings/[{mapping_id}/]
-GET  /api/v1/home-assistant/state/
-GET/POST/PATCH/DELETE /api/v1/home-assistant/action-mappings/[{mapping_id}/]
-POST /api/v1/home-assistant/actions/{action_id}/run/
-GET/POST/PATCH/DELETE /api/v1/home-assistant/event-mappings/[{mapping_id}/]
-POST /api/v1/home-assistant/event-mappings/{mapping_id}/test/
-```
+Calendar APIs cover:
 
-## 18. Later nodes
-Inventory, Assets, Hearth, Projects and Health endpoints follow the same patterns as
-their node specs (CRUD + node-specific actions), each behind the central permission layer.
-Health is fully sensitive and re-auth-gated.
+- standalone Calendar-owned event/appointment CRUD;
+- permission-filtered time-window queries/views;
+- generic rotating-schedule configuration/occurrence calculation/exceptions;
+- source/deep-link information for node-owned projected events.
 
-## 18.1 Fitness & training (D24)
-```
-GET/POST/PATCH/DELETE /api/v1/fitness/exercises/[{exercise_id}/]
-GET/POST/PATCH/DELETE /api/v1/fitness/programs/[{program_id}/]
-GET                       /api/v1/fitness/sessions/
-POST                      /api/v1/fitness/sessions/start/
-POST                      /api/v1/fitness/sessions/{session_id}/exercises/
-PATCH                     /api/v1/fitness/session-sets/{set_id}/
-POST                      /api/v1/fitness/session-exercises/{entry_id}/sets/
-POST                      /api/v1/fitness/session-exercises/{entry_id}/drop/
-POST                      /api/v1/fitness/sessions/{session_id}/{finish|abandon}/
-GET                       /api/v1/fitness/records/
-```
-Fitness is social by default but supports private programs/sessions; it is not medical Health.
-Session responses prefill each set's weight from the person's last completed training of that
-exercise, and every session exercise carries a read-only `last_performance`
-(`session_name`, `performed_at`, `sets`) naming where those defaults came from — `null` until the
-exercise has visible history.
+Node-derived event CRUD is not performed by clients against Calendar as though the projection were
+the owner. Changes go to the source domain; the scheduling helper maintains the mirror.
 
-## 18.2 Travel
+Rotating schedule occurrence queries calculate bounded requested ranges rather than return stored
+daily event rows.
 
-```
-GET/POST                 /api/v1/travel/trips/
-GET/PATCH/DELETE         /api/v1/travel/trips/{trip_id}/
-POST                     /api/v1/travel/trips/{trip_id}/bookings/
-PATCH/DELETE             /api/v1/travel/bookings/{booking_id}/
-GET/POST                 /api/v1/travel/ideas/
-PATCH/DELETE             /api/v1/travel/ideas/{idea_id}/
-POST                     /api/v1/travel/ideas/{idea_id}/convert/
-```
+## 10. Notifications and Web Push
 
-Trip/idea writes accept `participant_ids`, ordered `images` and `hidden_from_user_ids`. Hidden
-Users receive 404 from Travel and owned Calendar detail routes as well as being absent from list
-projections. Idea conversion is idempotent. Booking `book_by` fields own one task-classified
-Calendar mirror which is removed when the component is booked or cancelled.
+The current in-app notification API supports listing and user actions such as read/dismiss state.
 
-## 19. Standard error & response shape
+The active Web Push work extends this domain with the device/subscription/preference contract in
+`32_Core_Notifications_and_Push.md`. When it lands, that spec plus registered URLconfs are the
+source of truth for exact push endpoint names.
 
-Consistent envelope: list endpoints paginate; errors return a code + message + field errors.
-401 for unauthenticated, 403 for permission/re-auth failures (with a `reauth_required` flag
-where relevant so clients can prompt), 404 for not-found-or-not-visible (sensitive resources
-return 404 rather than 403 to avoid confirming existence).
+Security requirements:
+
+- device subscriptions belong to the authenticated User/household;
+- one User cannot manage another User's subscriptions/preferences without explicit admin contract;
+- push payloads are sparse and sensitive-safe;
+- opening/deep-linking from push re-checks current permissions/re-auth;
+- expired/invalid subscriptions can be deactivated safely without deleting unrelated notification
+  history.
+
+## 11. Attachments
+
+Attachment APIs provide upload/list/download/delete/link behaviour as implemented by the shared
+service.
+
+Every download is permission checked. Sensitive downloads are audited. An attachment path/storage
+URL is never treated as authorization.
+
+## 12. Search
+
+Global search is permission-aware and aggregates results from owning domain selectors/querysets.
+
+Query strings do not bypass source permissions and snippets must not be built from inaccessible
+records.
+
+## 13. Audit and backups
+
+Audit APIs are administrative/read-only except for internal logging helpers.
+
+Backup APIs are administrative and include creation/listing/download/restore behaviour implemented
+by the backup service. Restore is a sensitive re-authenticated operation.
+
+## 14. Atlas
+
+Atlas APIs own:
+
+- notes;
+- lists/items;
+- reminders;
+- Grocery;
+- Shopping;
+- item completion/edit/assignment/due-date behaviour;
+- Agenda/appointments/events projection helpers where exposed by Atlas UI.
+
+Product/link enrichment uses the bounded shared link-import capability rather than arbitrary server
+fetch endpoints.
+
+## 15. Meridian
+
+Meridian APIs own the household task/reward/economy domain, including the implemented combination
+of:
+
+- tasks and task completions/review;
+- routines;
+- points/ledger/balances;
+- rewards/shop/purchase approvals;
+- categories/settings;
+- goals/wishes/related contribution workflows;
+- reports/leaderboard/achievement-related views where applicable.
+
+The exact endpoint catalogue is defined by Meridian URLconfs/tests. Do not regress to the earlier
+reduced endpoint list from the first port.
+
+## 16. Education
+
+Education APIs own institutions, profiles/courses, assessments, notes/files, timetable/class
+records and Education events/search as implemented.
+
+Dated assessments/events use the Calendar integration contract rather than a second independent
+schedule API.
+
+## 17. Home Wiki
+
+Wiki APIs own pages/categories/favourite/emergency/presentation behaviour. Kiosk-safe read surfaces
+must remain explicitly permission/presentation constrained.
+
+## 18. Pets
+
+Pets APIs own pet profiles, treatment/care schedules and appointments. Treatment completion advances
+or clears future due state according to the owning recurrence rules and keeps Calendar projection in
+sync.
+
+## 19. Homestead
+
+Homestead APIs own property/room/area planning, maintenance, appliances, providers, cover/context,
+pools/spas, utilities and floor-plan associations as implemented.
+
+Protected finance-related Homestead actions must preserve the Solace permission/re-auth boundary
+when they read or create Solace-owned financial records.
+
+## 20. Solace / Money
+
+Solace APIs own the current native finance model: bills/occurrences, pay-cycle/Now/forecast/bucket
+and other implemented Money workflows.
+
+Treat current Solace URLconfs/tests as authoritative. Do not re-add obsolete route groups (for
+example a separate subscriptions surface after subscriptions were consolidated into Bills) just
+because an older API document listed them.
+
+All sensitive finance endpoints are permission/re-auth protected and must not leak content through
+error messages, Hub, Calendar, Search or notifications.
+
+## 21. Fitness & Training (D24)
+
+Fitness APIs own:
+
+- exercise catalogue/custom exercises;
+- programs/program days;
+- workout/session lifecycle;
+- session exercises/sets and live editing;
+- history/personal records/last-performance data.
+
+Private/visible session rules are enforced on the backend. Fitness APIs must not become a medical
+Health API.
+
+## 22. Travel
+
+Travel APIs own:
+
+- trips and To-go/idea records;
+- participant and surprise/hidden-user behaviour;
+- booking/cost planning;
+- idea-to-trip conversion where implemented;
+- itinerary/Things-to-do records including dated/undated options;
+- day-trip vs multi-day trip rules.
+
+Dated/book-by itinerary/booking/trip elements follow the shared Calendar ownership rules. Hidden
+Users must not recover surprise trip details by guessing IDs or using Calendar/search projections.
+
+## 23. Home Assistant (planned, D22)
+
+When implemented, Home Assistant APIs are backend-mediated and bounded. Candidate route families
+include:
+
+- connection health/test;
+- entity discovery for admins;
+- entity mappings;
+- selected current state;
+- action mappings and execution;
+- event mappings/test.
+
+The browser never receives the HA long-lived token and never submits arbitrary domain/service/entity
+calls as a generic proxy.
+
+## 24. Standard request/response behaviour
+
+Use consistent status/error behaviour across domains.
+
+Expected broad semantics:
+
+- `200/201/204` for successful read/create/no-content operations as appropriate;
+- `400` for validation errors;
+- `401` for unauthenticated session state;
+- `403` for authenticated-but-denied operations where confirming the resource is acceptable;
+- `404` for absent or deliberately non-disclosed/invisible records;
+- `409` where a real state conflict/idempotency contract requires it;
+- `429` when rate limiting is active and exceeded;
+- `5xx` only for genuine server/upstream failures, with secret-safe logging.
+
+Validation responses should identify actionable fields without returning stack traces or secret
+configuration.
+
+## 25. Mutation rules
+
+- PUT/PATCH semantics must be explicit per endpoint; partial updates should not accidentally apply
+  create-only required-field validation.
+- Writes happen in services/business transitions, not directly in serializers/views where the app
+  conventions require service ownership.
+- Idempotent actions/import/conversion operations should remain idempotent when retried.
+- Soft-delete/restore rules follow the owning model/service rather than generic client assumptions.
+
+## 26. API evolution rule
+
+The API is allowed to evolve while HomeStack is pre-1.0 and household-owned, but changes must stay
+coherent:
+
+1. update URL/view/service tests;
+2. update the owning node/core spec if the public contract changed;
+3. update frontend client/types in the same feature change;
+4. update this document only when a cross-cutting convention or major route family changes;
+5. remove obsolete endpoints from docs rather than preserving misleading compatibility prose.
+
+This keeps this specification useful as an architectural API contract while code/tests remain the
+precise executable route catalogue.
