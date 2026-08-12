@@ -18,9 +18,8 @@ The product is centred on:
 - **Calendar** — the shared household timeline.
 - **People** — household members and non-login people used throughout the system.
 - **Opt-in nodes** — broad household domains with their own records/workflows.
-- **Responsive web app** — the primary everyday surface on phone and desktop.
-- **Kiosk** — a shared child-friendly household surface; important but currently secondary to
-  responsive web/mobile usability.
+- **Responsive web/PWA** — the primary everyday surface on phone and desktop.
+- **Kiosk** — a shared child-friendly household surface.
 
 HomeStack may eventually be released as a **self-hosted product other households run themselves**.
 It is not being designed as SaaS.
@@ -51,10 +50,10 @@ Current HomeStack services are:
 - `homestack-backend` — Django/DRF.
 - `homestack-frontend` — React/TypeScript/Vite.
 
-The current base stack still runs Django `runserver` and the Vite development server. This is
-acceptable for the present LAN deployment but is **not the intended long-term production-serving
-shape**. A later hardening pass should introduce a production WSGI server and production-built
-static frontend before public access is considered.
+The current base stack still runs Django `runserver` and the Vite development server. This is the
+main production-readiness issue now that Web Push is shipped. The next engineering phase should
+replace those development servers with a production WSGI/static frontend path and tighten container
+network exposure.
 
 ### Live HTTPS environment
 
@@ -83,7 +82,7 @@ Read these first:
 - `01_Master_Software_Specification.md` — product vision, current node model and scope.
 - `02_Software_Architecture_Document.md` — modular-monolith architecture and shared boundaries.
 - `03_Database_Design_Document.md` — schema conventions.
-- `04_Development_Roadmap.md` — remaining roadmap and gates.
+- `04_Development_Roadmap.md` — current sequencing and future gates.
 - `05_Security_Architecture_Document.md` — authentication, permissions, sensitive data and
   remote-access gate.
 - `06_API_Specification.md` — API conventions/route ownership.
@@ -103,9 +102,10 @@ Important newer/current specs:
 - `29_Core_Link_Import.md`
 - `30_Core_Daily_Coordination.md`
 - `31_Core_Manage_HomeStack.md`
-- `32_Core_Notifications_and_Push.md`
-- `33_Node_Books.md` — shipped personal reading / Book Clubs domain; added to the canonical set
-  during documentation reconciliation because the implementation pre-dated its canonical spec.
+- `32_Core_Notifications_and_Push.md` — shipped Web Push/PWA notification contract.
+- `33_Node_Books.md` — shipped personal reading / Book Clubs domain.
+- `34_Recommended_Next_Steps.md` — practical execution plan for the current production-readiness
+  and reliability phase.
 
 `VERSION_HISTORY.md` is the historical release record. Do not duplicate that history here.
 
@@ -192,7 +192,14 @@ Major shipped areas include:
 - Travel with trips, bookings/costs, trip type and itinerary items.
 - Corners, suggestions/reactions and shared link-import/product/book enrichment/watch infrastructure.
 - Manage HomeStack guides/version history and household configuration surfaces.
-- LAN-trusted HTTPS at `homestack.moosesoftwares.com`.
+- Trusted LAN HTTPS at `homestack.moosesoftwares.com`.
+- **PWA/Web Push notifications (v0.34.10–v0.34.13)** — per-user preferences, per-device
+  subscriptions, VAPID delivery, quiet hours, bundled household activity, scheduled reminders,
+  countdown digest, sparse sensitive-safe payloads and PWA/service-worker support.
+
+The completed notification branch reported **875 backend tests green** and a clean frontend
+TypeScript check. Treat those as the implementation validation result; still perform the real live
+server/device deployment checks below.
 
 Use `VERSION_HISTORY.md` for exact release-by-release details rather than repeating them here.
 
@@ -200,37 +207,32 @@ Use `VERSION_HISTORY.md` for exact release-by-release details rather than repeat
 
 ## 6. Active work and near-term priorities
 
-### Active now
+### Active/recommended next phase
 
-**Phone/PWA push notifications** are the current feature workstream. The canonical design is
-`docs/32_Core_Notifications_and_Push.md`.
+**Production readiness and reliability** is now the recommended primary engineering workstream.
+Use `docs/34_Recommended_Next_Steps.md` as the practical plan and
+`docs/04_Development_Roadmap.md` for canonical sequencing.
 
-Another assistant may be implementing this on a separate branch while documentation cleanup is in
-progress. Do not overwrite or redesign that implementation from this branch. When it merges,
-reconcile the canonical notification docs/current-status text against the implemented behaviour.
+Recommended order:
 
-### Near-term engineering priorities
-
-After push notifications, prioritise reliability and production operation before adding many new
-nodes:
-
-1. **Production-serving hardening** — replace Django `runserver` and Vite dev serving in the live
-   deployment with a production WSGI/static frontend path.
-2. **Reduce exposed service ports** — prefer an internal/shared Docker network behind NPM; do not
-   leave PostgreSQL/backend/frontend unnecessarily LAN-published once the production proxy shape
-   is established.
-3. **Automated deploy command** — backup/preflight, build, migrations, restart and health checks in
-   one supported workflow so migrations cannot be forgotten.
-4. **CI and frontend/E2E tests** — backend tests are strong; add repeatable frontend unit and
-   critical-flow browser tests plus CI gates.
-5. **Off-server/encrypted backup strategy** — HomeStack is now important household data, not a
-   disposable test database.
-6. **2FA/passkeys for adult/admin accounts** before any public remote-access plan.
+1. **Production-serving hardening** — replace Django `runserver` and Vite dev serving with a
+   production WSGI server and production-built frontend/static serving.
+2. **Reduce exposed service ports** — prefer an internal/shared Docker network behind NPM and stop
+   unnecessarily publishing PostgreSQL/backend/frontend to the LAN.
+3. **Automated deploy command** — backup/preflight, build, migrations, restart and smoke checks in
+   one supported workflow.
+4. **CI and frontend/E2E tests** — backend suite, migration drift, frontend type/build/unit tests
+   and a small Playwright critical-flow suite.
+5. **Off-server encrypted backup + recovery validation** — HomeStack now contains important
+   household data and needs a credible server/storage-loss recovery path.
+6. **Operational/System Health surface** where it provides useful visibility without rebuilding
+   Uptime Kuma/Dozzle.
+7. **2FA/passkeys for adult/admin accounts** before any public remote-access plan.
 
 ### Feature priorities after reliability work
 
-- Finish the push-notification/PWA experience and validate it on real phones.
-- Resume the **Home Assistant bridge (M5.5)** after the HTTPS/push gate is satisfied.
+- Resume the **Home Assistant bridge (M5.5)** now that HTTPS and Web Push prerequisites exist,
+  after the production/recovery baseline is in better shape.
 - **Hearth/meal planning** can use Atlas Grocery rather than inventing another grocery store.
 - Finish Travel packing/protected-document slices when useful.
 - Health remains deliberately later because it raises the sensitivity/security bar.
@@ -245,7 +247,77 @@ nodes:
 
 ---
 
-## 7. Deployment workflow
+## 7. Notification deployment requirements
+
+The Web Push implementation is merged, but the live server must still be configured correctly.
+
+### Required deployment steps
+
+The notification work adds backend dependencies and migrations. After pulling it to the live server:
+
+```bash
+docker compose build homestack-backend homestack-frontend
+docker compose up -d
+docker exec homestack-backend python manage.py migrate
+```
+
+Relevant notification migrations include:
+
+```text
+notifications.0002_preferences_and_push_subscriptions
+notifications.0003_notification_bundle_key
+notifications.0004_notification_preference_lead_time_minutes
+```
+
+### VAPID configuration
+
+Web Push requires these deployment secrets/settings:
+
+```text
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=
+```
+
+Generate a key pair with:
+
+```bash
+docker exec homestack-backend python manage.py generate_vapid_keys
+```
+
+Put the generated values in the live `.env`, then recreate/restart the backend so clients receive
+the configured public key. Never commit the private key. Push gracefully disables when VAPID is
+not configured, but device registration/delivery will not function.
+
+A test push can be sent through the implemented device test endpoint once a device is registered.
+
+### Scheduled notification command
+
+Run the dispatcher at least hourly:
+
+```bash
+python manage.py notifications_run_scheduled
+```
+
+In Docker/host scheduling, invoke the equivalent command inside `homestack-backend`. It handles
+household-timezone-aware scheduled reminders/countdown delivery with duplicate claiming.
+
+### Real-device validation
+
+Before treating the live rollout as fully verified:
+
+- register at least two household users/devices with different preferences;
+- confirm push arrives while HomeStack is closed;
+- confirm quiet hours and lead times behave correctly;
+- confirm sensitive/re-auth-required sources do not expose lock-screen detail;
+- tap pushes and verify the destination re-checks current permissions;
+- test expired/revoked subscription behaviour;
+- on iOS, test from an **installed Home Screen PWA** — a normal Safari tab is not sufficient for
+  iOS Web Push.
+
+---
+
+## 8. General deployment workflow
 
 The home server uses **Docker**, not Podman.
 
@@ -281,21 +353,22 @@ Before risky migrations or data-changing maintenance, take/verify a backup accor
 
 ---
 
-## 8. Known deployment/security follow-ups
+## 9. Known deployment/security follow-ups
 
 - Confirm the live server is actually using `DJANGO_SETTINGS_MODULE=config.settings.prod` rather
   than merely documenting the intended switch.
 - Confirm a real authenticated **write** over `https://homestack.moosesoftwares.com`, not only the
   health endpoint, after security/environment changes.
+- Complete the Web Push VAPID/cron/real-device rollout described above.
 - Django admin static assets need a production-static solution if the admin UI is expected to
-  remain styled with `DEBUG=0`; this is not part of normal HomeStack use.
+  remain styled with `DEBUG=0`; this is naturally addressed by production serving work.
 - HomeStack is LAN-only. Do not add router port forwarding as a shortcut.
 - If remote access is pursued later, follow `docs/05_Security_Architecture_Document.md` rather
   than assuming HTTPS alone makes the application ready for the internet.
 
 ---
 
-## 9. Working and validation rhythm
+## 10. Working and validation rhythm
 
 For normal application work:
 
@@ -315,7 +388,7 @@ requires it.
 
 ---
 
-## 10. How to leave work for the next assistant
+## 11. How to leave work for the next assistant
 
 Keep this file current, not historical.
 
