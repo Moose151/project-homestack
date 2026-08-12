@@ -1,0 +1,1028 @@
+# Document 36 — Mobile UX Strategy and Implementation Plan
+
+**Status:** canonical implementation strategy for the mobile-first HomeStack experience.
+
+**Created:** 2026-08-13
+
+**Relationship to other documents:** this document is an implementation companion to
+`07_UIUX_Design_Guide.md`. Document 7 remains the stable interface contract; this document turns its
+mobile-first principles into a concrete redesign and engineering sequence for the current shipped
+application. Domain behaviour remains owned by the relevant node/core specification.
+
+---
+
+## 1. Executive recommendation
+
+HomeStack needs a substantial mobile UX overhaul, but it does **not** need a frontend rewrite.
+
+Keep:
+
+- React and the existing routing/API architecture;
+- Tailwind and the shared semantic design tokens;
+- the warm HomeStack visual identity;
+- the existing PWA/service-worker foundation;
+- shared Button, Field, Card, Modal, Tabs and other reusable components where they remain suitable;
+- existing backend permissions, sensitive re-authentication and deep-link behaviour.
+
+Change the mobile information architecture.
+
+The primary problem is not colour, spacing or rounded corners. The app has increasingly large
+feature pages which work by adapting desktop-oriented layouts to narrower widths. Many screens now
+technically fit a phone while still behaving like a desktop application: large pages, many tabs,
+nested tabs, inline create forms, inline edit forms and expanded detail panels all compete for the
+same small viewport.
+
+The mobile programme should therefore be treated as **HomeStack Mobile UX v1**, with this goal:
+
+> Make the phone the best way to use HomeStack, not merely a screen size HomeStack supports.
+
+A mobile user should be able to open HomeStack with one hand, understand what needs attention,
+reach any common destination quickly, add something from anywhere, complete ordinary actions
+without fighting tabs or long forms, and encounter complex management UI only when deliberately
+seeking it.
+
+The core structural change is:
+
+```text
+CURRENT
+
+Node
+ └── enormous page
+      ├── tab
+      ├── tab
+      ├── tab
+      ├── nested tab
+      ├── inline create form
+      ├── inline detail
+      └── inline edit form
+
+TARGET MOBILE
+
+Node home
+ ├── important status
+ ├── primary actions
+ └── destinations
+      │
+      ├── list screen
+      │    └── detail screen
+      │         └── edit/create sheet or focused form screen
+      │
+      └── another list screen
+```
+
+Desktop and mobile should share data, routes, permissions and components, but they do **not** need
+to use exactly the same composition. Responsive design is allowed to give the phone a genuinely
+mobile information hierarchy.
+
+---
+
+## 2. Why the current phone experience feels unpolished
+
+### 2.1 The shell is mobile-aware but most content pages are still desktop-shaped
+
+`AppShell` already provides useful mobile foundations:
+
+- a bottom navigation bar;
+- configurable primary destinations;
+- a complete More directory;
+- global Search;
+- Quick Create;
+- notification access;
+- safe-area padding.
+
+However, the content system still relies heavily on each page independently deciding how its large
+desktop layout should collapse. A single wide content container is shared globally, but mobile
+quality is largely determined page by page. As functionality has accumulated, consistency has
+drifted.
+
+### 2.2 Long tab sets are being hidden rather than redesigned
+
+The shared `Tabs` component sensibly turns a primary tab set with more than three items into a
+mobile select control. That prevents overflow, but it can hide a deeper navigation problem.
+
+For example, a phone user should not have to understand a nine-option selector containing concepts
+such as Overview, Rooms, Maintenance, Appliances, Pool, Power & Water, Improvements, Contacts and
+Finances simply to move around their home information. Those are mobile destinations, not merely
+tabs.
+
+A `<select>` is appropriate for choosing a value. It should not become the default answer to every
+large section hierarchy.
+
+### 2.3 Too much work happens inline
+
+Many nodes create, edit and expand records in the same card/list/page that the user is browsing.
+This is efficient on a large screen, but on a phone it creates long, unstable pages where the user
+can lose context and where important actions move far away from the item being changed.
+
+Routine mobile patterns should instead favour:
+
+- index/list screen;
+- record detail screen;
+- focused create/edit sheet or screen;
+- browser/PWA Back to return to the previous context.
+
+### 2.4 Readability is sometimes sacrificed for density
+
+The shared controls already meet a good touch baseline: fields are approximately 44px high, coarse
+pointer controls receive a 44px minimum, and phone form controls are forced to 16px to avoid iOS
+focus zoom. These are strengths that should remain.
+
+The higher-level screens still use a large amount of 10–11px supporting text. Small microcopy is
+fine for genuinely secondary labels, but meaningful instructions, status and metadata should more
+often sit around 13–16px on phones.
+
+### 2.5 Some experiences explicitly require horizontal panning
+
+The clearest example is Homestead's interactive floor plan. The SVG currently uses a minimum width
+of roughly 680px for the inside view and 760px for the whole-property view inside an overflowable
+container. Panning is reasonable inside a deliberately opened spatial viewer; it should not be the
+primary everyday way to navigate rooms on a phone.
+
+### 2.6 Complexity indicators
+
+The current page implementations are feature-rich. Source size is not itself a defect, but it is a
+useful indicator of how much behaviour is being coordinated in single route-level components.
+Current examples include approximately:
+
+- Calendar: 64 KB;
+- Atlas: 52 KB;
+- Education: 68 KB;
+- Homestead: 109 KB.
+
+The redesign should progressively decompose both the UX and the implementation around stable mobile
+subscreens rather than continue adding responsive conditions to monolithic page components.
+
+---
+
+## 3. Target mobile look and feel
+
+The redesign should still look unmistakably like HomeStack.
+
+Preserve:
+
+- warm neutral backgrounds;
+- soft cards and restrained shadows;
+- teal primary action colour;
+- node accent colours as identity/context rather than decoration;
+- rounded surfaces;
+- household-friendly language;
+- light and dark semantic tokens;
+- calm empty/normal states.
+
+The target should feel closer to a polished native household application than a responsive admin
+dashboard.
+
+### 3.1 Typical phone screen
+
+A normal phone screen should usually contain:
+
+1. a compact app bar with only relevant global/contextual controls;
+2. a clear title or immediate context;
+3. at most a short summary/status block;
+4. vertically flowing rows/cards containing the task at hand;
+5. one obvious primary action where appropriate;
+6. secondary/detail/configuration one level deeper.
+
+### 3.2 Typography
+
+Recommended practical baseline:
+
+- important screen heading: about 20–24px;
+- section/card heading: about 15–18px depending hierarchy;
+- normal body/value/action text: 15–16px;
+- supporting metadata: 13–14px;
+- 10–11px reserved for true micro-labels, badges or low-priority annotations.
+
+Do not solve dense screens by shrinking type.
+
+### 3.3 Touch and reachability
+
+- Keep approximately 44px minimum touch targets.
+- Prefer full-row tap targets instead of tiny text links.
+- Keep destructive actions away from primary actions and confirm irreversible operations.
+- Place frequent mobile actions within natural thumb reach.
+- Account for device safe areas and the on-screen keyboard.
+- Avoid primary actions being covered by the fixed bottom navigation.
+
+### 3.4 Progressive disclosure
+
+The default flow should ask for the minimum useful record first. Advanced recurrence, visibility,
+linkage and administrative options should be collapsed or moved to an advanced section where that
+does not hide necessary information.
+
+---
+
+## 4. Mobile shell and global navigation
+
+The shell should be redesigned before individual nodes so all later work has one stable mobile
+frame.
+
+### 4.1 Simplify the top bar
+
+The current mobile top bar carries destination identity plus Search, Quick Create and Notifications.
+That is too much global chrome competing inside a short phone header.
+
+Recommended mobile app bar:
+
+```text
+┌──────────────────────────────────┐
+│ ‹  Money                   🔔  ⋮ │
+└──────────────────────────────────┘
+```
+
+Use:
+
+- Back when the user is inside a detail/subscreen;
+- current screen/destination title;
+- notification access;
+- one overflow/context menu when useful.
+
+Search should remain globally available through More and be prominent on Home. A keyboard shortcut
+can remain for desktop.
+
+### 4.2 Elevate Quick Create into the bottom navigation
+
+Quick Create already provides one of the best cross-domain capabilities in the app: reminders,
+notes, calendar events, home plans/maintenance, books, points tasks and bills can be started from one
+place.
+
+It should become a first-class mobile action.
+
+Recommended bottom bar:
+
+```text
+┌──────────────────────────────────┐
+│ Home   Shortcut   ＋   Shortcut  More │
+└──────────────────────────────────┘
+```
+
+Rules:
+
+- **Home** fixed;
+- **Add (+)** fixed in the centre;
+- **More** fixed;
+- two user-configurable destination shortcuts;
+- Calendar should be a default shortcut for most users;
+- the current permission/node-visibility filtering remains authoritative.
+
+This gives the phone a stable mental model: go home, go somewhere common, add something, or find
+everything else.
+
+### 4.3 More becomes the mobile directory
+
+More should contain:
+
+- all enabled/authorized destinations grouped by purpose;
+- Search;
+- profile/account entry;
+- appearance/preferences;
+- administrative destinations for authorized users;
+- shortcut customization.
+
+Avoid duplicating a second dense dashboard inside More.
+
+---
+
+## 5. Shared mobile primitives to build first
+
+Do not let each node invent its own mobile screen patterns. Add a small shared mobile layer above the
+existing basic components.
+
+Recommended primitives/concepts include:
+
+- `MobileScreenHeader` — title, Back, optional contextual actions;
+- `MobileSection` — consistent section spacing/heading;
+- `MobileListRow` — large whole-row navigation/action target with leading icon/avatar, primary text,
+  secondary metadata, trailing value/status/chevron;
+- `MobileSettingsRow` — label, description/value and switch/chevron;
+- `MobileSummaryCard` — compact status/attention overview;
+- `StickyActionBar` — safe-area-aware bottom actions above app navigation;
+- `MobileActionMenu` — contextual secondary actions;
+- full-height/focused mobile form sheet using the existing Modal foundation;
+- standard index → detail → edit/create routing pattern;
+- standard mobile filter/sort sheet;
+- standard saved/success feedback.
+
+`Button`, `Field`, `Card`, `Modal`, `Badge`, `Avatar`, `AssigneeSelect` and semantic colour tokens
+should generally remain underneath these patterns.
+
+### 5.1 PageHeader changes
+
+Phone actions should not rely on horizontally scrolling action rows. If a page has more than one or
+two contextual actions, move them to the overflow menu or a dedicated action sheet.
+
+### 5.2 Tabs changes
+
+Keep tabs where there are two or three genuine peer views. For larger product hierarchies, use
+subroutes/list rows instead of automatically converting everything to a select.
+
+Secondary segmented controls can remain for small local choices such as:
+
+- Personal / Book Club;
+- Floor plan / Room list;
+- All / Favourites / Emergency;
+- day-specific filters.
+
+---
+
+## 6. Page-by-page redesign
+
+## 6.1 Home / Hub
+
+**Current direction:** relatively good. The Hub already collapses to one column on mobile.
+
+**Target:** make the phone Hub a daily feed rather than a configurable dashboard first.
+
+Opening viewport priority:
+
+1. greeting/context if useful;
+2. urgent/overdue items;
+3. today/upcoming;
+4. two or three high-value quick actions or user-selected widgets;
+5. lower-priority widgets below.
+
+Desktop can remain more dashboard-like. Mobile customization should remain possible but should not
+turn the normal experience into dashboard administration.
+
+## 6.2 Calendar
+
+Calendar already has substantial mobile-specific work: a phone month grid, swipe navigation,
+mobile view picker, floating Add action and selected-day bottom sheet. Refine this rather than
+replace it.
+
+### Mobile direction
+
+- **Agenda** should be the default everyday reading mode on phone.
+- **Day** should be the next most important view.
+- **Month** should provide orientation, not attempt to display full event content in every cell.
+- **Week** should become a horizontal day selector + readable agenda rather than a squeezed desktop
+  seven-column calendar.
+
+Example week pattern:
+
+```text
+Mon 10   Tue 11   WED 12   Thu 13   Fri 14
+                    ●
+
+Wednesday 12 August
+
+08:30  School drop-off
+10:00  Dentist
+       With Dad tonight
+15:30  Soccer training
+```
+
+Month cells should primarily show date, simple source/person indicators, event count and rotation
+state. Tapping a date opens the existing-style day sheet with readable event rows.
+
+Event create/edit should become a near/full-height phone sheet with sticky Save. Preserve the
+current progressive `More options` approach and source-owned-event deep links.
+
+## 6.3 Lists & notes / Atlas
+
+Atlas contains some of the best existing mobile interaction patterns and should be a reference for
+other nodes:
+
+- whole-row checkbox/title tap targets;
+- sensible metadata wrapping;
+- touch-visible actions;
+- mobile-aware add-item layout.
+
+Recommended changes are mainly structural:
+
+- Lists, Notes, Reminders and Contacts should be straightforward destinations;
+- opening an individual list should produce a focused screen;
+- Grocery in particular should feel like a tiny dedicated app: title, items and fast input with
+  minimal surrounding chrome;
+- list creation/editing should use focused sheets rather than expanding an already busy list page.
+
+## 6.4 Tasks & rewards / Meridian
+
+Meridian currently exposes up to eight top-level sections. A mobile picker prevents overflow but
+still asks the user to navigate the domain's data structure.
+
+Recommended primary phone model:
+
+```text
+Tasks
+Rewards
+My progress
+More
+```
+
+Suggested grouping:
+
+- Tasks includes ordinary tasks and routines;
+- Rewards is the shop/redemption workflow;
+- My progress includes goals, wishlist and leaderboard/personal progress;
+- More contains management/settings and less frequent tools.
+
+For child-facing use, optimize around three questions:
+
+- What can I do?
+- How many points do I have?
+- What can I get?
+
+Adult management/setup can remain richer but should not dominate the everyday phone screen.
+
+## 6.5 School & study / Education
+
+Education should become deadline- and timetable-first on mobile.
+
+Recommended landing screen:
+
+```text
+School & study
+
+Today
+  9:00  Cyber Defence
+  14:00 Lab
+
+Due soon
+  Threat Intel Lab             Tomorrow
+  Assignment 2                 Friday
+
+Assignments                    ›
+Timetable                      ›
+Courses                        ›
+Events                         ›
+```
+
+Move Profile and Institutions into configuration/More unless immediately relevant.
+
+Assignments should get real detail screens. Notes, files, status, priority and due date then live
+inside the assignment rather than expanding into a large workspace inside the list.
+
+Timetable should prioritize today/week agenda cards on phone. Dense desktop schedule comparison can
+remain available at wider breakpoints.
+
+## 6.6 Books
+
+Books is a lower-priority structural change because its shelf/card model already suits mobile.
+
+Recommended changes:
+
+- Personal / Book Club as a simple two-state segmented control;
+- clear shelf/status navigation;
+- tapping a book opens a focused detail screen;
+- add/edit metadata moves to a sheet;
+- Add Book starts with title/ISBN/link and only then reveals optional cataloguing metadata.
+
+The phone should feel like a reading list, not a library database editor.
+
+## 6.7 Household guide / Home Wiki
+
+The mobile Wiki should be extremely direct:
+
+- Search at the top;
+- Favourites and Emergency shortcuts;
+- pages/categories below;
+- tap a page to read it full-screen;
+- Edit is an action on the page, not an inline form inside the browse list.
+
+Emergency information should be reachable in very few taps and remain readable under stress.
+
+## 6.8 Pets
+
+The current pet cards already present identity well, but treatments and appointments expand inside
+the card.
+
+Give each pet a real detail screen:
+
+```text
+Milo
+
+Next attention
+Flea treatment due Saturday
+
+Treatments        ›
+Appointments      ›
+Vet details       ›
+History           ›
+```
+
+The Pets landing screen should show each pet and the next thing needing attention. Creation/editing
+moves to focused forms.
+
+## 6.9 Our home / Homestead
+
+This should receive the **largest mobile redesign**.
+
+Nine top-level sections are too many for phone tab navigation. Replace the top-level mobile tab
+selector with a home dashboard and navigable rows.
+
+Recommended landing screen:
+
+```text
+Our home
+
+Needs attention
+  2 maintenance jobs
+  1 warranty expiring
+
+Your home
+  Rooms & areas             ›
+  Maintenance               ›
+  Appliances                ›
+  Pool & spa                ›
+  Power & water             ›
+  Projects                  ›
+  Contacts                  ›
+  Costs & cover             ›
+```
+
+### Rooms and floor plan
+
+Default phone Rooms experience should be a tile/list view:
+
+```text
+Rooms & areas
+
+🏡 Family room
+   3 plans · $1,240 remaining                ›
+
+🛏 Master bedroom
+   1 open plan                               ›
+
+🏊 Pool
+   Water check due Saturday                  ›
+
+🛠 Shed
+   2 plans                                   ›
+```
+
+Provide **View interactive floor plan** as a deliberate full-screen spatial mode. Panning/zooming is
+then expected and acceptable. The floor plan must not be the only comfortable way to navigate room
+information.
+
+Room pages should become natural detail destinations for plans, purchases, notes and status.
+
+## 6.10 Money / Solace
+
+Solace has already improved by reducing many historical tabs to five high-level concepts: Now,
+Bills, Plan, Insights and Manage. Mobile should take the next step and become action-first.
+
+Recommended Money landing screen:
+
+```text
+Money
+
+Safe / current position
+$X available after planned commitments
+
+Coming up
+Electricity               $182   Tomorrow
+Mortgage                 $2,100   18 Aug
+
+Next pay
+Friday 14 Aug
+$X allocated · $Y remaining
+
+Bills          Pay plan
+Buckets        Purchases
+```
+
+Then open dedicated phone screens for:
+
+- Bills;
+- Pay plan;
+- Buckets;
+- Purchases;
+- Insights/history;
+- Manage/configuration.
+
+`Manage` should not have the same everyday prominence as current financial position and upcoming
+obligations.
+
+Add Bill, Edit Bill, Add Bucket, Record Income and similar operations should use focused sheets or
+form screens instead of expanding long forms inside the surrounding finance page.
+
+Keep sensitive re-authentication and all finance permission boundaries unchanged.
+
+## 6.11 Fitness & Training
+
+Fitness is an inherently phone-in-hand workflow, so it deserves strong mobile treatment.
+
+The live workout implementation is already headed in the correct direction:
+
+- large set completion controls;
+- editable set rows;
+- previous-performance context;
+- sticky Finish Workout actions.
+
+Preserve that focus. During an active workout, reduce unrelated navigation/noise as far as practical.
+The dominant content should be:
+
+- exercise name;
+- previous performance;
+- current sets;
+- large completion/next actions.
+
+Program building and exercise administration are less frequent and can remain richer, preferably on
+dedicated screens rather than mixed with live training.
+
+## 6.12 Trips & holidays / Travel
+
+Treat a trip as its own mobile project.
+
+Recommended trip detail:
+
+```text
+Japan 2027
+
+12–26 September
+4 travellers
+
+Next action
+Book accommodation by 30 March
+
+Itinerary                 ›
+Bookings                  ›
+Things to do              ›
+Packing                   ›
+Documents                 ›
+People                    ›
+```
+
+Trip, booking and itinerary forms should use progressive focused editors rather than long inline
+forms. Preserve surprise/hidden-user rules and calendar integration.
+
+## 6.13 My Corner
+
+My Corner should feel like a personal home/profile, not another multi-tab database page.
+
+Overview should surface:
+
+- personal status;
+- assignments/tasks;
+- points/goals where applicable;
+- current wishes/lists;
+- recent activity.
+
+Activity, Assigned and Lists become drill-down destinations. Reactions can remain compact and
+household-friendly.
+
+## 6.14 Notifications
+
+The current page is functional but reads like an administration matrix: Devices, Quiet Hours and a
+long category list with separate In-app and Push switches.
+
+Reorganize around human questions:
+
+```text
+Notifications
+
+This phone
+Push notifications               On
+Chrome on Android
+Test notification                  ›
+
+When to notify me
+Quiet hours                    10pm–7am
+Morning reminders                 8am
+
+What to notify me about
+Appointments                       ›
+Tasks & assignments                ›
+Household activity                 ›
+Bills                              ›
+```
+
+Rules:
+
+- prioritize the current device;
+- place other registered devices in a secondary section;
+- simple switches save immediately;
+- show brief `Saved` feedback rather than requiring a final page-level Save button;
+- category detail can contain Push/In-app/Mine-only options;
+- browser permission explanation remains contextual and explicit.
+
+## 6.15 Manage HomeStack / Settings
+
+The mobile Manage page should become a settings directory rather than one long page containing
+household settings, stacks, version history, notifications, backups, push devices, family colour
+and future controls.
+
+Recommended structure:
+
+```text
+Manage HomeStack
+
+Household                 ›
+People & access            ›
+Stacks                     ›
+Backups                    ›
+Push devices               ›
+Appearance                 ›
+Version & system           ›
+```
+
+Personal notification preferences should be accessible from the user's profile/preferences rather
+than feeling like household-wide administration.
+
+Sensitive/admin operations retain their existing permission and re-authentication requirements.
+
+---
+
+## 7. Mobile interaction rules for all nodes
+
+### 7.1 Prefer routes to giant conditionally rendered pages
+
+Use meaningful URLs for important mobile contexts so that:
+
+- notification deep links land somewhere stable;
+- Search can open exact records;
+- browser/PWA Back works naturally;
+- refresh retains context;
+- screens can be lazy-loaded independently;
+- the same record detail can be linked from Hub, Calendar, Corners and Search.
+
+Query-string tabs can remain where they represent a true small view state, but core entities and
+major sections should increasingly use dedicated routes.
+
+### 7.2 No routine horizontal scrolling
+
+Document-level horizontal scrolling is a defect.
+
+Horizontal movement is acceptable only for an intentionally spatial/continuous control such as:
+
+- the explicitly opened floor-plan viewer;
+- a small segmented day/date strip;
+- a deliberate chart timeline where alternatives are supplied.
+
+Tables should become cards/rows below the desktop breakpoint unless column comparison is the point
+of the screen.
+
+### 7.3 Forms should be focused
+
+On phones:
+
+- common fields first;
+- optional/advanced fields collapsed;
+- primary action sticky when the form is long;
+- destructive action visually separated;
+- validation adjacent to the failing field/workflow;
+- keyboard type/inputMode chosen appropriately;
+- unsaved changes should not be lost accidentally where the form is substantial.
+
+### 7.4 Save behaviour
+
+Prefer immediate save for simple settings switches and single-value controls.
+
+Use explicit Save for multi-field records where the user needs to review a coherent change.
+
+Always show enough feedback to answer:
+
+- Did it work?
+- What changed?
+- Is anything else required?
+
+### 7.5 Preserve permission and sensitivity behaviour
+
+Mobile convenience must never weaken:
+
+- backend authorization;
+- node visibility restrictions;
+- sensitive re-authentication;
+- private record handling;
+- hidden/surprise Travel handling;
+- safe notification text;
+- User/Person identity rules.
+
+UI hiding is not a security boundary.
+
+---
+
+## 8. Engineering execution order
+
+The order matters. Avoid asking an implementation agent to simply “fix mobile responsiveness on all
+pages”, because that will recreate page-specific solutions and leave the product inconsistent.
+
+### Phase 1 — Define and automate the mobile contract
+
+Primary target sizes:
+
+- 360–430px: everyday phone design target;
+- 320px: minimum/stress test;
+- approximately 768px: tablet transition target.
+
+Add Playwright/browser acceptance coverage for major routes before large layout changes:
+
+- capture baseline screenshots;
+- assert no document-level horizontal overflow;
+- assert critical controls are visible/reachable;
+- test major deep links;
+- test modal/sheet operation with phone viewport;
+- test light/dark where practical.
+
+Create a short repeatable mobile acceptance checklist for each converted surface.
+
+### Phase 2 — Build shared mobile primitives
+
+Implement the common screen/list/settings/sticky-action/form patterns described in section 5.
+
+Refine typography and PageHeader behaviour. Establish one standard for mobile forms, action menus,
+section navigation and saved feedback.
+
+Do this before converting large nodes.
+
+### Phase 3 — Redesign AppShell/mobile navigation
+
+Implement:
+
+- simplified mobile top bar;
+- fixed Home / Add / More model;
+- two configurable shortcuts;
+- central Quick Create;
+- More directory/search/profile;
+- proper detail-screen Back/context behaviour;
+- safe-area and keyboard checks.
+
+Desktop sidebar behaviour can remain intact.
+
+### Phase 4 — Calendar as the reference implementation
+
+Calendar should establish the canonical patterns for:
+
+- date navigation;
+- sheets;
+- full-screen/focused editors;
+- floating/sticky actions;
+- mobile view switching;
+- source deep links;
+- Back behaviour.
+
+Once Calendar feels polished, reuse those patterns elsewhere.
+
+### Phase 5 — Homestead
+
+This removes one of the largest current phone pain points.
+
+- replace nine-section mobile picker with home dashboard/subroutes;
+- room list/tile view first;
+- room detail screens;
+- floor plan becomes explicit full-screen spatial mode;
+- focused maintenance/appliance/project flows.
+
+### Phase 6 — Solace / Money
+
+- create action-first Money home;
+- separate Bills/Plan/Buckets/Purchases/Insights;
+- move inline editors to sheets/screens;
+- preserve sensitive gate;
+- ensure monetary values/status remain readable without dense dashboards.
+
+### Phase 7 — Notifications and Settings
+
+Establish the reusable settings-directory pattern:
+
+- settings rows;
+- immediate-save switches;
+- dedicated subpages;
+- current-device-first push experience;
+- shorter default explanatory copy with deeper help when required.
+
+### Phase 8 — Daily-use nodes
+
+Convert in this order, reusing the now-stable patterns:
+
+1. Atlas — preserve its good item/list interactions and improve navigation/detail flows;
+2. Meridian — simplify kid/adult mobile hierarchy;
+3. Education — today/deadline landing + assignment details;
+4. Pets — pet detail model;
+5. Fitness — polish focused live workout and separate management flows;
+6. Corners — personal home + drill-down sections.
+
+### Phase 9 — Lower-frequency content/planning nodes
+
+Convert:
+
+- Books;
+- Home Wiki;
+- Travel.
+
+They should now be able to reuse the established list/detail/form/settings primitives rather than
+inventing new responsive patterns.
+
+### Phase 10 — Complete real-device acceptance
+
+Test at minimum:
+
+- Android Chrome in-browser;
+- installed Android PWA;
+- iPhone Safari/Home Screen PWA where available;
+- small and larger phones;
+- portrait and landscape;
+- tablet/touch layout;
+- light and dark mode;
+- normal and increased browser/text scaling;
+- keyboard-open form states;
+- long household/person/node labels;
+- empty/loading/error states;
+- deep links from Calendar, notifications, Search and Corners;
+- destructive operations;
+- offline/reconnection states already supported by the PWA.
+
+---
+
+## 9. Acceptance criteria
+
+HomeStack Mobile UX v1 is not complete merely because screenshots fit at 390px.
+
+### 9.1 Global acceptance
+
+- No accidental document-level horizontal scrolling on ordinary screens at 320px and above.
+- Important destinations are normally reachable within two taps from the shell.
+- Common creation is reachable globally through Add/Quick Create.
+- Primary routine controls meet the approximately 44px touch-target baseline.
+- Meaningful text is readable without pinch zoom.
+- Fixed navigation/actions respect safe areas.
+- On-screen keyboard does not obscure the active field or primary action.
+- Back returns to a meaningful previous context.
+- Refresh/deep-link preserves meaningful screen/record state.
+- Light and dark modes remain coherent.
+- Permission/sensitivity behaviour is identical in strength to desktop.
+
+### 9.2 Everyday usability
+
+A household member should be able to complete these quickly on a phone:
+
+- check what needs attention today;
+- open today's Calendar and an event;
+- add an event;
+- add/check off a grocery or list item;
+- view/complete a Meridian task;
+- check an assignment deadline;
+- mark pet/home maintenance attention;
+- see upcoming bills/current Money position if authorized;
+- enable/test/configure notifications;
+- find a household Wiki page;
+- start and complete a Fitness workout;
+- open a specific record from a push notification.
+
+### 9.3 Navigation comprehension
+
+A user should not need to know internal node names or remember that a feature exists under an
+arbitrary tab. Plain household language and stable drill-down navigation remain the rule.
+
+---
+
+## 10. What not to do
+
+Do **not**:
+
+- rewrite HomeStack in React Native, Flutter or another frontend stack merely to fix mobile UX;
+- split business logic into a separate native client;
+- redesign the backend for this work unless a concrete API gap is exposed;
+- throw away the current semantic tokens/brand;
+- add a large third-party component framework just to obtain mobile visuals;
+- fix the project by adding hundreds of isolated `sm:`/`md:` classes to current giant pages;
+- use horizontal scrolling as the general answer to dense data;
+- solve navigation density by converting every large tab set into a dropdown;
+- hide complexity by shrinking important text;
+- weaken sensitive re-authentication or permission checks for mobile convenience.
+
+The responsive PWA architecture is capable of delivering the intended experience. The work is
+primarily product hierarchy, interaction design and component composition.
+
+---
+
+## 11. Implementation discipline
+
+For each screen converted:
+
+1. identify the primary phone job before touching CSS;
+2. decide the mobile screen hierarchy/index-detail flow;
+3. reuse or improve a shared mobile primitive;
+4. preserve existing domain/API/security behaviour;
+5. add/update deep-link routes where useful;
+6. add phone viewport tests before declaring the screen complete;
+7. verify real-device touch/keyboard behaviour;
+8. only then refine desktop/tablet regressions.
+
+Avoid converting several large nodes simultaneously before the shared patterns are proven. Calendar
+should be the first reference, then Homestead and Solace should validate that the pattern works for
+large, complex domains.
+
+---
+
+## 12. Definition of the intended result
+
+The programme succeeds when HomeStack stops feeling like thirteen responsive web pages sharing a
+sidebar and instead feels like one mobile household application with multiple capabilities.
+
+The user experience should be:
+
+- **Home-first:** what matters now is visible quickly;
+- **task-first:** screens are organised around actions/questions, not model structure;
+- **one-handed:** common actions are easy to reach and tap;
+- **progressive:** complexity appears only when needed;
+- **consistent:** the same navigation/form/detail patterns recur across nodes;
+- **calm:** normal household state is readable rather than dashboard-dense;
+- **secure:** convenience never bypasses backend permission/sensitivity rules;
+- **deep-linkable:** Calendar, Search, notifications and Corners can open exact useful contexts;
+- **responsive by design:** phone is intentionally composed, not merely a narrower desktop.
+
+The engineering principle for the programme is therefore:
+
+> Do not make everything fit on a phone. Make the phone the best way to use HomeStack.
