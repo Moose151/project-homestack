@@ -1,172 +1,303 @@
 # Document 5 — Security Architecture Document
 
-> Canonical. Supersedes all earlier security docs. Decisions D1–D23 in `00_README_and_Changelog.md`.
+> **Canonical security contract.** Decisions D1–D24 live in `00_README_and_Changelog.md`.
+> Implementation/release chronology belongs in `VERSION_HISTORY.md`; this file defines the
+> security boundaries that current and future work must preserve.
 
-## 1. Purpose
+## 1. Purpose and threat model
 
-Defines HomeStack's security model. HomeStack holds finances, health notes, documents and
-children's details, so security is a built-in feature, not a layer added later. Even running
-on a single home server for one trusted household, the security spine is built early because
-it becomes non-negotiable the moment HomeStack is ever released to families you don't know
-(D2, D10).
+HomeStack stores household finances, personal details, documents, children's information and may
+later store medical data. Even as a single-household LAN application, its security model assumes:
 
-## 2. Principles
+- another household member may legitimately have fewer permissions;
+- a child/shared kiosk must not inherit an adult's sensitive access;
+- a stolen/observed PIN is not sufficient to unlock finance/health data;
+- derived surfaces (Hub, Calendar, Search, notifications, Corners) can leak data unless they
+  re-check the source permission boundary;
+- backups can expose essentially the whole system;
+- any future remote/public path materially raises the threat level.
 
-Least privilege · secure defaults · **backend enforcement** (clients are never trusted) ·
-defence in depth · auditability · sensitive-data separation · safe kiosk behaviour.
+Principles: least privilege, secure defaults, backend enforcement, defence in depth, auditability,
+sensitive-data separation and explicit failure states.
 
-## 3. Sensitive areas
+## 2. Authentication (D6)
 
-- Solace (finance)
-- Health
-- Sensitive Documents/Attachments
-- Some Assets records (registration, VIN, insurance, receipts, serials)
-- Some People profile fields (DOB, allergies, school details, emergency contacts, notes)
-- Backups
-- Admin settings
-- Home Assistant connection credentials, mapping configuration and sensitive controls
+Current web/kiosk authentication uses Django sessions.
 
-These get stronger controls: restricted visibility, sensitivity tagging, re-authentication
-where noted, and audit logging.
+- Everyday login: avatar + PIN.
+- Adults/admins also have passwords.
+- PINs and passwords use Argon2id hashing.
+- PIN is intentionally a convenience credential and is never the only gate for sensitive areas.
+- Token/native-client authentication is deferred until a native client actually needs it.
 
-## 4. Authentication (D6)
+### 2.1 Transport
 
-**Model:** Django **session-based** auth for web and kiosk. Token auth is added only when
-native apps arrive — not built now.
+The household LAN now uses a browser-trusted HTTPS origin:
 
-**Everyday login:** avatar selection + PIN, for all members including children.
+`https://homestack.moosesoftwares.com`
 
-**Adults:** admin and manager accounts also have passwords.
+TLS terminates at the existing Nginx Proxy Manager. Pi-hole resolves the hostname locally to the
+home server. The Let's Encrypt certificate is issued/renewed through Cloudflare DNS challenge, so
+no public inbound port is required for certificate validation.
 
-**Hashing:** PINs and passwords hashed with **Argon2id**. PINs are low-entropy by nature, so
-they are never the sole protection for sensitive areas (see §6).
+This solves trusted transport on the LAN. **It does not make HomeStack approved for public
+internet exposure.**
 
-**Transport:** local network only until HTTPS is in place. Because PINs traverse the LAN,
-HTTPS via the reverse proxy is required before any access beyond the trusted local segment
-(see §14).
+## 3. Permissions (D10)
 
-## 5. Permissions (D10)
+Authorization is backend-enforced through the central permission/visibility spine. Frontend
+visibility is presentation only.
 
-Permissions are resolved **centrally**, never scattered ad hoc:
+Resolution considers the relevant combination of:
 
-- **Permission resolver** — one function combining role, per-user overrides
-  (`user_permissions`), node-enabled status, record visibility, sensitivity, and current
-  re-auth state into an allow/deny.
-- **Visibility queryset mixin** — list endpoints return only rows the requester may see.
+- authenticated/active User;
+- household;
+- role;
+- per-user overrides;
+- enabled node/capability;
+- record visibility;
+- record sensitivity;
+- child/kiosk restrictions;
+- current sensitive re-auth state.
 
-Permissions apply to nodes, Hub widgets, calendar events, attachments, search results, API
-endpoints, admin actions and kiosk views. **Permission tests are written first**, before node
-features.
+List/search/aggregation surfaces must filter before serializing or producing snippets. New domain
+features write permission/security tests before ordinary behaviour tests where access boundaries
+are involved.
 
-## 6. Sensitive-node locking & re-authentication (D6)
+## 4. Users vs People (D12)
 
-Sensitive nodes require **re-authentication using a password** (not the PIN), so that
-shoulder-surfing a PIN on a shared kiosk cannot expose finance or health data.
+- **User** = authentication/ownership/audit actor.
+- **Person** = household subject/assignee/profile.
 
-- Default re-auth nodes: Solace, Health, sensitive Documents/Attachments.
-- Optional sensitive lock may also apply to specific Assets records or People profile fields.
-- Re-auth grants a short-lived elevated state on the session; it expires quickly and on
-  kiosk timeout. The resolver checks this state for sensitive resources.
-- On kiosk specifically, opening a sensitive node requires re-auth **and** forces a shorter
-  timeout.
+`created_by`, `updated_by`, review/audit actors and login security always reference Users.
+Assignments/subjects normally reference People. A Person may have no login.
+
+This distinction must not be collapsed because it is part of both permission correctness and
+household modelling.
+
+## 5. Sensitive areas
+
+Default/high-sensitivity domains and capabilities include:
+
+- Solace / Money;
+- future Health;
+- sensitive Documents/Attachments;
+- backups and restore;
+- account/permission administration;
+- protected Homestead policy/account/financial context;
+- Home Assistant credentials/configuration and any sensitive controls;
+- selected People fields where their content warrants stronger restriction.
+
+Fitness & Training is **not** medical Health. It may contain private workouts but must not become a
+store for diagnoses, medications, injuries, body measurements or medical notes (D24).
+
+## 6. Sensitive re-authentication
+
+Sensitive areas use password re-authentication rather than PIN re-entry.
+
+- Re-auth creates a short-lived elevated session state.
+- The elevation expires; kiosk elevation is intentionally more cautious/shorter.
+- Sensitive APIs return a machine-readable locked/re-auth-required contract rather than relying on
+  client-side route hiding.
+- Source permissions and re-auth state must be checked again for sensitive downloads/actions.
+- Child accounts do not gain sensitive access merely by knowing/observing an adult PIN.
 
 ## 7. Kiosk security
 
-The kiosk is a shared, always-on device. Threat model: shoulder-surfing, leftover state from
-a previous user, a child tapping into adult data.
+The kiosk is a shared device. Main risks are shoulder-surfing, leftover session state and a child
+navigating into adult-only data.
 
-Controls:
-- Automatic timeout returning to avatar selection; short sessions.
-- No sensitive widgets on the kiosk Hub by default (no Solace, Health, financial events).
-- Kiosk-safe API endpoints serve only kiosk-appropriate data.
-- A clear, always-available logout control.
-- Sensitive nodes need re-auth + shortened timeout even for an admin (§6).
+Required controls:
 
-Worst realistic case if a child taps through the child kiosk: they see permitted lists,
-homework, pet cards and meal cards — nothing sensitive — by design.
+- automatic timeout back to avatar selection;
+- explicit logout/exit;
+- kiosk-safe endpoints/Hub widgets only;
+- no finance/health/sensitive-document leakage in normal kiosk summaries;
+- sensitive elevation requires password and uses a shorter timeout;
+- server-side permissions remain authoritative even if kiosk UI state is manipulated.
 
-## 8. Calendar (scheduling) security
+## 8. Derived-surface security
 
-Events carry `visibility` ∈ {private, household, role_restricted, user_restricted, sensitive}
-and `sensitivity` ∈ {normal, financial, health, document, private}. Because events are
-generated by the scheduling helper from node records (D7), the source record's sensitivity
-propagates to its event. Examples: pet vaccination → household; homework → assigned child +
-parents; bill due → admin/manager, sensitivity financial; medical appointment → sensitive,
-health.
+### 8.1 Calendar
 
-## 9. Search security (D9)
+Node records own their dates. Generated Calendar events inherit/reconstruct the owning record's
+visibility/sensitivity rules. Financial/private/health details must not become visible simply
+because a date is projected into Calendar.
 
-Postgres full-text search runs over each node's permission-filtered queryset through the same
-visibility mixin, so results filter by household, user, role, node, visibility, sensitivity
-and re-auth state. Snippets must not leak restricted detail (sensitive results are excluded
-before snippets are built).
+### 8.2 Hub
 
-## 10. Attachment security (D11)
+Widgets use permission-filtered selectors. A disabled/locked/unauthorized node must not reveal
+counts, titles, amounts or meaningful snippets through Hub.
 
-Access controlled by `visibility` + `sensitivity` via the central resolver (no per-row ACL in
-V1). Downloads are permission-checked; sensitive downloads are audited. Sensitive files are
-never exposed through kiosk or child accounts unless explicitly permitted.
+### 8.3 Search
 
-## 11. Assets & People field-level sensitivity
+Search operates over permission-filtered owning querysets. Sensitive results are excluded before
+snippet generation. A result deep-link re-checks permissions at the destination.
 
-Assets may hold registration, VIN, insurance, serials and receipts — support restricted
-visibility, and hide Assets from children by default. People profiles may hold DOB,
-allergies, school details and emergency contacts — sensitive fields are permission-controlled.
+### 8.4 Corners/activity
 
-## 12. Backup security (D17)
+Person-centred activity is a projection, not a bypass. Activity summaries/reactions/deep links
+must remain within the source record's current visibility.
 
-Backups can contain all HomeStack data. Backup actions require admin access; **restore
-requires admin re-authentication**. The restore procedure (pg_restore + media unpack + checksum
-verification, with stated downtime) is documented in the Architecture doc. Future: encrypted
-and offsite backups, integrity checks.
+### 8.5 Notifications and Web Push
 
-## 13. Audit logging
+Notification storage/delivery must respect the same source visibility. Lock-screen/push payloads
+must be sparse enough that sensitive information is not exposed before HomeStack re-authentication.
+Opening a push re-checks current authentication/permission/re-auth state rather than trusting the
+notification payload.
 
-Log: logins, failed logins, sensitive-node access, permission changes, user changes, node
-enable/disable, backup creation, backup restore, and sensitive attachment downloads. Audit
-entries are immutable and admin-viewable.
+Canonical push design: `32_Core_Notifications_and_Push.md`.
 
-### 13.1 Home Assistant bridge security (D22)
+## 9. Attachments (D11)
 
-The Home Assistant base URL and long-lived token are backend deployment secrets, never browser
-or ordinary database settings. Discovery/configuration is admin-only. Normal reads return only
-explicitly mapped entities with sensitive attributes filtered; controls resolve a stored action
-ID to a server-side domain/service/entity allowlist and are audited. Locks, alarms, garage doors,
-cameras and safety devices remain read-only or absent until separately reviewed. Upstream
-timeouts, invalid credentials or outages fail independently and do not block HomeStack.
+Attachments use the shared visibility/sensitivity mechanism rather than a parallel per-row ACL
+system.
 
-## 14. Remote access (pre-exposure checklist)
+- Download endpoints permission-check every request.
+- Sensitive downloads are audited.
+- Files are not exposed through a public static/media directory that bypasses the application
+  permission boundary.
+- Kiosk/child access follows the owning record/security policy.
 
-Local-network-only by default; VPN preferred. **Do not expose publicly** until all of:
-HTTPS configured · reverse proxy in place · 2FA available · rate limiting active · backups
-protected · strong admin passwords · sensitive-node locking implemented. This checklist also
-gates any future self-hosted release where buyers might expose their instance.
+A finer per-file ACL is deferred until real use proves the shared model insufficient.
 
-**HTTPS configured, LAN-only — DONE and confirmed live (2026-08-12).** The home server runs
-**Nginx Proxy Manager** (reverse proxy/TLS termination, ports 80/81/443) and **Pi-hole** (local
-DNS). NPM holds a real Let's Encrypt certificate for `homestack.moosesoftwares.com` via its DNS
-Challenge (Cloudflare), so no router port forwarding was ever needed to issue or renew it; a
-Pi-hole local DNS record points that hostname at the server's LAN IP (`192.168.1.125`) so it
-never resolves publicly. NPM proxies the hostname to the frontend container (`:5173`) with a
-second custom location routing `/api` to the backend (`:8000`) directly — the frontend's own
-dev-server proxy would also have forwarded `/api` internally, but routing it in NPM works
-identically and is one less hop. Outside this repo/compose file entirely: no HomeStack service
-(Caddy or otherwise) handles TLS. Confirmed: the backend health endpoint returns 200 over
-`https://homestack.moosesoftwares.com`. This is deliberately **not** the "reverse proxy in
-place" box above being ticked for public exposure — HomeStack remains reachable only from the
-home network (plus the existing VPN), with a real trusted certificate instead of a plain-HTTP or
-self-signed one. Public exposure via Cloudflare Tunnel or VPN-only access remains a separate,
-later decision.
+## 10. Audit
 
-## 15. V1 security requirements
+Security/administrative actions should produce immutable audit records where meaningful,
+including:
 
-Secure PIN/password hashing (Argon2id) · admin passwords · role permissions · node permissions
-· the central resolver + visibility mixin · calendar visibility/sensitivity · attachment
-permission checks · kiosk timeout · audit logs · backup access control + working restore ·
-re-auth foundation. Permission tests precede node features.
+- login success/failure;
+- sensitive-node access/elevation;
+- account/role/permission changes;
+- node enable/disable changes;
+- sensitive attachment downloads;
+- backup creation/restore;
+- reviewed Home Assistant controls when implemented.
 
-## 16. Notes on deferred items
+Do not record secrets, passwords, tokens or unnecessarily sensitive payload content in audit
+metadata.
 
-No durable event bus to secure in V1 (D4); signal handlers run in-process under the same
-permission context as the request that triggered them. Token-auth hardening, 2FA, passkeys
-and field-level encryption are parked until their milestones (Roadmap M4+ and Parking Lot).
+## 11. Backups (D17)
+
+A backup is sensitive because it can contain nearly all household data.
+
+Current HomeStack requirements:
+
+- admin-only backup management;
+- restore requires admin re-authentication;
+- database/media integrity checks;
+- a documented, tested restore path.
+
+Near-term hardening target: maintain an **encrypted off-server/off-primary-storage copy** and
+periodically prove it can be restored. A backup job that has never been restore-tested is not
+considered sufficient disaster recovery.
+
+## 12. Home Assistant security boundary (D22)
+
+When implemented:
+
+- base URL and long-lived token are deployment secrets, not browser data or ordinary node
+  settings;
+- discovery/configuration is admin-only;
+- only explicitly mapped entities are returned;
+- action requests use stored server-side allowlists, never arbitrary browser-supplied HA
+  domain/service/entity combinations;
+- controls are centrally permission-checked and audited;
+- locks, alarms, garage/cover access, cameras and safety-critical devices remain read-only/absent
+  until separately reviewed;
+- timeouts, response limits, TLS/URL validation and redaction are mandatory;
+- HA outage/invalid token must degrade the bridge without blocking HomeStack.
+
+Home Assistant remains the owner of devices/state/history/automations. HomeStack must not mirror a
+second durable copy of that domain.
+
+## 13. Current LAN HTTPS deployment
+
+**Confirmed live 2026-08-12:** trusted HTTPS is available locally at
+`homestack.moosesoftwares.com`.
+
+Topology:
+
+```text
+LAN client
+  -> Pi-hole DNS: homestack.moosesoftwares.com -> 192.168.1.125
+  -> Nginx Proxy Manager :443 (Let's Encrypt via Cloudflare DNS challenge)
+  -> HomeStack frontend/backend
+```
+
+No router port forwarding is required for DNS-01 issuance/renewal. Nginx Proxy Manager admin is
+LAN/admin-only.
+
+The HTTPS rollout confirmed:
+
+- local DNS resolution to `192.168.1.125`;
+- valid Let's Encrypt certificate for `homestack.moosesoftwares.com`;
+- frontend returns HTTP 200 through the HTTPS hostname after Vite `allowedHosts` configuration;
+- `/api/v1/health/` returns HTTP 200 through the HTTPS hostname.
+
+Still verify/retain as deployment hygiene:
+
+- real login plus at least one state-changing request over the HTTPS origin;
+- production secure-cookie/proxy settings when the live server moves from development settings to
+  the supported production-serving profile;
+- no accidental public router forwarding.
+
+## 14. Public/remote access gate
+
+HomeStack remains LAN-only by product decision. VPN can be used for controlled remote access.
+Public reachability (including Cloudflare Tunnel) is a **separate security milestone**, not a side
+effect of owning a domain or having HTTPS.
+
+Do not approve public exposure until all of the following are satisfied and reviewed together:
+
+- [x] browser-trusted HTTPS on the household hostname;
+- [x] central backend permission model;
+- [x] sensitive-node password re-authentication;
+- [x] protected attachment/download path;
+- [x] audit coverage for sensitive/admin operations;
+- [x] tested local backup/restore capability;
+- [ ] production application serving (no Django `runserver` / Vite dev server as the live path);
+- [ ] unnecessary direct host/container ports removed/restricted;
+- [ ] secure-cookie/proxy production settings verified in the live deployment;
+- [ ] brute-force/rate-limit protections reviewed for login/re-auth endpoints;
+- [ ] 2FA/passkey or equivalent stronger adult/admin remote authentication available;
+- [ ] encrypted off-server backup/recovery path in place and restore-tested;
+- [ ] explicit remote-exposure threat-model/review completed.
+
+Even after the checklist is complete, VPN-only access may remain the preferred architecture.
+
+## 15. Secret handling
+
+Secrets must not be committed to Git or exposed to the frontend bundle/logs.
+
+Examples:
+
+- database credentials;
+- Django secret key;
+- Cloudflare DNS API token (stored in Nginx Proxy Manager for DNS-01, not HomeStack `.env`);
+- future VAPID private key;
+- future Home Assistant token;
+- future offsite-backup credentials/encryption keys.
+
+Use restricted provider tokens where possible and scope them only to the resource/action required.
+
+## 16. Deferred security mechanisms
+
+Deferred unless the threat model or implementation requires them:
+
+- native-app token-auth hardening;
+- field-level/database encryption beyond protected storage/access;
+- per-file ACL tables;
+- durable event-broker security;
+- generic integration credential framework.
+
+2FA/passkeys are no longer merely a generic future idea: they are a specific gate for public
+remote access.
+
+## 17. Security acceptance rule
+
+A feature that displays, aggregates, notifies about, exports or downloads a record must be tested
+against the **source record's access boundary**, not just the feature's own route/button visibility.
+
+Security regressions in derived surfaces are release blockers even if the owning node's direct API
+remains correctly protected.
