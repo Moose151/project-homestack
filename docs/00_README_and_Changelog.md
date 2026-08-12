@@ -2,7 +2,7 @@
 
 **Status:** canonical documentation index and architectural/product decision register.
 
-**Last reconciled:** 2026-08-12
+**Last reconciled:** 2026-08-13
 
 Historical release chronology is intentionally kept in `VERSION_HISTORY.md` and Git history rather
 than duplicated here. `HANDOVER.md` describes only current operating/development state.
@@ -19,6 +19,8 @@ than duplicated here. `HANDOVER.md` describes only current operating/development
 | `04_Development_Roadmap.md` | Current sequencing, gates and genuinely future milestones. |
 | `05_Security_Architecture_Document.md` | Authoritative authentication, permission, sensitivity, HTTPS and remote-access contract. |
 | `34_Recommended_Next_Steps.md` | Practical recommended execution plan: production serving, deployment/network hardening, CI, backups and stronger operational readiness before major new feature expansion. |
+| `35_Production_Serving_and_Deployment.md` | Production Gunicorn/static-serving, Compose, reverse-proxy and deployment/rollback contract. |
+| `36_Mobile_UX_Strategy_and_Implementation_Plan.md` | Mobile-first UX overhaul strategy, page-by-page recommendations, engineering sequence and acceptance criteria. |
 | `VERSION_HISTORY.md` (repo root) | Historical feature/release chronology. |
 
 ### Architecture and implementation contracts
@@ -32,6 +34,7 @@ than duplicated here. `HANDOVER.md` describes only current operating/development
 | `08_Coding_Standards_and_Project_Structure.md` | App layering, coding and testing rules. |
 | `09_Node_Model_Decision_Record.md` | Why domain boundaries exist and when a new node is justified. |
 | `10_Future_Features_Parking_Lot.md` | Genuinely deferred ideas only. |
+| `36_Mobile_UX_Strategy_and_Implementation_Plan.md` | Concrete implementation companion to Document 7 for making the PWA intentionally mobile-first. |
 
 ### Domain/core specifications
 
@@ -62,6 +65,8 @@ than duplicated here. `HANDOVER.md` describes only current operating/development
   older node-model docs omitted it.
 - `34_Recommended_Next_Steps.md` — current practical execution plan for production readiness and
   reliability.
+- `35_Production_Serving_and_Deployment.md` — production application-serving and deployment contract.
+- `36_Mobile_UX_Strategy_and_Implementation_Plan.md` — mobile-first redesign strategy and execution plan.
 
 Milestone checklists remain useful as historical implementation/acceptance records but are not the
 best source for current priorities. Current priorities come from `HANDOVER.md`, the Roadmap and the
@@ -237,7 +242,8 @@ Home Assistant remains an important planned bridge after the production/recovery
 stronger. Public internet exposure is not enabled.
 
 For exact current work and deployment commands, read `../HANDOVER.md` and
-`34_Recommended_Next_Steps.md`.
+`34_Recommended_Next_Steps.md`. For the mobile-first redesign sequence and acceptance contract, read
+`36_Mobile_UX_Strategy_and_Implementation_Plan.md`.
 
 ## 5. Documentation maintenance rule
 
