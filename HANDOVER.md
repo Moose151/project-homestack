@@ -201,7 +201,12 @@ Current notification migrations after `0001_initial` are:
 notifications.0002_notificationpreference_usernotificationsettings_and_more
 notifications.0003_pushdevice
 notifications.0004_notificationreminderlog
+notifications.0005_pushdevice_browser_pushdevice_label_is_custom_and_more
 ```
+
+`0005` carries a data step that renames already-registered devices from the old client-side
+names ("This device", "Android device") to server-generated ones ("Firefox on Linux"). Devices
+registered before it do not need re-registering — but the rename only happens on `migrate`.
 
 ### Configure VAPID
 

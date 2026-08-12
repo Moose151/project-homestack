@@ -1,7 +1,9 @@
 """Notifications tests (Milestone 2, Phase 2.15)."""
 from datetime import datetime, time, timedelta
+from importlib import import_module
 from unittest.mock import patch
 
+from django.apps import apps as django_apps
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -13,7 +15,7 @@ from apps.core.models import get_active_household
 from apps.hub.models import HouseholdHubWidget, HubWidget
 from apps.meridian import services as meridian
 from apps.nodes.models import HouseholdNode
-from apps.notifications import selectors, services
+from apps.notifications import device_naming, selectors, services
 from apps.notifications.models import Notification, PushDevice, UserNotificationSettings
 from apps.notifications.tasks import run_countdown_digest, run_due_reminders
 from apps.people.models import Person
@@ -288,6 +290,221 @@ class PushDeviceApiTests(TestCase):
         their_device = PushDevice.objects.get(endpoint="https://push.example/theirs")
         deleted = self.client.delete(reverse("notification-device-detail", args=[their_device.id]))
         self.assertEqual(deleted.status_code, 404)
+
+
+_FIREFOX_LINUX = (
+    "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"
+)
+_CHROME_ANDROID = (
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/126.0.0.0 Mobile Safari/537.36"
+)
+_SAFARI_IPHONE = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 "
+    "(KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
+)
+_EDGE_WINDOWS = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0"
+)
+
+
+class DeviceNamingTests(TestCase):
+    """docs/32 §4 — the generated friendly name and its secondary technical detail."""
+
+    def test_recognises_common_browser_platform_pairs(self):
+        cases = [
+            (_FIREFOX_LINUX, ("Firefox", "Linux", "Firefox on Linux")),
+            (_CHROME_ANDROID, ("Chrome", "Android", "Chrome on Android")),
+            (_SAFARI_IPHONE, ("Safari", "iPhone", "Safari on iPhone")),
+            (_EDGE_WINDOWS, ("Edge", "Windows", "Edge on Windows")),
+        ]
+        for user_agent, expected in cases:
+            with self.subTest(user_agent=user_agent):
+                self.assertEqual(device_naming.describe(user_agent), expected)
+
+    def test_chromium_derivatives_are_not_reported_as_chrome(self):
+        # Edge/Opera/Samsung User-Agents all also contain "Chrome"; the more specific token wins.
+        opera = "Mozilla/5.0 (Windows NT 10.0) Chrome/126.0.0.0 Safari/537.36 OPR/112.0.0.0"
+        self.assertEqual(device_naming.parse_user_agent(opera)[0], "Opera")
+
+    def test_ios_browsers_are_not_reported_as_safari(self):
+        chrome_ios = (
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 "
+            "(KHTML, like Gecko) CriOS/126.0.0.0 Mobile/15E148 Safari/604.1"
+        )
+        self.assertEqual(device_naming.parse_user_agent(chrome_ios), ("Chrome", "iPhone"))
+
+    def test_unknown_user_agent_still_produces_a_usable_name(self):
+        self.assertEqual(device_naming.parse_user_agent(""), ("", ""))
+        self.assertEqual(device_naming.default_label("", ""), "New device")
+
+
+class DeviceNamingBackfillTests(TestCase):
+    """The notifications.0005 data step, run against real rows rather than an empty table."""
+
+    def setUp(self):
+        self.user = _make_user("parent")
+        # Migration modules start with a digit, so they can only be reached via importlib.
+        self.backfill = import_module(
+            "apps.notifications.migrations."
+            "0005_pushdevice_browser_pushdevice_label_is_custom_and_more"
+        ).backfill_device_naming
+
+    def _device(self, endpoint, label, user_agent):
+        return PushDevice.objects.create(
+            household=self.user.household, user=self.user, endpoint=endpoint,
+            p256dh="p", auth="a", label=label, user_agent=user_agent,
+        )
+
+    def test_regenerates_old_client_side_names_but_keeps_real_ones(self):
+        legacy = self._device("https://push.example/1", "This device", _FIREFOX_LINUX)
+        chosen = self._device("https://push.example/2", "Kitchen Tablet", _CHROME_ANDROID)
+
+        self.backfill(django_apps, None)
+
+        legacy.refresh_from_db()
+        self.assertEqual(legacy.label, "Firefox on Linux")
+        self.assertFalse(legacy.label_is_custom)
+        self.assertEqual((legacy.browser, legacy.platform), ("Firefox", "Linux"))
+
+        chosen.refresh_from_db()
+        self.assertEqual(chosen.label, "Kitchen Tablet")
+        self.assertTrue(chosen.label_is_custom)
+        self.assertEqual(chosen.platform, "Android")
+
+
+class PushDeviceNamingApiTests(TestCase):
+    """Registration names the device server-side; the owner can rename it afterwards."""
+
+    def setUp(self):
+        self.user = _make_user("parent")
+        self.client.post(
+            reverse("auth-pin-login"),
+            {"username": "parent", "pin": "1234"}, content_type="application/json",
+        )
+
+    def _register(self, endpoint="https://push.example/abc", user_agent=_FIREFOX_LINUX, **extra):
+        return self.client.post(
+            reverse("notification-devices"),
+            {"endpoint": endpoint, "keys": {"p256dh": "p", "auth": "a"}, **extra},
+            content_type="application/json", HTTP_USER_AGENT=user_agent,
+        )
+
+    def test_registration_generates_a_name_from_the_user_agent(self):
+        body = self._register(user_agent=_CHROME_ANDROID).json()
+        self.assertEqual(body["label"], "Chrome on Android")
+        self.assertEqual((body["browser"], body["platform"]), ("Chrome", "Android"))
+        self.assertFalse(body["label_is_custom"])
+
+    def test_owner_can_rename_a_device(self):
+        device_id = self._register().json()["id"]
+        resp = self.client.patch(
+            reverse("notification-device-detail", args=[device_id]),
+            {"label": "  Nick's Laptop  "}, content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.json())
+        self.assertEqual(resp.json()["label"], "Nick's Laptop")
+        self.assertTrue(resp.json()["label_is_custom"])
+
+    def test_blank_rename_restores_the_generated_name(self):
+        device_id = self._register().json()["id"]
+        self.client.patch(
+            reverse("notification-device-detail", args=[device_id]),
+            {"label": "Nick's Laptop"}, content_type="application/json",
+        )
+        resp = self.client.patch(
+            reverse("notification-device-detail", args=[device_id]),
+            {"label": ""}, content_type="application/json",
+        )
+        self.assertEqual(resp.json()["label"], "Firefox on Linux")
+        self.assertFalse(resp.json()["label_is_custom"])
+
+    def test_re_registering_keeps_a_custom_name_but_refreshes_detail(self):
+        device_id = self._register().json()["id"]
+        self.client.patch(
+            reverse("notification-device-detail", args=[device_id]),
+            {"label": "Nick's Laptop"}, content_type="application/json",
+        )
+        # Same browser subscribes again (e.g. push re-enabled after a permission reset).
+        body = self._register().json()
+        self.assertEqual(body["id"], device_id)
+        self.assertEqual(body["label"], "Nick's Laptop")
+        self.assertEqual(body["browser"], "Firefox")
+
+    def test_re_registering_refreshes_a_generated_name(self):
+        self._register()
+        body = self._register(user_agent=_CHROME_ANDROID).json()
+        self.assertEqual(body["label"], "Chrome on Android")
+
+    def test_cannot_rename_someone_elses_device(self):
+        other = _make_user("other", role=User.Role.USER)
+        services.register_push_device(other, endpoint="https://push.example/theirs", p256dh="p", auth="a")
+        theirs = PushDevice.objects.get(endpoint="https://push.example/theirs")
+        resp = self.client.patch(
+            reverse("notification-device-detail", args=[theirs.id]),
+            {"label": "Mine now"}, content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 404)
+        theirs.refresh_from_db()
+        self.assertNotEqual(theirs.label, "Mine now")
+
+    def test_device_response_never_exposes_subscription_secrets(self):
+        body = self._register().json()
+        for secret in ("endpoint", "p256dh", "auth", "keys"):
+            self.assertNotIn(secret, body)
+
+
+class HouseholdPushDeviceOverviewTests(TestCase):
+    """docs/32 §7 — admin-only read of every household device, grouped by owner."""
+
+    def setUp(self):
+        self.admin = _make_user("admin")
+        self.member = _make_user("member", role=User.Role.USER)
+        services.register_push_device(
+            self.admin, endpoint="https://push.example/admin-laptop",
+            p256dh="p", auth="a", user_agent=_FIREFOX_LINUX,
+        )
+        services.register_push_device(
+            self.member, endpoint="https://push.example/member-phone",
+            p256dh="p", auth="a", user_agent=_SAFARI_IPHONE,
+        )
+
+    def _login(self, username):
+        self.client.post(
+            reverse("auth-pin-login"),
+            {"username": username, "pin": "1234"}, content_type="application/json",
+        )
+
+    def test_admin_sees_every_users_devices_grouped(self):
+        self._login("admin")
+        resp = self.client.get(reverse("notification-household-devices"))
+        self.assertEqual(resp.status_code, 200)
+        groups = {row["user_display_name"]: row for row in resp.json()}
+        self.assertEqual(set(groups), {"Admin", "Member"})
+        self.assertEqual(groups["Member"]["devices"][0]["label"], "Safari on iPhone")
+        self.assertEqual(groups["Admin"]["devices"][0]["browser"], "Firefox")
+
+    def test_non_admin_is_denied(self):
+        self._login("member")
+        resp = self.client.get(reverse("notification-household-devices"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_overview_omits_revoked_devices(self):
+        PushDevice.objects.filter(user=self.member).update(is_active=False)
+        self._login("admin")
+        resp = self.client.get(reverse("notification-household-devices"))
+        self.assertEqual([row["user_display_name"] for row in resp.json()], ["Admin"])
+
+    def test_overview_never_exposes_subscription_secrets(self):
+        self._login("admin")
+        devices = [d for row in self.client.get(
+            reverse("notification-household-devices")
+        ).json() for d in row["devices"]]
+        self.assertTrue(devices)
+        for device in devices:
+            for secret in ("endpoint", "p256dh", "auth", "keys"):
+                self.assertNotIn(secret, device)
 
 
 class PushDeliveryTests(TestCase):

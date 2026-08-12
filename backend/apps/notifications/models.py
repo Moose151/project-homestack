@@ -121,7 +121,13 @@ class UserNotificationSettings(HouseholdBaseModel):
 
 class PushDevice(HouseholdBaseModel):
     """One browser Web Push subscription (docs/32 §4/§10). Several rows per user is normal —
-    phone, laptop, tablet each subscribe separately."""
+    phone, laptop, tablet each subscribe separately.
+
+    `label` is the friendly name shown in the UI. It starts as a generated "Chrome on Android"
+    style name derived from the User-Agent and can be renamed to anything the owner likes
+    ("Nick's Laptop"). `label_is_custom` records that the owner chose it, so re-registering the
+    same browser refreshes the technical detail without overwriting the chosen name.
+    """
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="push_devices"
@@ -130,6 +136,11 @@ class PushDevice(HouseholdBaseModel):
     p256dh = models.CharField(max_length=255)
     auth = models.CharField(max_length=255)
     label = models.CharField(max_length=120, blank=True, default="")
+    label_is_custom = models.BooleanField(
+        default=False, help_text="The owner renamed this device; do not regenerate its label."
+    )
+    browser = models.CharField(max_length=40, blank=True, default="")
+    platform = models.CharField(max_length=40, blank=True, default="")
     user_agent = models.CharField(max_length=255, blank=True, default="")
     last_seen_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)

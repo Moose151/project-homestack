@@ -6,6 +6,7 @@ import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { PageHeader } from '../../../components/PageHeader'
 import { confirmDialog } from '../../../components/Dialogs'
+import { deviceDetail, lastSeenLabel } from './pushDeviceFormat'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -21,15 +22,6 @@ function urlBase64ToUint8Array(base64url: string): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(raw.length)
   for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i)
   return bytes
-}
-
-function deviceLabelFromUserAgent(ua: string): string {
-  if (/iPhone/.test(ua)) return 'iPhone'
-  if (/iPad/.test(ua)) return 'iPad'
-  if (/Android/.test(ua)) return 'Android device'
-  if (/Macintosh/.test(ua)) return 'Mac'
-  if (/Windows/.test(ua)) return 'Windows PC'
-  return 'This device'
 }
 
 function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) {
@@ -58,6 +50,8 @@ export function NotificationSettingsPage() {
   const [subscribing, setSubscribing] = useState(false)
   const [busyDeviceId, setBusyDeviceId] = useState<number | null>(null)
   const [testedDeviceId, setTestedDeviceId] = useState<number | null>(null)
+  const [renamingId, setRenamingId] = useState<number | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
 
   const loadDevices = () => api.getPushDevices().then(setDevices).catch(e => setError(errMsg(e)))
 
@@ -86,10 +80,9 @@ export function NotificationSettingsPage() {
       }
       const json = subscription.toJSON() as { endpoint: string; keys?: { p256dh: string; auth: string } }
       if (!json.keys) throw new Error('The browser did not return subscription keys.')
-      await api.registerPushDevice({
-        endpoint: json.endpoint, keys: json.keys,
-        label: deviceLabelFromUserAgent(navigator.userAgent),
-      })
+      // No label: the server names the device from the User-Agent it already receives, so every
+      // client gets the same "Chrome on Android" naming and a renamed device stays renamed.
+      await api.registerPushDevice({ endpoint: json.endpoint, keys: json.keys })
       await loadDevices()
     } catch (e) { setError(errMsg(e)) } finally { setSubscribing(false) }
   }
@@ -105,6 +98,21 @@ export function NotificationSettingsPage() {
     setBusyDeviceId(device.id); setTestedDeviceId(null)
     try { await api.testPushDevice(device.id); setTestedDeviceId(device.id) }
     catch (e) { setError(errMsg(e)) } finally { setBusyDeviceId(null) }
+  }
+
+  const startRename = (device: PushDevice) => {
+    setRenamingId(device.id)
+    // Seed with the generated name too, so renaming is an edit rather than a blank box.
+    setRenameDraft(device.label)
+  }
+
+  const saveRename = async (device: PushDevice) => {
+    setBusyDeviceId(device.id); setError(null)
+    try {
+      const saved = await api.renamePushDevice(device.id, renameDraft.trim())
+      setDevices(prev => prev.map(row => row.id === saved.id ? saved : row))
+      setRenamingId(null)
+    } catch (e) { setError(errMsg(e)) } finally { setBusyDeviceId(null) }
   }
 
   const setRow = (category: string, patch: Partial<NotificationPreference>) =>
@@ -151,7 +159,7 @@ export function NotificationSettingsPage() {
         <p className="text-sm text-muted mb-3">
           Push notifications go to devices you've enabled here — each phone, tablet or computer
           you use HomeStack on needs its own. Requires an explicit permission prompt; nothing is
-          enabled automatically.
+          enabled automatically. Only you can see your own devices; rename any of them with ✏️.
         </p>
         {!PUSH_SUPPORTED ? (
           <p className="text-sm text-muted-strong">This browser doesn't support push notifications.</p>
@@ -166,17 +174,50 @@ export function NotificationSettingsPage() {
           <ul className="space-y-2">
             {devices.map(device => (
               <li key={device.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line px-3 py-2.5">
-                <div>
-                  <div className="text-sm font-semibold text-ink">{device.label || 'Device'}</div>
-                  <div className="text-xs text-muted">
-                    Last seen {new Date(device.last_seen_at).toLocaleDateString()}
-                    {testedDeviceId === device.id && <span className="ml-2 font-semibold text-success">Test sent ✓</span>}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button size="sm" variant="secondary" onClick={() => testDevice(device)} loading={busyDeviceId === device.id}>Test</Button>
-                  <Button size="sm" variant="ghost" onClick={() => revokeDevice(device)} loading={busyDeviceId === device.id}>Revoke</Button>
-                </div>
+                {renamingId === device.id ? (
+                  <form
+                    className="flex flex-1 flex-wrap items-center gap-2"
+                    onSubmit={e => { e.preventDefault(); void saveRename(device) }}
+                  >
+                    <input
+                      autoFocus
+                      value={renameDraft}
+                      onChange={e => setRenameDraft(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Escape') setRenamingId(null) }}
+                      maxLength={120}
+                      aria-label="Device name"
+                      placeholder={deviceDetail(device) || 'Device name'}
+                      className="min-w-[8rem] flex-1 rounded-xl border border-line bg-surface px-3 py-1.5 text-sm text-ink"
+                    />
+                    <Button size="sm" type="submit" loading={busyDeviceId === device.id}>Save</Button>
+                    <Button size="sm" variant="ghost" type="button" onClick={() => setRenamingId(null)}>Cancel</Button>
+                  </form>
+                ) : (
+                  <>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-semibold text-ink">{device.label || 'Device'}</span>
+                        <button
+                          type="button"
+                          onClick={() => startRename(device)}
+                          aria-label={`Rename ${device.label || 'device'}`}
+                          title="Rename"
+                          className="rounded px-1 text-xs text-muted hover:text-primary"
+                        >
+                          ✏️
+                        </button>
+                      </div>
+                      <div className="text-xs text-muted">
+                        {[deviceDetail(device), `Last seen ${lastSeenLabel(device.last_seen_at)}`].filter(Boolean).join(' · ')}
+                        {testedDeviceId === device.id && <span className="ml-2 font-semibold text-success">Test sent ✓</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="secondary" onClick={() => testDevice(device)} loading={busyDeviceId === device.id}>Test</Button>
+                      <Button size="sm" variant="ghost" onClick={() => revokeDevice(device)} loading={busyDeviceId === device.id}>Revoke</Button>
+                    </div>
+                  </>
+                )}
               </li>
             ))}
           </ul>

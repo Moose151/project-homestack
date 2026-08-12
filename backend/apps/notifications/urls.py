@@ -1,6 +1,7 @@
 from django.urls import path
 
 from apps.notifications.views import (
+    HouseholdPushDeviceListView,
     NotificationListView,
     NotificationPreferenceListView,
     NotificationReadAllView,
@@ -22,4 +23,9 @@ urlpatterns = [
     path("devices/", PushDeviceListView.as_view(), name="notification-devices"),
     path("devices/<int:device_id>/", PushDeviceDetailView.as_view(), name="notification-device-detail"),
     path("devices/<int:device_id>/test/", PushDeviceTestView.as_view(), name="notification-device-test"),
+    path(
+        "household-devices/",
+        HouseholdPushDeviceListView.as_view(),
+        name="notification-household-devices",
+    ),
 ]

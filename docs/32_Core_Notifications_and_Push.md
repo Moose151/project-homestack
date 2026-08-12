@@ -84,12 +84,31 @@ One Web Push subscription/device/browser:
 - unique subscription `endpoint`
 - `p256dh`
 - `auth`
-- optional `label`
+- `label` — the friendly display name
+- `label_is_custom` — the owner renamed it
+- `browser` / `platform` — derived secondary technical detail
 - `user_agent`
 - `last_seen_at`
 - `is_active`
 
 Multiple devices per User are normal.
+
+#### Device naming
+
+A device is named **server-side at registration** from the request's User-Agent
+(`apps/notifications/device_naming.py`), producing names like `Chrome on Android`,
+`Safari on iPhone` or `Firefox on Linux`. The client does not supply a label, so every client
+that registers a subscription names devices identically (D3).
+
+The parser is a deliberately small heuristic, not a User-Agent database, and does not claim
+detail the User-Agent does not carry — a Firefox-on-Fedora string only says `Linux`. Where both
+halves are unknown the label falls back to `New device`, never blank.
+
+The owner may rename a device to anything (`Nick's Laptop`, `Kitchen Tablet`), which sets
+`label_is_custom`. Re-registering the same endpoint refreshes keys/`browser`/`platform` but must
+**not** overwrite a custom label. Renaming to blank deliberately restores the generated name.
+`browser`/`platform` remain available as secondary detail shown under the friendly name, so a
+renamed device is still identifiable.
 
 ### `NotificationReminderLog`
 
@@ -198,15 +217,34 @@ GET/PUT/PATCH as implemented /preferences/
 GET/PUT/PATCH as implemented /settings/
 GET  /vapid-public-key/
 GET/POST /devices/
-...  /devices/<device_id>/
+PATCH/DELETE /devices/<device_id>/
 POST /devices/<device_id>/test/
+GET  /household-devices/
 ```
 
 The exact allowed methods/response shapes are defined by the current views/serializers/tests. The
 registered paths are authoritative in `backend/apps/notifications/urls.py`.
 
+`PATCH /devices/<device_id>/` renames a device and accepts only `label`.
+
 A User cannot manage another User's device subscription by guessing its ID; detail operations are
-current-User scoped.
+current-User scoped. `/devices/` itself lists only the requesting User's devices — this is not an
+administrator carve-out, it is the same for every role.
+
+Device responses never include `endpoint`, `p256dh` or `auth` (§13).
+
+### Household push-device overview
+
+`GET /household-devices/` is the **only** cross-User device endpoint. It is:
+
+- gated on the `users` resource, which only the admin role is granted, so it is administrator-only;
+- **read-only** — an owner still tests/renames/revokes their own devices from their own
+  notification settings, and no login may act on another person's device;
+- grouped by owning User, active devices only, and subject to the same secret-omission rule above.
+
+It exists for the operational question "who is actually set up for push, on what, and is that
+tablet still in use". It is not a route to managing another person's notifications, and the
+ordinary self-service notification screen deliberately continues to show only the current User.
 
 ## 8. Household-activity bundling
 
@@ -301,7 +339,9 @@ Important deployment/acceptance rules:
 - Apply source visibility before generating event-driven notifications.
 - Respect household/User ownership for preference/device APIs.
 - Keep the browser's push endpoint/keys as notification infrastructure data, not public profile
-  information.
+  information — they are never serialized, including in the admin overview.
+- Keep cross-User device visibility read-only and admin-gated; self-service device actions stay
+  current-User scoped.
 - Public remote access remains separately gated by the Security Architecture; Web Push and trusted
   LAN HTTPS do not make HomeStack internet-ready.
 
@@ -321,7 +361,12 @@ Current notification migrations after the original notification model are:
 0002_notificationpreference_usernotificationsettings_and_more
 0003_pushdevice
 0004_notificationreminderlog
+0005_pushdevice_browser_pushdevice_label_is_custom_and_more
 ```
+
+`0005` also backfills `browser`/`platform` and regenerates any label still carrying one of the
+old client-side names (`This device`, `Android device`, …), so devices registered before
+server-side naming pick up proper names on migrate without re-registering.
 
 Then configure VAPID, recreate/restart the backend as required, register devices, run the scheduled
 command and complete real-device validation.

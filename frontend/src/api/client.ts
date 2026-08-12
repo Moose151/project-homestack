@@ -6,7 +6,7 @@ import type {
   ClubQueueItem, CornerResponse, EducationAssessment, EducationClassSession, EducationCourse, EducationEvent,
   EducationInstitution, FitnessExercise, FitnessProgram, FitnessRecord, FitnessSession,
   FitnessSessionExercise, FitnessSessionSet, GlobalSearchResponse, HomesteadSearchResults,
-  Household, HouseholdCost, HubResponse, HubWidgetConfig, Improvement, InsurancePolicy,
+  Household, HouseholdCost, HouseholdPushDeviceGroup, HubResponse, HubWidgetConfig, Improvement, InsurancePolicy,
   KioskMeridian, KioskUser, LinkPreview, LinkWatch, MaintenanceTask, MeridianAllowanceRow, MeridianCategory,
   MeridianGoal, MeridianPointsResponse, MeridianReports, MeridianReward, MeridianRewardRequest,
   MeridianRoutine, MeridianSettings, MeridianTask, MeridianTaskCompletion,
@@ -1301,8 +1301,12 @@ export const api = {
   getPushDevices: (): Promise<PushDevice[]> => _fetch('/notifications/devices/'),
   registerPushDevice: (data: { endpoint: string; keys: { p256dh: string; auth: string }; label?: string }): Promise<PushDevice> =>
     _fetch('/notifications/devices/', { method: 'POST', body: JSON.stringify(data) }),
+  renamePushDevice: (id: number, label: string): Promise<PushDevice> =>
+    _fetch(`/notifications/devices/${id}/`, { method: 'PATCH', body: JSON.stringify({ label }) }),
   unregisterPushDevice: (id: number): Promise<void> =>
     _fetch(`/notifications/devices/${id}/`, { method: 'DELETE' }),
+  getHouseholdPushDevices: (): Promise<HouseholdPushDeviceGroup[]> =>
+    _fetch('/notifications/household-devices/'),
   testPushDevice: (id: number): Promise<{ delivered: boolean }> =>
     _fetch(`/notifications/devices/${id}/test/`, { method: 'POST' }),
 }

@@ -17,6 +17,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
 from apps.core.models import get_active_household
+from apps.notifications import device_naming
 from apps.notifications.models import (
     PUSH_OFF_BY_DEFAULT,
     NotificationPreference,
@@ -127,14 +128,44 @@ def _send_to_device(device: PushDevice, payload: str) -> bool:
 
 
 def register_device(user, *, endpoint: str, p256dh: str, auth: str, label: str = "", user_agent: str = "") -> PushDevice:
-    device, _ = PushDevice.objects.update_or_create(
-        endpoint=endpoint,
-        defaults={
-            "user": user, "p256dh": p256dh, "auth": auth, "label": label,
-            "user_agent": user_agent, "is_active": True,
-            "household": get_active_household(), "created_by": user, "updated_by": user,
-        },
-    )
+    """Create or refresh the subscription for `endpoint`.
+
+    An explicit `label` from the caller wins and counts as a custom name. Otherwise the label is
+    generated from the User-Agent — but only for a device that has never been renamed, so
+    re-enabling push in the same browser refreshes the keys and technical detail without
+    stomping on "Nick's Laptop".
+    """
+    browser, platform, generated = device_naming.describe(user_agent)
+    existing = PushDevice.all_objects.filter(endpoint=endpoint).first()
+    defaults = {
+        "user": user, "p256dh": p256dh, "auth": auth,
+        "browser": browser, "platform": platform,
+        "user_agent": user_agent, "is_active": True,
+        "household": get_active_household(), "created_by": user, "updated_by": user,
+    }
+    if label:
+        defaults["label"] = label
+        defaults["label_is_custom"] = True
+    elif not (existing and existing.label_is_custom):
+        defaults["label"] = generated
+    device, _ = PushDevice.objects.update_or_create(endpoint=endpoint, defaults=defaults)
+    return device
+
+
+def rename_device(user, device_id: int, label: str) -> PushDevice | None:
+    """Rename the caller's own device. Returns None if it isn't theirs (or doesn't exist).
+
+    A blank label deliberately resets to the generated name rather than leaving the device
+    nameless in the list.
+    """
+    device = PushDevice.objects.filter(user=user, pk=device_id).first()
+    if device is None:
+        return None
+    label = label.strip()
+    device.label = label or device_naming.default_label(device.browser, device.platform)
+    device.label_is_custom = bool(label)
+    device.updated_by = user
+    device.save(update_fields=["label", "label_is_custom", "updated_by", "updated_at"])
     return device
 
 

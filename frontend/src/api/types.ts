@@ -627,10 +627,23 @@ export interface UserNotificationSettings {
 
 export interface PushDevice {
   id: number
+  /** Friendly name — server-generated ("Chrome on Android") until the owner renames it. */
   label: string
+  label_is_custom: boolean
+  /** Secondary technical detail, e.g. "Firefox" · "Linux". Either may be blank. */
+  browser: string
+  platform: string
   user_agent: string
   last_seen_at: string
   created_at: string
+}
+
+/** Admin-only household push overview: one household user and their active devices. */
+export interface HouseholdPushDeviceGroup {
+  user_id: number
+  user_display_name: string
+  user_role: string
+  devices: PushDevice[]
 }
 
 export interface MeridianRewardRequest {

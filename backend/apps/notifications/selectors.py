@@ -49,3 +49,30 @@ def list_devices(user) -> list[PushDevice]:
 
 def get_device(user, pk: int) -> PushDevice | None:
     return PushDevice.objects.filter(user=user, pk=pk).first()
+
+
+def list_devices_by_user() -> list[dict]:
+    """Every active push device in the household, grouped by owning User.
+
+    Powers the admin overview only (docs/32 §7) — the self-service device endpoints stay
+    strictly current-User scoped. Users with no devices are omitted: the screen answers
+    "who is set up for push", so an empty group would be noise.
+    """
+    devices = list(
+        PushDevice.objects.filter(is_active=True)
+        .select_related("user")
+        .order_by("user__display_name", "user_id", "label")
+    )
+    groups: dict[int, dict] = {}
+    for device in devices:
+        group = groups.setdefault(
+            device.user_id,
+            {
+                "user_id": device.user_id,
+                "user_display_name": device.user.display_name,
+                "user_role": device.user.role,
+                "devices": [],
+            },
+        )
+        group["devices"].append(device)
+    return list(groups.values())

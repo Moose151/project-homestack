@@ -14,10 +14,12 @@ from rest_framework.views import APIView
 
 from apps.notifications import selectors, services
 from apps.notifications.serializers import (
+    HouseholdPushDeviceGroupSerializer,
     NotificationPreferenceSerializer,
     NotificationPreferenceWriteSerializer,
     NotificationSerializer,
     PushDeviceRegisterSerializer,
+    PushDeviceRenameSerializer,
     PushDeviceSerializer,
     UserNotificationSettingsSerializer,
 )
@@ -123,12 +125,38 @@ class PushDeviceListView(APIView):
 
 class PushDeviceDetailView(APIView):
     permission_classes = [_Perm]
-    permission_action = "view"
+    permission_action = "view"  # self-service on own device
+
+    def patch(self, request: Request, device_id: int) -> Response:
+        serializer = PushDeviceRenameSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        device = services.rename_push_device(
+            request.user, device_id, serializer.validated_data["label"],
+        )
+        if device is None:
+            raise NotFound()
+        return Response(PushDeviceSerializer(device).data)
 
     def delete(self, request: Request, device_id: int) -> Response:
         if not services.unregister_push_device(request.user, device_id):
             raise NotFound()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class HouseholdPushDeviceListView(APIView):
+    """Admin-only overview of every household push device, grouped by owner.
+
+    Gated on the `users` resource, which only the admin role is granted (see the permissions
+    seed migration), because it is user-administration visibility rather than self-service.
+    It is read-only: an owner still manages their own devices from their notification settings.
+    """
+
+    permission_classes = [HomeStackPermission.for_resource("users")]
+    permission_action = "view"
+
+    def get(self, request: Request) -> Response:
+        groups = selectors.list_devices_by_user()
+        return Response(HouseholdPushDeviceGroupSerializer(groups, many=True).data)
 
 
 class PushDeviceTestView(APIView):

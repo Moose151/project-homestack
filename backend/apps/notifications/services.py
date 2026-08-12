@@ -191,6 +191,11 @@ def unregister_push_device(user, device_id: int) -> bool:
     return push.unregister_device(user, device_id)
 
 
+def rename_push_device(user, device_id: int, label: str):
+    from apps.notifications import push
+    return push.rename_device(user, device_id, label)
+
+
 def send_test_push(device) -> bool:
     from apps.notifications import push
     return push.send_test_push(device)

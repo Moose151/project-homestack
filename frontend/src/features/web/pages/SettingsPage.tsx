@@ -23,7 +23,8 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went
 export function SettingsPage() {
   const { nodes, household, refresh } = useStacks()
   const { user } = useAuth()
-  const isManager = user?.role === 'admin' || user?.role === 'manager'
+  const isAdmin = user?.role === 'admin'
+  const isManager = isAdmin || user?.role === 'manager'
 
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -192,6 +193,18 @@ export function SettingsPage() {
           <Link to="/settings/notifications" className="flex-shrink-0 text-sm font-bold text-primary hover:underline">Manage →</Link>
         </div>
       </Card>
+
+      {isAdmin && (
+        <Card title="Notifications">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-ink">Push devices</p>
+              <p className="text-xs text-muted">Household-wide — which people and devices are registered for push notifications.</p>
+            </div>
+            <Link to="/settings/push-devices" className="flex-shrink-0 text-sm font-bold text-primary hover:underline">View →</Link>
+          </div>
+        </Card>
+      )}
 
       <Card title="Family colour">
         <p className="text-sm text-muted mb-3">

@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.34.13**
+> **Current version: 0.34.14**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,34 @@
 ---
 
 ## 0.34 — Discoverability and daily navigation
+
+### 0.34.14 — 2026-08-12 — Push device naming, renaming and an admin overview (docs/32)
+- Registered devices now have names worth reading. Naming moved off the frontend's five-case
+  guess (which called a Linux laptop "This device" and any phone "Android device") and onto the
+  server, which already receives the User-Agent: devices register as `Firefox on Linux`,
+  `Chrome on Android`, `Safari on iPhone`. New `apps/notifications/device_naming.py` keeps this
+  deliberately honest — it does not claim `Fedora` from a string that only says `Linux`.
+- Any device can be renamed to whatever actually identifies it ("Nick's Laptop", "Kitchen
+  Tablet") via a ✏️ action and the new `PATCH /notifications/devices/<id>/`. New
+  `label_is_custom` means re-enabling push in the same browser refreshes the subscription keys
+  and technical detail **without** stomping the chosen name; renaming to blank deliberately
+  restores the generated one. Browser/platform stay visible as secondary detail under the
+  friendly name, so a renamed device is still identifiable.
+- New admin-only **Manage HomeStack → Push devices** screen (`GET
+  /notifications/household-devices/`, gated on the admin-only `users` resource) showing every
+  household member and their registered devices with last-seen. Read-only on purpose: it answers
+  "who is actually set up for push, on what", without letting one login rename, test or revoke
+  another person's device. The ordinary notification settings screen keeps showing only the
+  current user's devices, exactly as before — that filtering was never an admin carve-out.
+- Migration `notifications.0005` adds `browser`/`platform`/`label_is_custom` **and backfills**:
+  devices registered under the old scheme get proper names on migrate rather than needing
+  re-registration. Device API responses never serialize `endpoint`/`p256dh`/`auth`, in the admin
+  overview as much as the self-service one, now covered by regression tests.
+- **891 backend tests, 890 green (16 new); frontend `tsc` clean.** The one error is the
+  pre-existing `attachments.test_storage_path_is_not_served_as_public_media`, which fails
+  identically on unmodified `main` — a Python 3.14 `copy` change breaking Django 5.0's test
+  client, not a real regression. It should pass on the container's pinned Python 3.12; confirm
+  when running the suite there.
 
 ### 0.34.13 — 2026-08-12 — Scheduled reminders + countdown digest (docs/32 slice 4, on feature/push-notifications — closes out Notifications & Push)
 - Appointments and assigned to-dos now get a genuine reminder: once ~24 hours before they're due

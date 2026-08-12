@@ -46,14 +46,26 @@ class UserNotificationSettingsSerializer(serializers.ModelSerializer):
 
 
 class PushDeviceSerializer(serializers.ModelSerializer):
+    """`browser`/`platform` are the secondary technical detail shown under the friendly label.
+
+    The subscription endpoint and keys are deliberately never serialized — they are notification
+    infrastructure data, not profile information (docs/32 §13).
+    """
+
     class Meta:
         model = PushDevice
-        fields = ["id", "label", "user_agent", "last_seen_at", "created_at"]
+        fields = [
+            "id", "label", "label_is_custom", "browser", "platform",
+            "user_agent", "last_seen_at", "created_at",
+        ]
         read_only_fields = fields
 
 
 class PushDeviceRegisterSerializer(serializers.Serializer):
-    """Shape of the browser's PushSubscription.toJSON(), plus an optional friendly label."""
+    """Shape of the browser's PushSubscription.toJSON(), plus an optional friendly label.
+
+    An omitted label is normal: the server names the device from the User-Agent instead.
+    """
 
     endpoint = serializers.CharField(max_length=500)
     keys = serializers.DictField(child=serializers.CharField())
@@ -63,3 +75,18 @@ class PushDeviceRegisterSerializer(serializers.Serializer):
         if "p256dh" not in value or "auth" not in value:
             raise serializers.ValidationError("Subscription keys must include p256dh and auth.")
         return value
+
+
+class PushDeviceRenameSerializer(serializers.Serializer):
+    """A blank label is allowed and means "go back to the generated name"."""
+
+    label = serializers.CharField(max_length=120, allow_blank=True)
+
+
+class HouseholdPushDeviceGroupSerializer(serializers.Serializer):
+    """Admin overview row: one household User and their active devices (docs/32 §7)."""
+
+    user_id = serializers.IntegerField(read_only=True)
+    user_display_name = serializers.CharField(read_only=True)
+    user_role = serializers.CharField(read_only=True)
+    devices = PushDeviceSerializer(many=True, read_only=True)
