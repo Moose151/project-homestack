@@ -86,6 +86,8 @@ These are platform capabilities rather than optional household domains:
   education events.
 - **Home Wiki** — persistent household knowledge, favourites and emergency/kiosk-safe reference.
 - **Pets** — pet profiles, recurring treatments/reminders and appointments.
+- **Books** — shared household Book catalogue, per-User Want to Read / Reading / Read shelves,
+  personal ratings/notes and shared Book Clubs with ordered up-next queues.
 - **Homestead** — home/property source of truth: rooms/areas, plans, maintenance, appliances,
   warranties, services, cover/cost context, pools/spas, utilities and floor plan.
 - **Solace / Money** — bills, pay cycles, budgets/buckets, planned purchases and financial
@@ -117,6 +119,8 @@ These are platform capabilities rather than optional household domains:
 - Home property, home appliances, warranties, home maintenance and home projects → **Homestead**.
 - Household grocery/shopping → **Atlas**; Hearth may populate Grocery later rather than create a
   competing shopping store.
+- Personal reading history and shared book-club workflows → **Books**; Education may later link to
+  Books for course reading but does not own personal shelves/clubs.
 - Finance/subscriptions → **Solace**.
 - Documents → shared **Documents/Attachments**, linked to owning records.
 - People → core **People**.
@@ -170,7 +174,7 @@ See `05_Security_Architecture_Document.md` for the authoritative security contra
 
 As of 2026-08-12, HomeStack is deployed on the home server and used in daily household workflows.
 The foundational milestones, Meridian, core Hub/Atlas/Calendar surfaces, Education, Home Wiki,
-Pets, security maturation, native Solace, Homestead, Fitness, Corners/link import, daily
+Pets, **Books**, security maturation, native Solace, Homestead, Fitness, Corners/link import, daily
 coordination, Travel, Grocery/Shopping and LAN HTTPS are implemented.
 
 The current active product-development slice is **PWA/Web Push notifications**. Home Assistant is
