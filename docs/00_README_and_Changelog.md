@@ -18,6 +18,7 @@ than duplicated here. `HANDOVER.md` describes only current operating/development
 | `01_Master_Software_Specification.md` | What HomeStack is, current node model and stable product boundaries. |
 | `04_Development_Roadmap.md` | Current sequencing, gates and genuinely future milestones. |
 | `05_Security_Architecture_Document.md` | Authoritative authentication, permission, sensitivity, HTTPS and remote-access contract. |
+| `34_Recommended_Next_Steps.md` | Practical recommended execution plan: finish Web Push, then production serving, deployment/network hardening, CI, backups and stronger operational readiness before major new feature expansion. |
 | `VERSION_HISTORY.md` (repo root) | Historical feature/release chronology. |
 
 ### Architecture and implementation contracts
