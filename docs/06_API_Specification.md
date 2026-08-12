@@ -63,8 +63,7 @@ For exact current method/path names, use:
 4. this document for cross-cutting contract.
 
 When a route ships or is removed, update the owning node/core spec and tests. Do not leave obsolete
-endpoint lists here (for example a removed native-Solace concept) merely because it appeared in an
-earlier design.
+endpoint lists here merely because they appeared in an earlier design.
 
 ## 4. Authentication endpoints
 
@@ -157,20 +156,31 @@ daily event rows.
 
 ## 10. Notifications and Web Push
 
-The current in-app notification API supports listing and user actions such as read/dismiss state.
+The notification API now covers both the in-app notification centre and the shipped Web Push/PWA
+capability defined by `32_Core_Notifications_and_Push.md`.
 
-The active Web Push work extends this domain with the device/subscription/preference contract in
-`32_Core_Notifications_and_Push.md`. When it lands, that spec plus registered URLconfs are the
-source of truth for exact push endpoint names.
+The implemented route families include the current-user notification list/read actions plus
+preference and device-subscription management, including a registered-device test-push flow. Exact
+method/path names remain authoritative in `backend/apps/notifications/urls.py` and its tests rather
+than duplicated exhaustively here.
 
-Security requirements:
+Security/ownership requirements:
 
-- device subscriptions belong to the authenticated User/household;
-- one User cannot manage another User's subscriptions/preferences without explicit admin contract;
+- notification preferences and push subscriptions belong to the authenticated User/household;
+- one User cannot manage another User's subscriptions/preferences without an explicit admin
+  contract;
 - push payloads are sparse and sensitive-safe;
-- opening/deep-linking from push re-checks current permissions/re-auth;
-- expired/invalid subscriptions can be deactivated safely without deleting unrelated notification
-  history.
+- sources that require sensitive-node re-authentication are not allowed to leak protected detail
+  into lock-screen push;
+- opening/deep-linking from push re-runs normal authentication, permission and re-authentication
+  checks;
+- expired/invalid/revoked subscriptions can be deactivated safely without deleting unrelated
+  notification history;
+- VAPID private-key material is deployment configuration and is never returned through ordinary
+  API responses.
+
+Scheduled reminder/countdown delivery is a management-command concern rather than an HTTP polling
+endpoint. See `HANDOVER.md` and the push spec for deployment requirements.
 
 ## 11. Attachments
 
@@ -284,8 +294,7 @@ when they read or create Solace-owned financial records.
 Solace APIs own the current native finance model: bills/occurrences, pay-cycle/Now/forecast/bucket
 and other implemented Money workflows.
 
-Treat current Solace URLconfs/tests as authoritative. Do not re-add obsolete route groups (for
-example a separate subscriptions surface after subscriptions were consolidated into Bills) just
+Treat current Solace URLconfs/tests as authoritative. Do not re-add obsolete route groups just
 because an older API document listed them.
 
 All sensitive finance endpoints are permission/re-auth protected and must not leak content through
