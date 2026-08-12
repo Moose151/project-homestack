@@ -23,12 +23,12 @@ unrelated apps. The important surfaces are:
 - **Hub** — what needs attention today.
 - **Calendar** — the household timeline.
 - **People** — the shared identity/subject layer used across domains.
-- **Responsive web app** — the primary everyday adult/mobile surface.
+- **Responsive web/PWA** — the primary everyday adult/mobile surface.
 - **Kiosk** — a shared, permission-safe family surface, especially for children.
 - **Corners** — person-centred views of assignments, activity, lists and wishes.
 - **Opt-in nodes** — major household domains with their own workflows and permissions.
 
-The backend is API-first so PWA/native clients can be added without rebuilding business logic.
+The backend is API-first so future native clients can be added without rebuilding business logic.
 
 ## 3. Stable design principles
 
@@ -63,8 +63,8 @@ These are platform capabilities rather than optional household domains:
 - **Hub** — permission-aware configurable widgets and daily summaries.
 - **Calendar (`scheduling`)** — standalone events plus projections from dated node records.
 - **People** — household members/profiles; separate from login Users.
-- **Notifications** — in-app notification store and delivery preferences; Web Push is the current
-  expansion path.
+- **Notifications** — in-app notification store plus shipped PWA/Web Push delivery, per-user
+  preferences, per-device subscriptions, quiet hours, bundling and scheduled reminders.
 - **Search** — global permission-aware search over owning node querysets.
 - **Documents/Attachments** — shared protected file capability used by domain records.
 - **Permissions** — central roles, per-user overrides, visibility and sensitivity enforcement.
@@ -147,13 +147,15 @@ hiding buttons alone.
 
 ## 7. Authentication and sensitive access
 
-- Django session authentication for the current web/kiosk application.
+- Django session authentication for the current web/kiosk/PWA application.
 - Avatar/PIN everyday login.
 - Adult password credentials for re-authentication and administrative/sensitive operations.
 - Argon2id password/PIN hashing.
 - Short-lived elevated session state for sensitive-node access.
-- HTTPS is now used on the LAN at `https://homestack.moosesoftwares.com` through the existing
-  Nginx Proxy Manager and Pi-hole split/local DNS arrangement.
+- HTTPS is used on the LAN at `https://homestack.moosesoftwares.com` through the existing Nginx
+  Proxy Manager and Pi-hole split/local DNS arrangement.
+- Web Push uses deployment-held VAPID credentials and sparse sensitive-safe payloads; opening a
+  push does not bypass normal session/permission/re-authentication checks.
 - Token/native-app authentication remains future work.
 
 See `05_Security_Architecture_Document.md` for the authoritative security contract.
@@ -175,14 +177,16 @@ See `05_Security_Architecture_Document.md` for the authoritative security contra
 As of 2026-08-12, HomeStack is deployed on the home server and used in daily household workflows.
 The foundational milestones, Meridian, core Hub/Atlas/Calendar surfaces, Education, Home Wiki,
 Pets, **Books**, security maturation, native Solace, Homestead, Fitness, Corners/link import, daily
-coordination, Travel, Grocery/Shopping and LAN HTTPS are implemented.
+coordination, Travel, Grocery/Shopping, LAN HTTPS and **PWA/Web Push notifications** are implemented.
 
-The current active product-development slice is **PWA/Web Push notifications**. Home Assistant is
-intentionally sequenced after trusted HTTPS and working phone push notifications. Public internet
-exposure has not been enabled.
+The recommended current engineering phase is **production readiness and reliability**: production
+serving, tighter container networking, safer deployment automation, frontend/E2E CI and stronger
+off-server recovery. Home Assistant remains important planned feature work after that baseline is
+stronger. Public internet exposure has not been enabled.
 
 Historical implementation detail does not belong in this MSS; use `VERSION_HISTORY.md` and Git
-history for release chronology.
+history for release chronology. Operational notification deployment requirements live in
+`HANDOVER.md`; the practical next-phase plan is `34_Recommended_Next_Steps.md`.
 
 ## 10. Success criteria
 
