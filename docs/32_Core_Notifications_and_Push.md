@@ -163,14 +163,15 @@ when the household actually wants that surface, following the pattern in `handle
 `travel.idea_created` keeps its existing inline notify call from before this spec (§2) rather
 than being migrated — no functional reason to touch working code.
 
-## 8. Scheduled reminders (appointments, assigned to-dos)
+## 8. Scheduled reminders (appointments, assigned to-dos) — DONE (v0.34.13)
 
-New idempotent management command (D5 pattern, matching `solace_run_scheduled`/
-`link_imports_run_scheduled`), run hourly is enough — it only needs to catch the two fixed lead
-times, not arbitrary ones:
+New idempotent management command `notifications_run_scheduled` (D5 pattern, matching
+`solace_run_scheduled`/`link_imports_run_scheduled`), `apps/notifications/tasks.py::
+run_due_reminders`, run hourly — it only needs to catch the two fixed lead times, not arbitrary
+ones:
 
 - **24 hours before**: for every visible Calendar appointment/event and every Atlas item with a
-  due date, if `due_at` is between 23–25h away (hourly cron tolerance) and no
+  due date, if `start_at` is between 23–25h away (hourly cron tolerance) and no
   `NotificationReminderLog` row exists for `(record, "24h")`, notify assignees (or the whole
   household if unassigned) under `appointments`/`assigned_tasks`, then log it.
 - **Morning of**: same sweep, but firing once per user at their `morning_time`
@@ -181,14 +182,39 @@ This is deliberately **not** the fully generic "configurable lead times" from do
 owner asked for exactly these two fixed points. The model (`NotificationReminderLog.lead_kind`)
 leaves room to add more later without a redesign, but V1 ships only these two.
 
-## 9. Daily countdown digest
+**Implementation notes (adjusted from the sketch above while building):**
+- **Sourced from `CalendarEvent`, not two separate sweeps.** Calendar single-source-of-truth
+  (D7) means every Atlas item with a `due_at` already mirrors into `CalendarEvent` via
+  `CalendarSyncMixin`, so one query covers both "Calendar appointment/event" and "Atlas item
+  with a due date" — no separate Atlas-model sweep needed. The category is derived from
+  `CalendarEvent.source_node`: unset (a standalone event) → `appointments`/`source_node=
+  "scheduling"`; `source_node.key == "atlas"` → `assigned_tasks`/`source_node="atlas"`.
+- **Scope is narrower than "every visible Calendar entry."** Other synced nodes (Solace,
+  Meridian, Homestead, Pets, Travel, Education) are deliberately excluded from the sweep —
+  Solace already runs its own reminder job (`solace_run_scheduled`) and is re-auth-gated
+  besides, and the owner's literal ask was appointments and assigned to-dos, not a generic
+  reminder layer for every node. Extending the sweep to another node is a one-line change to
+  `apps/notifications/tasks.py::_reminder_events`'s filter when actually wanted.
+- **`NotificationReminderLog.recipient_user` was added** (not in the original four-field
+  sketch) and is `null` for the 24h-before reminder — one log row locks the *event*, covering
+  every recipient at once, since the lead time itself doesn't depend on any individual's clock
+  — but is set per-recipient for morning-of (and the countdown digest, §9), since those fire at
+  a different real-world moment for each user's own `morning_time`.
+- **`mine_only` is enforced here, not inside `create_notification`.** The shared preference gate
+  only understands `in_app_enabled`/`push_enabled`; the reminder sweep itself filters recipients
+  down to assignees when a user's `mine_only` is set for the category, since only the caller
+  knows who's actually assigned to a given record.
 
-Same command (or a lightweight second one), once per user per day at their `morning_time`: if the
-Hub Countdown widget is enabled and has a future `target_date`, send one push/in-app notification
-("3 days to go" / "14 hours to go" inside the final day) to everyone with `countdown` enabled.
-Idempotency: reuse `NotificationReminderLog` with `record_type="hub_countdown"`,
-`lead_kind=f"daily:{date.today()}"` so it can never double-send for the same calendar day even if
-the command runs twice.
+## 9. Daily countdown digest — DONE (v0.34.13)
+
+Same command, `apps/notifications/tasks.py::run_countdown_digest`, checked once per user per
+hour but only fires at their own `morning_time`: if the Hub Countdown widget is enabled and has
+a future `target_date`, send one push/in-app notification ("3 days to go" / "14 hours to go"
+inside the final day) to everyone with `countdown` enabled. Idempotency: `NotificationReminderLog`
+with `record_type="HouseholdHubWidget"`, `lead_kind=f"daily:{date}"`, `recipient_user=user` so it
+can never double-send the same user for the same calendar day even if the command runs twice —
+and each household member gets it at their own morning time rather than everyone getting it at
+once.
 
 ## 10. Web Push mechanics
 
@@ -262,9 +288,16 @@ today's profile editing.
    double-notify. Home & maintenance / Meridian / Travel activity notifications beyond what
    slice 1 already covers, and Homestead room-plan additions, remain a future extension of this
    same dispatcher if wanted — not required by the original ask.
-4. **Scheduled reminders + countdown digest.** The management command from §8/§9,
-   `NotificationReminderLog`, cron entry (matching the existing
-   `link_imports_run_scheduled` host-cron pattern from `docs/29_Core_Link_Import.md`).
+4. **Scheduled reminders + countdown digest — DONE (v0.34.13).** New `notifications_run_scheduled`
+   management command (recommended hourly cron, matching the existing
+   `link_imports_run_scheduled`/`solace_run_scheduled` pattern) runs `run_due_reminders()` (§8)
+   and `run_countdown_digest()` (§9) in `apps/notifications/tasks.py`. New
+   `NotificationReminderLog` model (migration `notifications.0004`) — see §8's implementation
+   notes for how it ended up shaped slightly differently from the original four-field sketch
+   (a `recipient_user` column was added for per-user idempotency on morning-of/countdown).
+   Sourced entirely from `CalendarEvent` (D7 single-source-of-truth) rather than querying Atlas
+   models separately, since dated Atlas records already mirror there. This closes out the
+   Notifications & Push feature — all four slices are done on `feature/push-notifications`.
 
 ## 13. Acceptance criteria
 

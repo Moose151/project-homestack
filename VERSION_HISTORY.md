@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.34.12**
+> **Current version: 0.34.13**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,30 @@
 ---
 
 ## 0.34 — Discoverability and daily navigation
+
+### 0.34.13 — 2026-08-12 — Scheduled reminders + countdown digest (docs/32 slice 4, on feature/push-notifications — closes out Notifications & Push)
+- Appointments and assigned to-dos now get a genuine reminder: once ~24 hours before they're due
+  and again the morning of, each exactly once even if the hourly cron job overlaps or re-runs.
+  Sourced straight from `CalendarEvent` rather than a separate Atlas query — dated Atlas items
+  already mirror there (D7 single source of truth), so one sweep naturally covers both a
+  standalone calendar appointment (`appointments` category) and an Atlas to-do with a due date
+  (`assigned_tasks`). Deliberately scoped to just those two sources for V1, not every synced
+  node — Solace already runs its own reminder job and is re-auth-gated besides.
+- Anyone with an active Hub Countdown widget now gets a daily "3 days to go" push/in-app nudge at
+  their own morning time, not everyone's at once — new per-user idempotency (a `recipient_user`
+  column added to `NotificationReminderLog`, one small deviation from the original doc sketch)
+  means two people with different `morning_time` settings each get exactly one digest a day, at
+  the time that's actually morning for them.
+- New `NotificationReminderLog` model (migration `notifications.0004`), `apps/notifications/
+  tasks.py` (`run_due_reminders`, `run_countdown_digest`), and the `notifications_run_scheduled`
+  management command (recommended hourly cron, matching the existing `solace_run_scheduled`/
+  `link_imports_run_scheduled` pattern — not yet added to the live server's crontab, that's a
+  deploy step for the owner). A user's `mine_only` preference (assigned-to-me vs. everyone's) is
+  enforced by the reminder sweep itself rather than the shared preference gate, since only the
+  sweep knows who's actually assigned to a given record.
+- **875 backend tests green (16 new); no frontend changes this slice; migration
+  `notifications.0004` applied to the live dev database.** This closes out all four Notifications
+  & Push delivery slices — still on `feature/push-notifications`, not yet merged to `main`.
 
 ### 0.34.12 — 2026-08-12 — Cross-user activity notifications, bundled (docs/32 slice 3, on feature/push-notifications)
 - The literal owner request now works: adding to a shared calendar, a shopping/grocery list, or

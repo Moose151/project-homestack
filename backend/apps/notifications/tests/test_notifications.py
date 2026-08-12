@@ -1,5 +1,5 @@
 """Notifications tests (Milestone 2, Phase 2.15)."""
-from datetime import time
+from datetime import datetime, time, timedelta
 from unittest.mock import patch
 
 from django.test import TestCase, override_settings
@@ -9,10 +9,13 @@ from django.utils import timezone
 from apps.accounts.models import User
 from apps.atlas.services import create_atlas_list, create_list_item
 from apps.books.services import create_personal_entry, update_personal_entry
+from apps.core.models import get_active_household
+from apps.hub.models import HouseholdHubWidget, HubWidget
 from apps.meridian import services as meridian
 from apps.nodes.models import HouseholdNode
 from apps.notifications import selectors, services
 from apps.notifications.models import Notification, PushDevice, UserNotificationSettings
+from apps.notifications.tasks import run_countdown_digest, run_due_reminders
 from apps.people.models import Person
 from apps.scheduling.services import create_event
 
@@ -456,3 +459,191 @@ class HouseholdActivityDispatcherTests(TestCase):
         create_event(self.actor, title="Dentist", start_at=timezone.now())
         create_personal_entry(self.actor, book={"title": "Dune"}, status="history")
         self.assertEqual(Notification.objects.filter(recipient_user=self.other, is_read=False).count(), 0)
+
+
+class ScheduledReminderTests(TestCase):
+    """docs/32_Core_Notifications_and_Push.md §8 — 24h-before + morning-of reminders."""
+
+    def setUp(self):
+        self.parent = _make_user("parent", role=User.Role.USER)
+        self.other = _make_user("other", role=User.Role.USER)
+
+    def test_24h_before_appointment_notifies_household(self):
+        due = timezone.now() + timedelta(hours=24)
+        create_event(self.parent, title="Dentist", start_at=due)
+        result = run_due_reminders()
+        self.assertEqual(result["24h"], 1)
+        for user in (self.parent, self.other):
+            notes = Notification.objects.filter(
+                recipient_user=user, source_node="scheduling", title="Coming up tomorrow",
+            )
+            self.assertEqual(notes.count(), 1)
+            self.assertEqual(notes.first().message, "Dentist")
+
+    def test_24h_reminder_is_idempotent(self):
+        due = timezone.now() + timedelta(hours=24)
+        create_event(self.parent, title="Dentist", start_at=due)
+        run_due_reminders()
+        run_due_reminders()
+        self.assertEqual(
+            Notification.objects.filter(source_node="scheduling", title="Coming up tomorrow").count(), 2,
+        )
+
+    def test_event_outside_24h_window_is_not_reminded(self):
+        due = timezone.now() + timedelta(hours=30)
+        create_event(self.parent, title="Later", start_at=due)
+        result = run_due_reminders()
+        self.assertEqual(result["24h"], 0)
+
+    def test_atlas_item_due_tomorrow_uses_assigned_tasks_category(self):
+        atlas_list = create_atlas_list(self.parent, title="Chores", list_type="todo")
+        due = timezone.now() + timedelta(hours=24)
+        create_list_item(self.parent, atlas_list, title="Take out bins", due_at=due)
+        run_due_reminders()
+        notes = Notification.objects.filter(
+            recipient_user=self.other, source_node="atlas", title="Coming up tomorrow",
+        )
+        self.assertEqual(notes.count(), 1)
+        self.assertEqual(notes.first().message, "Take out bins")
+
+    def test_mine_only_preference_skips_unassigned_events(self):
+        services.set_preference(
+            self.other, category="appointments", in_app_enabled=True, push_enabled=True, mine_only=True,
+        )
+        due = timezone.now() + timedelta(hours=24)
+        create_event(self.parent, title="Dentist", start_at=due)
+        run_due_reminders()
+        self.assertEqual(
+            Notification.objects.filter(
+                recipient_user=self.other, source_node="scheduling", title="Coming up tomorrow",
+            ).count(),
+            0,
+        )
+
+    def test_mine_only_still_notifies_when_assigned(self):
+        person = _make_person("Other", linked_user=self.other)
+        services.set_preference(
+            self.other, category="appointments", in_app_enabled=True, push_enabled=True, mine_only=True,
+        )
+        due = timezone.now() + timedelta(hours=24)
+        create_event(self.parent, title="Dentist", start_at=due, assigned_to_people=[person.id])
+        run_due_reminders()
+        self.assertEqual(
+            Notification.objects.filter(
+                recipient_user=self.other, source_node="scheduling", title="Coming up tomorrow",
+            ).count(),
+            1,
+        )
+
+    def test_disabled_category_receives_no_reminder(self):
+        services.set_preference(
+            self.other, category="appointments", in_app_enabled=False, push_enabled=False, mine_only=False,
+        )
+        due = timezone.now() + timedelta(hours=24)
+        create_event(self.parent, title="Dentist", start_at=due)
+        run_due_reminders()
+        self.assertEqual(
+            Notification.objects.filter(
+                recipient_user=self.other, source_node="scheduling", title="Coming up tomorrow",
+            ).count(),
+            0,
+        )
+
+    def test_morning_of_notifies_at_users_morning_time(self):
+        today = timezone.now().date()
+        due_at = timezone.make_aware(datetime.combine(today, time(15, 0)))
+        create_event(self.parent, title="Dentist", start_at=due_at)
+        morning_now = timezone.make_aware(datetime.combine(today, time(8, 0)))
+        result = run_due_reminders(now=morning_now)
+        self.assertEqual(result["morning_of"], 2)
+        notes = Notification.objects.filter(
+            recipient_user=self.other, source_node="scheduling", title="Due today",
+        )
+        self.assertEqual(notes.count(), 1)
+
+    def test_morning_of_respects_per_user_morning_time(self):
+        services.update_settings(self.other, morning_time=time(9, 0))
+        today = timezone.now().date()
+        due_at = timezone.make_aware(datetime.combine(today, time(15, 0)))
+        create_event(self.parent, title="Dentist", start_at=due_at)
+        eight_am = timezone.make_aware(datetime.combine(today, time(8, 0)))
+        run_due_reminders(now=eight_am)
+        self.assertEqual(
+            Notification.objects.filter(recipient_user=self.other, source_node="scheduling", title="Due today").count(), 0,
+        )
+        nine_am = timezone.make_aware(datetime.combine(today, time(9, 0)))
+        run_due_reminders(now=nine_am)
+        self.assertEqual(
+            Notification.objects.filter(recipient_user=self.other, source_node="scheduling", title="Due today").count(), 1,
+        )
+
+    def test_morning_of_is_idempotent_per_user(self):
+        today = timezone.now().date()
+        due_at = timezone.make_aware(datetime.combine(today, time(15, 0)))
+        create_event(self.parent, title="Dentist", start_at=due_at)
+        morning_now = timezone.make_aware(datetime.combine(today, time(8, 0)))
+        run_due_reminders(now=morning_now)
+        run_due_reminders(now=morning_now)
+        self.assertEqual(
+            Notification.objects.filter(recipient_user=self.other, source_node="scheduling", title="Due today").count(), 1,
+        )
+
+
+class CountdownDigestTests(TestCase):
+    """docs/32_Core_Notifications_and_Push.md §9 — daily countdown digest."""
+
+    def setUp(self):
+        self.parent = _make_user("parent", role=User.Role.USER)
+        self.other = _make_user("other", role=User.Role.USER)
+
+    def _enable_countdown(self, *, target_date, target_time="12:00"):
+        widget = HubWidget.objects.get(key="countdown")
+        return HouseholdHubWidget.objects.create(
+            household=get_active_household(), widget=widget, is_enabled=True,
+            settings_json={"title": "Trip", "target_date": target_date, "target_time": target_time},
+        )
+
+    def test_countdown_digest_sends_to_everyone_at_their_morning_time(self):
+        target_date = (timezone.now() + timedelta(days=5)).date().isoformat()
+        self._enable_countdown(target_date=target_date)
+        morning_now = timezone.make_aware(datetime.combine(timezone.now().date(), time(8, 0)))
+        result = run_countdown_digest(now=morning_now)
+        self.assertEqual(result["sent"], 2)
+        note = Notification.objects.get(recipient_user=self.other, source_node="hub")
+        self.assertIn("day", note.message)
+
+    def test_countdown_digest_is_idempotent_same_day(self):
+        target_date = (timezone.now() + timedelta(days=5)).date().isoformat()
+        self._enable_countdown(target_date=target_date)
+        morning_now = timezone.make_aware(datetime.combine(timezone.now().date(), time(8, 0)))
+        run_countdown_digest(now=morning_now)
+        run_countdown_digest(now=morning_now)
+        self.assertEqual(Notification.objects.filter(source_node="hub").count(), 2)
+
+    def test_no_countdown_widget_sends_nothing(self):
+        result = run_countdown_digest()
+        self.assertEqual(result["sent"], 0)
+
+    def test_disabled_countdown_widget_sends_nothing(self):
+        target_date = (timezone.now() + timedelta(days=5)).date().isoformat()
+        widget_row = self._enable_countdown(target_date=target_date)
+        widget_row.is_enabled = False
+        widget_row.save(update_fields=["is_enabled"])
+        result = run_countdown_digest()
+        self.assertEqual(result["sent"], 0)
+
+    def test_past_target_date_sends_nothing(self):
+        target_date = (timezone.now() - timedelta(days=1)).date().isoformat()
+        self._enable_countdown(target_date=target_date)
+        result = run_countdown_digest()
+        self.assertEqual(result["sent"], 0)
+
+    def test_countdown_disabled_category_is_skipped(self):
+        services.set_preference(
+            self.other, category="countdown", in_app_enabled=False, push_enabled=False, mine_only=False,
+        )
+        target_date = (timezone.now() + timedelta(days=5)).date().isoformat()
+        self._enable_countdown(target_date=target_date)
+        morning_now = timezone.make_aware(datetime.combine(timezone.now().date(), time(8, 0)))
+        run_countdown_digest(now=morning_now)
+        self.assertEqual(Notification.objects.filter(recipient_user=self.other, source_node="hub").count(), 0)

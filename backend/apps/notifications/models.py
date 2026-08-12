@@ -143,3 +143,33 @@ class PushDevice(HouseholdBaseModel):
 
     def __str__(self) -> str:
         return self.label or self.endpoint[:40]
+
+
+class NotificationReminderLog(HouseholdBaseModel):
+    """Idempotency marker for the scheduled reminder/countdown command (docs/32 §8/§9).
+
+    `recipient_user` is null for the 24h-before reminder — one fire covers every eligible
+    recipient at once, since that lead time doesn't depend on any individual's clock — and set
+    for morning-of and the daily countdown digest, which fire at a different real-world moment
+    for each user's own `morning_time`.
+    """
+
+    source_node = models.CharField(max_length=40)
+    record_type = models.CharField(max_length=100)
+    record_id = models.PositiveBigIntegerField()
+    lead_kind = models.CharField(max_length=32)
+    recipient_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="+"
+    )
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "notification reminder log"
+        indexes = [
+            models.Index(fields=["source_node", "record_type", "record_id", "lead_kind", "recipient_user"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.source_node}:{self.record_type}:{self.record_id}:{self.lead_kind}"
