@@ -4,7 +4,9 @@ from rest_framework import serializers
 
 from apps.accounts.models import User
 from apps.people.models import Person
-from apps.travel.models import BookingDeadline, TravelBooking, TravelIdea, Trip, TripImage
+from apps.travel.models import (
+    BookingDeadline, TravelBooking, TravelIdea, TravelItineraryItem, Trip, TripImage,
+)
 
 
 class TripImageSerializer(serializers.ModelSerializer):
@@ -42,23 +44,45 @@ class BookingSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class ItineraryItemSerializer(serializers.ModelSerializer):
+    booking_id = serializers.PrimaryKeyRelatedField(
+        source="booking", queryset=TravelBooking.objects.all(), required=False, allow_null=True,
+    )
+
+    class Meta:
+        model = TravelItineraryItem
+        fields = [
+            "id", "trip_id", "booking_id", "title", "notes", "location",
+            "scheduled_date", "scheduled_time", "position", "calendar_event_id",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "trip_id", "calendar_event_id", "created_at", "updated_at"]
+
+    def validate_title(self, value: str) -> str:
+        if not value.strip():
+            raise serializers.ValidationError("Title may not be blank.")
+        return value
+
+
 class TripSerializer(serializers.ModelSerializer):
     participant_ids = serializers.PrimaryKeyRelatedField(source="participants", queryset=Person.objects.all(), many=True, required=False)
     hidden_from_user_ids = serializers.PrimaryKeyRelatedField(source="hidden_from_users", queryset=User.objects.all(), many=True, required=False)
     images = TripImageSerializer(many=True, required=False)
     bookings = BookingSerializer(many=True, read_only=True)
+    itinerary_items = ItineraryItemSerializer(many=True, read_only=True)
     cost_summary = serializers.SerializerMethodField()
     booking_progress = serializers.SerializerMethodField()
 
     class Meta:
         model = Trip
         fields = [
-            "id", "title", "destination", "notes", "start_date", "end_date", "timezone",
+            "id", "title", "destination", "notes", "start_date", "end_date", "trip_type", "timezone",
             "status", "colour", "flights_required", "accommodation_required", "visibility",
-            "participant_ids", "hidden_from_user_ids", "images", "bookings", "cost_summary", "booking_progress",
+            "participant_ids", "hidden_from_user_ids", "images", "bookings", "itinerary_items",
+            "cost_summary", "booking_progress",
             "calendar_event_id", "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "bookings", "cost_summary", "booking_progress", "calendar_event_id", "created_at", "updated_at"]
+        read_only_fields = ["id", "bookings", "itinerary_items", "cost_summary", "booking_progress", "calendar_event_id", "created_at", "updated_at"]
 
     def validate(self, attrs):
         start = attrs.get("start_date", getattr(self.instance, "start_date", None))

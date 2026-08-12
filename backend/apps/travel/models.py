@@ -26,11 +26,16 @@ class Trip(CalendarSyncMixin, HouseholdBaseModel):
         COMPLETED = "completed", "Completed"
         CANCELLED = "cancelled", "Cancelled"
 
+    class TripType(models.TextChoices):
+        DAY_TRIP = "day_trip", "Day trip"
+        MULTI_DAY = "multi_day", "Multi-day trip"
+
     title = models.CharField(max_length=200)
     destination = models.CharField(max_length=255)
     notes = models.TextField(blank=True, default="")
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
+    trip_type = models.CharField(max_length=10, choices=TripType.choices, default=TripType.MULTI_DAY)
     timezone = models.CharField(max_length=64, blank=True, default="Australia/Brisbane")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PLANNING)
     colour = models.CharField(max_length=7, default="#2B7FD0")
@@ -178,4 +183,50 @@ class BookingDeadline(CalendarSyncMixin, HouseholdBaseModel):
             "visibility": self.booking.trip.visibility,
             "assigned_to_person_ids": list(self.booking.trip.participants.values_list("id", flat=True)),
             "hidden_from_user_ids": list(self.booking.trip.hidden_from_users.values_list("id", flat=True)),
+        }
+
+
+class TravelItineraryItem(CalendarSyncMixin, HouseholdBaseModel):
+    """A thing to do on the trip — assigned to a day, or left as an option to consider.
+
+    ``scheduled_date`` is the day of the trip it belongs to; blank means it is still just an
+    idea ("option to do") rather than a plan. Only dated items sync to Calendar (spec §10);
+    an unscheduled idea has nothing to put on a date.
+    """
+
+    trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name="itinerary_items")
+    booking = models.ForeignKey(
+        TravelBooking, null=True, blank=True, on_delete=models.SET_NULL, related_name="itinerary_items"
+    )
+    title = models.CharField(max_length=200)
+    notes = models.TextField(blank=True, default="")
+    location = models.CharField(max_length=255, blank=True, default="")
+    scheduled_date = models.DateField(null=True, blank=True)
+    scheduled_time = models.TimeField(null=True, blank=True)
+    position = models.PositiveSmallIntegerField(default=0)
+    calendar_event_id = models.PositiveBigIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["scheduled_date", "scheduled_time", "position", "id"]
+
+    def get_calendar_node_key(self):
+        return "travel"
+
+    def get_calendar_data(self):
+        if not self.scheduled_date or self.trip.status == Trip.Status.CANCELLED:
+            return None
+        if self.scheduled_time:
+            start_at = timezone.make_aware(
+                datetime.combine(self.scheduled_date, self.scheduled_time), timezone.get_current_timezone()
+            )
+            is_all_day = False
+        else:
+            start_at = _aware(self.scheduled_date)
+            is_all_day = True
+        return {
+            "title": f"{self.trip.title} · {self.title}", "description": self.notes,
+            "start_at": start_at, "is_all_day": is_all_day, "location": self.location,
+            "colour": self.trip.colour, "visibility": self.trip.visibility,
+            "assigned_to_person_ids": list(self.trip.participants.values_list("id", flat=True)),
+            "hidden_from_user_ids": list(self.trip.hidden_from_users.values_list("id", flat=True)),
         }

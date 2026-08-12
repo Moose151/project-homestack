@@ -322,11 +322,18 @@ export interface TravelBooking {
   book_by: string | null; booked_at: string | null; notes: string; colour: string
   calendar_event_id: number | null; deadline_calendar_event_id: number | null
 }
+export interface TravelItineraryItem {
+  id: number; trip_id: number; booking_id: number | null; title: string; notes: string; location: string
+  scheduled_date: string | null; scheduled_time: string | null; position: number
+  calendar_event_id: number | null
+}
 export interface Trip {
   id: number; title: string; destination: string; notes: string; start_date: string | null; end_date: string | null
+  trip_type: 'day_trip' | 'multi_day'
   timezone: string; status: 'planning' | 'ready_to_book' | 'booked' | 'travelling' | 'completed' | 'cancelled'
   colour: string; flights_required: boolean; accommodation_required: boolean; visibility: string
   participant_ids: number[]; hidden_from_user_ids: number[]; images: TravelImage[]; bookings: TravelBooking[]
+  itinerary_items: TravelItineraryItem[]
   cost_summary: { currency: string; quoted: string; booked: string }[]
   booking_progress: { required_types: string[]; booked_required_types: string[]; component_count: number; booked_count: number }
   calendar_event_id: number | null

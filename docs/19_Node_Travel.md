@@ -1,6 +1,9 @@
 # Node Spec — Travel
 
-> Canonical. **Initial useful slice shipped in v0.33.0 (2026-08-11).** Global rules from
+> Canonical. **Initial useful slice shipped in v0.33.0 (2026-08-11).** Itinerary items
+> (trip-day activities, `docs/19_Node_Travel.md` §10) and a day-trip/multi-day-trip type on
+> Trips shipped in v0.34.6 (2026-08-12); packing and protected documents remain from §14 slice 4.
+> Global rules from
 > `00_README_and_Changelog.md` apply: household-scoped base models; assignments are People (D12);
 > dates sync only through the Calendar helper (D7); cross-node effects use signals (D4); shared
 > attachments own uploaded files; reads use central visibility (D10) and Postgres FTS (D9).
@@ -186,8 +189,8 @@ parents: use explicit nullable Trip/Idea FKs with a constraint that exactly one 
    rows, booked controls, quote/actual roll-ups and readiness state.
 3. **Calendar, deadlines and Hub:** Trip/flight/stay sync, at-a-glance booked state, book-by
    Agenda actions, notifications and widgets.
-4. **Itinerary, packing and documents:** trip-day activities, assigned packing and protected
-   attachments. Solace/Pets automation remains a later integration.
+4. **Itinerary, packing and documents:** trip-day activities **(shipped v0.34.6)**, assigned
+   packing and protected attachments **(not started)**. Solace/Pets automation remains later.
 
 ## 15. Completion criteria
 

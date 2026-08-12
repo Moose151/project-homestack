@@ -8,7 +8,9 @@ from apps.core.models import get_active_household
 from apps.notifications.services import create_notification
 from apps.permissions.resolver import resolve_permission
 from apps.scheduling.helpers import delete_event_for, sync_event_for
-from apps.travel.models import BookingDeadline, TravelBooking, TravelIdea, Trip, TripImage
+from apps.travel.models import (
+    BookingDeadline, TravelBooking, TravelIdea, TravelItineraryItem, Trip, TripImage,
+)
 
 
 class TravelError(ValueError):
@@ -29,6 +31,10 @@ def _images(user, parent, rows):
 
 @transaction.atomic
 def create_trip(user, *, participants=None, hidden_from_users=None, images=None, **data):
+    # A day trip is inherently one day — keep the stored end_date consistent so downstream
+    # duration math (Calendar block, itinerary day options) never has to special-case it.
+    if data.get("trip_type") == Trip.TripType.DAY_TRIP and data.get("start_date"):
+        data["end_date"] = data["start_date"]
     obj = Trip.objects.create(**_base(user), **data)
     obj.participants.set(participants or [])
     obj.hidden_from_users.set([row for row in (hidden_from_users or []) if row.id != user.id])
@@ -40,7 +46,11 @@ def create_trip(user, *, participants=None, hidden_from_users=None, images=None,
 
 @transaction.atomic
 def update_trip(user, obj, *, participants=None, hidden_from_users=None, images=None, **data):
-    for field in {"title", "destination", "notes", "start_date", "end_date", "timezone", "status", "colour", "flights_required", "accommodation_required", "visibility"}:
+    resulting_type = data.get("trip_type", obj.trip_type)
+    resulting_start = data.get("start_date", obj.start_date)
+    if resulting_type == Trip.TripType.DAY_TRIP and resulting_start:
+        data["end_date"] = resulting_start
+    for field in {"title", "destination", "notes", "start_date", "end_date", "trip_type", "timezone", "status", "colour", "flights_required", "accommodation_required", "visibility"}:
         if field in data:
             setattr(obj, field, data[field])
     obj.updated_by = user
@@ -55,6 +65,8 @@ def update_trip(user, obj, *, participants=None, hidden_from_users=None, images=
     for booking in obj.bookings.all():
         sync_event_for(booking)
         _sync_deadline(user, booking)
+    for item in obj.itinerary_items.all():
+        sync_event_for(item)
     return obj
 
 
@@ -64,6 +76,8 @@ def delete_trip(user, obj):
         delete_event_for(booking)
         if hasattr(booking, "deadline"):
             delete_event_for(booking.deadline)
+    for item in obj.itinerary_items.all():
+        delete_event_for(item)
     obj.soft_delete()
 
 
@@ -170,4 +184,27 @@ def delete_booking(user, obj):
     if hasattr(obj, "deadline"):
         delete_event_for(obj.deadline)
         obj.deadline.delete()
+    obj.soft_delete()
+
+
+@transaction.atomic
+def create_itinerary_item(user, trip, **data):
+    obj = TravelItineraryItem.objects.create(trip=trip, **_base(user), **data)
+    sync_event_for(obj)
+    return obj
+
+
+@transaction.atomic
+def update_itinerary_item(user, obj, **data):
+    for field in {"booking", "title", "notes", "location", "scheduled_date", "scheduled_time", "position"}:
+        if field in data:
+            setattr(obj, field, data[field])
+    obj.updated_by = user
+    obj.save()
+    sync_event_for(obj)
+    return obj
+
+
+def delete_itinerary_item(user, obj):
+    delete_event_for(obj)
     obj.soft_delete()

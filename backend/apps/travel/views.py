@@ -5,7 +5,9 @@ from rest_framework.views import APIView
 
 from apps.permissions.drf import HomeStackPermission
 from apps.travel import selectors, services
-from apps.travel.serializers import BookingSerializer, TravelIdeaSerializer, TripSerializer
+from apps.travel.serializers import (
+    BookingSerializer, ItineraryItemSerializer, TravelIdeaSerializer, TripSerializer,
+)
 
 _Perm = HomeStackPermission.for_resource("travel")
 
@@ -127,4 +129,36 @@ class BookingDetailView(APIView):
 
     def delete(self, request, booking_id):
         services.delete_booking(request.user, self._get(request, booking_id))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ItineraryItemListView(APIView):
+    permission_classes = [_Perm]
+
+    def post(self, request, trip_id):
+        trip = selectors.get_trip(request.user, trip_id)
+        if not trip:
+            raise NotFound()
+        serializer = ItineraryItemSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        obj = services.create_itinerary_item(request.user, trip, **serializer.validated_data)
+        return Response(ItineraryItemSerializer(obj).data, status=status.HTTP_201_CREATED)
+
+
+class ItineraryItemDetailView(APIView):
+    permission_classes = [_Perm]
+
+    def _get(self, request, pk):
+        obj = selectors.get_itinerary_item(request.user, pk)
+        if not obj:
+            raise NotFound()
+        return obj
+
+    def patch(self, request, item_id):
+        serializer = ItineraryItemSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        return Response(ItineraryItemSerializer(services.update_itinerary_item(request.user, self._get(request, item_id), **serializer.validated_data)).data)
+
+    def delete(self, request, item_id):
+        services.delete_itinerary_item(request.user, self._get(request, item_id))
         return Response(status=status.HTTP_204_NO_CONTENT)

@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.34.5**
+> **Current version: 0.34.6**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,21 @@
 ---
 
 ## 0.34 — Discoverability and daily navigation
+
+### 0.34.6 — 2026-08-12 — Travel itinerary and day-trip/multi-day-trip type
+- Trips now have a **Things to do** section: itinerary items with a title, location and notes,
+  either assigned to a specific day of the trip or left as an unscheduled "option to do". A day
+  pick shows as "Day N · date"; giving an item a day (and optional time) syncs it to Calendar
+  through the existing helper (D7) with the trip's colour/visibility/surprise exclusions, and
+  removing the day removes the Calendar entry. New `TravelItineraryItem` model + migration
+  `travel.0003`, nested under the trip's API response, with its own `POST
+  /travel/trips/<id>/itinerary/` and `PATCH/DELETE /travel/itinerary/<id>/`.
+- Trips can be marked **Day trip** or **Multi-day trip** (`Trip.trip_type`, same migration).
+  Choosing Day trip keeps the stored end date locked to the start date on both create and edit,
+  and a "Day trip" badge shows on the trip card and detail header.
+- `docs/19_Node_Travel.md` §14 slice 4 updated — itinerary shipped, packing/documents still open.
+  **826 backend tests green (4 new); frontend typecheck and production build clean; migration
+  applied to the live dev database.**
 
 ### 0.34.5 — 2026-08-12 — Dedicated Grocery and Shopping tabs in Atlas
 - Atlas' generic Lists tab is split: Grocery and Shopping are now first-class tabs, and any
