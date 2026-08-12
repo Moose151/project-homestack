@@ -24,7 +24,9 @@ Current shipped areas include:
 - Fitness & Training (separate from sensitive medical Health, D24);
 - Travel trips, booking/cost planning and itinerary/Things to do;
 - Corners and safe product/book-link preview/cache/watch flows;
-- daily coordination across appointments, Agenda, birthdays and pool schedules.
+- daily coordination across appointments, Agenda, birthdays and pool schedules;
+- **PWA/Web Push notifications** with per-user preferences, per-device subscriptions, quiet hours,
+  bundled household activity, scheduled reminders/countdown delivery and sensitive-safe payloads.
 
 Trusted **LAN HTTPS is live** at:
 
@@ -34,8 +36,10 @@ The hostname resolves locally through Pi-hole to the home server; Nginx Proxy Ma
 Let's Encrypt certificate obtained through Cloudflare DNS challenge. This does **not** mean
 HomeStack is publicly exposed.
 
-The active development workstream is PWA/Web Push notifications. Home Assistant is the next major
-planned bridge after push notifications. See [`docs/04_Development_Roadmap.md`](docs/04_Development_Roadmap.md).
+The recommended primary engineering workstream is now **production readiness and reliability**:
+production serving, tighter Docker networking, safer deployment automation, frontend/E2E CI and
+off-server recovery. See [`docs/34_Recommended_Next_Steps.md`](docs/34_Recommended_Next_Steps.md)
+and [`docs/04_Development_Roadmap.md`](docs/04_Development_Roadmap.md).
 
 ## Tech stack
 
@@ -101,15 +105,25 @@ curl -I https://homestack.moosesoftwares.com
 curl -I https://homestack.moosesoftwares.com/api/v1/health/
 ```
 
-A future operational-hardening milestone will replace this manual sequence with one supported
-deployment command and move the live stack away from development application servers.
+The production-readiness milestone will replace this manual sequence with one supported deployment
+command and move the live stack away from development application servers.
+
+## Web Push deployment note
+
+The Web Push implementation is shipped, but the live server needs VAPID configuration and the
+scheduled dispatcher. See [`HANDOVER.md`](HANDOVER.md) and
+[`docs/32_Core_Notifications_and_Push.md`](docs/32_Core_Notifications_and_Push.md) before deploying
+or troubleshooting push.
+
+Do not commit VAPID private keys. On iOS, Web Push must be tested from an installed Home Screen PWA,
+not an ordinary Safari tab.
 
 ## Current live-serving caveat
 
 The current container definitions still use Django `runserver` and the Vite development server.
 They work behind the LAN reverse proxy, but they are not the intended final production-serving
-architecture. Production WSGI/static serving and tighter Docker-network exposure are explicit
-near-term roadmap work before any public exposure is considered.
+architecture. Production WSGI/static serving and tighter Docker-network exposure are now the
+recommended immediate engineering work before any public exposure is considered.
 
 ## Environment / HTTPS notes
 
@@ -145,12 +159,14 @@ backups and a dedicated exposure review.
 
 Use:
 
-- [`HANDOVER.md`](HANDOVER.md) — current state and what to do next;
+- [`HANDOVER.md`](HANDOVER.md) — current state, deployment requirements and what to do next;
 - [`docs/00_README_and_Changelog.md`](docs/00_README_and_Changelog.md) — settled decisions and doc map;
 - [`docs/01_Master_Software_Specification.md`](docs/01_Master_Software_Specification.md) — product contract;
 - [`docs/04_Development_Roadmap.md`](docs/04_Development_Roadmap.md) — current/future sequencing;
 - [`docs/05_Security_Architecture_Document.md`](docs/05_Security_Architecture_Document.md) — security contract;
+- [`docs/32_Core_Notifications_and_Push.md`](docs/32_Core_Notifications_and_Push.md) — shipped notification/PWA contract;
 - [`docs/33_Node_Books.md`](docs/33_Node_Books.md) — Books domain contract;
+- [`docs/34_Recommended_Next_Steps.md`](docs/34_Recommended_Next_Steps.md) — practical current execution plan;
 - [`VERSION_HISTORY.md`](VERSION_HISTORY.md) — historical release chronology.
 
 Do not turn `HANDOVER.md` back into a permanent implementation diary; Git history and
