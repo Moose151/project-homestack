@@ -220,6 +220,115 @@ class EducationCalendarSyncTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Repeating timetable classes
+# ---------------------------------------------------------------------------
+
+class ClassSeriesTests(TestCase):
+    """A repeating class must land on the calendar for every week of term, not just the first.
+
+    Ticking "repeats weekly" used to write FREQ=WEEKLY onto one row. Nothing expands a
+    recurrence rule on read — the calendar lists real CalendarEvent rows — so exactly one class
+    ever appeared.
+    """
+
+    def setUp(self):
+        self.admin = _make_user("admin", User.Role.ADMIN)
+        _login(self.client, "admin")
+        household = self.admin.household
+        household.timezone = "Australia/Sydney"
+        household.save(update_fields=["timezone"])
+
+    def _create(self, **payload):
+        body = {
+            "title": "Lecture",
+            "start_at": "2026-03-02T09:00:00Z",
+            "duration_minutes": 60,
+        }
+        body.update(payload)
+        return self.client.post(
+            reverse("education-class-list"), body, content_type="application/json",
+        )
+
+    def _events(self):
+        return CalendarEvent.objects.filter(source_record_type__startswith="Education")
+
+    def test_a_weekly_class_creates_one_session_per_week_until_the_last_date(self):
+        response = self._create(repeat="weekly", repeat_until="2026-03-30")
+        self.assertEqual(response.status_code, 201, response.json())
+        created = response.json()
+        # 2, 9, 16, 23 and 30 March — the last date is inclusive.
+        self.assertEqual(len(created), 5)
+        self.assertEqual(self._events().count(), 5)
+        self.assertEqual(
+            [row["start_at"][:10] for row in created],
+            ["2026-03-02", "2026-03-09", "2026-03-16", "2026-03-23", "2026-03-30"],
+        )
+
+    def test_every_occurrence_keeps_the_duration_and_shares_a_series_key(self):
+        created = self._create(repeat="fortnightly", repeat_until="2026-03-30").json()
+        self.assertEqual(len(created), 3)  # 2, 16, 30 March
+        keys = {row["series_key"] for row in created}
+        self.assertEqual(len(keys), 1)
+        self.assertNotIn(None, keys)
+        for row in created:
+            session = EducationClassSession.objects.get(pk=row["id"])
+            self.assertEqual((session.end_at - session.start_at).total_seconds(), 3600)
+
+    def test_a_class_without_a_repeat_is_still_a_single_session(self):
+        created = self._create().json()
+        self.assertEqual(len(created), 1)
+        self.assertIsNone(created[0]["series_key"])
+        self.assertEqual(self._events().count(), 1)
+
+    def test_repeat_without_a_last_date_is_rejected(self):
+        response = self._create(repeat="weekly")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("repeat_until", response.json())
+        self.assertEqual(EducationClassSession.objects.count(), 0)
+
+    def test_a_last_date_before_the_first_class_is_rejected(self):
+        response = self._create(repeat="weekly", repeat_until="2026-02-01")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(EducationClassSession.objects.count(), 0)
+
+    def test_an_absurd_range_is_refused_rather_than_creating_hundreds_of_classes(self):
+        response = self._create(repeat="weekly", repeat_until="2030-03-30")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(EducationClassSession.objects.count(), 0)
+
+    def test_the_local_class_time_survives_a_daylight_saving_change(self):
+        # Sydney leaves daylight saving on 2026-04-05. A 09:00 class must stay 09:00 local on
+        # both sides of it, which stepping in UTC would not do.
+        from zoneinfo import ZoneInfo
+
+        created = self._create(
+            start_at="2026-03-29T09:00:00+11:00", repeat="weekly", repeat_until="2026-04-12",
+        ).json()
+        sydney = ZoneInfo("Australia/Sydney")
+        local_hours = {
+            EducationClassSession.objects.get(pk=row["id"]).start_at.astimezone(sydney).hour
+            for row in created
+        }
+        self.assertEqual(local_hours, {9})
+
+    def test_deleting_one_class_leaves_the_rest_of_the_series(self):
+        created = self._create(repeat="weekly", repeat_until="2026-03-16").json()
+        self.client.delete(reverse("education-class-detail", args=[created[0]["id"]]))
+        self.assertEqual(EducationClassSession.objects.count(), 2)
+        self.assertEqual(self._events().count(), 2)
+
+    def test_deleting_the_series_removes_every_class_and_its_events(self):
+        created = self._create(repeat="weekly", repeat_until="2026-03-16").json()
+        response = self.client.delete(
+            f"{reverse('education-class-detail', args=[created[0]['id']])}?series=1"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["deleted"], 3)
+        self.assertEqual(EducationClassSession.objects.count(), 0)
+        self.assertEqual(self._events().count(), 0)
+
+
+# ---------------------------------------------------------------------------
 # Visibility (D10)
 # ---------------------------------------------------------------------------
 

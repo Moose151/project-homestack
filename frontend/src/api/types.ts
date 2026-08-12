@@ -638,6 +638,19 @@ export interface PushDevice {
   created_at: string
 }
 
+/** A database + protected-media backup archive (D17). Admin-only; creating one needs re-auth. */
+export interface Backup {
+  id: number
+  label: string
+  status: 'pending' | 'running' | 'complete' | 'failed'
+  db_checksum: string
+  media_checksum: string
+  size_bytes: number
+  error_message: string
+  created_at: string
+  updated_at: string
+}
+
 /** Admin-only household push overview: one household user and their active devices. */
 export interface HouseholdPushDeviceGroup {
   user_id: number
@@ -806,11 +819,16 @@ export interface EducationClassSession {
   start_at: string
   end_at: string | null
   recurrence_rule: string
+  /** Shared by every class generated from one "repeats until" request; null for a one-off. */
+  series_key: string | null
   calendar_event_id: number | null
   visibility: string
   created_at: string
   updated_at: string
 }
+
+/** How often a timetabled class repeats. Mirrors services.CLASS_REPEAT_INTERVALS. */
+export type ClassRepeat = 'weekly' | 'fortnightly' | 'every_3_weeks' | 'every_4_weeks' | 'monthly'
 
 export type EducationEventType =
   | 'excursion' | 'school_event' | 'term_start' | 'term_end'
@@ -1595,7 +1613,6 @@ export interface SolaceBucket {
   id: number
   name: string
   purpose: SolaceBucketPurpose
-  category: string
   target_amount: string
   current_amount: string
   remaining_amount: string

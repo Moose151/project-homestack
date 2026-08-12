@@ -1,10 +1,13 @@
 """education serializers."""
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.urls import reverse
 from rest_framework import serializers
 
 from apps.core.serializers import AssigneeSerializerMixin
+from apps.education import services
 
 from apps.education.models import (
     EducationAcademicProfile,
@@ -90,21 +93,44 @@ class EducationClassSessionSerializer(serializers.ModelSerializer):
     course_code = serializers.CharField(source="course.code", read_only=True, default="")
     display_title = serializers.CharField(read_only=True)
 
+    # --- How a repeating class is described on the way in (write-only) ---
+    # A class is entered as "first class, how long it runs, how often, last class" and the server
+    # generates one real session per occurrence. `end_at` is still the stored truth, so an
+    # existing caller sending start_at/end_at directly keeps working.
+    duration_minutes = serializers.IntegerField(
+        write_only=True, required=False, min_value=5, max_value=24 * 60,
+    )
+    repeat = serializers.ChoiceField(
+        write_only=True, required=False, allow_blank=True, default="",
+        choices=[(key, key) for key in services.CLASS_REPEAT_INTERVALS],
+    )
+    repeat_until = serializers.DateField(write_only=True, required=False, allow_null=True)
+
     class Meta:
         model = EducationClassSession
         fields = [
             "id", "title", "display_title", "course_id", "course_name", "course_code",
             "student_id", "location", "start_at", "end_at", "recurrence_rule",
-            "calendar_event_id", "visibility", "created_at", "updated_at",
+            "series_key", "calendar_event_id", "visibility", "created_at", "updated_at",
+            "duration_minutes", "repeat", "repeat_until",
         ]
         read_only_fields = [
             "id", "display_title", "course_name", "course_code", "calendar_event_id",
-            "created_at", "updated_at",
+            "series_key", "created_at", "updated_at",
         ]
 
     def validate(self, attrs):
         if self.instance is None and not attrs.get("start_at"):
             raise serializers.ValidationError({"start_at": "A start time is required."})
+        # A duration is the friendlier way to say the same thing as end_at, so fold it in here
+        # and let the service deal only in start/end.
+        duration = attrs.pop("duration_minutes", None)
+        if duration is not None and attrs.get("start_at"):
+            attrs["end_at"] = attrs["start_at"] + timedelta(minutes=duration)
+        if attrs.get("repeat") and not attrs.get("repeat_until"):
+            raise serializers.ValidationError(
+                {"repeat_until": "Give the date of the last class in the series."}
+            )
         return attrs
 
 

@@ -589,10 +589,13 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError }: {
 function BucketForm({ buckets, onCreated, onError }: {
   buckets: SolaceBucket[]; onCreated: () => void; onError: (message: string) => void
 }) {
+  // cap_to_remaining defaults off: only one bucket may hold the leftover pay (the service
+  // clears the flag on every other bucket), so defaulting every new bucket to true meant the
+  // setting silently moved to whichever bucket was saved last.
   const [f, setF] = useState({
-    name: '', purpose: 'savings', category: '', target_amount: '', current_amount: '',
+    name: '', purpose: 'savings', target_amount: '', current_amount: '',
     allocation_method: 'percentage' as 'percentage' | 'fixed',
-    allocation_value: '', rounding_increment: '1.00', cap_to_remaining: true,
+    allocation_value: '', rounding_increment: '1.00', cap_to_remaining: false,
   })
   const [saving, setSaving] = useState(false)
   const allocatedPercentage = buckets.reduce(
@@ -603,6 +606,7 @@ function BucketForm({ buckets, onCreated, onError }: {
     ), 0,
   )
   const remainingPercentage = Math.max(0, 100 - allocatedPercentage)
+  const leftoverBucket = buckets.find(bucket => bucket.is_active && bucket.cap_to_remaining)
   const exceedsPercentage = f.allocation_method === 'percentage'
     && Number(f.allocation_value || 0) > remainingPercentage
   const set = (k: string, v: string | boolean) => setF(prev => ({ ...prev, [k]: v }))
@@ -617,9 +621,9 @@ function BucketForm({ buckets, onCreated, onError }: {
         allocation_value: f.allocation_value || '0.00',
       })
       setF({
-        name: '', purpose: 'savings', category: '', target_amount: '', current_amount: '',
+        name: '', purpose: 'savings', target_amount: '', current_amount: '',
         allocation_method: 'percentage', allocation_value: '',
-        rounding_increment: '1.00', cap_to_remaining: true,
+        rounding_increment: '1.00', cap_to_remaining: false,
       })
       onCreated()
     } catch (error) {
@@ -628,22 +632,30 @@ function BucketForm({ buckets, onCreated, onError }: {
   }
   return (
     <Card contentClassName="p-4">
-      <h3 className="mb-3 font-semibold text-ink">New bucket and pay rule</h3>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[1.3fr_1fr_0.9fr_0.8fr_0.8fr_0.8fr_auto]">
-        <Field label="Bucket"><Input value={f.name} onChange={e => set('name', e.target.value)} placeholder="Emergency fund" /></Field>
-        <Field label="What for">
+      <h3 className="mb-1 font-semibold text-ink">New bucket</h3>
+      <p className="mb-4 text-sm text-muted">
+        A bucket is somewhere a share of each pay goes. Name it, say what it is for, then say how
+        it is funded.
+      </p>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Name"><Input value={f.name} onChange={e => set('name', e.target.value)} placeholder="Emergency fund" /></Field>
+        <Field label="What for" hint={BUCKET_PURPOSE_HINT[f.purpose]}>
           <Select value={f.purpose} onChange={e => set('purpose', e.target.value)}>
             {BUCKET_PURPOSES.map(row => <option key={row.value} value={row.value}>{row.label}</option>)}
           </Select>
         </Field>
-        <Field label="Category"><Input value={f.category} onChange={e => set('category', e.target.value)} /></Field>
-        <Field label="Pay rule">
+      </div>
+
+      <h4 className="mb-2 mt-5 text-sm font-semibold text-ink">Funded each pay</h4>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field label="Rule">
           <Select value={f.allocation_method} onChange={e => set('allocation_method', e.target.value)}>
-            <option value="percentage">Percentage</option>
-            <option value="fixed">Fixed total</option>
+            <option value="percentage">Percentage of pay</option>
+            <option value="fixed">Fixed household amount</option>
           </Select>
         </Field>
-        <Field label={f.allocation_method === 'percentage' ? 'Percent' : 'Amount'}>
+        <Field label={f.allocation_method === 'percentage' ? 'Percent of each pay' : 'Amount per cycle'}>
           <Input
             type="number" min="0"
             max={f.allocation_method === 'percentage' ? remainingPercentage : undefined}
@@ -656,9 +668,29 @@ function BucketForm({ buckets, onCreated, onError }: {
             {['0.01', '1.00', '5.00', '10.00'].map(v => <option key={v} value={v}>{money(v)}</option>)}
           </Select>
         </Field>
-        <Field label="Goal"><Input type="number" min="0" step="0.01" value={f.target_amount} onChange={e => set('target_amount', e.target.value)} /></Field>
-        <Field label="Saved"><Input type="number" min="0" step="0.01" value={f.current_amount} onChange={e => set('current_amount', e.target.value)} /></Field>
-        <div className="flex items-end"><Button onClick={save} loading={saving} disabled={!f.name.trim() || exceedsPercentage} className="w-full">Add</Button></div>
+      </div>
+      <label className="mt-2 flex items-start gap-2 text-sm text-muted">
+        <input
+          type="checkbox" className="mt-1" checked={f.cap_to_remaining}
+          onChange={e => set('cap_to_remaining', e.target.checked)}
+        />
+        <span>
+          Give this bucket whatever is left over
+          <span className="block text-xs text-muted">
+            Only one bucket can hold the leftover pay. Ticking this moves it here from
+            {leftoverBucket ? ` ${leftoverBucket.name}` : ' wherever it is now'}.
+          </span>
+        </span>
+      </label>
+
+      <h4 className="mb-2 mt-5 text-sm font-semibold text-ink">Goal <span className="font-normal text-muted">(optional)</span></h4>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Target amount"><Input type="number" min="0" step="0.01" value={f.target_amount} onChange={e => set('target_amount', e.target.value)} placeholder="0.00" /></Field>
+        <Field label="Already in it"><Input type="number" min="0" step="0.01" value={f.current_amount} onChange={e => set('current_amount', e.target.value)} placeholder="0.00" /></Field>
+      </div>
+
+      <div className="mt-4">
+        <Button onClick={save} loading={saving} disabled={!f.name.trim() || exceedsPercentage}>Add bucket</Button>
       </div>
       {f.allocation_method === 'percentage' && (
         <p className={`mt-2 text-xs ${exceedsPercentage ? 'text-danger' : 'text-muted'}`}>
@@ -680,6 +712,25 @@ const BUCKET_PURPOSES: { value: SolaceBucketPurpose; label: string }[] = [
   { value: 'purchases', label: 'Planned purchases' },
   { value: 'other', label: 'Other' },
 ]
+
+/** A bucket only has a goal worth showing a progress bar for if it has a target above zero. */
+const hasGoal = (bucket: SolaceBucket) => Number(bucket.target_amount) > 0
+
+const BUCKET_PURPOSE_LABEL: Record<string, string> = Object.fromEntries(
+  BUCKET_PURPOSES.map(row => [row.value, row.label]),
+)
+
+/** What each purpose actually changes, so "What for" does not read as decoration.
+ *
+ * It is not: bills and planned purchases are the two the pay planner counts towards what the
+ * household must set aside, and bills is what the bills-account forecast projects income into. */
+const BUCKET_PURPOSE_HINT: Record<string, string> = {
+  bills: 'Counted as money set aside for bills, and projected into the bills forecast.',
+  purchases: 'Counted as money set aside for planned purchases.',
+  savings: 'Tracked towards its goal; not counted as set aside for bills.',
+  spending: 'Tracked towards its goal; not counted as set aside for bills.',
+  other: 'Tracked towards its goal; not counted as set aside for bills.',
+}
 
 /**
  * Money in and out of one bucket.
@@ -793,7 +844,7 @@ function BucketRuleEditor({ bucket, buckets, reload, onError }: {
 }) {
   const [method, setMethod] = useState(bucket.allocation_method)
   const [name, setName] = useState(bucket.name)
-  const [category, setCategory] = useState(bucket.category)
+  const [purpose, setPurpose] = useState(bucket.purpose)
   const [target, setTarget] = useState(bucket.target_amount)
   const [current, setCurrent] = useState(bucket.current_amount)
   const [notes, setNotes] = useState(bucket.notes)
@@ -817,7 +868,7 @@ function BucketRuleEditor({ bucket, buckets, reload, onError }: {
     try {
       await api.updateSolaceBucket(bucket.id, {
         name,
-        category,
+        purpose,
         target_amount: target || '0.00',
         current_amount: current || '0.00',
         notes,
@@ -851,13 +902,17 @@ function BucketRuleEditor({ bucket, buckets, reload, onError }: {
       <summary className="cursor-pointer text-sm font-medium text-primary">Edit bucket</summary>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <Field label="Name"><Input value={name} onChange={e => setName(e.target.value)} /></Field>
-        <Field label="Category"><Input value={category} onChange={e => setCategory(e.target.value)} /></Field>
+        <Field label="What for" hint={BUCKET_PURPOSE_HINT[purpose]}>
+          <Select value={purpose} onChange={e => setPurpose(e.target.value as SolaceBucketPurpose)}>
+            {BUCKET_PURPOSES.map(row => <option key={row.value} value={row.value}>{row.label}</option>)}
+          </Select>
+        </Field>
         <Field label="Goal"><Input type="number" min="0" step="0.01" value={target} onChange={e => setTarget(e.target.value)} /></Field>
-        <Field label="Saved"><Input type="number" min="0" step="0.01" value={current} onChange={e => setCurrent(e.target.value)} /></Field>
+        <Field label="Already in it"><Input type="number" min="0" step="0.01" value={current} onChange={e => setCurrent(e.target.value)} /></Field>
         <Field label="Rule">
           <Select value={method} onChange={e => setMethod(e.target.value as 'percentage' | 'fixed')}>
-            <option value="percentage">Percentage</option>
-            <option value="fixed">Fixed household total</option>
+            <option value="percentage">Percentage of pay</option>
+            <option value="fixed">Fixed household amount</option>
           </Select>
         </Field>
         <Field label={method === 'percentage' ? 'Percent' : 'Amount'}>
@@ -874,7 +929,7 @@ function BucketRuleEditor({ bucket, buckets, reload, onError }: {
         <div className="flex flex-col justify-end gap-2 pb-1 text-sm text-muted">
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={capRemaining} onChange={e => setCapRemaining(e.target.checked)} />
-            Cap to remaining pay
+            Give this bucket whatever is left over
           </label>
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
@@ -909,13 +964,30 @@ function BucketsTab({ buckets, reload, onError }: {
           {buckets.map(b => (
             <Card key={b.id} contentClassName="p-4">
               <div className="flex items-start justify-between gap-3">
-                <div><h3 className="font-semibold text-ink">{b.name}</h3><p className="text-sm text-muted">{b.category || 'Set-aside'}</p></div>
-                <Badge tone={b.progress_percent >= 100 ? 'success' : 'primary'}>{b.progress_percent}%</Badge>
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-ink">{b.name}</h3>
+                  {/* Was `b.category || 'Set-aside'` — category was free text the form never
+                      filled in, so every bucket read "Set-aside" regardless of what it was for. */}
+                  <p className="text-sm text-muted">{BUCKET_PURPOSE_LABEL[b.purpose] ?? 'Other'}</p>
+                </div>
+                {hasGoal(b) && (
+                  <Badge tone={b.progress_percent >= 100 ? 'success' : 'primary'}>{b.progress_percent}%</Badge>
+                )}
               </div>
-              <div className="mt-4 h-2 rounded-full bg-sunken overflow-hidden">
-                <div className="h-full bg-primary" style={{ width: `${b.progress_percent}%` }} />
-              </div>
-              <p className="mt-2 text-sm text-muted">{money(b.current_amount)} of {money(b.target_amount)}</p>
+
+              {/* A bills bucket normally has no target, and a 0% bar reading "$0.00 of $0.00"
+                  said nothing. Show the balance instead, and the bar only when there is a goal. */}
+              {hasGoal(b) ? (
+                <>
+                  <div className="mt-4 h-2 rounded-full bg-sunken overflow-hidden">
+                    <div className="h-full bg-primary" style={{ width: `${b.progress_percent}%` }} />
+                  </div>
+                  <p className="mt-2 text-sm text-muted">{money(b.current_amount)} of {money(b.target_amount)}</p>
+                </>
+              ) : (
+                <p className="mt-4 text-2xl font-semibold text-ink">{money(b.current_amount)}</p>
+              )}
+
               <p className="mt-2 text-sm font-medium text-ink">
                 {b.is_active
                   ? b.allocation_method === 'fixed'
@@ -923,6 +995,9 @@ function BucketsTab({ buckets, reload, onError }: {
                     : `${Number(b.allocation_value)}% of each pay`
                   : 'Excluded from pay plan'}
               </p>
+              {b.is_active && b.cap_to_remaining && (
+                <p className="mt-1 text-xs text-muted">Also takes whatever is left over each pay.</p>
+              )}
               <BucketMoney bucket={b} reload={reload} onError={onError} />
               <BucketRuleEditor bucket={b} buckets={buckets} reload={reload} onError={onError} />
             </Card>

@@ -11,17 +11,21 @@ from __future__ import annotations
 
 from apps.accounts.models import User
 from apps.events.bus import subscribe
+from apps.notifications.models import NotificationCategory
 from apps.notifications.services import notify_bundled
 from apps.permissions.visibility import apply_visibility
 
 
-def _notify_household_activity(*, actor, record_qs, source_node: str, title: str, message: str, action_url: str) -> None:
+def _notify_household_activity(
+    *, actor, record_qs, source_node: str, title: str, message: str, action_url: str,
+    category: str = NotificationCategory.HOUSEHOLD_ACTIVITY,
+) -> None:
     if actor is None:
         return
     for recipient in User.objects.filter(is_active=True, household_id=actor.household_id).exclude(pk=actor.pk):
         if apply_visibility(record_qs, recipient).exists():
             notify_bundled(
-                recipient, category="household_activity", source_node=source_node,
+                recipient, category=category, source_node=source_node,
                 title=title, message=message, action_url=action_url,
             )
 
@@ -47,6 +51,13 @@ def _on_scheduling_event_created(sender, *, payload, **kwargs) -> None:
         title=f"{actor.display_name} added to the calendar" if actor else "Added to the calendar",
         message=event.title,
         action_url=f"/calendar?date={date_str}" if date_str else "/calendar",
+        # Something landing on the shared household calendar is an appointment, and that is the
+        # category the taxonomy already describes as "Calendar appointments/events". It sat under
+        # household_activity, which ships with push off by default (docs/32 §4) — so a household
+        # that had "turned everything on" still got only a silent in-app row when a partner added
+        # a dentist appointment. Adding a milk carton to a shopping list stays household_activity,
+        # where the quieter default is the right call.
+        category=NotificationCategory.APPOINTMENTS,
     )
 
 

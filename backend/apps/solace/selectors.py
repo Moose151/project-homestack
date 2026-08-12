@@ -320,14 +320,16 @@ def _get_pay_cycle_plan(user, *, as_of=None) -> dict:
         penny,
         rounding=ROUND_HALF_UP,
     )
+    # What this cycle actually puts aside for bills and planned purchases. Like the forecast, this
+    # reads the modelled `purpose` — it used to substring-match a free-text `category` the bucket
+    # form never filled in, so the total was always 0.00 and the plan reported a shortfall equal
+    # to the entire required amount no matter how the household had set their buckets up.
+    _SET_ASIDE_PURPOSES = {BudgetBucket.Purpose.BILLS, BudgetBucket.Purpose.PURCHASES}
     bills_bucket_total = sum(
         (
             Decimal(row["amount"])
             for row in plan["buckets"]
-            if (
-                "bill" in row["category"].casefold()
-                or "planned purchase" in row["category"].casefold()
-            )
+            if row["purpose"] in _SET_ASIDE_PURPOSES
         ),
         Decimal("0.00"),
     )
@@ -414,7 +416,7 @@ def search_solace(user, query: str) -> dict:
     bills = _search(Bill.objects.all(), query, ["name", "provider", "notes"])
     paydays = _search(Payday.objects.all(), query, ["title", "notes"])
     purchases = _search(PlannedPurchase.objects.all(), query, ["name", "category", "notes"])
-    buckets = _search(BudgetBucket.objects.all(), query, ["name", "category", "notes"])
+    buckets = _search(BudgetBucket.objects.all(), query, ["name", "purpose", "notes"])
     checklist = _search(PaydayChecklistItem.objects.all(), query, ["title", "notes"])
     if user is not None:
         bills = apply_visibility(bills, user)

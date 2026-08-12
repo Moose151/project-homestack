@@ -4,6 +4,7 @@ import { api } from '../../../api/client'
 import type {
   AcademicProfile, AcademicProfileResponse,
   AssessmentFile, AssessmentNote, AssessmentPriority, AssessmentStatus, AssessmentType,
+  ClassRepeat,
   EducationAssessment, EducationClassSession, EducationCourse, EducationEvent,
   EducationEventType, EducationInstitution,
 } from '../../../api/types'
@@ -38,7 +39,6 @@ const PRIORITY_TONE: Record<AssessmentPriority, string> = {
   high: 'bg-danger-soft text-danger', medium: 'bg-primary-soft text-primary',
   low: 'bg-sunken text-muted-strong',
 }
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 const EVENT_TYPE_LABELS: Record<EducationEventType, string> = {
   excursion: 'Excursion', school_event: 'School event', term_start: 'Term start',
@@ -585,6 +585,62 @@ function CoursesTab({ courses, reload, people, institutions, defaultAssignee, on
 // Timetable
 // ===========================================================================
 
+/** What the "Repeats" select offers. Values must match the backend's CLASS_REPEAT_INTERVALS. */
+const CLASS_REPEATS: { value: ClassRepeat | ''; label: string }[] = [
+  { value: '', label: "Doesn't repeat" },
+  { value: 'weekly', label: 'Every week' },
+  { value: 'fortnightly', label: 'Every fortnight' },
+  { value: 'every_3_weeks', label: 'Every 3 weeks' },
+  { value: 'every_4_weeks', label: 'Every 4 weeks' },
+  { value: 'monthly', label: 'Every month' },
+]
+
+const CLASS_DURATIONS = [
+  { value: 30, label: '30 minutes' },
+  { value: 45, label: '45 minutes' },
+  { value: 60, label: '1 hour' },
+  { value: 90, label: '1 hour 30' },
+  { value: 120, label: '2 hours' },
+  { value: 180, label: '3 hours' },
+]
+
+/** Describe a generated series from the gap between its first two classes.
+ *
+ * Read off the real dates rather than a stored rule: the sessions are the source of truth, and
+ * a `recurrence_rule` string that nothing expands is exactly what made "repeats weekly" show a
+ * single class in the first place. */
+function repeatLabel(sessions: EducationClassSession[]): string {
+  if (sessions.length < 2) return 'Repeats'
+  const days = Math.round(
+    (new Date(sessions[1].start_at).getTime() - new Date(sessions[0].start_at).getTime()) / 86_400_000,
+  )
+  return { 7: 'Every week', 14: 'Every fortnight', 21: 'Every 3 weeks', 28: 'Every 4 weeks' }[days]
+    ?? 'Every month'
+}
+
+/** One timetable entry: a single class, or every class generated from one repeat request. */
+interface ClassSeries {
+  key: string
+  first: EducationClassSession
+  sessions: EducationClassSession[]
+}
+
+function groupIntoSeries(sessions: EducationClassSession[]): ClassSeries[] {
+  const byKey = new Map<string, EducationClassSession[]>()
+  for (const session of sessions) {
+    // A one-off has no series_key, so it stands alone under its own id.
+    const key = session.series_key ?? `single:${session.id}`
+    byKey.set(key, [...(byKey.get(key) ?? []), session])
+  }
+  return [...byKey.entries()].map(([key, rows]) => {
+    const ordered = [...rows].sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+    return { key, first: ordered[0], sessions: ordered }
+  })
+}
+
+const shortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+
 function TimetableTab({ courses, onError }: { courses: EducationCourse[]; onError: (m: string) => void }) {
   const [sessions, setSessions] = useState<EducationClassSession[]>([])
   const [loading, setLoading] = useState(true)
@@ -592,45 +648,71 @@ function TimetableTab({ courses, onError }: { courses: EducationCourse[]; onErro
   const [title, setTitle] = useState('Lecture')
   const [courseId, setCourseId] = useState('')
   const [start, setStart] = useState('')
-  const [end, setEnd] = useState('')
+  const [durationMinutes, setDurationMinutes] = useState(60)
+  const [repeat, setRepeat] = useState<ClassRepeat | ''>('weekly')
+  const [repeatUntil, setRepeatUntil] = useState('')
   const [location, setLocation] = useState('')
-  const [weekly, setWeekly] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [added, setAdded] = useState<string | null>(null)
+
+  const reload = () => api.getClassSessions().then(setSessions).catch(e => onError(errMsg(e)))
 
   useEffect(() => {
     api.getClassSessions().then(setSessions).catch(e => onError(errMsg(e))).finally(() => setLoading(false))
   }, [onError])
 
+  // The timetable reads as a week, so each series sits on the weekday its classes fall on.
   const grouped = useMemo(() => {
-    const by: Record<number, EducationClassSession[]> = {}
-    for (const s of sessions) {
-      const wd = new Date(s.start_at).getDay()
-      ;(by[wd] ??= []).push(s)
+    const by: Record<number, ClassSeries[]> = {}
+    for (const series of groupIntoSeries(sessions)) {
+      const weekday = new Date(series.first.start_at).getDay()
+      ;(by[weekday] ??= []).push(series)
     }
-    for (const k of Object.keys(by)) {
-      by[+k].sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+    for (const key of Object.keys(by)) {
+      by[+key].sort((a, b) =>
+        new Date(a.first.start_at).getTime() - new Date(b.first.start_at).getTime())
     }
     return by
   }, [sessions])
 
+  const resetForm = () => {
+    setStart(''); setLocation(''); setCourseId(''); setTitle('Lecture')
+    setDurationMinutes(60); setRepeat('weekly'); setRepeatUntil('')
+  }
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!start) { onError('A start time is required.'); return }
-    setBusy(true)
+    if (!start) { onError('Pick the date and time of the first class.'); return }
+    if (repeat && !repeatUntil) { onError('Pick the date of the last class.'); return }
+    setBusy(true); setAdded(null)
     try {
-      const s = await api.createClassSession({
+      const created = await api.createClassSession({
         title: title.trim(), course_id: courseId ? Number(courseId) : null,
-        location: location.trim(), start_at: start, end_at: end || null,
-        recurrence_rule: weekly ? 'FREQ=WEEKLY' : '',
+        location: location.trim(), start_at: start,
+        duration_minutes: durationMinutes,
+        repeat, repeat_until: repeat ? repeatUntil : null,
       })
-      setSessions(prev => [...prev, s])
-      setStart(''); setEnd(''); setLocation(''); setCourseId(''); setTitle('Lecture'); setOpen(false)
+      await reload()
+      setAdded(created.length === 1 ? 'Class added.' : `${created.length} classes added to the calendar.`)
+      resetForm(); setOpen(false)
     } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
-  const remove = async (s: EducationClassSession) => {
-    if (!(await confirmDialog({ title: 'Delete this class from your timetable?', confirmLabel: 'Delete' }))) return
-    try { await api.deleteClassSession(s.id); setSessions(prev => prev.filter(x => x.id !== s.id)) }
-    catch (e) { onError(errMsg(e)) }
+
+  const removeSeries = async (series: ClassSeries) => {
+    const count = series.sessions.length
+    const confirmed = await confirmDialog({
+      title: count === 1
+        ? 'Delete this class from your timetable?'
+        : `Delete all ${count} of these classes?`,
+      message: count === 1 ? undefined : 'Every class in this repeating series is removed from the calendar.',
+      confirmLabel: 'Delete',
+    })
+    if (!confirmed) return
+    try {
+      if (count === 1) await api.deleteClassSession(series.first.id)
+      else await api.deleteClassSeries(series.first.id)
+      await reload()
+    } catch (e) { onError(errMsg(e)) }
   }
 
   return (
@@ -643,48 +725,78 @@ function TimetableTab({ courses, onError }: { courses: EducationCourse[]; onErro
               <option value="">No course</option>
               {courses.map(c => <option key={c.id} value={c.id}>{c.code || c.name}</option>)}
             </select>
-            <label className="text-xs text-muted-strong flex flex-col gap-1">Starts
+            <label className="text-xs text-muted-strong flex flex-col gap-1">First class
               <DateTimeField value={start || null} allDay={false} allowAllDay={false} onChange={({ value }) => setStart(value ?? '')} />
             </label>
-            <label className="text-xs text-muted-strong flex flex-col gap-1">Ends
-              <DateTimeField value={end || null} allDay={false} allowAllDay={false} onChange={({ value }) => setEnd(value ?? '')} />
+            <label className="text-xs text-muted-strong flex flex-col gap-1">Runs for
+              <select className={inputCls} value={durationMinutes} onChange={e => setDurationMinutes(Number(e.target.value))}>
+                {CLASS_DURATIONS.map(row => <option key={row.value} value={row.value}>{row.label}</option>)}
+              </select>
             </label>
+            <label className="text-xs text-muted-strong flex flex-col gap-1">Repeats
+              <select className={inputCls} value={repeat} onChange={e => setRepeat(e.target.value as ClassRepeat | '')}>
+                {CLASS_REPEATS.map(row => <option key={row.value} value={row.value}>{row.label}</option>)}
+              </select>
+            </label>
+            {repeat && (
+              <label className="text-xs text-muted-strong flex flex-col gap-1">Last class
+                <input type="date" required className={inputCls} value={repeatUntil} onChange={e => setRepeatUntil(e.target.value)} />
+              </label>
+            )}
             <input className={inputCls} placeholder="Location (room / building)" value={location} onChange={e => setLocation(e.target.value)} />
           </div>
-          <label className="flex items-center gap-2 text-sm text-muted-strong">
-            <input type="checkbox" checked={weekly} onChange={e => setWeekly(e.target.checked)} />
-            Repeats weekly
-          </label>
+          <p className="text-xs text-muted">
+            {repeat
+              ? 'Every class from the first to the last date goes straight onto the calendar.'
+              : 'A single class on that date.'}
+          </p>
           <div className="flex gap-2">
-            <Button type="submit" loading={busy}>Add class</Button>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="submit" loading={busy}>{repeat ? 'Add classes' : 'Add class'}</Button>
+            <Button type="button" variant="ghost" onClick={() => { setOpen(false); resetForm() }}>Cancel</Button>
           </div>
         </form>
       ) : (
-        <Button variant="secondary" onClick={() => setOpen(true)}>+ Add class</Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="secondary" onClick={() => { setAdded(null); setOpen(true) }}>+ Add class</Button>
+          {added && <span className="text-sm font-semibold text-success">{added}</span>}
+        </div>
       )}
 
       {loading ? (
         <Card><p className="text-sm text-muted">Loading…</p></Card>
       ) : sessions.length === 0 ? (
-        <Card><p className="text-sm text-muted py-4 text-center">No classes yet. Add your weekly lectures and tutorials.</p></Card>
+        <Card><p className="text-sm text-muted py-4 text-center">No classes yet. Add your lectures and tutorials — a repeating class fills in the whole term at once.</p></Card>
       ) : (
         <div className="space-y-3">
           {[1, 2, 3, 4, 5, 6, 0].filter(wd => grouped[wd]?.length).map(wd => (
-            <Card key={wd} title={WEEKDAYS[wd] === 'Sun' ? 'Sunday' : ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][wd]}>
+            <Card key={wd} title={['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][wd]}>
               <ul className="divide-y divide-line -mt-1">
-                {grouped[wd].map(s => {
+                {grouped[wd].map(series => {
+                  const s = series.first
+                  const last = series.sessions[series.sessions.length - 1]
                   const t0 = new Date(s.start_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
                   const t1 = s.end_at ? new Date(s.end_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : null
+                  const repeating = series.sessions.length > 1
                   return (
-                    <li key={s.id} className="flex items-center gap-3 py-2.5 group">
+                    <li key={series.key} className="flex items-center gap-3 py-2.5 group">
                       <div className="text-sm font-medium text-primary w-28 flex-shrink-0">{t0}{t1 ? `–${t1}` : ''}</div>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm text-ink truncate">{s.display_title}</div>
-                        {s.location && <div className="text-xs text-muted">{s.location}</div>}
+                        <div className="text-xs text-muted truncate">
+                          {[
+                            s.location,
+                            repeating
+                              ? `${series.sessions.length} classes · ${shortDate(s.start_at)} – ${shortDate(last.start_at)}`
+                              : shortDate(s.start_at),
+                          ].filter(Boolean).join(' · ')}
+                        </div>
                       </div>
-                      {s.recurrence_rule && <span className="text-xs px-2 py-0.5 rounded-full bg-sunken text-muted-strong flex-shrink-0">Weekly</span>}
-                      <DeleteAction onClick={() => remove(s)} label={s.display_title} />
+                      {repeating && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-sunken text-muted-strong flex-shrink-0">
+                          {repeatLabel(series.sessions)}
+                        </span>
+                      )}
+                      <DeleteAction onClick={() => removeSeries(series)} label={s.display_title} />
                     </li>
                   )
                 })}

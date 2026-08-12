@@ -11,7 +11,7 @@ from django.utils import timezone
 from apps.solace import selectors
 from apps.solace.bill_schedule import ensure_bill_occurrences, household_timezone
 from apps.solace.budget_engine import build_pay_cycle_plan
-from apps.solace.models import BillOccurrence
+from apps.solace.models import BillOccurrence, BudgetBucket
 
 _PENNY = Decimal("0.01")
 
@@ -24,8 +24,15 @@ def _money_string(value) -> str:
     return f"{_money(value):.2f}"
 
 
-def _is_bills_bucket(category: str) -> bool:
-    return "bill" in (category or "").casefold()
+def _is_bills_bucket(purpose: str) -> bool:
+    """Which buckets fund the bills account.
+
+    This reads `BudgetBucket.purpose` — the value the bucket form actually sets. It previously
+    substring-matched a free-text `category` field the form never populated, so a household's
+    projected pay came out as zero while their bills still counted, making the account look
+    permanently doomed. That field is gone (migration solace.0022).
+    """
+    return purpose == BudgetBucket.Purpose.BILLS
 
 
 def _split_amount(amount: Decimal, count: int) -> list[Decimal]:
@@ -139,7 +146,7 @@ def build_balance_forecast(
                 (
                     _money(row["amount"])
                     for row in source["allocations"]
-                    if _is_bills_bucket(row["category"])
+                    if _is_bills_bucket(row["purpose"])
                 ),
                 Decimal("0.00"),
             )

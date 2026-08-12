@@ -107,11 +107,31 @@ creating a second completed-task database in Atlas/Calendar.
 
 ## 8. Classes / timetable — shipped
 
-Recurring class/session/timetable records remain Education-owned and use the established recurrence
-and Calendar rules.
+Class/session/timetable records remain Education-owned and mirror to the shared Calendar through the
+scheduling helper (D7).
 
-Weekly lecture/class context should be easy to scan in Study without forcing the user to manage the
-same recurring date manually in Calendar.
+A repeating class is entered as **first class, how long it runs, how often, last class**, and the
+server generates **one real `EducationClassSession` per occurrence**, tied together by `series_key`.
+Repeat intervals are a closed list: weekly, fortnightly, every 3 weeks, every 4 weeks, monthly.
+`repeat_until` is inclusive and compared as a household-local date.
+
+This is deliberately not an unbounded `recurrence_rule` on a single row. Nothing in HomeStack
+expands an RRULE on read — the Calendar lists real `CalendarEvent` rows — so a class ticked
+"repeats weekly" appeared on the timetable and the calendar exactly **once**. A term of classes is
+bounded and finite, which is the same shape as D23 rotations rather than an open-ended repeating
+event.
+
+Guards:
+
+- stepping happens in the household timezone, so a 9am class stays 9am across a daylight-saving
+  change rather than drifting an hour;
+- a series is capped at 120 classes, so a mistyped year is refused instead of quietly creating
+  hundreds of calendar events;
+- `DELETE /education/classes/<id>/?series=1` removes the whole series; without it only that one
+  class goes.
+
+Timetable context should be easy to scan in Study without forcing the user to manage the same
+repeating date manually in Calendar.
 
 ## 9. Education events — shipped
 

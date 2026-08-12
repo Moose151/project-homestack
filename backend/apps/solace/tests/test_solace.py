@@ -687,7 +687,7 @@ class SolacePayCyclePlanTests(TestCase):
         self.bills = create_bucket(
             self.admin,
             name="Bills",
-            category="Bills",
+            purpose=BudgetBucket.Purpose.BILLS,
             allocation_method=BudgetBucket.AllocationMethod.PERCENTAGE,
             allocation_value="25.00",
             rounding_increment="10.00",
@@ -696,7 +696,7 @@ class SolacePayCyclePlanTests(TestCase):
         self.savings = create_bucket(
             self.admin,
             name="Savings",
-            category="Savings",
+            purpose=BudgetBucket.Purpose.SAVINGS,
             allocation_method=BudgetBucket.AllocationMethod.FIXED,
             allocation_value="300.00",
             rounding_increment="1.00",
@@ -976,7 +976,7 @@ class SolaceManagementTests(TestCase):
         create_bucket(
             self.admin,
             name="Bills account",
-            category="Bills",
+            purpose=BudgetBucket.Purpose.BILLS,
             allocation_method=BudgetBucket.AllocationMethod.PERCENTAGE,
             allocation_value="20.00",
             rounding_increment="1.00",
@@ -1042,6 +1042,68 @@ class SolaceManagementTests(TestCase):
     def test_balance_forecast_validates_horizon(self):
         response = self.client.get(reverse("solace-forecast"), {"months": "25"})
         self.assertEqual(response.status_code, 400)
+
+    def test_balance_forecast_counts_pay_into_a_bucket_marked_bills_by_purpose(self):
+        """A bucket created through the UI sets `purpose`, never the old free-text category.
+
+        The forecast used to decide "is this the bills bucket?" by looking for the substring
+        "bill" in that free-text field, which the bucket form does not populate — so every
+        household's projected income silently came out as zero while their bills still counted.
+        """
+        create_payday(
+            self.admin,
+            title="Household pay",
+            expected_amount="1000.00",
+            pay_at=timezone.make_aware(datetime(2026, 8, 15, 9)),
+            recurrence_rule="FREQ=WEEKLY;INTERVAL=2",
+        )
+        create_bucket(
+            self.admin,
+            name="Bills account",
+            purpose=BudgetBucket.Purpose.BILLS,
+            allocation_method=BudgetBucket.AllocationMethod.PERCENTAGE,
+            allocation_value="20.00",
+            rounding_increment="1.00",
+        )
+        create_bill(
+            self.admin,
+            name="Rent",
+            amount="600.00",
+            due_at=timezone.make_aware(datetime(2026, 8, 10, 9)),
+            recurrence_rule="FREQ=MONTHLY",
+        )
+
+        forecast = self.client.get(
+            reverse("solace-forecast"),
+            {"date": "2026-08-03", "months": "1"},
+        ).json()
+
+        self.assertEqual(forecast["total_contributions"], "400.00")
+        self.assertGreater(
+            len([row for row in forecast["timeline"] if row["contributions"] != "0.00"]), 0
+        )
+
+    def test_balance_forecast_ignores_a_bucket_that_is_not_for_bills(self):
+        create_payday(
+            self.admin,
+            title="Household pay",
+            expected_amount="1000.00",
+            pay_at=timezone.make_aware(datetime(2026, 8, 15, 9)),
+            recurrence_rule="FREQ=WEEKLY;INTERVAL=2",
+        )
+        create_bucket(
+            self.admin,
+            name="Holiday fund",
+            purpose=BudgetBucket.Purpose.SAVINGS,
+            allocation_method=BudgetBucket.AllocationMethod.PERCENTAGE,
+            allocation_value="20.00",
+            rounding_increment="1.00",
+        )
+        forecast = self.client.get(
+            reverse("solace-forecast"),
+            {"date": "2026-08-03", "months": "1"},
+        ).json()
+        self.assertEqual(forecast["total_contributions"], "0.00")
 
     def test_purchase_quick_saving_caps_at_target_and_rejects_closed_goal(self):
         purchase = create_purchase(

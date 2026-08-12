@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from django.http import FileResponse, Http404
 from rest_framework import status
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -329,10 +329,21 @@ class ClassSessionListView(APIView):
         return Response(EducationClassSessionSerializer(sessions, many=True).data)
 
     def post(self, request: Request) -> Response:
+        """Create one class, or the whole repeating series in a single request.
+
+        Always responds with the list of sessions created — length 1 for a one-off — so the
+        caller can tell how many classes a "repeats until" actually produced.
+        """
         serializer = EducationClassSessionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        obj = services.create_class_session(request.user, **serializer.validated_data)
-        return Response(EducationClassSessionSerializer(obj).data, status=status.HTTP_201_CREATED)
+        try:
+            created = services.create_class_series(request.user, **serializer.validated_data)
+        except services.ClassSeriesError as exc:
+            raise ValidationError({"repeat_until": str(exc)}) from exc
+        return Response(
+            EducationClassSessionSerializer(created, many=True).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class ClassSessionDetailView(APIView):
@@ -355,7 +366,12 @@ class ClassSessionDetailView(APIView):
         return Response(EducationClassSessionSerializer(obj).data)
 
     def delete(self, request: Request, session_id: int) -> Response:
-        services.delete_class_session(request.user, self._get(session_id))
+        """`?series=1` removes every class in the same repeating series, not just this one."""
+        obj = self._get(session_id)
+        if request.query_params.get("series") == "1":
+            removed = services.delete_class_series(request.user, obj)
+            return Response({"deleted": removed})
+        services.delete_class_session(request.user, obj)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

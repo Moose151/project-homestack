@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../../../api/client'
-import type { MeridianSettings } from '../../../api/types'
+import { api, ApiError } from '../../../api/client'
+import type { Backup, MeridianSettings } from '../../../api/types'
 import { useStacks } from '../../stacks/StacksContext'
 import { useAuth } from '../../auth/AuthContext'
 import { STACK_BY_KEY, softColour } from '../../../config/stacks'
@@ -19,6 +19,120 @@ const COMMON_TIMEZONES = [
 ]
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
+
+
+const BACKUP_STATUS_TONE: Record<Backup['status'], string> = {
+  complete: 'text-success',
+  failed: 'text-danger',
+  running: 'text-warning',
+  pending: 'text-muted',
+}
+
+const formatBytes = (bytes: number) => {
+  if (!bytes) return '—'
+  const mb = bytes / 1024 / 1024
+  return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb.toFixed(1)} MB`
+}
+
+/**
+ * Take a backup of the database and protected media (D17).
+ *
+ * The backup API has existed since Milestone 1 but nothing in the app ever called it, so the
+ * only way to run one was by hand against the API. Creating a backup needs recent password
+ * re-authentication, so this asks for the password only when the server says it needs one
+ * rather than demanding it up front.
+ */
+function BackupCard({ onError }: { onError: (message: string) => void }) {
+  const [backups, setBackups] = useState<Backup[]>([])
+  const [loading, setLoading] = useState(true)
+  const [running, setRunning] = useState(false)
+  const [password, setPassword] = useState('')
+  const [needsPassword, setNeedsPassword] = useState(false)
+  const [done, setDone] = useState<string | null>(null)
+
+  const load = () => api.getBackups().then(setBackups).catch(() => {})
+
+  useEffect(() => { load().finally(() => setLoading(false)) }, [])
+
+  const run = async () => {
+    setRunning(true); setDone(null)
+    try {
+      if (needsPassword) {
+        await api.reauth(password)
+        setPassword(''); setNeedsPassword(false)
+      }
+      const backup = await api.createBackup()
+      await load()
+      setDone(backup.status === 'complete'
+        ? `Backup complete — ${formatBytes(backup.size_bytes)}.`
+        : `Backup ${backup.status}. ${backup.error_message}`.trim())
+    } catch (error) {
+      // 403 here means the password elevation has expired, not that the user lacks access.
+      if (error instanceof ApiError && error.status === 403 && !needsPassword) {
+        setNeedsPassword(true)
+      } else {
+        onError(errMsg(error))
+      }
+    } finally { setRunning(false) }
+  }
+
+  const latest = backups[0]
+
+  return (
+    <Card title="Backups">
+      <p className="text-sm text-muted mb-3">
+        A backup captures the household database and protected uploads. It runs on the server and
+        can take a moment. Restoring one is a command-line operation — see the restore guide.
+      </p>
+
+      {loading ? (
+        <p className="text-sm text-muted">Loading…</p>
+      ) : latest ? (
+        <p className="text-sm text-muted">
+          Last backup{' '}
+          <span className="font-semibold text-ink">{new Date(latest.created_at).toLocaleString()}</span>
+          {' · '}
+          <span className={`font-semibold ${BACKUP_STATUS_TONE[latest.status]}`}>{latest.status}</span>
+          {latest.status === 'complete' && ` · ${formatBytes(latest.size_bytes)}`}
+        </p>
+      ) : (
+        <p className="text-sm text-warning">No backup has ever been taken on this server.</p>
+      )}
+
+      {needsPassword && (
+        <div className="mt-3 rounded-xl border border-line bg-sunken p-3">
+          <div className="text-xs text-muted-strong mb-1">Confirm your password to run a backup</div>
+          <input
+            type="password" autoFocus value={password}
+            onChange={event => setPassword(event.target.value)}
+            onKeyDown={event => { if (event.key === 'Enter' && password) void run() }}
+            className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink"
+          />
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <Button onClick={run} loading={running} disabled={needsPassword && !password}>
+          {needsPassword ? 'Confirm and back up' : 'Back up now'}
+        </Button>
+        {done && <span className="text-sm font-semibold text-success">{done}</span>}
+      </div>
+
+      {backups.length > 1 && (
+        <ul className="mt-4 space-y-1 border-t border-line pt-3 text-xs text-muted">
+          {backups.slice(1, 6).map(backup => (
+            <li key={backup.id} className="flex justify-between gap-3">
+              <span>{new Date(backup.created_at).toLocaleString()}</span>
+              <span className={BACKUP_STATUS_TONE[backup.status]}>
+                {backup.status}{backup.status === 'complete' ? ` · ${formatBytes(backup.size_bytes)}` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  )
+}
 
 export function SettingsPage() {
   const { nodes, household, refresh } = useStacks()
@@ -193,6 +307,8 @@ export function SettingsPage() {
           <Link to="/settings/notifications" className="flex-shrink-0 text-sm font-bold text-primary hover:underline">Manage →</Link>
         </div>
       </Card>
+
+      {isAdmin && <BackupCard onError={setError} />}
 
       {isAdmin && (
         <Card title="Notifications">

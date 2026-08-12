@@ -139,7 +139,6 @@ def build_pay_cycle_plan(
                 {
                     "bucket_id": bucket.id,
                     "bucket_name": bucket.name,
-                    "category": bucket.category,
                     "purpose": bucket.purpose,
                     "allocation_method": bucket.allocation_method,
                     "allocation_value": _money_string(bucket.allocation_value),
@@ -212,7 +211,6 @@ def build_pay_cycle_plan(
         {
             "bucket_id": bucket.id,
             "bucket_name": bucket.name,
-            "category": bucket.category,
             "purpose": bucket.purpose,
             "amount": _money_string(bucket_totals[bucket.id]),
         }
@@ -248,7 +246,6 @@ def _shared_allocations(payday: Payday, income: Decimal, buckets: list[BudgetBuc
         return {
             "bucket_id": bucket.id,
             "bucket_name": bucket.name,
-            "category": bucket.category,
             "purpose": bucket.purpose,
             "allocation_method": "shared",
             "allocation_value": label,

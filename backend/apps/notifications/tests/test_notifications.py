@@ -628,6 +628,31 @@ class HouseholdActivityDispatcherTests(TestCase):
         create_event(self.actor, title="Dentist", start_at=timezone.now())
         self.assertEqual(self._unread_for(self.actor, "scheduling").count(), 0)
 
+    def test_a_calendar_addition_pushes_without_anyone_changing_a_preference(self):
+        """Adding to the shared calendar is an `appointments` notification, which pushes by
+        default — it used to be `household_activity`, whose default is push off (docs/32 §4), so
+        a partner adding an appointment produced a silent in-app row and nothing on the phone."""
+        PushDevice.objects.create(
+            household=self.other.household, user=self.other,
+            endpoint="https://push.example/other", p256dh="p", auth="a",
+        )
+        with override_settings(**_VAPID_SETTINGS), \
+                patch("apps.notifications.push._send_to_device") as send:
+            create_event(self.actor, title="Dentist", start_at=timezone.now())
+        self.assertEqual(send.call_count, 1)
+
+    def test_a_shopping_list_addition_still_stays_quiet_by_default(self):
+        # The noisy half of household_activity keeps its quieter default.
+        PushDevice.objects.create(
+            household=self.other.household, user=self.other,
+            endpoint="https://push.example/other", p256dh="p", auth="a",
+        )
+        atlas_list = create_atlas_list(self.actor, title="Groceries", list_type="grocery")
+        with override_settings(**_VAPID_SETTINGS), \
+                patch("apps.notifications.push._send_to_device") as send:
+            create_list_item(self.actor, atlas_list, title="Milk")
+        self.assertEqual(send.call_count, 0)
+
     def test_private_calendar_event_does_not_notify_others(self):
         create_event(self.actor, title="Secret", start_at=timezone.now(), visibility="private")
         self.assertEqual(self._unread_for(self.other, "scheduling").count(), 0)
@@ -669,13 +694,23 @@ class HouseholdActivityDispatcherTests(TestCase):
         create_personal_entry(self.actor, book={"title": "Dune"}, status="history")
         self.assertEqual(self._unread_for(self.other, "books").count(), 1)
 
-    def test_disabling_household_activity_suppresses_all_sources(self):
+    def test_disabling_household_activity_suppresses_its_sources(self):
         services.set_preference(self.other, category="household_activity", in_app_enabled=False, push_enabled=False)
         atlas_list = create_atlas_list(self.actor, title="Groceries", list_type="grocery")
         create_list_item(self.actor, atlas_list, title="Milk")
-        create_event(self.actor, title="Dentist", start_at=timezone.now())
         create_personal_entry(self.actor, book={"title": "Dune"}, status="history")
         self.assertEqual(Notification.objects.filter(recipient_user=self.other, is_read=False).count(), 0)
+
+    def test_calendar_additions_follow_appointments_not_household_activity(self):
+        # Someone who has muted list chatter should still hear about a new appointment; muting
+        # appointments is what silences the calendar.
+        services.set_preference(self.other, category="household_activity", in_app_enabled=False, push_enabled=False)
+        create_event(self.actor, title="Dentist", start_at=timezone.now())
+        self.assertEqual(self._unread_for(self.other, "scheduling").count(), 1)
+
+        services.set_preference(self.other, category="appointments", in_app_enabled=False, push_enabled=False)
+        create_event(self.actor, title="Physio", start_at=timezone.now())
+        self.assertEqual(self._unread_for(self.other, "scheduling").count(), 1)
 
 
 class ScheduledReminderTests(TestCase):
