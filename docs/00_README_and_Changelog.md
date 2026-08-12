@@ -56,6 +56,9 @@ than duplicated here. `HANDOVER.md` describes only current operating/development
 - `30_Core_Daily_Coordination.md`
 - `31_Core_Manage_HomeStack.md`
 - `32_Core_Notifications_and_Push.md`
+- `33_Node_Books.md` — shipped personal reading + shared Book Clubs node; added to the canonical
+  set during the 2026-08-12 documentation reconciliation because the implementation existed but
+  older node-model docs omitted it.
 
 Milestone checklists remain useful as historical implementation/acceptance records but are not the
 best source for current priorities. Current priorities come from `HANDOVER.md` and the Roadmap.
@@ -216,8 +219,8 @@ not belong in Fitness.
 ## 4. Current high-level state
 
 As of 2026-08-12 the live household installation includes the core platform, Meridian, Education,
-Home Wiki, Pets, Homestead, Solace/Money, Fitness & Training, Travel, Corners, safe link import,
-Grocery/Shopping and the daily-coordination capabilities. Trusted LAN HTTPS is live at
+Home Wiki, Pets, **Books**, Homestead, Solace/Money, Fitness & Training, Travel, Corners, safe link
+import, Grocery/Shopping and the daily-coordination capabilities. Trusted LAN HTTPS is live at
 `homestack.moosesoftwares.com` through Nginx Proxy Manager and Pi-hole.
 
 The active implementation workstream is PWA/Web Push notifications. Home Assistant is intentionally
