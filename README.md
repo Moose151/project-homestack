@@ -18,11 +18,12 @@ Current shipped areas include:
 - Atlas household notes/to-dos plus dedicated Grocery and Shopping surfaces;
 - native Meridian tasks/routines/points/rewards/approvals;
 - Education, Home Wiki and Pets;
+- **Books** with personal Want to Read / Reading / Read shelves, ratings/notes and shared Book Clubs;
 - Homestead property/rooms/plans/maintenance/appliances/cover/pools/utilities/floor plan;
 - native Solace/Money;
 - Fitness & Training (separate from sensitive medical Health, D24);
 - Travel trips, booking/cost planning and itinerary/Things to do;
-- Corners and safe product-link preview/cache/watch flows;
+- Corners and safe product/book-link preview/cache/watch flows;
 - daily coordination across appointments, Agenda, birthdays and pool schedules.
 
 Trusted **LAN HTTPS is live** at:
@@ -149,6 +150,7 @@ Use:
 - [`docs/01_Master_Software_Specification.md`](docs/01_Master_Software_Specification.md) — product contract;
 - [`docs/04_Development_Roadmap.md`](docs/04_Development_Roadmap.md) — current/future sequencing;
 - [`docs/05_Security_Architecture_Document.md`](docs/05_Security_Architecture_Document.md) — security contract;
+- [`docs/33_Node_Books.md`](docs/33_Node_Books.md) — Books domain contract;
 - [`VERSION_HISTORY.md`](VERSION_HISTORY.md) — historical release chronology.
 
 Do not turn `HANDOVER.md` back into a permanent implementation diary; Git history and
