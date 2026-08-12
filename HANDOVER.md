@@ -73,23 +73,22 @@ that switch has happened.
 
 ## 3. Canonical documentation
 
-The canonical documentation lives in `docs/`. If a stale comment, historical changelog entry or
-old `.docx` conflicts with the canonical docs, the canonical docs win.
+The canonical documentation lives in `docs/`. If stale prose or a historical checklist conflicts
+with the canonical docs, the canonical docs win.
 
 Read these first:
 
-- `00_README_and_Changelog.md` — architectural/product decisions (D1–D24) and documentation map.
-- `01_Master_Software_Specification.md` — product vision, current node model and scope.
-- `02_Software_Architecture_Document.md` — modular-monolith architecture and shared boundaries.
+- `00_README_and_Changelog.md` — decisions D1–D24 and documentation map.
+- `01_Master_Software_Specification.md` — product vision, node model and scope.
+- `02_Software_Architecture_Document.md` — architecture and shared boundaries.
 - `03_Database_Design_Document.md` — schema conventions.
 - `04_Development_Roadmap.md` — current sequencing and future gates.
-- `05_Security_Architecture_Document.md` — authentication, permissions, sensitive data and
-  remote-access gate.
+- `05_Security_Architecture_Document.md` — auth, permissions, sensitivity and remote-access gate.
 - `06_API_Specification.md` — API conventions/route ownership.
 - `07_UIUX_Design_Guide.md` — responsive/kiosk design rules.
-- `08_Coding_Standards_and_Project_Structure.md` — mandatory code structure and conventions.
-- `09_Node_Model_Decision_Record.md` — why HomeStack uses a deliberately small node set.
-- `10_Future_Features_Parking_Lot.md` — deferred ideas; not authority to create new nodes.
+- `08_Coding_Standards_and_Project_Structure.md` — implementation standards.
+- `09_Node_Model_Decision_Record.md` — deliberate node boundaries.
+- `10_Future_Features_Parking_Lot.md` — genuinely deferred ideas.
 
 Important newer/current specs:
 
@@ -102,158 +101,93 @@ Important newer/current specs:
 - `29_Core_Link_Import.md`
 - `30_Core_Daily_Coordination.md`
 - `31_Core_Manage_HomeStack.md`
-- `32_Core_Notifications_and_Push.md` — shipped Web Push/PWA notification contract.
-- `33_Node_Books.md` — shipped personal reading / Book Clubs domain.
-- `34_Recommended_Next_Steps.md` — practical execution plan for the current production-readiness
-  and reliability phase.
+- `32_Core_Notifications_and_Push.md` — shipped notification/PWA contract.
+- `33_Node_Books.md` — shipped Books domain.
+- `34_Recommended_Next_Steps.md` — practical production-readiness/reliability plan.
 
-`VERSION_HISTORY.md` is the historical release record. Do not duplicate that history here.
+`VERSION_HISTORY.md` is the release chronology. Do not duplicate that history here.
 
 ---
 
 ## 4. Non-negotiable architecture rules
 
-These are settled product/architecture decisions. If a new requirement appears to conflict with
-one of them, surface the conflict rather than silently bypassing it.
+1. **One household per install; keep `household_id` (D1/D2).** No SaaS tenancy/signup/billing.
+2. **API-first (D3).** Business logic belongs in the backend.
+3. **Thin event interface, no durable bus (D4)** until measured need justifies one.
+4. **No Redis/Celery by default (D5).** Scheduled work uses management commands/cron for now.
+5. **Shared session auth (D6).** Avatar/PIN everyday login; password re-auth for sensitive areas.
+6. **Calendar has one source of truth (D7).** Owning records own dates; use scheduling helpers.
+7. **One general recurrence format (D8).** RRULE/`recurrence_rule` except bounded D23 rotations.
+8. **Permission-aware search/projections (D9/D10).** Never aggregate inaccessible data first.
+9. **Central backend permissions (D10).** Frontend hiding is not authorization.
+10. **Shared attachment security (D11).** No per-node file-security systems.
+11. **Users act; People are subjects (D12).** Do not collapse the concepts.
+12. **Meridian and Solace are native domains (D13/D14).** No iframe/generic integration shell.
+13. **No household-specific schema/business logic (D15).**
+14. **Calendar Django app is `scheduling` (D16).**
+15. **Backup means restore capability (D17).**
+16. **Rotating schedules are calculated cycles + sparse exceptions (D23).**
+17. **Fitness is separate from medical Health (D24).**
 
-1. **One household per install; keep `household_id` (D1/D2).** Do not build SaaS or multi-tenant
-   signup/billing behaviour.
-2. **API-first (D3).** Business logic lives in the backend; clients use `/api/v1/`.
-3. **Thin event interface, no durable event bus (D4).** Node decoupling uses the existing Django
-   signal/event boundary. Do not introduce an events table/broker without a demonstrated need.
-4. **No Redis/Celery by default (D5).** Scheduled work uses management commands/cron until real
-   workload requirements justify a worker/broker.
-5. **Shared session authentication (D6).** Everyday avatar/PIN login; password re-authentication
-   for sensitive areas. PINs/passwords use Argon2id.
-6. **Calendar has one source of truth (D7).** Node records own their dates. Nodes use the shared
-   scheduling helper; they do not create parallel Calendar records manually.
-7. **One recurrence format (D8).** Use RRULE through `recurrence_rule`; do not add another generic
-   repeat field.
-8. **Search through selectors with permission/visibility filtering (D9/D10).** Never create a
-   search path that bypasses record visibility.
-9. **Central permissions (D10).** No ad-hoc permission logic in views. Permission tests come first.
-10. **Attachments use shared visibility/sensitivity controls (D11).** Do not invent per-node file
-    security systems.
-11. **People and Users are distinct (D12).** Users authenticate/own/audit; People are household
-    subjects/assignees and may not have logins.
-12. **Meridian and Solace are native HomeStack domains (D13/D14).** Do not recreate iframe or
-    generic integration shells around the legacy apps.
-13. **No household-specific schema/logic (D15).** Real household data is fine; hard-coded family
-    assumptions are not.
-14. **The Calendar Django app is `scheduling` (D16).** Do not rename it to `calendar`.
-15. **Backup work includes restore (D17).** A backup feature is incomplete if restore is untested.
-16. **Rotating Calendar layers are calculated cycles plus sparse exceptions (D23).** Do not
-    materialise years of daily events.
-17. **Fitness is separate from medical Health (D24).** Social training/workouts/records belong to
-    Fitness; medical/injury/diagnosis data belongs to the stronger Health privacy boundary.
-
-### Per-app layering
-
-Keep views thin. Reads belong in `selectors`; writes/business rules belong in `services`.
-Permission/visibility behaviour remains central and test-first.
-
-Typical app shape:
-
-```text
-models.py
-serializers.py
-selectors.py
-services.py
-views.py
-urls.py
-events.py
-tasks.py
-tests/
-```
-
-Do not import another node's models simply to make a cross-node feature convenient. Use the
-existing shared service/event contracts.
+Keep views thin. Reads belong in `selectors`; writes/business transitions belong in `services`.
+Do not import another node's models merely to make a cross-node feature convenient.
 
 ---
 
 ## 5. Current product state
 
-HomeStack is no longer a walking skeleton or an undeployed pilot. It is running on the household
-server and is being used with real data.
-
 Major shipped areas include:
 
-- Core auth, People/Users, roles/permissions, audit and backups.
-- Hub, Calendar, global search, notifications and attachments.
-- Atlas with notes, to-do, Grocery, Shopping, reminders and Agenda-style coordination.
-- Native Meridian household tasks/rewards/points workflows.
-- Education for courses, assessments, timetable/events and study workflows.
-- Home Wiki and Pets.
-- **Books** with personal reading shelves, per-User rating/notes and shared Book Clubs/up-next queue.
-- Homestead including rooms/planning, maintenance, appliances, services, improvements, costs &
-  cover, pools/spas, utility usage and the interactive floor plan.
-- Native Solace/Money with bills, pay cycles, budget/allocation and household finance workflows.
-- Fitness & Training as a separate non-medical node.
-- Travel with trips, bookings/costs, trip type and itinerary items.
-- Corners, suggestions/reactions and shared link-import/product/book enrichment/watch infrastructure.
-- Manage HomeStack guides/version history and household configuration surfaces.
-- Trusted LAN HTTPS at `homestack.moosesoftwares.com`.
-- **PWA/Web Push notifications (v0.34.10–v0.34.13)** — per-user preferences, per-device
-  subscriptions, VAPID delivery, quiet hours, bundled household activity, scheduled reminders,
-  countdown digest, sparse sensitive-safe payloads and PWA/service-worker support.
+- Core auth, People/Users, roles/permissions, audit, backups and protected attachments.
+- Hub, Calendar, global search and notifications.
+- Atlas notes/to-do/Grocery/Shopping/reminders/Agenda.
+- Native Meridian tasks/rewards/points workflows.
+- Education, Home Wiki and Pets.
+- **Books** personal shelves, per-User ratings/notes and shared Book Clubs/up-next queue.
+- Homestead rooms/planning/maintenance/appliances/services/cover/pools/utilities/floor plan.
+- Native Solace/Money.
+- Fitness & Training.
+- Travel trips/bookings/costs/itinerary.
+- Corners and safe link/product/book enrichment/watch infrastructure.
+- Manage HomeStack guides/version history/configuration.
+- Trusted LAN HTTPS.
+- **PWA/Web Push notifications (v0.34.10–v0.34.13)** — preferences, per-device subscriptions,
+  VAPID delivery, quiet hours, household-activity bundling, fixed 24h/morning reminders,
+  countdown digest, sensitive-safe push gating and service-worker/PWA support.
 
 The completed notification branch reported **875 backend tests green** and a clean frontend
-TypeScript check. Treat those as the implementation validation result; still perform the real live
-server/device deployment checks below.
-
-Use `VERSION_HISTORY.md` for exact release-by-release details rather than repeating them here.
+TypeScript check. Live deployment/device validation is still required below.
 
 ---
 
-## 6. Active work and near-term priorities
-
-### Active/recommended next phase
+## 6. Active/recommended next phase
 
 **Production readiness and reliability** is now the recommended primary engineering workstream.
-Use `docs/34_Recommended_Next_Steps.md` as the practical plan and
+Use `docs/34_Recommended_Next_Steps.md` for the practical plan and
 `docs/04_Development_Roadmap.md` for canonical sequencing.
 
 Recommended order:
 
-1. **Production-serving hardening** — replace Django `runserver` and Vite dev serving with a
-   production WSGI server and production-built frontend/static serving.
-2. **Reduce exposed service ports** — prefer an internal/shared Docker network behind NPM and stop
-   unnecessarily publishing PostgreSQL/backend/frontend to the LAN.
-3. **Automated deploy command** — backup/preflight, build, migrations, restart and smoke checks in
-   one supported workflow.
-4. **CI and frontend/E2E tests** — backend suite, migration drift, frontend type/build/unit tests
-   and a small Playwright critical-flow suite.
-5. **Off-server encrypted backup + recovery validation** — HomeStack now contains important
-   household data and needs a credible server/storage-loss recovery path.
-6. **Operational/System Health surface** where it provides useful visibility without rebuilding
-   Uptime Kuma/Dozzle.
-7. **2FA/passkeys for adult/admin accounts** before any public remote-access plan.
+1. replace Django `runserver` and Vite dev serving with production serving;
+2. reduce unnecessary LAN-exposed database/backend/frontend ports;
+3. create one supported deploy command with migration + smoke validation;
+4. add frontend unit/E2E testing and CI;
+5. establish encrypted off-server backup + recovery validation;
+6. add small operational/System Health visibility;
+7. add passkeys/2FA before any public remote-access plan.
 
-### Feature priorities after reliability work
+After the reliability baseline: Home Assistant, Hearth, Travel finishing work and later Health.
 
-- Resume the **Home Assistant bridge (M5.5)** now that HTTPS and Web Push prerequisites exist,
-  after the production/recovery baseline is in better shape.
-- **Hearth/meal planning** can use Atlas Grocery rather than inventing another grocery store.
-- Finish Travel packing/protected-document slices when useful.
-- Health remains deliberately later because it raises the sensitivity/security bar.
-
-### Explicitly not a priority
-
-- New generic integration/plugin framework.
-- Kubernetes/microservices.
-- Redis/Celery without measured need.
-- More top-level nodes merely because a feature could be separated.
-- Public exposure before the Security Architecture remote-access gate is satisfied.
+Explicitly avoid generic plugins/integrations, Kubernetes/microservices, Redis/Celery without
+measured need, or public exposure before the Security Architecture gate is satisfied.
 
 ---
 
 ## 7. Notification deployment requirements
 
-The Web Push implementation is merged, but the live server must still be configured correctly.
+The Web Push implementation is merged, but the live server must still be configured and validated.
 
-### Required deployment steps
-
-The notification work adds backend dependencies and migrations. After pulling it to the live server:
+### Deploy code and migrations
 
 ```bash
 docker compose build homestack-backend homestack-frontend
@@ -261,17 +195,17 @@ docker compose up -d
 docker exec homestack-backend python manage.py migrate
 ```
 
-Relevant notification migrations include:
+Current notification migrations after `0001_initial` are:
 
 ```text
-notifications.0002_preferences_and_push_subscriptions
-notifications.0003_notification_bundle_key
-notifications.0004_notification_preference_lead_time_minutes
+notifications.0002_notificationpreference_usernotificationsettings_and_more
+notifications.0003_pushdevice
+notifications.0004_notificationreminderlog
 ```
 
-### VAPID configuration
+### Configure VAPID
 
-Web Push requires these deployment secrets/settings:
+Required deployment values:
 
 ```text
 VAPID_PUBLIC_KEY=
@@ -279,41 +213,44 @@ VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=
 ```
 
-Generate a key pair with:
+Generate keys with:
 
 ```bash
 docker exec homestack-backend python manage.py generate_vapid_keys
 ```
 
-Put the generated values in the live `.env`, then recreate/restart the backend so clients receive
-the configured public key. Never commit the private key. Push gracefully disables when VAPID is
-not configured, but device registration/delivery will not function.
+Put the values in the live `.env`, then recreate/restart the backend as required. Never commit the
+private key. Push gracefully no-ops when VAPID is not configured.
 
-A test push can be sent through the implemented device test endpoint once a device is registered.
+### Schedule reminder/countdown delivery
 
-### Scheduled notification command
-
-Run the dispatcher at least hourly:
+Run at least hourly:
 
 ```bash
-python manage.py notifications_run_scheduled
+docker exec homestack-backend python manage.py notifications_run_scheduled
 ```
 
-In Docker/host scheduling, invoke the equivalent command inside `homestack-backend`. It handles
-household-timezone-aware scheduled reminders/countdown delivery with duplicate claiming.
+The command is idempotent and currently handles:
+
+- fixed 24-hour reminders for standalone Calendar and Atlas-sourced Calendar entries;
+- morning-of reminders at each User's configured `morning_time`;
+- the daily enabled Hub countdown digest.
+
+It is deliberately **not** a generic per-domain/configurable-lead-time reminder engine.
 
 ### Real-device validation
 
 Before treating the live rollout as fully verified:
 
 - register at least two household users/devices with different preferences;
-- confirm push arrives while HomeStack is closed;
-- confirm quiet hours and lead times behave correctly;
-- confirm sensitive/re-auth-required sources do not expose lock-screen detail;
+- send a device test push;
+- confirm normal push arrives while HomeStack is closed;
+- confirm quiet hours suppress normal push;
+- confirm the fixed 24h/morning scheduled behaviour and countdown do not double-send on rerun;
+- confirm sensitive/re-auth-required sources cannot expose protected lock-screen content;
 - tap pushes and verify the destination re-checks current permissions;
 - test expired/revoked subscription behaviour;
-- on iOS, test from an **installed Home Screen PWA** — a normal Safari tab is not sufficient for
-  iOS Web Push.
+- on iOS, test an **installed Home Screen PWA** — a normal Safari tab is insufficient.
 
 ---
 
@@ -335,8 +272,7 @@ docker exec homestack-backend python manage.py migrate
 docker exec homestack-backend python manage.py showmigrations
 ```
 
-Do not assume image rebuilds apply database schema changes. Forgetting `migrate` has caused real
-live failures before.
+Do not assume image rebuilds apply database migrations.
 
 Useful checks:
 
@@ -348,58 +284,49 @@ curl -I https://homestack.moosesoftwares.com
 curl -I https://homestack.moosesoftwares.com/api/v1/health/
 ```
 
-Before risky migrations or data-changing maintenance, take/verify a backup according to
-`docs/restore.md` and the backup service documentation.
+Before risky migrations/data changes, take or verify a backup according to `docs/restore.md`.
 
 ---
 
 ## 9. Known deployment/security follow-ups
 
-- Confirm the live server is actually using `DJANGO_SETTINGS_MODULE=config.settings.prod` rather
-  than merely documenting the intended switch.
-- Confirm a real authenticated **write** over `https://homestack.moosesoftwares.com`, not only the
-  health endpoint, after security/environment changes.
-- Complete the Web Push VAPID/cron/real-device rollout described above.
-- Django admin static assets need a production-static solution if the admin UI is expected to
-  remain styled with `DEBUG=0`; this is naturally addressed by production serving work.
-- HomeStack is LAN-only. Do not add router port forwarding as a shortcut.
-- If remote access is pursued later, follow `docs/05_Security_Architecture_Document.md` rather
-  than assuming HTTPS alone makes the application ready for the internet.
+- Confirm the live server is actually using the intended production Django settings.
+- Confirm a real authenticated **write** over the trusted HTTPS origin, not only health checks.
+- Complete the Web Push VAPID/cron/real-device rollout above.
+- Solve production static/admin assets as part of the production-serving work.
+- HomeStack remains LAN-only; do not add router port forwarding as a shortcut.
+- If remote access is pursued, follow `05_Security_Architecture_Document.md` rather than assuming
+  HTTPS alone makes the app internet-ready.
 
 ---
 
 ## 10. Working and validation rhythm
 
-For normal application work:
-
-1. Read the relevant canonical spec and the shared architecture/security/coding rules.
-2. Check current implementation before designing a duplicate capability.
-3. Write permission/security regression tests first for access-sensitive work.
+1. Read the relevant canonical spec and shared architecture/security/coding rules.
+2. Check current implementation before designing duplicate capability.
+3. Write permission/security regression tests first where access boundaries change.
 4. Backend: model/migration → selectors/services → serializers/views/URLs → tests.
 5. Frontend: types/client → shared components → feature UI.
-6. Validate the focused tests plus the appropriate full-suite/type/build checks.
-7. Update the canonical spec if behaviour/product direction changed.
-8. Add a concise release entry to `VERSION_HISTORY.md` when appropriate.
-9. Commit coherent work on a branch; do not use `HANDOVER.md` as a chronological progress log.
+6. Run focused tests plus appropriate full-suite/type/build checks.
+7. Update the canonical spec if the contract changed.
+8. Add concise release chronology to `VERSION_HISTORY.md` when appropriate.
+9. Keep `HANDOVER.md` current rather than appending session history.
 
-Backend tests intentionally support SQLite as well as the Postgres live environment. Guard
-Postgres-only query features with an appropriate fallback where the existing test architecture
-requires it.
+Backend tests intentionally support SQLite as well as the PostgreSQL live environment; preserve the
+established fallback strategy for Postgres-specific features where required.
 
 ---
 
-## 11. How to leave work for the next assistant
+## 11. Handover maintenance rule
 
-Keep this file current, not historical.
+Only edit this file when one of these changes:
 
-Only edit `HANDOVER.md` when one of these changes:
-
-- the live deployment shape;
+- live deployment shape;
 - a non-negotiable design rule;
 - current product status;
 - active/near-term priorities;
 - a known operational blocker/gotcha;
 - the canonical documentation map.
 
-For ordinary feature completion, use the relevant canonical spec and `VERSION_HISTORY.md`.
-Git already preserves the detailed implementation chronology.
+For ordinary feature completion, update the owning spec and `VERSION_HISTORY.md`. Git already
+preserves detailed implementation chronology.
