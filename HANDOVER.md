@@ -268,15 +268,16 @@ regression protection, but do not treat Mobile UX as active feature work.
 
 ## 6. Active/recommended next phase
 
-**Production readiness and reliability** is the recommended primary engineering workstream now
-that Mobile UX v1 is complete.
+**Production readiness and reliability** is the active engineering workstream now that Mobile UX
+v1 is complete.
 Use `docs/34_Recommended_Next_Steps.md` for the practical plan and
 `docs/04_Development_Roadmap.md` for canonical sequencing.
 
 Recommended order:
 
 1. ~~replace Django `runserver` and Vite dev serving with production serving~~ — **done, v0.35.0**;
-2. reduce unnecessary LAN-exposed database/backend/frontend ports;
+2. reduce unnecessary LAN-exposed database/backend/frontend ports — **prepared in v0.37.0,
+   pending owner review and live NPM cutover**;
 3. create one supported deploy command with migration + smoke validation;
 4. add frontend unit/E2E testing and CI;
 5. establish encrypted off-server backup + recovery validation;
@@ -284,6 +285,17 @@ Recommended order:
 7. add passkeys/2FA before any public remote-access plan.
 
 After the reliability baseline: Home Assistant, Hearth, Travel finishing work and later Health.
+
+**Docker/network hardening status (v0.37.0):** repo-side Compose and documentation are prepared,
+but the live networking cutover has not been applied. The inspected live topology has Nginx Proxy
+Manager in the `all-services` Compose project on `all-services_services-network`; HomeStack was
+still publishing backend `8001`, frontend `5173` and PostgreSQL `5433` to the LAN before this
+change. The prepared target removes those production host ports, attaches only frontend/backend
+to NPM's existing Docker network, and keeps PostgreSQL on `project-homestack_private`. Review
+`docs/35_Production_Serving_and_Deployment.md` §10 before changing NPM: first prove container-name
+routing while the old ports still exist, then deploy the hardened Compose and run the validation
+checklist. Rollback is to restore NPM's old LAN upstreams and the pre-hardening Compose commit;
+do not delete volumes or run Docker cleanup.
 
 Explicitly avoid generic plugins/integrations, Kubernetes/microservices, Redis/Celery without
 measured need, or public exposure before the Security Architecture gate is satisfied.

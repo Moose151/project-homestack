@@ -87,7 +87,7 @@ Preserve this production-serving model while hardening the remaining network exp
 
 ### 4.2 Docker network exposure
 
-**Status:** next active phase.
+**Status:** prepared in v0.37.0, pending owner review and live NPM cutover.
 
 Move internal services toward private container networking:
 
@@ -97,6 +97,11 @@ Move internal services toward private container networking:
 - NPM admin (`81`) remains LAN/admin-only and is never publicly exposed.
 
 Keep a development Compose profile/override that exposes developer-friendly ports where useful.
+
+The prepared target attaches `homestack-frontend` and `homestack-backend` to Nginx Proxy
+Manager's existing Docker network and keeps `homestack-postgres` on a HomeStack-private internal
+network. The live cutover is intentionally separated from the repo change so NPM routing can be
+reviewed and rolled back safely.
 
 ### 4.3 Deployment automation
 

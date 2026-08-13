@@ -1,7 +1,8 @@
 # Production Serving and Deployment
 
-> **Status: implemented, pending live rollout.** This is the canonical contract for how HomeStack
-> is served in production and how a deployment is performed, validated and rolled back.
+> **Status: production serving implemented; Docker network hardening prepared, pending reviewed
+> live rollout.** This is the canonical contract for how HomeStack is served in production and how
+> a deployment is performed, validated and rolled back.
 >
 > It replaces the previous live path, which ran Django `runserver` and the Vite development server.
 > Any older prose describing those as the live servers is stale.
@@ -16,23 +17,34 @@ The live household deployment serves the application with production components:
   **WhiteNoise** from the same gunicorn process;
 - development keeps `runserver` and the Vite dev server through an explicit Compose override.
 
-Deliberately **not** part of this change: reducing published container ports, Docker network
-redesign, Redis/Celery, CI, or any public exposure. Those remain separately sequenced in
-`34_Recommended_Next_Steps.md`.
+Still deliberately out of scope: Redis/Celery, CI, direct public exposure, router port forwarding
+or replacing Nginx Proxy Manager. Those remain separately sequenced.
 
 ## 2. Topology
 
-Unchanged from the pre-existing HTTPS deployment — that is the point. Nginx Proxy Manager keeps its
-existing routing and needs no reconfiguration.
+### 2.1 Production topology after network hardening
+
+Nginx Proxy Manager remains the only HTTPS entry point. HomeStack no longer publishes its
+PostgreSQL, backend or frontend ports to the LAN in production Compose. NPM reaches only the
+frontend/backend containers through its existing Docker network; PostgreSQL remains isolated on a
+HomeStack-private network that NPM does not join.
 
 ```text
 LAN client
   -> Pi-hole DNS: homestack.moosesoftwares.com -> 192.168.1.125
   -> Nginx Proxy Manager :443   (Let's Encrypt via Cloudflare DNS-01)
        |
-       +-- /api/*  -> homestack-backend  :8000   gunicorn -> Django -> PostgreSQL
+       |  Docker network: all-services_services-network
+       |
+       +-- /api/*  -> homestack-backend  :8000   gunicorn -> Django
        |
        +-- /*      -> homestack-frontend :5173   nginx -> built React bundle
+                         |
+                         v
+                  Docker network: project-homestack_private
+                         |
+                         v
+                  homestack-postgres :5432
 ```
 
 HomeStack terminates no TLS of its own and adds no second reverse-proxy layer. The frontend
@@ -40,8 +52,27 @@ container deliberately does **not** proxy `/api/` — that is NPM's job, and the
 `/api/` with a clear 404 so a misrouted proxy is obvious rather than returning HTML to a caller
 expecting JSON.
 
-Ports are unchanged: gunicorn listens on the container port `runserver` used, and the frontend's
-nginx listens on the port the Vite dev server used.
+Gunicorn still listens on container port `8000`; the frontend nginx still listens on container
+port `5173`; PostgreSQL still listens on container port `5432`. In production these are
+container-only ports (`expose`), not LAN host ports. Development port publishing is preserved in
+`docker-compose.dev.yml`.
+
+### 2.2 Recorded pre-change Docker/NPM inspection
+
+Before preparing the network change, the live host was inspected:
+
+- `docker network ls` showed NPM on `all-services_services-network` and HomeStack on
+  `project-homestack_default`.
+- `docker inspect npm` showed container `npm`, Compose project `all-services`, service
+  `nginx-proxy-manager`, `NetworkMode=all-services_services-network`, aliases `npm` and
+  `nginx-proxy-manager`, and LAN/admin host ports `81`, `8088` and `4443`.
+- `docker compose config` for HomeStack showed the pre-hardening production stack publishing
+  `homestack-postgres` as host `5433 -> 5432`, `homestack-backend` as host `8001 -> 8000`, and
+  `homestack-frontend` as host `5173 -> 5173`.
+
+That makes the safest target: attach HomeStack frontend/backend to NPM's existing external
+network, keep PostgreSQL off that network, and remove the HomeStack host-port publications only
+after NPM is proven to route to the container names.
 
 ## 3. Compose layout
 
@@ -64,6 +95,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 | Source | baked into the image | bind-mounted, hot reload |
 | Static files | `collectstatic` at build, served by WhiteNoise | Django's `DEBUG=True` handler |
 | Health checks | backend + frontend | disabled (reload restarts are noisy) |
+| LAN host ports | none for HomeStack app/database services | backend/frontend/PostgreSQL published through the dev override |
 
 `DJANGO_SETTINGS_MODULE` is pinned in each Compose file's `environment:` block, which takes
 precedence over `.env`. A stale development value in the live environment file therefore cannot
@@ -218,26 +250,85 @@ VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT
 
 ## 10. Nginx Proxy Manager changes
 
-**None required.** Ports and routing are unchanged.
+Network hardening requires changing the existing NPM proxy host upstreams from LAN host ports to
+Docker DNS names after HomeStack frontend/backend are attached to `all-services_services-network`:
+
+| Route | Upstream after hardening |
+|---|---|
+| Main proxy host / SPA | `http://homestack-frontend:5173` |
+| `/api/` custom location | `http://homestack-backend:8000` |
+| optional `/admin/` | `http://homestack-backend:8000` |
+| optional `/static/` | `http://homestack-backend:8000` |
+
+Do not expose HomeStack publicly. Do not add router port forwarding. NPM admin (`81`) remains
+LAN/admin-only.
 
 Optional, only to reach Django admin over HTTPS — add to the existing proxy host's Advanced
 configuration, pointing at the same backend upstream `/api/` already uses:
 
 ```nginx
 location /admin/ {
-    proxy_pass http://192.168.1.125:8000;
+    proxy_pass http://homestack-backend:8000;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 }
 location /static/ {
-    proxy_pass http://192.168.1.125:8000;
+    proxy_pass http://homestack-backend:8000;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
 }
 ```
 
 Do not add router port forwarding. Do not terminate TLS inside HomeStack.
+
+### 10.1 Safe migration procedure for network hardening
+
+Stop for review before running this against the live installation if any NPM route, hostname or
+network name differs from the inspection above.
+
+1. Confirm a fresh HomeStack backup and record the rollback commit.
+2. Confirm `docker network ls` still contains `all-services_services-network` and `docker inspect
+   npm` still shows NPM attached to that network.
+3. Transitional proof step, while old LAN ports still exist: run
+   `docker network connect all-services_services-network homestack-frontend` and
+   `docker network connect all-services_services-network homestack-backend` if they are not
+   already attached.
+4. In NPM, change the main HomeStack proxy host to `homestack-frontend:5173` and the `/api/`
+   custom location to `homestack-backend:8000`.
+5. Validate HTTPS HomeStack load, backend health through HTTPS, login/logout, writes, Solace
+   re-auth, deep-link refresh, PWA assets and push test while the old host ports are still
+   available as rollback.
+6. Deploy the hardened Compose commit with `docker compose up -d --build`.
+7. Re-run the validation checklist below and then confirm from another LAN device that the old
+   HomeStack host ports are no longer reachable.
+
+### 10.2 Rollback procedure for network hardening
+
+1. In NPM, restore the previous LAN upstreams:
+   frontend `192.168.1.125:5173`; backend/API `192.168.1.125:8001` for the inspected live host.
+2. Roll the repo back to the recorded pre-hardening commit or temporarily restore the previous
+   `ports:` mappings for `homestack-frontend`, `homestack-backend` and `homestack-postgres`.
+3. Run `docker compose up -d --build`.
+4. Confirm `docker compose ps`, HTTPS load, backend health and a login/write smoke test.
+5. Do not delete volumes or run Docker prune/cleanup as part of rollback.
+
+### 10.3 Network-hardening validation checklist
+
+- `docker compose ps` shows frontend/backend/PostgreSQL healthy.
+- Backend health succeeds through the HTTPS HomeStack origin.
+- HTTPS HomeStack loads from the LAN hostname.
+- Password login/logout works.
+- PIN/avatar login works.
+- An authenticated write persists after refresh.
+- Money/Solace sensitive re-authentication still gates sensitive content.
+- A React deep-link refresh restores the same screen.
+- `/sw.js` and `/manifest.json` load through HTTPS and the PWA/service worker remains healthy.
+- A real push test succeeds on a registered device.
+- From another LAN device, HomeStack PostgreSQL, backend and frontend host ports are no longer
+  generally reachable.
+- From inside the backend container, Django can still reach PostgreSQL at
+  `homestack-postgres:5432` over `project-homestack_private`.
 
 ## 11. Deployment
 

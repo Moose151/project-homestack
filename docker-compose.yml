@@ -5,12 +5,12 @@
 #
 # THREE services only: postgres, backend, frontend. LAN-trusted HTTPS is handled by the
 # already-running Nginx Proxy Manager + Pi-hole outside this compose file (Security doc §13) —
-# NPM routes /api/ to the backend and everything else to the frontend. No TLS terminates here.
+# NPM routes /api/ to the backend and everything else to the frontend over Docker networking. No
+# TLS terminates here.
 # No Redis/Celery (D5).
 #
-# Host port publication is unchanged from the pre-production-serving stack on purpose. Reducing
-# exposed ports is a separate, later change (docs/34_Recommended_Next_Steps.md §4) so that this
-# one can be rolled back without touching NPM.
+# Production deliberately publishes no HomeStack app/database ports to the LAN. Use
+# docker-compose.dev.yml when you need developer-friendly localhost/LAN ports.
 
 services:
   homestack-postgres:
@@ -22,8 +22,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "${DB_HOST_PORT:-5432}:5432"
+    expose:
+      - "5432"
+    networks:
+      - homestack_private
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -43,8 +45,11 @@ services:
     volumes:
       - media_data:/app/media
       - backup_data:/app/backups
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
+    expose:
+      - "8000"
+    networks:
+      - homestack_private
+      - npm_proxy
     depends_on:
       homestack-postgres:
         condition: service_healthy
@@ -62,8 +67,10 @@ services:
       context: ./frontend
       target: production
     container_name: homestack-frontend
-    ports:
-      - "${FRONTEND_PORT:-5173}:5173"
+    expose:
+      - "5173"
+    networks:
+      - npm_proxy
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5173/healthz"]
       interval: 30s
@@ -78,3 +85,11 @@ volumes:
   postgres_data:
   media_data:
   backup_data:
+
+networks:
+  homestack_private:
+    name: project-homestack_private
+    internal: true
+  npm_proxy:
+    external: true
+    name: ${NPM_DOCKER_NETWORK:-all-services_services-network}

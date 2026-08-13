@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.36.11**
+> **Current version: 0.37.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,23 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.37 — Production reliability and deployment safety
+
+### 0.37.0 — 2026-08-14 — Prepare Docker network hardening (pending live review)
+- Prepared the Phase 2 production-network target without applying it to the live containers:
+  production Compose now removes LAN host-port publication for PostgreSQL, backend and frontend;
+  backend/frontend attach to Nginx Proxy Manager's existing external Docker network
+  (`all-services_services-network` by default); PostgreSQL stays only on a HomeStack-private
+  internal network; and `docker-compose.dev.yml` preserves convenient development port publishing.
+- Documented the observed live topology before the change: `docker network ls`, `docker inspect
+  npm`, and `docker compose config` showed NPM in the `all-services` Compose project on
+  `all-services_services-network`, while HomeStack was publishing backend `8001 -> 8000`,
+  frontend `5173 -> 5173`, and PostgreSQL `5433 -> 5432` from `project-homestack_default`.
+- Updated the production-serving documentation with the target topology, exact NPM upstreams
+  (`homestack-frontend:5173`, `homestack-backend:8000`), a staged migration procedure, rollback
+  procedure and validation checklist. This is not yet a live networking cutover; NPM/live routing
+  should be changed only after owner review.
 
 ## 0.36 — Mobile UX v1
 

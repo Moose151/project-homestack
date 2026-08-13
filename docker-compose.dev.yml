@@ -6,6 +6,10 @@
 # rebuilding an image. Never use this on the live server.
 
 services:
+  homestack-postgres:
+    ports:
+      - "${DB_HOST_PORT:-5432}:5432"
+
   homestack-backend:
     # Podman rootless: container root maps to your host UID — no user: override needed.
     # Docker: add `user: "${UID:-1000}:${GID:-1000}"` here to avoid root-owned files.
@@ -20,6 +24,8 @@ services:
       # no collectstatic are involved here.
       DJANGO_SETTINGS_MODULE: config.settings.dev
       DJANGO_DEBUG: "1"
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
     healthcheck:
       # runserver's reloader restarts on every edit; a failing probe mid-restart is noise here.
       disable: true
@@ -36,5 +42,7 @@ services:
       - ./frontend:/app:z
       # Keep the container's own node_modules (don't let the bind mount hide it).
       - /app/node_modules
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
     healthcheck:
       disable: true
