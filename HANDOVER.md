@@ -232,7 +232,15 @@ grids had no explicit base `grid-cols-1`, the CSS Grid analogue of the AppShell 
 from Phase 4 — a grid item's default `min-width: auto` let a wide card dictate the implicit
 column's width instead of the container's, pushing the grid past the viewport at 320px.
 
-Phase 10 (real-device acceptance) not started. Not yet merged to `main`.
+Phases 1–9 are now all implemented and Playwright-verified — that's the full extent of what's
+achievable without a physical device. **Phase 10 (real-device acceptance) is a checklist, not
+code** — docs/36's Phase 10 section now has the full structured protocol (device matrix, §9.1/9.2
+walkthroughs, deep-link checks, destructive-op checks, a list of deliberate Phase 8/9 scope gaps
+so they don't get re-reported as bugs). It genuinely needs a person with a phone, not another
+coding session — push notifications end-to-end in particular can't be exercised by the mocked
+Playwright suite at all. Once that's walked and any real findings fixed, Mobile UX v1 is ready for
+a merge-to-`main` decision, which stays the owner's call as with every push on this branch so far.
+Not yet merged to `main`.
 
 ---
 

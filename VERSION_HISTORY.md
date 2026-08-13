@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.36.5**
+> **Current version: 0.36.6**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,19 @@
 ---
 
 ## 0.36 — Mobile UX v1 (on feature/mobile-ux)
+
+### 0.36.6 — 2026-08-13 — Phase 10 real-device acceptance checklist (docs/36, on feature/mobile-ux)
+- Docs-only change, no app code. Phases 1–9 are fully implemented and Playwright-verified —
+  everything achievable without a physical device. docs/36's Phase 10 section is now a full
+  structured acceptance protocol rather than a bare bullet list: a device/environment matrix
+  (Android Chrome, installed Android PWA, iPhone Safari/Home Screen PWA, small/large phone,
+  tablet), checklists against §9.1's global acceptance criteria and §9.2's everyday-usability
+  tasks, deep-link checks, destructive-operation checks, and an explicit list of Phase 8/9's
+  deliberate scope gaps so a real tester doesn't re-report a documented decision as a bug.
+- This phase genuinely needs a person with real devices — push notifications end-to-end in
+  particular cannot be exercised by the mocked Playwright suite at all. Not marked done; the
+  checklist is ready for execution. Once walked and any findings fixed, Mobile UX v1 is ready for
+  a merge-to-`main` decision. Still on `feature/mobile-ux`, not merged.
 
 ### 0.36.5 — 2026-08-13 — Lower-frequency nodes: Books, Home Wiki, Travel (docs/36 Phase 9, on feature/mobile-ux)
 - **Books.** Personal/Book Club segmented control and shelf navigation already matched the doc

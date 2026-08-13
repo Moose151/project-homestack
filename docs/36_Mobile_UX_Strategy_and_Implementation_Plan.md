@@ -1263,24 +1263,112 @@ defaults.
 Wiki's read-full-screen-then-Edit-inside flow, Travel's trip/booking/itinerary sheets). 147
 passing, 45 skipped across four viewport projects; `tsc --noEmit` and `npm run build` both clean.
 
-### Phase 10 — Complete real-device acceptance
+### Phase 10 — Complete real-device acceptance — CHECKLIST READY, execution pending
 
-Test at minimum:
+Phases 1–9 are implementation and Playwright-verified — everything Claude can do without a
+physical device or a live household. Phase 10 is different in kind: it asks whether the finished
+thing actually works in someone's hand, which is not something a mocked-API browser automation
+run can answer. **This phase needs a person with real devices to execute it against the running
+household server; it is not something this assistant can complete on its own.** What follows is
+the concrete checklist to work through — a structured version of this section's original bullet
+list, cross-referenced against §9's acceptance criteria and Phase 8/9's scope-limiting notes so a
+deliberate scope decision doesn't get reported back as a bug.
 
-- Android Chrome in-browser;
-- installed Android PWA;
-- iPhone Safari/Home Screen PWA where available;
-- small and larger phones;
-- portrait and landscape;
-- tablet/touch layout;
-- light and dark mode;
-- normal and increased browser/text scaling;
-- keyboard-open form states;
-- long household/person/node labels;
-- empty/loading/error states;
-- deep links from Calendar, notifications, Search and Corners;
-- destructive operations;
-- offline/reconnection states already supported by the PWA.
+**Setup.** Reach the dev server from a phone on the home Wi-Fi at the LAN hostname already
+allow-listed in `frontend/vite.config.ts` (`.home.arpa`/`.local`) — no separate deploy needed.
+For the "installed PWA" rows, actually add it to the home screen (Android: Chrome menu → *Install
+app*; iOS: Share → *Add to Home Screen*) rather than testing the browser tab twice.
+
+**Devices/environments matrix** — each row of the checklists below should be walked at least once
+per environment that's actually available:
+
+| Environment | Notes |
+|---|---|
+| Android Chrome, in-browser | |
+| Android, installed PWA | standalone display mode — no browser chrome |
+| iPhone Safari, in-browser | if an iPhone is available |
+| iPhone, Home Screen PWA | if an iPhone is available |
+| A small phone (≤375px CSS width, e.g. iPhone SE/mini) | |
+| A larger phone/phablet | |
+| Tablet, touch input | confirms the `md:`/`sm:` shell-vs-page breakpoint mismatch (a known, deliberately-unresolved inconsistency — see HANDOVER §5) doesn't produce a broken in-between state |
+
+**§9.1 Global acceptance** — check across the whole app, not just one page:
+
+- [ ] No document-level horizontal scroll at any point, portrait or landscape, down to 320px.
+- [ ] Every important destination is reachable within two taps from the bottom nav/More sheet.
+- [ ] Add/Quick Create is reachable from anywhere via the bottom nav.
+- [ ] Routine controls (nav, Save/Cancel, list-row taps, toggles) feel like real touch targets —
+      no mis-taps on adjacent controls.
+- [ ] Body text is readable without pinch-zoom; test with the OS text-size setting raised one or
+      two steps, not just default.
+- [ ] Bottom nav and sticky sheet footers clear the home indicator / gesture bar (safe-area
+      insets) on a notched/gesture-nav device.
+- [ ] Opening the on-screen keyboard in any form (Calendar's event sheet, Quick Create, Search)
+      never hides the field being typed into or the primary Save action.
+- [ ] Back (shell top-bar Back, and each `MobileScreenHeader` `showBack` instance) always lands
+      somewhere meaningful — test this **starting cold**: kill the app/tab, reopen directly on a
+      nested URL (a corner, a Homestead room-adjacent tab, an Education assignment deep link),
+      and confirm Back doesn't leave HomeStack or land on an unrelated browser page. (Playwright
+      already covers the mechanism in `e2e/deep-link-back.spec.ts`; this step confirms it holds
+      on a real browser's real history stack, not just Chromium's.)
+- [ ] Reloading the page on a nested route (not just `/hub`) restores the same screen/record,
+      not a reset to the top.
+- [ ] Toggle the OS/browser dark mode and confirm every screen touched below stays coherent —
+      not just the shell chrome.
+- [ ] A child/guest account sees the same permission and sensitive-node re-auth behaviour on
+      phone as on desktop — nothing was loosened for mobile convenience.
+
+**§9.2 Everyday usability** — do each of these as an actual task, not a look-around:
+
+- [ ] Check what needs attention today from the Hub.
+- [ ] Open today's Calendar and open one event from it.
+- [ ] Add a new Calendar event (phone floating Add button, phone Quick Add bar, and desktop
+      `+ Event` — confirm all three create against the day you were actually looking at, not
+      always "today").
+- [ ] Add and check off a grocery/list item in Atlas.
+- [ ] View and complete a Meridian task as an adult account, then as a child/guest account if one
+      exists.
+- [ ] Check an Education assignment's due date and open its detail sheet.
+- [ ] Mark a pet treatment or Homestead maintenance item as attended to.
+- [ ] View upcoming Solace bills / current Money position, as an authorized user.
+- [ ] Enable and test a push notification end-to-end (this is the one item that **cannot** be
+      faked by Playwright's mocked-API suite at all — it needs a real device, a real push
+      subscription and a real notification arriving).
+- [ ] Find a specific Home Wiki page via search, then via Favourites, then via the Emergency
+      filter.
+- [ ] Start a Fitness workout, log a set, and finish it — confirm the page header/tab bar
+      actually disappear while the session is active (Phase 8's chrome-hiding fix) and reappear
+      once finished.
+- [ ] Tap through from an actual push notification into the specific record it names.
+
+**Deep links** — each of these should land on the specific record, not just the right node:
+
+- [ ] A Calendar event's source-record link (e.g. a Homestead maintenance-originated event) opens
+      the correct underlying record, not just the node's landing tab.
+- [ ] A notification tap opens the specific item it's about.
+- [ ] A global Search result opens the specific record.
+- [ ] A Corners "Assigned"/"Lists & wishes"/"Activity" row lands on the right tab with the right
+      item highlighted if applicable.
+
+**Destructive operations** — confirm every delete still confirms and actually removes the item,
+inside its new sheet-based home (list items, pets, wiki pages, trips/bookings, book club members,
+etc.) — Phase 8/9 moved a lot of these into modals; this is the check that the move didn't drop
+the confirm-dialog step anywhere.
+
+**Offline/reconnection** — already-supported PWA behaviour, not new this initiative: turn on
+airplane mode mid-session, confirm the app doesn't hard-crash, then reconnect and confirm it
+recovers (a reload if nothing better) rather than staying stuck on a stale error state.
+
+**Known, deliberate gaps — not bugs, don't re-report:** Homestead's Maintenance/Appliances/Pool/
+Utilities/Improvements/Contacts inline forms; Solace's Bucket/Purchase/Payday editors; Settings'
+Household/Family-colour/Meridian sections; Atlas's Notes/Reminders creation forms; Pets' "Vet
+details"/"History" as separate destinations (flattened into one screen); Travel's Packing/
+Documents destinations (not a real feature yet). Each is called out with its reasoning in the
+relevant phase's write-up above.
+
+Once this checklist has actually been walked on real hardware and any genuine findings fixed,
+Phase 10 — and Mobile UX v1 as a whole — is ready for a merge-to-`main` decision, which stays the
+owner's call per this branch's established pattern.
 
 ---
 

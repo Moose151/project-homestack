@@ -1,7 +1,16 @@
 {
-  "current_version": "0.36.5",
-  "source_sha256": "c33337b2b24116eb027953318f0dd626bfb77526737c6c5d9433dd18bff8544a",
+  "current_version": "0.36.6",
+  "source_sha256": "d0597a899bd61b628f2927603fe82ef462476d40d4ae603d54f0aca7d7537323",
   "releases": [
+    {
+      "version": "0.36.6",
+      "date": "2026-08-13",
+      "title": "Phase 10 real-device acceptance checklist (docs/36, on feature/mobile-ux)",
+      "changes": [
+        "Docs-only change, no app code. Phases 1–9 are fully implemented and Playwright-verified — everything achievable without a physical device. docs/36's Phase 10 section is now a full structured acceptance protocol rather than a bare bullet list: a device/environment matrix (Android Chrome, installed Android PWA, iPhone Safari/Home Screen PWA, small/large phone, tablet), checklists against §9.1's global acceptance criteria and §9.2's everyday-usability tasks, deep-link checks, destructive-operation checks, and an explicit list of Phase 8/9's deliberate scope gaps so a real tester doesn't re-report a documented decision as a bug.",
+        "This phase genuinely needs a person with real devices — push notifications end-to-end in particular cannot be exercised by the mocked Playwright suite at all. Not marked done; the checklist is ready for execution. Once walked and any findings fixed, Mobile UX v1 is ready for a merge-to-`main` decision. Still on `feature/mobile-ux`, not merged."
+      ]
+    },
     {
       "version": "0.36.5",
       "date": "2026-08-13",
