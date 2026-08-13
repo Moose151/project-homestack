@@ -62,6 +62,9 @@ export function MobileSettingsRow({
 function Switch({
   checked, onChange, label, disabled,
 }: { checked: boolean; onChange?: (next: boolean) => void; label: string; disabled?: boolean }) {
+  // The 44px touch-target baseline applies to the *hit area*, not necessarily the visible
+  // control (docs/36 §3.3) — the switch stays a compact 24px-tall pill, centred inside a
+  // 44x44 button so the tap target meets the baseline without the switch looking oversized.
   return (
     <button
       type="button"
@@ -70,9 +73,11 @@ function Switch({
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange?.(!checked)}
-      className={`relative h-6 w-11 flex-shrink-0 rounded-full transition-colors disabled:opacity-50 ${checked ? 'bg-success' : 'bg-line-strong'}`}
+      className="grid h-11 w-11 flex-shrink-0 place-items-center disabled:opacity-50"
     >
-      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${checked ? 'left-5' : 'left-0.5'}`} />
+      <span className={`relative h-6 w-11 rounded-full transition-colors ${checked ? 'bg-success' : 'bg-line-strong'}`}>
+        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${checked ? 'left-5' : 'left-0.5'}`} />
+      </span>
     </button>
   )
 }

@@ -37,12 +37,16 @@ export default defineConfig({
     },
     {
       name: 'phone-stress-320',
+      // No `isMobile`/`hasTouch` here: paired with a hand-picked (not device-preset) viewport,
+      // `isMobile: true` made Chromium report `window.innerWidth` as 340, not 320 — silently
+      // testing the wrong width and masking real overflow until a wide-enough page (Calendar's
+      // period-nav row) exposed the 20px gap. `phone`/`phone-dark` are unaffected: they spread
+      // the whole `devices['iPhone 13']` preset, so its viewport and emulation flags stay
+      // internally consistent. A stress test only needs the raw width, not touch emulation.
       use: {
         browserName: 'chromium',
         viewport: { width: 320, height: 568 },
         userAgent: devices['iPhone 13'].userAgent,
-        isMobile: true,
-        hasTouch: true,
       },
     },
     {

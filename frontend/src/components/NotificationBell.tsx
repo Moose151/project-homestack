@@ -45,7 +45,7 @@ export function NotificationBell() {
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen(o => !o)}
-        className="relative w-10 h-10 grid place-items-center rounded-xl hover:bg-sunken text-muted-strong"
+        className="relative w-11 h-11 grid place-items-center rounded-xl hover:bg-sunken text-muted-strong"
         aria-label="Notifications">
         <span className="text-lg">🔔</span>
         {unread > 0 && (

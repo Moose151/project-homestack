@@ -1,12 +1,13 @@
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import type { CSSProperties } from 'react'
-import { useEffect, useState } from 'react'
+import type { CSSProperties, Dispatch, SetStateAction } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { Avatar } from '../../components/Avatar'
 import { NotificationBell } from '../../components/NotificationBell'
 import { CalendarPeek } from '../../components/CalendarPeek'
 import { Logo } from '../../components/Logo'
 import { useDarkMode } from '../../hooks/useDarkMode'
+import { useDialogA11y } from '../../components/useDialogA11y'
 import { useStacks } from '../stacks/StacksContext'
 import { STACKS, softColour } from '../../config/stacks'
 import { APP_VERSION } from '../../config/version'
@@ -198,10 +199,205 @@ function SectionLabel({ children }: { children: string }) {
   )
 }
 
+/**
+ * Mobile destination directory + profile/preferences. A separate component (not inline JSX
+ * gated by `{moreOpen && ...}`) so it can call `useDialogA11y` itself, matching every other
+ * sheet in the app (Modal, and anything built on it) — the hook's mount/unmount lifecycle
+ * needs the sheet to actually mount/unmount, not just toggle visibility inside an
+ * always-mounted parent, since React hooks can't be called conditionally.
+ */
+function MoreSheet({
+  user, editingProfile, setEditingProfile, updateUser, stackNav, customisingNav, setCustomisingNav,
+  effectiveMobileKeys, toggleMobileKey, adminNav, dark, setDark, onSearch, onQuickCreate, logout, onClose,
+}: {
+  user: AuthUser | null
+  editingProfile: boolean
+  setEditingProfile: Dispatch<SetStateAction<boolean>>
+  updateUser: (u: AuthUser) => void
+  stackNav: NavItem[]
+  customisingNav: boolean
+  setCustomisingNav: Dispatch<SetStateAction<boolean>>
+  effectiveMobileKeys: string[]
+  toggleMobileKey: (key: string) => void
+  adminNav: NavItem[]
+  dark: boolean
+  setDark: (v: boolean) => void
+  onSearch: () => void
+  onQuickCreate: () => void
+  logout: () => void
+  onClose: () => void
+}) {
+  const dialogRef = useDialogA11y(onClose)
+
+  return (
+    <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true" aria-label="HomeStack navigation">
+      <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" onClick={onClose} />
+      <div
+        ref={dialogRef}
+        className="absolute inset-x-0 bottom-0 max-h-[90vh] overflow-y-auto rounded-t-[2rem] border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] shadow-card"
+      >
+        <div className="sticky top-0 z-10 border-b border-line bg-surface/95 px-5 pb-3 pt-2 backdrop-blur-xl">
+          <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-line-strong" />
+          <div className="flex items-center justify-between">
+            <span>
+              <span className="block text-base font-extrabold text-ink">Go anywhere</span>
+              <span className="block text-xs text-muted">All your household spaces in one place</span>
+            </span>
+            <button onClick={onClose} className="grid h-11 w-11 place-items-center rounded-xl text-muted hover:bg-sunken" aria-label="Close">✕</button>
+          </div>
+        </div>
+
+        <div className="space-y-5 p-4">
+          {user && (
+            <div className="rounded-3xl border border-line p-3.5" style={{ background: `linear-gradient(135deg, ${softColour(user.colour || '#1d7a91', '18')}, var(--hs-surface) 68%)` }}>
+              <div className="flex items-center gap-3">
+                <Avatar name={user.display_name} colour={user.colour} avatar={user.avatar} size="md" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-extrabold text-ink">{user.display_name}</p>
+                  <p className="text-xs font-semibold capitalize text-muted">{user.role} profile</p>
+                </div>
+                <button
+                  onClick={() => setEditingProfile(value => !value)}
+                  className="min-h-11 rounded-xl border border-line bg-surface/80 px-3 py-2 text-xs font-bold text-primary shadow-sm"
+                >
+                  {editingProfile ? 'Done' : 'Edit'}
+                </button>
+              </div>
+              {editingProfile && (
+                <div className="mt-3">
+                  <ProfileEditor
+                    user={user}
+                    onSaved={u => { updateUser(u); setEditingProfile(false) }}
+                    onClose={() => setEditingProfile(false)}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-3 px-1">
+              <span>
+                <span className="block text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Destinations</span>
+                {customisingNav && <span className="mt-0.5 block text-[11px] text-muted">Choose up to two shortcuts either side of Add — Home is always shown</span>}
+              </span>
+              <button onClick={() => setCustomisingNav(value => !value)} className="min-h-11 rounded-lg px-2 text-xs font-bold text-primary hover:bg-primary-soft">
+                {customisingNav ? 'Finish editing' : 'Edit bottom bar'}
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {stackNav.map(item => {
+                const pinned = effectiveMobileKeys.includes(item.key)
+                if (customisingNav) {
+                  if (item.key === 'hub') return null // Home's slot is fixed; nothing to choose.
+                  return (
+                    <button
+                      key={item.route}
+                      onClick={() => toggleMobileKey(item.key)}
+                      disabled={!pinned && effectiveMobileKeys.length >= MOBILE_SHORTCUT_SLOTS}
+                      className={`relative flex min-h-[72px] items-center gap-2.5 rounded-2xl border p-2.5 text-left transition-all ${
+                        pinned ? 'border-primary/40 bg-primary-soft text-primary' : 'border-line bg-surface text-muted-strong disabled:opacity-40'
+                      }`}
+                    >
+                      <span className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl text-xl" style={{ background: softColour(item.colour, '18') }}>{item.icon}</span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-extrabold">{item.label}</span>
+                        <span className="mt-0.5 block text-[11px] font-medium opacity-70">{pinned ? 'In bottom bar' : 'Add to bottom bar'}</span>
+                      </span>
+                      <span className="absolute right-2 top-1.5 text-xs font-black">{pinned ? '✓' : '+'}</span>
+                    </button>
+                  )
+                }
+                return (
+                  <NavLink
+                    key={item.route}
+                    to={item.route}
+                    onClick={onClose}
+                    style={({ isActive }) => (isActive ? { borderColor: item.colour, background: softColour(item.colour, '14'), color: item.colour } : undefined)}
+                    className={({ isActive }) => `flex min-h-[76px] items-center gap-2.5 rounded-2xl border p-2.5 text-left transition-all ${isActive ? 'shadow-sm' : 'border-line bg-surface text-muted-strong active:scale-[0.98]'}`}
+                  >
+                    <span className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-2xl text-2xl" style={{ background: softColour(item.colour, '18') }}>{item.icon}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-extrabold">{item.label}</span>
+                      <span className="mt-1 block text-[11px] leading-tight opacity-70">{item.description}</span>
+                    </span>
+                  </NavLink>
+                )
+              })}
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Quick actions</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => { onClose(); onSearch() }} className="flex min-h-12 items-center gap-2 rounded-2xl border border-line bg-surface px-3 text-sm font-bold text-ink"><span className="text-lg">⌕</span> Search</button>
+              <button onClick={() => { onClose(); onQuickCreate() }} className="flex min-h-12 items-center gap-2 rounded-2xl bg-primary px-3 text-sm font-bold text-white shadow-soft"><span className="text-lg">＋</span> Add something</button>
+            </div>
+          </div>
+
+          {adminNav.length > 0 && (
+            <div>
+              <p className="mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Manage</p>
+              <div className="grid grid-cols-2 gap-2">
+                {adminNav.map(item => (
+                  <NavLink key={item.route} to={item.route} onClick={onClose} className={({ isActive }) => `flex min-h-[64px] items-center gap-2.5 rounded-2xl border px-3 text-left ${isActive ? 'border-primary bg-primary-soft text-primary' : 'border-line bg-surface text-muted-strong'}`}>
+                    <span className="text-xl">{item.icon}</span>
+                    <span className="min-w-0"><span className="block truncate text-sm font-bold">{item.label}</span><span className="block truncate text-[11px] text-muted">{item.description}</span></span>
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <p className="mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">App & session</p>
+            <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+              <button
+                onClick={() => setDark(!dark)}
+                className="flex min-h-12 w-full items-center gap-3 border-b border-line px-3 text-left text-sm font-semibold text-muted-strong hover:bg-sunken"
+              >
+                <span className="text-lg w-6 text-center">{dark ? '☀' : '☾'}</span>
+                {dark ? 'Light mode' : 'Dark mode'}
+              </button>
+              <a
+                href="/kiosk"
+                className="flex min-h-12 items-center gap-3 border-b border-line px-3 text-sm font-semibold text-muted-strong hover:bg-sunken"
+              >
+                <span className="text-lg w-6 text-center">▣</span>
+                Enter kiosk
+              </a>
+              {user && (
+                <button
+                  onClick={() => { onClose(); logout() }}
+                  className="flex min-h-12 w-full items-center gap-3 px-3 text-left text-sm font-semibold text-muted-strong hover:bg-danger-soft hover:text-danger"
+                >
+                  <span className="text-lg w-6 text-center">⊗</span>
+                  Sign out
+                </button>
+              )}
+            </div>
+          </div>
+
+          <p className="border-t border-line px-1 pt-4 text-center text-[10px] font-medium text-muted/45">HomeStack v{APP_VERSION}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function AppShell() {
   const { user, logout, updateUser } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
+  // React Router assigns a fresh `key` to every entry it pushes/replaces, and the very first
+  // entry of a session (cold load, PWA launch, a push-notification/deep link opened straight
+  // into a nested route) always keys as "default". Capturing that once at mount and comparing
+  // against the *current* key — not a boolean ref flipped by an effect — tells us, on every
+  // render, whether the user has actually navigated in-app since landing here. `navigate(-1)`
+  // on a cold entry would leave HomeStack (or land on an unrelated prior browser-history page);
+  // falling back to the stack's own base route keeps Back inside the app.
+  const initialLocationKey = useRef(location.key).current
+  const hasInAppHistory = location.key !== initialLocationKey
   const [dark, setDark] = useDarkMode()
   const [editingProfile, setEditingProfile] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -223,6 +419,11 @@ export function AppShell() {
       return []
     }
   })
+  // Whether the user has ever customised their shortcuts, vs. `mobileKeys` merely being *empty*
+  // because nothing was ever saved. Without this, deliberately removing both shortcuts is
+  // indistinguishable from never having chosen any, and "up to two" can never actually mean
+  // zero — the length check alone always falls back to the defaults.
+  const hasCustomizedNav = useRef(localStorage.getItem('hs-mobile-nav') !== null)
   const { enabledKeys, error: stacksError, refresh: refreshStacks } = useStacks()
   useScrollRestoration()
 
@@ -249,8 +450,18 @@ export function AppShell() {
   const defaultMobileKeys = MOBILE_DEFAULT_SHORTCUT_PRIORITY
     .filter(key => availableKeys.has(key))
     .slice(0, MOBILE_SHORTCUT_SLOTS)
-  const effectiveMobileKeys = mobileKeys.length
-    ? mobileKeys.filter(key => availableKeys.has(key) && key !== 'hub').slice(0, MOBILE_SHORTCUT_SLOTS)
+  // A saved key that's no longer in `availableKeys` means its node got disabled since it was
+  // pinned — not that the user chose to drop it — so that slot is backfilled from the defaults
+  // rather than just shrinking the bar. A saved list that's simply shorter than
+  // MOBILE_SHORTCUT_SLOTS (deliberately, via toggleMobileKey) is never backfilled: the user
+  // asked for fewer, including genuinely zero.
+  const rawSavedKeys = mobileKeys.filter(key => key !== 'hub')
+  const validSavedKeys = rawSavedKeys.filter(key => availableKeys.has(key))
+  const disabledSlotCount = rawSavedKeys.length - validSavedKeys.length
+  const backfillPool = MOBILE_DEFAULT_SHORTCUT_PRIORITY
+    .filter(key => availableKeys.has(key) && !validSavedKeys.includes(key))
+  const effectiveMobileKeys = hasCustomizedNav.current
+    ? [...validSavedKeys, ...backfillPool.slice(0, disabledSlotCount)].slice(0, MOBILE_SHORTCUT_SLOTS)
     : defaultMobileKeys
   const mobileShortcuts = effectiveMobileKeys
     .map(key => stackNav.find(item => item.key === key))
@@ -264,6 +475,10 @@ export function AppShell() {
   // Mobile-only: the top bar shows Back instead of the destination icon once you're inside a
   // subscreen (docs/36 §4.1) — a route nested below the matched stack's own base route.
   const isNestedRoute = Boolean(currentNav && location.pathname !== currentNav.route)
+  const goBack = () => {
+    if (hasInAppHistory) navigate(-1)
+    else navigate(currentNav?.route ?? '/hub')
+  }
   const contextualGuide = currentNav && !['settings', 'users'].includes(currentNav.key) && !hiddenGuides.includes(currentNav.key)
     ? currentNav
     : null
@@ -278,29 +493,13 @@ export function AppShell() {
 
   const toggleMobileKey = (key: string) => {
     if (key === 'hub') return // Home always has the fixed bottom-bar slot; nothing to toggle.
-    setMobileKeys(previous => {
-      const current = previous.filter(item => availableKeys.has(item) && item !== 'hub')
-      const effective = current.length ? current : effectiveMobileKeys
-      const next = effective.includes(key)
-        ? effective.filter(item => item !== key)
-        : effective.length < MOBILE_SHORTCUT_SLOTS ? [...effective, key] : effective
-      localStorage.setItem('hs-mobile-nav', JSON.stringify(next))
-      return next
-    })
+    hasCustomizedNav.current = true
+    const next = effectiveMobileKeys.includes(key)
+      ? effectiveMobileKeys.filter(item => item !== key)
+      : effectiveMobileKeys.length < MOBILE_SHORTCUT_SLOTS ? [...effectiveMobileKeys, key] : effectiveMobileKeys
+    localStorage.setItem('hs-mobile-nav', JSON.stringify(next))
+    setMobileKeys(next)
   }
-
-  // Close the More sheet on Escape.
-  useEffect(() => {
-    if (!moreOpen) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMoreOpen(false) }
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    window.addEventListener('keydown', onKey)
-    return () => {
-      document.body.style.overflow = previousOverflow
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [moreOpen])
 
   useEffect(() => {
     setMoreOpen(false)
@@ -420,7 +619,7 @@ export function AppShell() {
       </aside>
 
       {/* Main content */}
-      <div className="flex min-h-screen flex-1 flex-col md:ml-[272px]">
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col md:ml-[272px]">
         <header className="sticky top-0 z-10 h-[62px] border-b border-line bg-surface/82 backdrop-blur-xl md:h-[68px]">
           <div className={`${CONTENT_CONTAINER} flex h-full items-center gap-1.5`}>
           <div className="mr-auto flex min-w-0 items-center gap-2.5">
@@ -429,7 +628,7 @@ export function AppShell() {
                 and More sheet on phone; desktop keeps its full top bar unchanged (§8 Phase 3). */}
             {isNestedRoute && (
               <button
-                onClick={() => navigate(-1)}
+                onClick={goBack}
                 aria-label="Back"
                 className="-ml-1.5 grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl text-2xl text-muted transition-colors hover:bg-sunken hover:text-ink md:hidden"
               >
@@ -485,7 +684,7 @@ export function AppShell() {
             <InlineAlert message={stacksError} onRetry={refreshStacks} />
           </div>
         )}
-        <main className={`${CONTENT_CONTAINER} flex-1 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] md:py-7 md:pb-8`}>
+        <main className={`${CONTENT_CONTAINER} min-w-0 flex-1 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] md:py-7 md:pb-8`}>
           <Outlet />
         </main>
       </div>
@@ -530,157 +729,25 @@ export function AppShell() {
         </button>
       </nav>
 
-      {/* Mobile destination directory + profile/preferences. */}
       {moreOpen && (
-        <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true" aria-label="HomeStack navigation">
-          <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" onClick={() => setMoreOpen(false)} />
-          <div className="absolute inset-x-0 bottom-0 max-h-[90vh] overflow-y-auto rounded-t-[2rem] border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] shadow-card">
-            <div className="sticky top-0 z-10 border-b border-line bg-surface/95 px-5 pb-3 pt-2 backdrop-blur-xl">
-              <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-line-strong" />
-              <div className="flex items-center justify-between">
-                <span>
-                  <span className="block text-base font-extrabold text-ink">Go anywhere</span>
-                  <span className="block text-xs text-muted">All your household spaces in one place</span>
-                </span>
-                <button onClick={() => setMoreOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl text-muted hover:bg-sunken" aria-label="Close">✕</button>
-              </div>
-            </div>
-
-            <div className="space-y-5 p-4">
-              {user && (
-                <div className="rounded-3xl border border-line p-3.5" style={{ background: `linear-gradient(135deg, ${softColour(user.colour || '#1d7a91', '18')}, var(--hs-surface) 68%)` }}>
-                  <div className="flex items-center gap-3">
-                    <Avatar name={user.display_name} colour={user.colour} avatar={user.avatar} size="md" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-extrabold text-ink">{user.display_name}</p>
-                      <p className="text-xs font-semibold capitalize text-muted">{user.role} profile</p>
-                    </div>
-                    <button
-                      onClick={() => setEditingProfile(value => !value)}
-                      className="min-h-10 rounded-xl border border-line bg-surface/80 px-3 py-2 text-xs font-bold text-primary shadow-sm"
-                    >
-                      {editingProfile ? 'Done' : 'Edit'}
-                    </button>
-                  </div>
-                  {editingProfile && (
-                    <div className="mt-3">
-                      <ProfileEditor
-                        user={user}
-                        onSaved={u => { updateUser(u); setEditingProfile(false) }}
-                        onClose={() => setEditingProfile(false)}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div>
-                <div className="mb-2 flex items-center justify-between gap-3 px-1">
-                  <span>
-                    <span className="block text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Destinations</span>
-                    {customisingNav && <span className="mt-0.5 block text-[11px] text-muted">Choose up to two shortcuts either side of Add — Home is always shown</span>}
-                  </span>
-                  <button onClick={() => setCustomisingNav(value => !value)} className="min-h-9 rounded-lg px-2 text-xs font-bold text-primary hover:bg-primary-soft">
-                    {customisingNav ? 'Finish editing' : 'Edit bottom bar'}
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {stackNav.map(item => {
-                    const pinned = effectiveMobileKeys.includes(item.key)
-                    if (customisingNav) {
-                      if (item.key === 'hub') return null // Home's slot is fixed; nothing to choose.
-                      return (
-                        <button
-                          key={item.route}
-                          onClick={() => toggleMobileKey(item.key)}
-                          disabled={!pinned && effectiveMobileKeys.length >= MOBILE_SHORTCUT_SLOTS}
-                          className={`relative flex min-h-[72px] items-center gap-2.5 rounded-2xl border p-2.5 text-left transition-all ${
-                            pinned ? 'border-primary/40 bg-primary-soft text-primary' : 'border-line bg-surface text-muted-strong disabled:opacity-40'
-                          }`}
-                        >
-                          <span className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl text-xl" style={{ background: softColour(item.colour, '18') }}>{item.icon}</span>
-                          <span className="min-w-0">
-                            <span className="block truncate text-sm font-extrabold">{item.label}</span>
-                            <span className="mt-0.5 block text-[11px] font-medium opacity-70">{pinned ? 'In bottom bar' : 'Add to bottom bar'}</span>
-                          </span>
-                          <span className="absolute right-2 top-1.5 text-xs font-black">{pinned ? '✓' : '+'}</span>
-                        </button>
-                      )
-                    }
-                    return (
-                      <NavLink
-                        key={item.route}
-                        to={item.route}
-                        onClick={() => setMoreOpen(false)}
-                        style={({ isActive }) => (isActive ? { borderColor: item.colour, background: softColour(item.colour, '14'), color: item.colour } : undefined)}
-                        className={({ isActive }) => `flex min-h-[76px] items-center gap-2.5 rounded-2xl border p-2.5 text-left transition-all ${isActive ? 'shadow-sm' : 'border-line bg-surface text-muted-strong active:scale-[0.98]'}`}
-                      >
-                        <span className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-2xl text-2xl" style={{ background: softColour(item.colour, '18') }}>{item.icon}</span>
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-extrabold">{item.label}</span>
-                          <span className="mt-1 block text-[11px] leading-tight opacity-70">{item.description}</span>
-                        </span>
-                      </NavLink>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <p className="mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Quick actions</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => { setMoreOpen(false); setSearchOpen(true) }} className="flex min-h-12 items-center gap-2 rounded-2xl border border-line bg-surface px-3 text-sm font-bold text-ink"><span className="text-lg">⌕</span> Search</button>
-                  <button onClick={() => { setMoreOpen(false); setQuickOpen(true) }} className="flex min-h-12 items-center gap-2 rounded-2xl bg-primary px-3 text-sm font-bold text-white shadow-soft"><span className="text-lg">＋</span> Add something</button>
-                </div>
-              </div>
-
-              {adminNav.length > 0 && (
-                <div>
-                  <p className="mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Manage</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {adminNav.map(item => (
-                      <NavLink key={item.route} to={item.route} onClick={() => setMoreOpen(false)} className={({ isActive }) => `flex min-h-[64px] items-center gap-2.5 rounded-2xl border px-3 text-left ${isActive ? 'border-primary bg-primary-soft text-primary' : 'border-line bg-surface text-muted-strong'}`}>
-                        <span className="text-xl">{item.icon}</span>
-                        <span className="min-w-0"><span className="block truncate text-sm font-bold">{item.label}</span><span className="block truncate text-[11px] text-muted">{item.description}</span></span>
-                      </NavLink>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <p className="mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">App & session</p>
-                <div className="overflow-hidden rounded-2xl border border-line bg-surface">
-                  <button
-                    onClick={() => { setDark(!dark); }}
-                    className="flex min-h-12 w-full items-center gap-3 border-b border-line px-3 text-left text-sm font-semibold text-muted-strong hover:bg-sunken"
-                  >
-                    <span className="text-lg w-6 text-center">{dark ? '☀' : '☾'}</span>
-                    {dark ? 'Light mode' : 'Dark mode'}
-                  </button>
-                  <a
-                    href="/kiosk"
-                    className="flex min-h-12 items-center gap-3 border-b border-line px-3 text-sm font-semibold text-muted-strong hover:bg-sunken"
-                  >
-                    <span className="text-lg w-6 text-center">▣</span>
-                    Enter kiosk
-                  </a>
-                  {user && (
-                    <button
-                      onClick={() => { setMoreOpen(false); logout() }}
-                      className="flex min-h-12 w-full items-center gap-3 px-3 text-left text-sm font-semibold text-muted-strong hover:bg-danger-soft hover:text-danger"
-                    >
-                      <span className="text-lg w-6 text-center">⊗</span>
-                      Sign out
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <p className="border-t border-line px-1 pt-4 text-center text-[10px] font-medium text-muted/45">HomeStack v{APP_VERSION}</p>
-            </div>
-          </div>
-        </div>
+        <MoreSheet
+          user={user}
+          editingProfile={editingProfile}
+          setEditingProfile={setEditingProfile}
+          updateUser={updateUser}
+          stackNav={stackNav}
+          customisingNav={customisingNav}
+          setCustomisingNav={setCustomisingNav}
+          effectiveMobileKeys={effectiveMobileKeys}
+          toggleMobileKey={toggleMobileKey}
+          adminNav={adminNav}
+          dark={dark}
+          setDark={setDark}
+          onSearch={() => setSearchOpen(true)}
+          onQuickCreate={() => setQuickOpen(true)}
+          logout={logout}
+          onClose={() => setMoreOpen(false)}
+        />
       )}
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} enabledKeys={enabledKeys} />
       <QuickCreate open={quickOpen} onClose={() => setQuickOpen(false)} enabledKeys={enabledKeys} />

@@ -18,6 +18,7 @@ export function MobileListRow({
   to,
   onClick,
   chevron,
+  compact = false,
   className = '',
 }: {
   icon?: ReactNode
@@ -28,10 +29,16 @@ export function MobileListRow({
   onClick?: () => void
   /** Defaults to true whenever the row is interactive (to/onClick given). */
   chevron?: boolean
+  /** Real content — an assignment, a maintenance job, a book title — rarely fits one line
+   * without losing the information that made it worth reading. Title/subtitle wrap to ~2 lines
+   * by default; pass `compact` for rows that genuinely need one line (a dense settings list, a
+   * short fixed-format value) rather than truncating everywhere out of habit. */
+  compact?: boolean
   className?: string
 }) {
   const interactive = Boolean(to || onClick)
   const showChevron = chevron ?? interactive
+  const textClamp = compact ? 'truncate' : 'line-clamp-2'
 
   const content = (
     <>
@@ -41,8 +48,8 @@ export function MobileListRow({
         </span>
       )}
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[15px] font-semibold text-ink">{title}</div>
-        {subtitle && <div className="truncate text-sm text-muted">{subtitle}</div>}
+        <div className={`${textClamp} text-[15px] font-semibold text-ink`}>{title}</div>
+        {subtitle && <div className={`${textClamp} text-sm text-muted`}>{subtitle}</div>}
       </div>
       {trailing && <div className="flex-shrink-0 text-sm text-muted-strong">{trailing}</div>}
       {showChevron && <span className="flex-shrink-0 text-lg text-muted" aria-hidden="true">›</span>}

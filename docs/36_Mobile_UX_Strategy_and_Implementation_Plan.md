@@ -837,9 +837,13 @@ section navigation and saved feedback.
 
 Do this before converting large nodes.
 
-**Shipped as `frontend/src/components/mobile/`**: `MobileScreenHeader` (Back + title for a
-focused subscreen), `MobileSection` (heading + spacing), `MobileListRow` (whole-row nav/action
-target — `to`, `onClick`, or static), `MobileSettingsRow` (immediate-save switch or
+**Shipped as `frontend/src/components/mobile/`**: `MobileScreenHeader` (title + subtitle +
+contextual actions for a focused subscreen; the app shell is the default owner of mobile Back,
+so this only renders its own Back button behind an explicit `showBack` opt-in — corrected in the
+Phase 3 pass below once a shell-level Back existed to risk duplicating), `MobileSection` (heading
++ spacing), `MobileListRow` (whole-row nav/action target — `to`, `onClick`, or static; title/
+subtitle wrap to ~2 lines by default, since real content routinely needs it, with a `compact`
+opt-in for the rows that genuinely need one line), `MobileSettingsRow` (immediate-save switch or
 navigate-to-subpage row, extracting the `Toggle` pattern `NotificationSettingsPage` had
 duplicated inline), `MobileSummaryCard` (compact attention banner), `StickyActionBar`
 (safe-area-aware bottom actions, offset to clear the bottom nav — reuses the same `5.25rem`
@@ -866,8 +870,8 @@ Implement:
 **Shipped in `frontend/src/features/web/AppShell.tsx`.** Mobile top bar: Search and Create move
 out (`hidden md:flex` — desktop keeps them exactly as before, per this phase's own "desktop
 sidebar behaviour can remain intact"); the destination icon is replaced by a Back button
-(`navigate(-1)`) whenever the route is nested below its stack's base route (`location.pathname
-!== currentNav.route`), mobile-only. Bottom nav is now Home (fixed) → shortcut → **Add** (fixed
+whenever the route is nested below its stack's base route (`location.pathname !==
+currentNav.route`), mobile-only. Bottom nav is now Home (fixed) → shortcut → **Add** (fixed
 centre, opens the same Quick Create sheet the old top-bar button did) → shortcut → More (fixed);
 `MOBILE_SHORTCUT_SLOTS = 2` replaces the old 4-slot `MOBILE_PRIMARY_SLOTS`, and Home is no longer
 a choice in the "Edit bottom bar" customiser since its slot is fixed. Search remains reachable on
@@ -881,7 +885,59 @@ immediately.
 
 Desktop sidebar behaviour can remain intact.
 
-### Phase 4 — Calendar as the reference implementation
+**Correction pass (v0.36.1, external review before Phase 4 landed).** A review against this
+document while Phase 4 was underway found several foundation gaps worth fixing before more
+screens depend on this shell:
+
+- **Back was unsafe on a cold entry.** A bare `navigate(-1)` assumes in-app history exists — untrue
+  for a PWA launch, a push-notification deep link, or a pasted URL, where it could leave HomeStack
+  entirely or land on an unrelated prior browser-history page. `goBack()` now compares
+  `location.key` against the key captured at mount: unchanged means nothing has navigated
+  client-side since landing here, so it falls back to `currentNav.route` (the stack's own base
+  route) instead of trusting history. `e2e/deep-link-back.spec.ts` starts a context directly on a
+  nested route (no `/hub` visit first) to prove it.
+- **Two Back buttons was a real risk.** `MobileScreenHeader` (§5, Phase 2) rendered its own Back
+  unconditionally; a later screen using both it and the shell's contextual Back would show two.
+  The shell is now the default owner — `MobileScreenHeader` only renders Back behind an explicit
+  `showBack` opt-in, documented as the exception, not the default.
+- **44px touch targets, enforced past the top bar.** The notification bell (40×40), the More
+  sheet's close button (36×36) and its Profile-Edit/"Edit bottom bar" buttons (40px/36px tall),
+  and the shared `Modal` close button (32×32) were all under baseline; all now measure ≥44px.
+  `MobileSettingsRow`'s switch keeps its compact 24px-tall visual pill but sits inside a 44×44
+  hit area, per §3.3's "prefer full-row tap targets" without literally enlarging every control.
+  `e2e/mobile-shell.spec.ts`'s new "shell and dialog controls meet the 44px touch-target baseline"
+  test covers the shell/dialog set.
+- **`Modal size="full"` needed a top safe-area too**, not just the bottom inset it already had —
+  an edge-to-edge phone sheet reaches the physical top of the screen, which needs
+  `env(safe-area-inset-top)` on an installed iPhone PWA/notched device the same way the bottom
+  needed `env(safe-area-inset-bottom)` for the home indicator.
+- **`MobileListRow` truncated to one line by default.** Real content — an assignment, a
+  maintenance job, a book title — routinely needs more than one line to stay meaningful. Title/
+  subtitle now `line-clamp-2` by default; a `compact` prop opts back into single-line `truncate`
+  for rows that genuinely need it.
+- **The More sheet had its own, second dialog-accessibility implementation** (Escape + scroll
+  lock only — no focus trap, no autofocus, no restore-focus-on-close) alongside `Modal`'s fuller
+  one. Extracted `useDialogA11y` (`frontend/src/components/useDialogA11y.ts`) out of `Modal` so
+  both share exactly one implementation; the More sheet became its own component (`MoreSheet`,
+  in `AppShell.tsx`) so it could call the hook itself — hooks can't be called conditionally
+  inside a `{moreOpen && ...}` block in an always-mounted parent.
+- **The bottom-bar shortcut list couldn't actually reach zero, and didn't backfill a
+  since-disabled pin.** `effectiveMobileKeys` fell back to defaults whenever the saved list's
+  *length* was falsy, so deliberately removing both shortcuts was indistinguishable from never
+  having customised — "up to two" couldn't mean zero. A `hasCustomizedNav` ref (from whether the
+  `localStorage` key exists at all, not the parsed length) now makes that distinction. Separately,
+  if a household disables a node whose stack was pinned, that slot silently shrank instead of
+  being replenished — a saved key no longer in `availableKeys` means its node disappeared, not
+  that the user chose to drop it, so it's backfilled from the unused defaults; a saved list that's
+  simply shorter than two slots (a deliberate choice) is never topped up.
+- **The Hub Playwright assertion accepted `body` as a fallback** for the expected Home heading,
+  which meant the test could pass even if Hub's actual content went missing. It now checks a real
+  Hub-specific string.
+
+No architectural change: still React/Tailwind/PWA, the same mocked-Playwright-API approach, the
+same shared mobile primitives, the same fixed Home/Add/More bottom nav with two shortcuts.
+
+### Phase 4 — Calendar as the reference implementation — DONE (v0.36.1)
 
 Calendar should establish the canonical patterns for:
 
@@ -894,6 +950,41 @@ Calendar should establish the canonical patterns for:
 - Back behaviour.
 
 Once Calendar feels polished, reuse those patterns elsewhere.
+
+**Shipped in `frontend/src/features/web/pages/CalendarPage.tsx`.** Calendar already had solid
+mobile groundwork (phone month grid, swipe navigation, the mobile view picker, a floating Add
+button, the selected-day bottom sheet) — this phase refined it against §6.2 rather than replacing
+it:
+
+- **Agenda is the default view on phone**, independent of the household's own (typically
+  desktop-oriented) `calendar_default_view` — computed once at mount from `window.innerWidth < 640`
+  (this page's own established mobile/desktop split; the shell's is `md:`/768px, a pre-existing
+  inconsistency between the two not introduced or fixed here) and never overridden by the
+  household-default effect. A stored personal preference (`hs_cal_view` in `localStorage`) always
+  wins over both.
+- **Week is now a horizontal day strip plus the selected day's agenda**, not a squeezed
+  desktop-style 7-column grid stacked into one column. Extracted `DayAgendaList` so the Day view
+  and the phone Week view render the exact same list — one implementation, not two that could
+  drift.
+- **Month cells show a dot per event (up to three) plus an overflow count, not a truncated
+  8px-tall title.** Orientation, not full content, per §6.2 — the day's actual events live one tap
+  away in the existing day sheet.
+- **Event create/edit is now `Modal size="full"`** — the near/full-height phone sheet with a
+  sticky Save this section and Phase 2's Modal work both called for; desktop is unchanged (capped
+  at the normal `'lg'` width).
+- **Found and fixed in passing: `AppShell`'s `<main>` was never actually width-constrained to the
+  viewport.** It's a flex item of a flex-column wrapper, and flex items default to
+  `min-width: auto` — letting their content's own minimum size win over the container's, rather
+  than shrinking to fit. This was latent (no existing page had a wide enough non-wrapping row to
+  expose it) until Calendar's new week-day-strip did. Fixed with `min-w-0` on `<main>` and its
+  flex-column parent — a shell-level fix, not something Calendar itself needed to work around, so
+  every future page benefits from it, not just Calendar.
+
+**New `e2e/calendar.spec.ts`** (mobile view defaults, the Month/Week/day-sheet interactions, the
+full-sheet editor) **and new `e2e/deep-link-back.spec.ts`, plus the Phase 3 correction-pass
+additions to `e2e/mobile-shell.spec.ts`** (touch-target coverage, More-sheet focus trap/restore,
+the tightened Hub assertion). 20 Playwright test definitions total, 63 passing across the four
+viewport projects (stable across repeated runs); `tsc --noEmit` and `npm run build` both clean.
 
 ### Phase 5 — Homestead
 

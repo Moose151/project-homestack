@@ -13,7 +13,9 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('Hub renders without horizontal overflow', async ({ page }) => {
-  await expect(page.getByRole('heading', { name: 'Home', exact: true }).first().or(page.locator('body'))).toBeVisible()
+  // A real Hub-specific element, not a "the page rendered *something*" fallback — this must
+  // fail if Hub's actual content goes missing, not just if the whole app fails to boot.
+  await expect(page.getByText('Nothing needs your attention right now.')).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })
 
@@ -74,9 +76,48 @@ test.describe('phone layout', () => {
     await expectNoHorizontalOverflow(page)
   })
 
+  test('More sheet traps focus while open and restores it to the More button on close', async ({ page }) => {
+    const nav = page.getByRole('navigation', { name: 'Main navigation' })
+    const moreButton = nav.getByRole('button', { name: /More navigation|open all destinations/ })
+    await moreButton.click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    // useDialogA11y moves focus into the sheet on open (the shared hook Modal itself uses) —
+    // checked as real DOM containment, not just "the dialog happens to contain this text".
+    const focusIsInsideDialog = await page.evaluate(() =>
+      document.querySelector('[role="dialog"]')?.contains(document.activeElement) ?? false)
+    expect(focusIsInsideDialog).toBe(true)
+    await page.keyboard.press('Escape')
+    await expect(dialog).not.toBeVisible()
+    await expect(moreButton).toBeFocused()
+  })
+
+  test('shell and dialog controls meet the 44px touch-target baseline', async ({ page }) => {
+    await expectMinTouchTarget(page.getByRole('button', { name: 'Notifications' }))
+    const nav = page.getByRole('navigation', { name: 'Main navigation' })
+    await nav.getByRole('button', { name: /More navigation|open all destinations/ }).click()
+    await expectMinTouchTarget(page.getByRole('button', { name: 'Close' }))
+    await expectMinTouchTarget(page.getByRole('button', { name: 'Edit', exact: true }))
+    await expectMinTouchTarget(page.getByRole('button', { name: 'Edit bottom bar' }))
+  })
+
   test('a nested route shows Back instead of the destination icon', async ({ page }) => {
     // /corners/:personId is nested below the core /corners route (src/config/stacks.ts) —
     // any such route exercises the same Back-vs-icon branch without needing node-specific mocks.
+    // CornerPage does need a real CornerResponse shape to avoid crashing on render (see
+    // deep-link-back.spec.ts) — registered here, after the shared beforeEach's broader mock,
+    // so it takes precedence for this one path (Playwright checks routes most-recently-added
+    // first).
+    await page.route('**/api/v1/corners/1/', async route => {
+      await route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({
+          person: { id: 1, display_name: 'Test User', preferred_name: 'Test User', avatar: '', colour: '#1d7a91', profile_type: 'adult', linked_user_id: 1, date_of_birth: null, name: 'Test User', is_me: true },
+          summary: { activity_count: 0, assignment_count: 0, collection_count: 0 },
+          activity: [], assignments: [], collections: [],
+        }),
+      })
+    })
     await page.goto('/corners/1')
     await expect(page.getByRole('button', { name: 'Back' })).toBeVisible()
     await expectNoHorizontalOverflow(page)

@@ -167,6 +167,9 @@ export function EventModal({
     <Modal
       title={title}
       onClose={onClose}
+      // docs/36 §6.2: create/edit becomes a near/full-height phone sheet with sticky Save — the
+      // 'full' size is edge-to-edge/near-viewport-height on phone, capped at 'lg' on desktop.
+      size="full"
       footer={
         <>
           {event && <button onClick={remove} className="mr-auto text-sm text-danger hover:underline">Delete</button>}
@@ -603,6 +606,44 @@ function AgendaView({ events, rotations, colourFor, time24, onOpen, onOpenRotati
 }
 
 // ---------------------------------------------------------------------------
+// A single day's events as a vertical list — the Day view's own content, reused by the phone
+// Week view's horizontal-day-strip-plus-agenda pattern (docs/36 §6.2) so the two never drift.
+// ---------------------------------------------------------------------------
+
+function DayAgendaList({ date, dayEvents, dayRotations, colourFor, time24, canEditCalendar, onOpen, onOpenRotation }: {
+  date: Date
+  dayEvents: (d: Date) => CalendarEvent[]
+  dayRotations: (d: Date) => RotatingScheduleOccurrence[]
+  colourFor: (e: CalendarEvent) => string
+  time24: boolean
+  canEditCalendar: boolean
+  onOpen: (e: CalendarEvent) => void
+  onOpenRotation: (occurrence: RotatingScheduleOccurrence) => void
+}) {
+  const events = dayEvents(date)
+  const rotations = dayRotations(date)
+  return (
+    <div className="flex flex-col gap-2">
+      {rotations.map(occurrence => (
+        <RotationBadge key={occurrence.id} occurrence={occurrence} onClick={canEditCalendar ? () => onOpenRotation(occurrence) : undefined} />
+      ))}
+      {events.length === 0 ? (
+        <EmptyState icon="📅" title="No events scheduled" hint="Use the quick-add above, or “New event” for full details." />
+      ) : events.map(e => (
+        <button key={e.id} onClick={() => onOpen(e)} className="flex items-start gap-4 p-4 rounded-xl border border-line hover:bg-sunken text-left">
+          <div className="w-16 text-xs text-primary font-semibold tabular-nums flex-shrink-0">{e.is_all_day ? 'All day' : fmtTime(e.start_at, time24)}</div>
+          <div className="flex-1 min-w-0" style={{ borderLeft: `3px solid ${colourFor(e)}`, paddingLeft: 10 }}>
+            <p className="font-medium text-ink">{e.title}</p>
+            {e.location && <p className="text-xs text-muted">{e.location}</p>}
+            {e.source_node && <span className="text-xs text-muted capitalize">{e.source_node}</span>}
+          </div>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Calendar page
 // ---------------------------------------------------------------------------
 
@@ -613,12 +654,23 @@ const linkedDate = () => {
   const d = new Date(`${raw}T00:00:00`)
   return Number.isNaN(d.getTime()) ? null : d
 }
+// This page's own mobile/desktop split is the `sm:` breakpoint (matching every `sm:hidden`/
+// `hidden sm:block` below), not the app shell's `md:` — kept consistent with itself rather than
+// introduced fresh here.
+const isPhoneViewport = () => typeof window !== 'undefined' && window.innerWidth < 640
 
 export function CalendarPage() {
   const { user } = useAuth()
   const { household } = useStacks()
   const initialLinkedDate = linkedDate()
-  const [view, setView] = useState<View>(() => initialLinkedDate ? 'day' : lsGet('hs_cal_view', 'month') as View)
+  const [view, setView] = useState<View>(() => {
+    if (initialLinkedDate) return 'day'
+    const stored = localStorage.getItem('hs_cal_view')
+    if (stored) return stored as View
+    // docs/36 §6.2: Agenda is the default everyday reading mode on phone, independent of the
+    // household's own (typically desktop-oriented) default — never overridden below either.
+    return isPhoneViewport() ? 'agenda' : 'month'
+  })
   const [weekStart, setWeekStart] = useState<number>(() => Number(lsGet('hs_cal_weekstart', '1')))
   const [time24, setTime24] = useState<boolean>(() => lsGet('hs_cal_24h', '0') === '1')
   const [anchor, setAnchor] = useState(() => initialLinkedDate ?? new Date())
@@ -659,7 +711,7 @@ export function CalendarPage() {
   useEffect(() => {
     if (!household || householdApplied.current) return
     householdApplied.current = true
-    if (!initialLinkedDate && !storedRef.current.view) setView(household.calendar_default_view)
+    if (!initialLinkedDate && !storedRef.current.view && !isPhoneViewport()) setView(household.calendar_default_view)
     if (!storedRef.current.weekStart) setWeekStart(household.calendar_week_start)
     if (!storedRef.current.time24) setTime24(household.calendar_time_format === '24h')
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -863,7 +915,7 @@ export function CalendarPage() {
   }
 
   const quickAdd = async (text: string) => {
-    const p = parseQuickEvent(text, view === 'day' ? anchor : new Date())
+    const p = parseQuickEvent(text, view === 'day' || view === 'week' ? anchor : new Date())
     try {
       await api.createEvent({
         title: p.title,
@@ -1030,8 +1082,8 @@ export function CalendarPage() {
         </div>
       )}
 
-      {canEditCalendar && (view === 'day' || view === 'agenda') && (
-        <QuickAddBar baseDate={view === 'day' ? anchor : new Date()} time24={time24} onAdd={quickAdd} />
+      {canEditCalendar && (view === 'day' || view === 'week' || view === 'agenda') && (
+        <QuickAddBar baseDate={view === 'day' || view === 'week' ? anchor : new Date()} time24={time24} onAdd={quickAdd} />
       )}
 
       {/* The legend explains the colours; the forecasting hint explains the arrows. They were
@@ -1089,15 +1141,14 @@ export function CalendarPage() {
                       {occurrence && <span className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: occurrence.colour }} />}
                       <span className={`inline-grid h-6 min-w-6 place-items-center rounded-full px-1 text-xs font-bold ${isToday(day) ? 'bg-primary text-white' : ''}`}>{day.getDate()}</span>
                       {occurrence?.is_override && <span className="absolute right-1 top-2 text-[8px] font-black text-primary" aria-label="Changed day">S</span>}
+                      {/* Month is for orientation, not full event content (docs/36 §6.2) — a
+                          dot per event plus an overflow count, not a truncated illegible title. */}
                       {dayItems.length > 0 && (
-                        <span className="absolute inset-x-1 bottom-1 flex min-w-0 items-center gap-0.5" aria-hidden>
-                          <span
-                            className="min-w-0 flex-1 truncate rounded-[3px] px-0.5 py-px text-[8px] font-bold leading-[11px] text-ink"
-                            style={{ backgroundColor: `${colourFor(dayItems[0])}30`, borderLeft: `2px solid ${colourFor(dayItems[0])}` }}
-                          >
-                            {dayItems[0].title}
-                          </span>
-                          {dayItems.length > 1 && <span className="flex-shrink-0 text-[8px] font-black text-muted">+{dayItems.length - 1}</span>}
+                        <span className="absolute inset-x-1 bottom-1.5 flex min-w-0 items-center justify-center gap-0.5" aria-hidden>
+                          {dayItems.slice(0, 3).map((item, i) => (
+                            <span key={i} className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: colourFor(item) }} />
+                          ))}
+                          {dayItems.length > 3 && <span className="flex-shrink-0 text-[8px] font-black text-muted">+{dayItems.length - 3}</span>}
                         </span>
                       )}
                     </button>
@@ -1156,42 +1207,63 @@ export function CalendarPage() {
           </div>
         </>
       ) : view === 'week' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-7 gap-2">
-          {Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(anchor, weekStart), i)).map(d => (
-            <div
-              key={d.toDateString()}
-              className="rounded-xl border border-line p-2 min-h-[72px] sm:min-h-[120px] text-left hover:bg-sunken/40"
-            >
-              <button type="button" onClick={() => openNew(d)} className={`mb-2 min-h-8 w-full text-left text-xs font-semibold ${isToday(d) ? 'text-primary' : 'text-muted-strong'}`}>
-                {d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })}
-              </button>
-              <div className="flex flex-col gap-1">
-                {dayRotations(d).map(occurrence => (
-                  <RotationBadge key={occurrence.id} occurrence={occurrence} compact onClick={canEditCalendar ? () => openRotation(occurrence) : undefined} />
-                ))}
-                {dayEvents(d).map(e => <EventChip key={e.id} event={e} colour={colourFor(e)} time24={time24} onClick={() => openEvent(e)} />)}
-              </div>
+        <>
+          {/* Phone: a horizontal day strip (date + a dot per source, not a squeezed 7-column
+              grid) plus the selected day's agenda below — docs/36 §6.2's week pattern, reusing
+              the exact Day-view list so the two never drift. */}
+          <div className="flex w-full min-w-0 flex-col gap-3 sm:hidden">
+            <div className="flex w-full min-w-0 gap-1.5 overflow-x-auto pb-1">
+              {Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(anchor, weekStart), i)).map(d => {
+                const selected = sameDay(d, anchor)
+                const dayItems = dayEvents(d)
+                const occurrence = dayRotations(d)[0]
+                return (
+                  <button
+                    key={d.toDateString()}
+                    type="button"
+                    onClick={() => setAnchor(d)}
+                    aria-pressed={selected}
+                    className={`flex min-h-[64px] min-w-[46px] flex-shrink-0 flex-col items-center gap-1 rounded-2xl border px-2 py-2 transition-colors ${selected ? 'border-primary bg-primary-soft' : 'border-line bg-surface'}`}
+                  >
+                    <span className={`text-[10px] font-bold uppercase ${selected ? 'text-primary' : 'text-muted'}`}>{d.toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 2)}</span>
+                    <span className={`grid h-7 w-7 place-items-center rounded-full text-sm font-bold ${isToday(d) ? 'bg-primary text-white' : selected ? 'text-primary' : 'text-ink'}`}>{d.getDate()}</span>
+                    <span className="flex h-1.5 gap-0.5">
+                      {occurrence && <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: occurrence.colour }} />}
+                      {dayItems.length > 0 && <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: colourFor(dayItems[0]) }} />}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
-          ))}
-        </div>
-      ) : view === 'day' ? (
-        <div className="flex flex-col gap-2">
-          {dayRotations(anchor).map(occurrence => (
-            <RotationBadge key={occurrence.id} occurrence={occurrence} onClick={canEditCalendar ? () => openRotation(occurrence) : undefined} />
-          ))}
-          {dayEvents(anchor).length === 0 ? (
-            <EmptyState icon="📅" title="No events scheduled" hint="Use the quick-add above, or “New event” for full details." />
-          ) : dayEvents(anchor).map(e => (
-            <button key={e.id} onClick={() => openEvent(e)} className="flex items-start gap-4 p-4 rounded-xl border border-line hover:bg-sunken text-left">
-              <div className="w-16 text-xs text-primary font-semibold tabular-nums flex-shrink-0">{e.is_all_day ? 'All day' : fmtTime(e.start_at, time24)}</div>
-              <div className="flex-1 min-w-0" style={{ borderLeft: `3px solid ${colourFor(e)}`, paddingLeft: 10 }}>
-                <p className="font-medium text-ink">{e.title}</p>
-                {e.location && <p className="text-xs text-muted">{e.location}</p>}
-                {e.source_node && <span className="text-xs text-muted capitalize">{e.source_node}</span>}
+            <DayAgendaList
+              date={anchor} dayEvents={dayEvents} dayRotations={dayRotations} colourFor={colourFor}
+              time24={time24} canEditCalendar={canEditCalendar} onOpen={openEvent} onOpenRotation={openRotation}
+            />
+          </div>
+          <div className="hidden grid-cols-7 gap-2 sm:grid">
+            {Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(anchor, weekStart), i)).map(d => (
+              <div
+                key={d.toDateString()}
+                className="rounded-xl border border-line p-2 min-h-[120px] text-left hover:bg-sunken/40"
+              >
+                <button type="button" onClick={() => openNew(d)} className={`mb-2 min-h-8 w-full text-left text-xs font-semibold ${isToday(d) ? 'text-primary' : 'text-muted-strong'}`}>
+                  {d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })}
+                </button>
+                <div className="flex flex-col gap-1">
+                  {dayRotations(d).map(occurrence => (
+                    <RotationBadge key={occurrence.id} occurrence={occurrence} compact onClick={canEditCalendar ? () => openRotation(occurrence) : undefined} />
+                  ))}
+                  {dayEvents(d).map(e => <EventChip key={e.id} event={e} colour={colourFor(e)} time24={time24} onClick={() => openEvent(e)} />)}
+                </div>
               </div>
-            </button>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
+      ) : view === 'day' ? (
+        <DayAgendaList
+          date={anchor} dayEvents={dayEvents} dayRotations={dayRotations} colourFor={colourFor}
+          time24={time24} canEditCalendar={canEditCalendar} onOpen={openEvent} onOpenRotation={openRotation}
+        />
       ) : (
         <AgendaView
           events={visibleEvents}

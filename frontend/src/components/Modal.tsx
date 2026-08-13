@@ -1,6 +1,7 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
+import { useDialogA11y } from './useDialogA11y'
 
-/** Shared modal/dialog: backdrop, Escape-to-close, click-outside, scroll lock. */
+/** Shared modal/dialog: backdrop, Escape-to-close, click-outside, focus trap, scroll lock. */
 export function Modal({
   title,
   onClose,
@@ -18,42 +19,7 @@ export function Modal({
   size?: 'sm' | 'md' | 'lg' | 'full'
 }) {
   const titleId = useId()
-  const dialogRef = useRef<HTMLDivElement>(null)
-  const closeRef = useRef(onClose)
-  closeRef.current = onClose
-
-  useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeRef.current()
-      if (e.key === 'Tab' && dialogRef.current) {
-        const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
-        )]
-        if (!focusable.length) return
-        const first = focusable[0]
-        const last = focusable[focusable.length - 1]
-        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
-        if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
-      }
-    }
-    document.addEventListener('keydown', onKey)
-    document.body.style.overflow = 'hidden'
-    const frame = requestAnimationFrame(() => {
-      // React never renders an `autofocus` attribute, so a dialog that wants a specific control
-      // focused marks it `data-autofocus`; otherwise focus falls to the first control, which in
-      // document order is the header's close button.
-      const dialog = dialogRef.current
-      const preferred = dialog?.querySelector<HTMLElement>('[data-autofocus]')
-      ;(preferred ?? dialog?.querySelector<HTMLElement>('input, select, textarea, button'))?.focus()
-    })
-    return () => {
-      cancelAnimationFrame(frame)
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = ''
-      previouslyFocused?.focus()
-    }
-  }, [])
+  const dialogRef = useDialogA11y(onClose)
 
   const maxW = size === 'sm' ? 'max-w-sm' : size === 'lg' || size === 'full' ? 'max-w-2xl' : 'max-w-lg'
   const isFull = size === 'full'
@@ -70,7 +36,10 @@ export function Modal({
         ref={dialogRef}
         className={`flex w-full ${maxW} flex-col overflow-y-auto bg-surface shadow-card ${
           isFull
-            ? 'h-[100dvh] max-h-[100dvh] rounded-none sm:h-auto sm:max-h-[92vh] sm:rounded-2xl'
+            // Edge-to-edge on phone reaches the physical top of the screen, so an installed
+            // iPhone PWA/notched device needs its own top inset — the bottom padding on the
+            // non-full sheet only ever had to clear the home indicator, not a notch/status bar.
+            ? 'h-[100dvh] max-h-[100dvh] rounded-none pt-[env(safe-area-inset-top)] sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:pt-0'
             : 'max-h-[92vh] rounded-t-2xl pb-[env(safe-area-inset-bottom)] sm:rounded-2xl sm:pb-0'
         }`}
         onClick={e => e.stopPropagation()}
@@ -80,7 +49,7 @@ export function Modal({
             <h2 id={titleId} className="text-base font-bold text-ink">{title}</h2>
             <button
               onClick={onClose}
-              className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg text-muted transition-colors hover:bg-sunken hover:text-ink"
+              className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-lg text-muted transition-colors hover:bg-sunken hover:text-ink"
               aria-label="Close"
             >
               ✕

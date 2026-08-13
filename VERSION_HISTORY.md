@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.36.0**
+> **Current version: 0.36.1**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,48 @@
 ---
 
 ## 0.36 — Mobile UX v1 (on feature/mobile-ux)
+
+### 0.36.1 — 2026-08-13 — Calendar as the mobile reference implementation, plus a Phase 1-3 correction pass (docs/36 Phase 4, on feature/mobile-ux)
+- **Phase 4 — Calendar.** Agenda is now the default view on phone (computed from
+  `window.innerWidth < 640`, this page's own established mobile split — independent of the
+  household's typically desktop-oriented `calendar_default_view`, and never overridden once set;
+  a stored personal preference always wins over both). Week is now a horizontal day strip plus
+  the selected day's agenda, not a squeezed desktop grid stacked into one column — extracted
+  `DayAgendaList` so Day view and phone Week view share one implementation rather than two that
+  could drift. Month cells show a dot per event (up to three) plus an overflow count instead of a
+  truncated, barely-legible 8px title. Event create/edit is now `Modal size="full"` — a
+  near/full-height phone sheet with sticky Save, desktop unchanged. **Found and fixed in
+  passing:** `AppShell`'s `<main>` was never actually width-constrained to the viewport — a flex
+  item of a flex-column wrapper defaults to `min-width: auto`, letting content win over the
+  container. Latent until Calendar's new non-wrapping week-day-strip exposed it; fixed with
+  `min-w-0` on `<main>` and its flex-column parent, a shell-level fix every page benefits from.
+- **Correction pass — an external review of Phases 1-3 before Phase 4 landed.** Back was unsafe
+  on a cold entry (PWA launch, push-notification deep link, pasted URL): `navigate(-1)` assumes
+  in-app history that might not exist. `goBack()` now compares `location.key` against the key
+  captured at mount and falls back to the stack's own base route when nothing has navigated
+  client-side yet; `e2e/deep-link-back.spec.ts` starts a fresh context directly on a nested route
+  to prove it. `MobileScreenHeader` no longer renders its own Back by default (the shell is the
+  default owner; a screen opts in via `showBack` for the genuine exception) — guards against two
+  Back buttons once a later phase uses both. Touch targets under the 44px baseline are fixed: the
+  notification bell (40→44), the More sheet's close button (36→44) and Profile-Edit/"Edit bottom
+  bar" buttons (40/36→44px tall), the shared `Modal` close button (32→44); `MobileSettingsRow`'s
+  switch keeps its compact 24px pill inside a 44×44 hit area. `Modal size="full"` gained a top
+  `env(safe-area-inset-top)` to match the inset it already had on the bottom. `MobileListRow`
+  title/subtitle now `line-clamp-2` by default (real content routinely needs more than one line),
+  with a `compact` opt-in for rows that genuinely need one. The More sheet's own,
+  second dialog-accessibility implementation (Escape + scroll lock only) is gone — extracted
+  `useDialogA11y` out of `Modal` so both share one focus-trap/autofocus/restore-focus
+  implementation; the More sheet became its own `MoreSheet` component so it could call the hook
+  (hooks can't be called conditionally inside an always-mounted `{moreOpen && ...}` block). The
+  bottom-bar shortcut list couldn't persist genuinely zero shortcuts (an empty saved list read as
+  "never customised" and fell back to defaults) and didn't backfill a slot when a pinned node
+  later got disabled (silently shrinking the bar instead of replacing it) — both fixed via a
+  `hasCustomizedNav` flag and a backfill-only-for-disabled-slots rule that still respects a
+  deliberately shorter list. The Hub Playwright test no longer accepts `body` as a fallback for
+  the expected heading. Full detail in docs/36's Phase 3 "Correction pass" note.
+- **20 Playwright test definitions, 63 passing across the four viewport projects (stable across
+  repeated runs); `tsc --noEmit` and `npm run build` both clean; backend untouched.** Still on
+  `feature/mobile-ux`, not merged to `main`.
 
 ### 0.36.0 — 2026-08-13 — Mobile contract, shared primitives and a redesigned AppShell (docs/36 Phases 1-3, on feature/mobile-ux)
 - **Phase 1 — mobile contract + Playwright.** New `frontend/playwright.config.ts` (four
