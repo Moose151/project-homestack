@@ -1339,6 +1339,8 @@ export const api = {
   getVapidPublicKey: (): Promise<{ public_key: string }> =>
     _fetch('/notifications/vapid-public-key/'),
   getPushDevices: (): Promise<PushDevice[]> => _fetch('/notifications/devices/'),
+  getCurrentPushDevice: (endpoint: string): Promise<{ device_id: number | null }> =>
+    _fetch('/notifications/devices/current/', { method: 'POST', body: JSON.stringify({ endpoint }) }),
   registerPushDevice: (data: { endpoint: string; keys: { p256dh: string; auth: string }; label?: string }): Promise<PushDevice> =>
     _fetch('/notifications/devices/', { method: 'POST', body: JSON.stringify(data) }),
   renamePushDevice: (id: number, label: string): Promise<PushDevice> =>

@@ -171,7 +171,7 @@ Major shipped areas include:
 Web Push is live and validated on real devices; VAPID and the hourly `notifications_run_scheduled`
 job are configured on the server.
 
-**Mobile UX v1 (v0.36.7, in progress on `feature/mobile-ux`)** — owner-directed rework of the
+**Mobile UX v1 (v0.36.8, in progress on `feature/mobile-ux`)** — owner-directed rework of the
 phone experience per `docs/36_Mobile_UX_Strategy_and_Implementation_Plan.md`. Phases 1–7 done:
 a Playwright mobile-viewport acceptance suite (API-mocked — see `frontend/e2e/README.md` for why
 it must never hit the real backend), a shared `src/components/mobile/` primitives layer, the
@@ -246,6 +246,13 @@ category drill-down for In-app/Push/Mine-only rather than rendering every catego
 Manage HomeStack opens as a phone settings directory with focused sections; Homestead overview
 uses shared data instead of duplicate hidden mobile/desktop effect paths; Meridian setting
 switches use 44px hit areas.
+
+Final pre-hardware corrections in v0.36.8: `main` is merged into the feature branch (including
+the live Solace health fix/test); nested dialogs are stack-aware; Homestead Floor Plan is a real
+full-screen phone viewer; Notifications identifies and prioritizes **This phone** with touch-sized
+device actions; and Hub has a phone daily feed plus prominent Search. The complete mocked browser
+suite is green across its four viewport projects. The feature branch has incorporated `main`, but
+the feature branch itself is still not merged back to `main`.
 
 **Pre-Phase-10 status:** Phases 1-9 are complete for software-side/mobile-automation acceptance.
 Phase 10 is CHECKLIST READY / NOT STARTED. Do not run Phase 10 installed

@@ -217,6 +217,7 @@ GET/PUT/PATCH as implemented /preferences/
 GET/PUT/PATCH as implemented /settings/
 GET  /vapid-public-key/
 GET/POST /devices/
+POST /devices/current/
 PATCH/DELETE /devices/<device_id>/
 POST /devices/<device_id>/test/
 GET  /household-devices/
@@ -226,6 +227,10 @@ The exact allowed methods/response shapes are defined by the current views/seria
 registered paths are authoritative in `backend/apps/notifications/urls.py`.
 
 `PATCH /devices/<device_id>/` renames a device and accepts only `label`.
+
+`POST /devices/current/` accepts the browser's existing subscription endpoint and returns only
+its matching active `device_id` (or `null`) for the current User. This lets the phone UI label and
+prioritize **This phone** without ever serializing subscription endpoints into device lists.
 
 A User cannot manage another User's device subscription by guessing its ID; detail operations are
 current-User scoped. `/devices/` itself lists only the requesting User's devices — this is not an

@@ -18,6 +18,7 @@ from apps.notifications.serializers import (
     NotificationPreferenceSerializer,
     NotificationPreferenceWriteSerializer,
     NotificationSerializer,
+    PushDeviceCurrentSerializer,
     PushDeviceRegisterSerializer,
     PushDeviceRenameSerializer,
     PushDeviceSerializer,
@@ -121,6 +122,25 @@ class PushDeviceListView(APIView):
             user_agent=request.META.get("HTTP_USER_AGENT", "")[:255],
         )
         return Response(PushDeviceSerializer(device).data, status=status.HTTP_201_CREATED)
+
+
+class PushDeviceCurrentView(APIView):
+    """Match this browser's subscription to one of the current User's active devices.
+
+    The endpoint arrives in a POST body and is used only for an ownership-scoped lookup. It is
+    never echoed back or added to the ordinary device serializer.
+    """
+
+    permission_classes = [_Perm]
+    permission_action = "view"
+
+    def post(self, request: Request) -> Response:
+        serializer = PushDeviceCurrentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        device = selectors.get_device_by_endpoint(
+            request.user, serializer.validated_data["endpoint"],
+        )
+        return Response({"device_id": device.id if device else None})
 
 
 class PushDeviceDetailView(APIView):

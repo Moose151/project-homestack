@@ -1284,6 +1284,20 @@ affected phone suites, full `npx playwright test` (172 passed / 52 skipped), and
 `npm run build` was blocked by the existing root-owned `frontend/dist/` directory, not by
 TypeScript or bundling.
 
+**Final software correction pass (v0.36.8).** The remaining external-review findings are now
+closed before real-device acceptance. `main` was merged normally into this published feature
+branch, including the Solace bucket-purpose health fix and its regression test. Shared dialogs
+now maintain a real stack: only the top layer handles Escape/focus trapping and body scroll stays
+locked until the final layer closes. Homestead opens Floor Plan as an explicit full-screen phone
+viewer, with nested confirmation coverage. Notifications resolves the current browser's existing
+subscription through a self-only endpoint that returns only its device ID, puts **This phone**
+first, separates other devices and uses full touch targets for Test/Rename/Revoke. Hub's phone
+composition is now a prioritized daily feed with a prominent global Search entry while desktop
+keeps the configurable board. The final suite also exposed and fixed Calendar Quick Add's 5px
+overflow at the 320px stress width. Validation: 78 focused backend tests, clean TypeScript, 184
+passing / 56 intentionally skipped Playwright cases across all four viewport projects, and a
+clean temporary production build.
+
 ### Phase 10 — Complete real-device acceptance — CHECKLIST READY / NOT STARTED
 
 Phases 1-9 are now complete for the software-side/mobile-automation pass. Phase 10 is different in

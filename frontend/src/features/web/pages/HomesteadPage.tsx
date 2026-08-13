@@ -299,6 +299,7 @@ const EMPTY_ROOMS: RoomListResponse = {
 }
 
 function RoomsTab({ onError, canEdit }: { onError: (m: string) => void; canEdit: boolean }) {
+  const [phone] = useState(isPhoneViewport)
   const [data, setData] = useState<RoomListResponse>(EMPTY_ROOMS)
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
@@ -377,21 +378,42 @@ function RoomsTab({ onError, canEdit }: { onError: (m: string) => void; canEdit:
         </div>
       )}
 
-      <Tabs
-        tabs={[{ key: 'plan' as const, label: 'Floor plan' }, { key: 'list' as const, label: 'Room list', badge: data.rooms.length }]}
-        active={roomView}
-        onChange={setRoomView}
-        variant="secondary"
-      />
-
-      {roomView === 'plan' && (
-        <HomeFloorPlan
-          rooms={data.rooms}
-          canEdit={canEdit}
-          onRoomsChanged={load}
-          onError={onError}
+      {phone ? (
+        <Button
+          variant="secondary"
+          className="w-full"
+          onClick={() => setRoomView('plan')}
+          aria-haspopup="dialog"
+        >
+          View interactive floor plan
+        </Button>
+      ) : (
+        <Tabs
+          tabs={[{ key: 'plan' as const, label: 'Floor plan' }, { key: 'list' as const, label: 'Room list', badge: data.rooms.length }]}
+          active={roomView}
+          onChange={setRoomView}
+          variant="secondary"
         />
       )}
+
+      {roomView === 'plan' && (phone ? (
+        <Modal title="Interactive floor plan" size="full" onClose={() => setRoomView('list')}>
+          <HomeFloorPlan
+            rooms={data.rooms}
+            canEdit={canEdit}
+            onRoomsChanged={load}
+            onError={onError}
+            fullScreen
+          />
+        </Modal>
+      ) : (
+          <HomeFloorPlan
+            rooms={data.rooms}
+            canEdit={canEdit}
+            onRoomsChanged={load}
+            onError={onError}
+          />
+      ))}
 
       {roomView === 'list' && (
         data.rooms.length === 0 ? (

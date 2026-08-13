@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type { RoomArea } from '../../../api/types'
 import { Button } from '../../../components/Button'
+import { confirmDialog } from '../../../components/Dialogs'
 import { Select } from '../../../components/Field'
 
 type PlanMode = 'inside' | 'property'
@@ -180,11 +181,13 @@ export function HomeFloorPlan({
   canEdit,
   onRoomsChanged,
   onError,
+  fullScreen = false,
 }: {
   rooms: RoomArea[]
   canEdit: boolean
   onRoomsChanged: () => Promise<unknown>
   onError: (message: string) => void
+  fullScreen?: boolean
 }) {
   const navigate = useNavigate()
   const [mode, setMode] = useState<PlanMode>('inside')
@@ -243,6 +246,11 @@ export function HomeFloorPlan({
 
   const unlink = async () => {
     if (!selectedMatch?.explicit) return
+    if (!(await confirmDialog({
+      title: `Unlink ${selectedMatch.room.name} from this space?`,
+      message: 'The room and its plan stay in HomeStack; only its position on the floor plan is removed.',
+      confirmLabel: 'Unlink room',
+    }))) return
     setSaving(true)
     try {
       const nextData = { ...selectedMatch.room.floorplan_data }
@@ -261,7 +269,10 @@ export function HomeFloorPlan({
   const minWidth = mode === 'inside' ? 680 : 760
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-soft">
+    <div
+      data-floor-plan-viewer={fullScreen ? 'fullscreen' : 'inline'}
+      className={`overflow-hidden border border-line bg-surface shadow-soft ${fullScreen ? 'flex h-full min-h-0 flex-col rounded-xl' : 'rounded-2xl'}`}
+    >
       <div className="flex flex-col gap-3 border-b border-line px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h3 className="font-bold text-ink">Our home</h3>
@@ -282,8 +293,8 @@ export function HomeFloorPlan({
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-[minmax(0,1fr)_280px]">
-        <div className="overflow-auto bg-paper-soft p-3 sm:p-5">
+      <div className={`grid lg:grid-cols-[minmax(0,1fr)_280px] ${fullScreen ? 'min-h-0 flex-1 overflow-y-auto' : ''}`}>
+        <div className={`overflow-auto bg-paper-soft p-3 sm:p-5 ${fullScreen ? 'min-h-[48dvh] lg:min-h-0' : ''}`}>
           <svg
             viewBox={viewBox}
             role="img"

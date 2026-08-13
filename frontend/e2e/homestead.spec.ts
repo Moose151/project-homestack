@@ -13,6 +13,15 @@ const ROOMS_FIXTURE = {
   household_summary: { active_count: 1, completed_count: 0, archived_count: 0, remaining_estimated_cost: '120.00', completed_cost: '0.00', overall_cost: '120.00' },
 }
 
+const LINKED_ROOMS_FIXTURE = {
+  ...ROOMS_FIXTURE,
+  rooms: [{
+    ...ROOMS_FIXTURE.rooms[0],
+    name: 'Family room',
+    floorplan_data: { floorplan_slot: 'living' },
+  }],
+}
+
 test.beforeEach(async ({}, testInfo) => {
   test.skip(testInfo.project.name === 'tablet-768', 'phone-only: the dashboard/Back pattern is sm:hidden')
 })
@@ -63,6 +72,45 @@ test('Rooms defaults to the list view on phone, not the floor plan', async ({ pa
   await page.goto('/homestead?tab=rooms')
   await expect(page.getByRole('link', { name: /Kitchen/ })).toBeVisible()
   await expectNoHorizontalOverflow(page)
+})
+
+test('Floor plan opens as a full-screen phone viewer and returns to the room list', async ({ page }) => {
+  await mockAuthenticatedApi(page, { '/api/v1/homestead/rooms/': ROOMS_FIXTURE })
+  await page.goto('/homestead?tab=rooms')
+  await page.getByRole('button', { name: 'View interactive floor plan' }).click()
+
+  const viewer = page.getByRole('dialog', { name: 'Interactive floor plan' })
+  await expect(viewer).toBeVisible()
+  await expect(viewer.locator('[data-floor-plan-viewer="fullscreen"]')).toBeVisible()
+  const box = await viewer.boundingBox()
+  const viewport = page.viewportSize()
+  expect(box?.width).toBe(viewport?.width)
+  expect(box?.height).toBe(viewport?.height)
+  await expectNoHorizontalOverflow(page)
+
+  await viewer.getByRole('button', { name: 'Close' }).click()
+  await expect(viewer).toHaveCount(0)
+  await expect(page.getByRole('link', { name: /Kitchen/ })).toBeVisible()
+})
+
+test('nested confirmation closes one layer at a time and keeps body scroll locked', async ({ page }) => {
+  await mockAuthenticatedApi(page, { '/api/v1/homestead/rooms/': LINKED_ROOMS_FIXTURE })
+  await page.goto('/homestead?tab=rooms')
+  await page.getByRole('button', { name: 'View interactive floor plan' }).click()
+  await page.getByRole('button', { name: 'Unlink' }).click()
+
+  await expect(page.getByRole('dialog')).toHaveCount(2)
+  await expect(page.getByRole('dialog', { name: /Unlink Family room/ })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => document.body.style.overflow)).toBe('hidden')
+
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(1)
+  await expect(page.getByRole('dialog', { name: 'Interactive floor plan' })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => document.body.style.overflow)).toBe('hidden')
+
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect.poll(() => page.evaluate(() => document.body.style.overflow)).toBe('')
 })
 
 test('a deep link with ?tab= still lands directly on that section (existing contract preserved)', async ({ page }) => {

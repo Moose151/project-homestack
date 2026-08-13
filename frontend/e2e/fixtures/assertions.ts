@@ -4,8 +4,29 @@ import { expect, type Locator, type Page } from '@playwright/test'
 
 /** §9.1: "No accidental document-level horizontal scrolling on ordinary screens at 320px+." */
 export async function expectNoHorizontalOverflow(page: Page) {
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
-  expect(overflow, 'document should not scroll horizontally').toBeLessThanOrEqual(1)
+  const result = await page.evaluate(() => {
+    const root = document.documentElement
+    const overflow = root.scrollWidth - root.clientWidth
+    const offenders = [...document.querySelectorAll<HTMLElement>('body *')]
+      .map(element => {
+        const rect = element.getBoundingClientRect()
+        return { element, rect }
+      })
+      .filter(({ rect }) => rect.right > root.clientWidth + 1 || rect.left < -1)
+      .slice(0, 5)
+      .map(({ element, rect }) => ({
+        tag: element.tagName.toLowerCase(),
+        label: element.getAttribute('aria-label') || element.textContent?.trim().slice(0, 60) || '',
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        width: Math.round(rect.width),
+      }))
+    return { overflow, offenders }
+  })
+  expect(
+    result.overflow,
+    `document should not scroll horizontally; offenders: ${JSON.stringify(result.offenders)}`,
+  ).toBeLessThanOrEqual(1)
 }
 
 /** §3.3 / §9.1: "Primary routine controls meet the approximately 44px touch-target baseline." */

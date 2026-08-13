@@ -34,6 +34,8 @@ import { HubConfig } from './HubConfig'
 import { useAuth } from '../../auth/AuthContext'
 import { STACK_BY_KEY, softColour } from '../../../config/stacks'
 import { InlineAlert, PageSkeleton } from '../../../components/PageState'
+import { openGlobalSearch } from '../../../lib/shellEvents'
+import { isPhoneViewport } from '../../../lib/viewport'
 
 // Spans are chosen so a board of same-size widgets tiles a row exactly and leaves no dead
 // column: at xl the grid is 4 columns, so 4 small / 2 medium / 1 large fills a row.
@@ -41,6 +43,28 @@ const SIZE_SPAN: Record<string, string> = {
   small: 'md:col-span-1 xl:col-span-1',
   medium: 'md:col-span-1 xl:col-span-2',
   large: 'md:col-span-2 xl:col-span-4',
+}
+
+const MOBILE_ATTENTION_WIDGETS = new Set([
+  'notifications_summary', 'meridian_hot_tasks', 'meridian_pending_approvals',
+  'meridian_reward_requests', 'education_deadlines', 'pets_reminders', 'pets_appointments',
+  'homestead_maintenance', 'homestead_warranties', 'solace_bills_due',
+])
+const MOBILE_UPCOMING_WIDGETS = new Set([
+  'upcoming', 'calendar_upcoming', 'atlas_reminders', 'education_classes', 'education_events',
+  'countdown',
+])
+const MOBILE_QUICK_WIDGETS = new Set(['quick_add', 'atlas_todos', 'meridian_my_tasks'])
+
+function mobileFeedSections(widgets: HubWidget[]) {
+  const sections = [
+    { key: 'attention', title: 'Needs attention', widgets: widgets.filter(widget => MOBILE_ATTENTION_WIDGETS.has(widget.key)) },
+    { key: 'upcoming', title: 'Today & upcoming', widgets: widgets.filter(widget => MOBILE_UPCOMING_WIDGETS.has(widget.key)) },
+    { key: 'quick', title: 'Quick actions', widgets: widgets.filter(widget => MOBILE_QUICK_WIDGETS.has(widget.key)) },
+  ]
+  const prioritized = new Set(sections.flatMap(section => section.widgets.map(widget => widget.key)))
+  sections.push({ key: 'more', title: 'More from your home', widgets: widgets.filter(widget => !prioritized.has(widget.key)) })
+  return sections.filter(section => section.widgets.length > 0)
 }
 
 // Which stack a hub widget belongs to → its accent colour + icon for the card header.
@@ -818,6 +842,7 @@ function renderWidget(w: HubWidget, onChanged: () => void) {
 
 export function HubPage() {
   const { user } = useAuth()
+  const [phone] = useState(isPhoneViewport)
   const [data, setData] = useState<HubResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [configuring, setConfiguring] = useState(false)
@@ -863,6 +888,51 @@ export function HubPage() {
     }
   }
 
+  const widgetCard = (widget: HubWidget, desktopBoard = false) => {
+    const accent = widgetAccent(widget.key)
+    return (
+      <div
+        key={widget.key}
+        onDragOver={desktopBoard ? event => {
+          if (!configuring) return
+          event.preventDefault()
+          event.dataTransfer.dropEffect = 'move'
+          setDragOverWidget(widget.key)
+        } : undefined}
+        onDragLeave={desktopBoard ? () => setDragOverWidget(current => current === widget.key ? null : current) : undefined}
+        onDrop={desktopBoard ? event => void dropWidget(event, widget.key) : undefined}
+        className={`${desktopBoard ? SIZE_SPAN[widget.size] ?? SIZE_SPAN.medium : ''} overflow-hidden rounded-2xl border bg-surface shadow-soft transition-all ${
+          dragOverWidget === widget.key && draggedWidget !== widget.key
+            ? 'border-primary ring-2 ring-primary/20'
+            : 'border-line'
+        } ${draggedWidget === widget.key ? 'opacity-50' : ''}`}
+      >
+        <div
+          className="flex items-center gap-2 border-b border-line px-4 py-2.5"
+          style={{ background: softColour(accent.colour, '18') }}
+        >
+          {accent.icon
+            ? <span className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-xl bg-surface/75 text-base shadow-sm">{accent.icon}</span>
+            : <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ background: accent.colour }} />}
+          <h3 className="truncate text-sm font-bold text-ink">{widget.name}</h3>
+          {desktopBoard && configuring && (
+            <span
+              draggable={!savingOrder}
+              onDragStart={event => beginWidgetDrag(event, widget.key)}
+              onDragEnd={() => { setDraggedWidget(null); setDragOverWidget(null) }}
+              className="ml-auto hidden h-8 w-9 cursor-grab select-none items-center justify-center rounded-lg bg-surface/70 text-lg text-muted hover:text-ink active:cursor-grabbing md:flex"
+              title={`Drag ${widget.name}`}
+              aria-label={`Drag ${widget.name} to reorder`}
+            >
+              ⠿
+            </span>
+          )}
+        </div>
+        <div className="p-4">{renderWidget(widget, loadHub)}</div>
+      </div>
+    )
+  }
+
   const now = new Date()
   const greeting =
     now.getHours() < 12 ? 'Good morning' : now.getHours() < 18 ? 'Good afternoon' : 'Good evening'
@@ -874,10 +944,28 @@ export function HubPage() {
         <p className="text-sm font-semibold text-muted-strong">
           {greeting}{user ? `, ${user.display_name}` : ''} · {now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
         </p>
-        <Button variant="secondary" size="sm" onClick={() => setConfiguring(c => !c)}>
-          {configuring ? 'Done tuning' : 'Tune this page'}
-        </Button>
+        {!phone && (
+          <Button variant="secondary" size="sm" onClick={() => setConfiguring(c => !c)}>
+            {configuring ? 'Done tuning' : 'Tune this page'}
+          </Button>
+        )}
       </div>
+
+      {phone && (
+        <button
+          type="button"
+          onClick={openGlobalSearch}
+          className="flex min-h-14 w-full items-center gap-3 rounded-2xl border border-line bg-surface px-4 text-left shadow-soft transition-colors hover:border-primary/40 hover:bg-primary-soft/40"
+          aria-label="Search HomeStack"
+        >
+          <span className="grid h-10 w-10 flex-none place-items-center rounded-xl bg-primary-soft text-xl text-primary">⌕</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-base font-bold text-ink">Search HomeStack</span>
+            <span className="block text-sm text-muted">Find a list, event, room, person or record</span>
+          </span>
+          <span className="text-xl text-muted">›</span>
+        </button>
+      )}
 
       {error && <InlineAlert message={error} onRetry={loadHub} onDismiss={() => setError(null)} />}
 
@@ -885,62 +973,39 @@ export function HubPage() {
         <HubConfig key={configVersion} isAdmin={user?.role === 'admin'} onChanged={loadHub} />
       )}
 
-      {!data ? (
-        <PageSkeleton />
-      ) : data.widgets.length === 0 ? (
-        <Card>
-          <p className="py-4 text-center text-sm text-muted">
-            Nothing needs your attention right now. Cards appear here as things come up — use{' '}
-            <span className="font-medium text-ink">Tune this page</span> to choose which ones.
-          </p>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {data.widgets.map(w => {
-            const accent = widgetAccent(w.key)
-            return (
-              <div
-                key={w.key}
-                onDragOver={event => {
-                  if (!configuring) return
-                  event.preventDefault()
-                  event.dataTransfer.dropEffect = 'move'
-                  setDragOverWidget(w.key)
-                }}
-                onDragLeave={() => setDragOverWidget(current => current === w.key ? null : current)}
-                onDrop={event => void dropWidget(event, w.key)}
-                className={`${SIZE_SPAN[w.size] ?? SIZE_SPAN.medium} overflow-hidden rounded-2xl border bg-surface shadow-soft transition-all ${
-                  dragOverWidget === w.key && draggedWidget !== w.key
-                    ? 'border-primary ring-2 ring-primary/20'
-                    : 'border-line'
-                } ${draggedWidget === w.key ? 'opacity-50' : ''}`}
-              >
-                <div
-                  className="flex items-center gap-2 px-4 py-2.5 border-b border-line"
-                  style={{ background: softColour(accent.colour, '18') }}
-                >
-                  {accent.icon
-                    ? <span className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-xl bg-surface/75 text-base shadow-sm">{accent.icon}</span>
-                    : <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ background: accent.colour }} />}
-                  <h3 className="text-sm font-bold text-ink truncate">{w.name}</h3>
-                  {configuring && (
-                    <span
-                      draggable={!savingOrder}
-                      onDragStart={event => beginWidgetDrag(event, w.key)}
-                      onDragEnd={() => { setDraggedWidget(null); setDragOverWidget(null) }}
-                      className="ml-auto hidden h-8 w-9 cursor-grab select-none items-center justify-center rounded-lg bg-surface/70 text-lg text-muted hover:text-ink active:cursor-grabbing md:flex"
-                      title={`Drag ${w.name}`}
-                      aria-label={`Drag ${w.name} to reorder`}
-                    >
-                      ⠿
-                    </span>
-                  )}
-                </div>
-                <div className="p-4">{renderWidget(w, loadHub)}</div>
-              </div>
-            )
-          })}
-        </div>
+      {!data ? <PageSkeleton /> : (
+        phone ? (
+          <div className="flex flex-col gap-5" aria-label="Your daily feed">
+            {data.widgets.length === 0 ? (
+              <Card>
+                <p className="py-4 text-center text-sm text-muted">Nothing needs your attention right now.</p>
+              </Card>
+            ) : mobileFeedSections(data.widgets).map(section => (
+              <section key={section.key} className="flex flex-col gap-2">
+                <h2 className="px-1 text-xs font-bold uppercase tracking-wide text-muted">{section.title}</h2>
+                <div className="flex flex-col gap-3">{section.widgets.map(widget => widgetCard(widget))}</div>
+              </section>
+            ))}
+            <Button variant="ghost" className="w-full" onClick={() => setConfiguring(c => !c)}>
+              {configuring ? 'Done tuning Home' : 'Tune Home'}
+            </Button>
+          </div>
+        ) : (
+          data.widgets.length === 0 ? (
+            <div>
+              <Card>
+                <p className="py-4 text-center text-sm text-muted">
+                  Nothing needs your attention right now. Cards appear here as things come up — use{' '}
+                  <span className="font-medium text-ink">Tune this page</span> to choose which ones.
+                </p>
+              </Card>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {data.widgets.map(widget => widgetCard(widget, true))}
+            </div>
+          )
+        )
       )}
     </div>
   )

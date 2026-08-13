@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.36.7**
+> **Current version: 0.36.8**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,26 @@
 ---
 
 ## 0.36 — Mobile UX v1 (on feature/mobile-ux)
+
+### 0.36.8 — 2026-08-13 — Final software correction pass before hardware acceptance (on feature/mobile-ux)
+- Merged `main` normally into the published feature branch, bringing in the live Solace bucket-
+  purpose health fix and its `/solace/health/` + `/solace/bootstrap/` regression test without
+  rewriting feature history.
+- Dialog accessibility is now stack-aware: only the top dialog owns Escape/focus trapping, body
+  scroll remains locked until the final layer closes, and focus returns safely. Homestead's phone
+  Floor Plan is now an explicit full-screen spatial viewer; an unlink confirmation supplies real
+  nested-dialog coverage.
+- Notifications identifies the current browser subscription through a self-only endpoint that
+  returns only a device ID (never the push endpoint), prioritizes **This phone**, separates other
+  devices, and gives Test/Rename/Revoke full touch targets. Hub now has a dedicated phone daily
+  feed ordered around attention/upcoming/quick actions plus a prominent entry into global Search;
+  desktop keeps the configurable board.
+- The strengthened 320px overflow diagnostic exposed Calendar Quick Add's input retaining its
+  intrinsic placeholder width; `min-w-0` now prevents its Add button extending five pixels past
+  the viewport.
+- Validation: Notifications plus the merged Solace regression are green (78 backend tests);
+  frontend TypeScript is clean; the complete four-viewport Playwright suite is green (184 passed,
+  56 intentionally skipped); and a temporary production Vite build is clean.
 
 ### 0.36.7 — 2026-08-13 — Pre-Phase-10 correction pass completion (on feature/mobile-ux)
 - Corrected the remaining concrete Phase 5-9 blockers from the handover before real-device acceptance:

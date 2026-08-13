@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { mockAuthenticatedApi } from './fixtures/mockApi'
-import { expectNoHorizontalOverflow } from './fixtures/assertions'
+import { expectMinTouchTarget, expectNoHorizontalOverflow } from './fixtures/assertions'
 
 // docs/36 §6.14-6.15 (Phase 7): notification categories become immediate-save MobileSettingsRow
 // switches instead of a batch-Save table; Manage HomeStack gains a real settings-directory
@@ -94,6 +94,45 @@ test.describe('Notification settings', () => {
     await page.goto('/settings/notifications')
     await expect(page.getByRole('heading', { name: 'Quiet hours' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Save' })).toBeVisible()
+  })
+
+  test('identifies This phone first and gives device actions full touch targets', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'PushManager', { configurable: true, value: class PushManager {} })
+      Object.defineProperty(navigator, 'serviceWorker', {
+        configurable: true,
+        value: {
+          register: async () => ({}),
+          getRegistration: async () => ({
+            pushManager: { getSubscription: async () => ({ endpoint: 'https://push.example/phone' }) },
+          }),
+        },
+      })
+    })
+    const devices = [
+      { id: 1, label: 'Kitchen laptop', label_is_custom: true, browser: 'Firefox', platform: 'Linux', user_agent: '', last_seen_at: '2026-08-12T10:00:00Z', created_at: '2026-08-01T10:00:00Z' },
+      { id: 2, label: 'Pixel 8', label_is_custom: true, browser: 'Chrome', platform: 'Android', user_agent: '', last_seen_at: '2026-08-13T10:00:00Z', created_at: '2026-08-02T10:00:00Z' },
+    ]
+    await mockAuthenticatedApi(page, {
+      '/api/v1/notifications/preferences/': [PREF_ROW],
+      '/api/v1/notifications/settings/': { quiet_start: null, quiet_end: null, morning_time: '08:00:00' },
+      '/api/v1/notifications/devices/': devices,
+      '/api/v1/notifications/devices/current/': { device_id: 2 },
+    })
+    await page.goto('/settings/notifications')
+
+    const current = page.getByRole('heading', { name: 'This phone' }).locator('..').locator('..')
+    const others = page.getByRole('heading', { name: 'Other devices' }).locator('..').locator('..')
+    await expect(current.getByText('Pixel 8')).toBeVisible()
+    await expect(others.getByText('Kitchen laptop')).toBeVisible()
+    expect((await current.boundingBox())?.y).toBeLessThan((await others.boundingBox())?.y ?? 0)
+
+    await expectMinTouchTarget(current.getByRole('button', { name: 'Test notification' }))
+    await expectMinTouchTarget(current.getByRole('button', { name: 'Rename' }))
+    await expectMinTouchTarget(current.getByRole('button', { name: 'Revoke' }))
+    await current.getByRole('button', { name: 'Rename' }).click()
+    await expect(current.getByRole('textbox', { name: 'Device name' })).toHaveValue('Pixel 8')
+    await expectNoHorizontalOverflow(page)
   })
 })
 

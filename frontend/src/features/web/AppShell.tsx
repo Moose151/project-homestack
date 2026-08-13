@@ -21,6 +21,7 @@ import { QuickCreate } from '../../components/QuickCreate'
 import { useScrollRestoration } from '../../hooks/useScrollRestoration'
 import { InlineAlert } from '../../components/PageState'
 import { ColourPicker } from '../../components/ColourPicker'
+import { OPEN_GLOBAL_SEARCH_EVENT } from '../../lib/shellEvents'
 
 interface NavItem {
   key: string
@@ -523,8 +524,13 @@ export function AppShell() {
         setSearchOpen(true)
       }
     }
+    const openSearch = () => setSearchOpen(true)
     window.addEventListener('keydown', shortcut)
-    return () => window.removeEventListener('keydown', shortcut)
+    window.addEventListener(OPEN_GLOBAL_SEARCH_EVENT, openSearch)
+    return () => {
+      window.removeEventListener('keydown', shortcut)
+      window.removeEventListener(OPEN_GLOBAL_SEARCH_EVENT, openSearch)
+    }
   }, [])
 
   return (

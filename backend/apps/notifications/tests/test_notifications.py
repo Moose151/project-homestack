@@ -291,6 +291,29 @@ class PushDeviceApiTests(TestCase):
         deleted = self.client.delete(reverse("notification-device-detail", args=[their_device.id]))
         self.assertEqual(deleted.status_code, 404)
 
+    def test_current_device_matches_only_the_callers_active_subscription(self):
+        mine = services.register_push_device(
+            self.user, endpoint="https://push.example/mine", p256dh="p", auth="a",
+        )
+        other = _make_user("other", role=User.Role.USER)
+        services.register_push_device(
+            other, endpoint="https://push.example/theirs", p256dh="p", auth="a",
+        )
+
+        matched = self.client.post(
+            reverse("notification-device-current"),
+            {"endpoint": "https://push.example/mine"}, content_type="application/json",
+        )
+        self.assertEqual(matched.status_code, 200, matched.json())
+        self.assertEqual(matched.json(), {"device_id": mine.id})
+
+        not_mine = self.client.post(
+            reverse("notification-device-current"),
+            {"endpoint": "https://push.example/theirs"}, content_type="application/json",
+        )
+        self.assertEqual(not_mine.status_code, 200, not_mine.json())
+        self.assertEqual(not_mine.json(), {"device_id": None})
+
 
 _FIREFOX_LINUX = (
     "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"

@@ -15,7 +15,7 @@ test.beforeEach(async ({ page }) => {
 test('Hub renders without horizontal overflow', async ({ page }) => {
   // A real Hub-specific element, not a "the page rendered *something*" fallback — this must
   // fail if Hub's actual content goes missing, not just if the whole app fails to boot.
-  await expect(page.getByText('Nothing needs your attention right now.')).toBeVisible()
+  await expect(page.getByRole('main').locator('p:visible').filter({ hasText: 'Nothing needs your attention right now.' }).first()).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })
 
@@ -43,11 +43,35 @@ test.describe('phone layout', () => {
   })
 
   test('top bar Search and Create are not shown — they live in the bottom nav / More sheet', async ({ page }) => {
-    await expect(page.getByRole('button', { name: 'Search HomeStack' })).toBeHidden()
+    await expect(page.locator('header').getByRole('button', { name: 'Search HomeStack' })).toBeHidden()
     // "Create something" still resolves — to the bottom nav's Add button, which shares the
     // label with the (hidden on phone) top bar version by design (same action either place).
     const nav = page.getByRole('navigation', { name: 'Main navigation' })
     await expect(nav.getByRole('button', { name: 'Create something' })).toBeVisible()
+  })
+
+  test('Hub opens with prominent Search and a prioritized daily feed', async ({ page }) => {
+    await page.route('**/api/v1/hub/', async route => {
+      await route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ widgets: [
+          { key: 'daily_quote', name: 'Daily quote', size: 'small', supports_kiosk: true, items: [] },
+          { key: 'calendar_upcoming', name: 'Coming up', size: 'medium', supports_kiosk: true, items: [] },
+          { key: 'notifications_summary', name: 'Notifications', size: 'small', supports_kiosk: false, items: [], meta: { unread_count: 0 } },
+        ] }),
+      })
+    })
+    await page.reload()
+
+    const feed = page.getByLabel('Your daily feed')
+    await expect(feed.getByRole('heading', { name: 'Needs attention' })).toBeVisible()
+    await expect(feed.getByRole('heading', { name: 'Today & upcoming' })).toBeVisible()
+    await expect(feed.getByRole('heading', { name: 'More from your home' })).toBeVisible()
+    const sectionOrder = await feed.locator('section h2').allTextContents()
+    expect(sectionOrder).toEqual(['Needs attention', 'Today & upcoming', 'More from your home'])
+
+    await page.getByRole('main').getByRole('button', { name: 'Search HomeStack' }).click()
+    await expect(page.getByRole('dialog', { name: 'Search HomeStack' })).toBeVisible()
   })
 
   test('Quick Create opens from the bottom nav as a sheet without overflow and is closable', async ({ page }) => {
@@ -62,7 +86,7 @@ test.describe('phone layout', () => {
   test('Search is reachable from the More sheet without overflow', async ({ page }) => {
     const nav = page.getByRole('navigation', { name: 'Main navigation' })
     await nav.getByRole('button', { name: /More navigation|open all destinations/ }).click()
-    await page.getByRole('button', { name: 'Search' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: /Search/ }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
     await expectNoHorizontalOverflow(page)

@@ -29,6 +29,7 @@ export function NotificationSettingsPage() {
   const [rows, setRows] = useState<NotificationPreference[]>([])
   const [settings, setSettings] = useState<UserNotificationSettings | null>(null)
   const [devices, setDevices] = useState<PushDevice[]>([])
+  const [currentDeviceId, setCurrentDeviceId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [savingSettings, setSavingSettings] = useState(false)
@@ -41,11 +42,27 @@ export function NotificationSettingsPage() {
 
   const loadDevices = () => api.getPushDevices().then(setDevices).catch(e => setError(errMsg(e)))
 
+  const identifyCurrentDevice = async () => {
+    if (!PUSH_SUPPORTED) return
+    try {
+      const registration = await navigator.serviceWorker.getRegistration()
+      const subscription = await registration?.pushManager.getSubscription()
+      if (!subscription) { setCurrentDeviceId(null); return }
+      const result = await api.getCurrentPushDevice(subscription.endpoint)
+      setCurrentDeviceId(result.device_id)
+    } catch {
+      // Identification is an enhancement to the settings layout. A browser with a stale or
+      // partially available service worker can still list, rename and revoke every device.
+      setCurrentDeviceId(null)
+    }
+  }
+
   useEffect(() => {
     Promise.all([api.getNotificationPreferences(), api.getNotificationSettings(), api.getPushDevices()])
       .then(([prefRows, settingsRow, deviceRows]) => { setRows(prefRows); setSettings(settingsRow); setDevices(deviceRows) })
       .catch(e => setError(errMsg(e)))
       .finally(() => setLoading(false))
+    void identifyCurrentDevice()
   }, [])
 
   const enablePushOnThisDevice = async () => {
@@ -68,7 +85,8 @@ export function NotificationSettingsPage() {
       if (!json.keys) throw new Error('The browser did not return subscription keys.')
       // No label: the server names the device from the User-Agent it already receives, so every
       // client gets the same "Chrome on Android" naming and a renamed device stays renamed.
-      await api.registerPushDevice({ endpoint: json.endpoint, keys: json.keys })
+      const registered = await api.registerPushDevice({ endpoint: json.endpoint, keys: json.keys })
+      setCurrentDeviceId(registered.id)
       await loadDevices()
     } catch (e) { setError(errMsg(e)) } finally { setSubscribing(false) }
   }
@@ -76,7 +94,11 @@ export function NotificationSettingsPage() {
   const revokeDevice = async (device: PushDevice) => {
     if (!(await confirmDialog({ title: `Stop push on "${device.label || 'this device'}"?`, confirmLabel: 'Revoke' }))) return
     setBusyDeviceId(device.id)
-    try { await api.unregisterPushDevice(device.id); await loadDevices() }
+    try {
+      await api.unregisterPushDevice(device.id)
+      if (device.id === currentDeviceId) setCurrentDeviceId(null)
+      await loadDevices()
+    }
     catch (e) { setError(errMsg(e)) } finally { setBusyDeviceId(null) }
   }
 
@@ -152,6 +174,54 @@ export function NotificationSettingsPage() {
 
   if (loading) return <div className="mx-auto max-w-2xl"><div className="h-40 animate-pulse rounded-2xl bg-sunken" /></div>
   const openCategoryRow = rows.find(row => row.category === openCategory) ?? null
+  const currentDevice = devices.find(device => device.id === currentDeviceId) ?? null
+  const otherDevices = devices.filter(device => device.id !== currentDeviceId)
+
+  const deviceCard = (device: PushDevice, isCurrent = false) => (
+    <div key={device.id} className="rounded-xl border border-line bg-surface px-3 py-3">
+      {renamingId === device.id ? (
+        <form
+          className="flex flex-col gap-2 sm:flex-row sm:items-center"
+          onSubmit={e => { e.preventDefault(); void saveRename(device) }}
+        >
+          <input
+            data-autofocus
+            value={renameDraft}
+            onChange={e => setRenameDraft(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Escape') setRenamingId(null) }}
+            maxLength={120}
+            aria-label="Device name"
+            placeholder={deviceDetail(device) || 'Device name'}
+            className="min-h-11 min-w-[8rem] flex-1 rounded-xl border border-line bg-surface px-3 py-2 text-base text-ink"
+          />
+          <div className="grid grid-cols-2 gap-2 sm:flex">
+            <Button type="submit" loading={busyDeviceId === device.id}>Save</Button>
+            <Button variant="ghost" type="button" onClick={() => setRenamingId(null)}>Cancel</Button>
+          </div>
+        </form>
+      ) : (
+        <>
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-base font-semibold text-ink">{device.label || 'Device'}</span>
+                {isCurrent && <span className="rounded-full bg-success-soft px-2 py-0.5 text-xs font-bold text-success">Push on</span>}
+              </div>
+              <p className="mt-1 text-sm text-muted">
+                {[deviceDetail(device), `Last seen ${lastSeenLabel(device.last_seen_at)}`].filter(Boolean).join(' · ')}
+              </p>
+              {testedDeviceId === device.id && <p className="mt-1 text-sm font-semibold text-success" aria-live="polite">Test sent ✓</p>}
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            <Button variant="secondary" onClick={() => testDevice(device)} loading={busyDeviceId === device.id}>Test notification</Button>
+            <Button variant="secondary" onClick={() => startRename(device)}>Rename</Button>
+            <Button variant="ghost" className="col-span-2" onClick={() => revokeDevice(device)} loading={busyDeviceId === device.id}>Revoke</Button>
+          </div>
+        </>
+      )}
+    </div>
+  )
 
   if (openCategoryRow) {
     return (
@@ -205,74 +275,30 @@ export function NotificationSettingsPage() {
         </div>
       )}
 
-      <Card title="Devices">
-        <p className="text-sm text-muted mb-3">
-          Push notifications go to devices you've enabled here — each phone, tablet or computer
-          you use HomeStack on needs its own. Requires an explicit permission prompt; nothing is
-          enabled automatically. Only you can see your own devices; rename any of them with ✏️.
-        </p>
-        {!PUSH_SUPPORTED ? (
-          <p className="text-sm text-muted-strong">This browser doesn't support push notifications.</p>
-        ) : (
-          <Button onClick={enablePushOnThisDevice} loading={subscribing} className="mb-4">
-            Enable push on this device
-          </Button>
+      <MobileSection title="This phone">
+        {currentDevice ? deviceCard(currentDevice, true) : (
+          <div className="rounded-xl border border-line bg-surface p-4">
+            <p className="font-semibold text-ink">Push notifications are off on this phone</p>
+            <p className="mt-1 text-sm leading-relaxed text-muted">
+              Permission is requested only when you choose Enable. On iPhone, use an installed Home Screen app.
+            </p>
+            {!PUSH_SUPPORTED ? (
+              <p className="mt-3 text-sm font-semibold text-muted-strong">This browser doesn't support push notifications.</p>
+            ) : (
+              <Button onClick={enablePushOnThisDevice} loading={subscribing} className="mt-3 w-full sm:w-auto">
+                Enable push on this phone
+              </Button>
+            )}
+          </div>
         )}
-        {devices.length === 0 ? (
-          <p className="text-sm text-muted">No devices enabled yet.</p>
-        ) : (
-          <ul className="space-y-2">
-            {devices.map(device => (
-              <li key={device.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line px-3 py-2.5">
-                {renamingId === device.id ? (
-                  <form
-                    className="flex flex-1 flex-wrap items-center gap-2"
-                    onSubmit={e => { e.preventDefault(); void saveRename(device) }}
-                  >
-                    <input
-                      autoFocus
-                      value={renameDraft}
-                      onChange={e => setRenameDraft(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Escape') setRenamingId(null) }}
-                      maxLength={120}
-                      aria-label="Device name"
-                      placeholder={deviceDetail(device) || 'Device name'}
-                      className="min-w-[8rem] flex-1 rounded-xl border border-line bg-surface px-3 py-1.5 text-sm text-ink"
-                    />
-                    <Button size="sm" type="submit" loading={busyDeviceId === device.id}>Save</Button>
-                    <Button size="sm" variant="ghost" type="button" onClick={() => setRenamingId(null)}>Cancel</Button>
-                  </form>
-                ) : (
-                  <>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-semibold text-ink">{device.label || 'Device'}</span>
-                        <button
-                          type="button"
-                          onClick={() => startRename(device)}
-                          aria-label={`Rename ${device.label || 'device'}`}
-                          title="Rename"
-                          className="rounded px-1 text-xs text-muted hover:text-primary"
-                        >
-                          ✏️
-                        </button>
-                      </div>
-                      <div className="text-xs text-muted">
-                        {[deviceDetail(device), `Last seen ${lastSeenLabel(device.last_seen_at)}`].filter(Boolean).join(' · ')}
-                        {testedDeviceId === device.id && <span className="ml-2 font-semibold text-success">Test sent ✓</span>}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" variant="secondary" onClick={() => testDevice(device)} loading={busyDeviceId === device.id}>Test</Button>
-                      <Button size="sm" variant="ghost" onClick={() => revokeDevice(device)} loading={busyDeviceId === device.id}>Revoke</Button>
-                    </div>
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      </MobileSection>
+
+      {otherDevices.length > 0 && (
+        <MobileSection title="Other devices">
+          <p className="px-1 text-sm text-muted">Other phones, tablets and computers enabled for your login.</p>
+          <div className="space-y-2">{otherDevices.map(device => deviceCard(device))}</div>
+        </MobileSection>
+      )}
 
       <Card title="Quiet hours">
         <p className="text-sm text-muted mb-3">

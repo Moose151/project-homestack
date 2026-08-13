@@ -51,6 +51,11 @@ def get_device(user, pk: int) -> PushDevice | None:
     return PushDevice.objects.filter(user=user, pk=pk).first()
 
 
+def get_device_by_endpoint(user, endpoint: str) -> PushDevice | None:
+    """Resolve only the caller's active subscription for current-device UI labelling."""
+    return PushDevice.objects.filter(user=user, endpoint=endpoint, is_active=True).first()
+
+
 def list_devices_by_user() -> list[dict]:
     """Every active push device in the household, grouped by owning User.
 

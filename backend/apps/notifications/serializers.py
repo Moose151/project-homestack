@@ -77,6 +77,12 @@ class PushDeviceRegisterSerializer(serializers.Serializer):
         return value
 
 
+class PushDeviceCurrentSerializer(serializers.Serializer):
+    """Identify the caller's existing browser subscription without serializing its endpoint."""
+
+    endpoint = serializers.CharField(max_length=500)
+
+
 class PushDeviceRenameSerializer(serializers.Serializer):
     """A blank label is allowed and means "go back to the generated name"."""
 

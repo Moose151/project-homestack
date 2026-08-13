@@ -272,7 +272,7 @@ function QuickAddBar({ baseDate, time24, onAdd }: {
           value={text}
           onChange={e => setText(e.target.value)}
           placeholder="Try “Dentist 3pm”"
-          className="min-h-11 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted"
+          className="min-h-11 min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted"
         />
         <Button type="submit" loading={busy} disabled={!text.trim()}>Add</Button>
       </div>
