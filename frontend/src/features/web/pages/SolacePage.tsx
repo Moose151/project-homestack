@@ -11,6 +11,7 @@ import type {
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { Field, Input, SearchField, Select, fieldClass } from '../../../components/Field'
+import { Modal } from '../../../components/Modal'
 import { Tabs } from '../../../components/Tabs'
 import { Badge, type BadgeTone } from '../../../components/Badge'
 import { PageHeader } from '../../../components/PageHeader'
@@ -143,6 +144,10 @@ function DueBadge({ iso, paid }: { iso: string | null; paid?: boolean }) {
   return <Badge tone={tone}>{label}</Badge>
 }
 
+// docs/36 §6.10: "Add Bill, Edit Bill, Add Bucket, Record Income and similar operations should
+// use focused sheets or form screens instead of expanding long forms inside the surrounding
+// finance page." One shared wrapper (Add bill/bucket/purchase/payday all use this) means fixing
+// it once fixes all four, matching Calendar's EventModal reference pattern (Modal size="full").
 function CreatePanel({ label, children }: {
   label: string
   children: (close: () => void) => ReactNode
@@ -150,19 +155,9 @@ function CreatePanel({ label, children }: {
   const [open, setOpen] = useState(false)
   if (!open) return <Button variant="secondary" onClick={() => setOpen(true)} className="self-start">+ {label}</Button>
   return (
-    <div className="space-y-2">
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="min-h-10 rounded-xl px-3 text-sm font-semibold text-muted hover:bg-sunken hover:text-ink"
-          aria-label={`Close ${label.toLowerCase()} form`}
-        >
-          Close form ✕
-        </button>
-      </div>
+    <Modal title={label} onClose={() => setOpen(false)} size="full">
       {children(() => setOpen(false))}
-    </div>
+    </Modal>
   )
 }
 
@@ -251,6 +246,7 @@ function BillForm({ categories, initialCategory, categoryLocked = false, nameLab
 function BillEditor({ bill, categories, reload, onError }: {
   bill: SolaceBill; categories: string[]; reload: () => void; onError: (message: string) => void
 }) {
+  const [open, setOpen] = useState(false)
   const [f, setF] = useState({
     name: bill.name,
     provider: bill.provider,
@@ -296,10 +292,33 @@ function BillEditor({ bill, categories, reload, onError }: {
       setSaving(false)
     }
   }
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-3 min-h-11 border-t border-line pt-3 text-left text-sm font-medium text-primary hover:underline"
+      >
+        Edit bill
+      </button>
+    )
+  }
+
   return (
-    <details className="mt-3 border-t border-line pt-3">
-      <summary className="cursor-pointer text-sm font-medium text-primary">Edit bill</summary>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+    <Modal
+      title={`Edit ${bill.name}`}
+      onClose={() => setOpen(false)}
+      size="full"
+      footer={
+        <>
+          <Button size="sm" variant="danger" onClick={remove} disabled={saving}>Delete</Button>
+          <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button size="sm" onClick={save} loading={saving} disabled={!f.name.trim()}>Save</Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Name"><Input value={f.name} onChange={e => set('name', e.target.value)} /></Field>
         <Field label="Provider"><Input value={f.provider} onChange={e => set('provider', e.target.value)} /></Field>
         <Field label="Amount"><Input type="number" min="0" step="0.01" value={f.amount} onChange={e => set('amount', e.target.value)} /></Field>
@@ -338,27 +357,24 @@ function BillEditor({ bill, categories, reload, onError }: {
             </Select>
           </Field>
         )}
+        </div>
+        <p className="mt-2 text-xs text-muted">Paid history is always preserved. Use all unpaid only when correcting the bill rule for the whole budget year.</p>
+        <div className="flex flex-wrap gap-4 text-sm text-muted">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={f.is_active} onChange={e => set('is_active', e.target.checked)} />
+            Active
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={f.include_in_set_aside} onChange={e => set('include_in_set_aside', e.target.checked)} />
+            Include in set-aside
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={f.is_autopay} onChange={e => set('is_autopay', e.target.checked)} />
+            Autopay
+          </label>
+        </div>
       </div>
-      <p className="mt-2 text-xs text-muted">Paid history is always preserved. Use all unpaid only when correcting the bill rule for the whole budget year.</p>
-      <div className="mt-3 flex flex-wrap gap-4 text-sm text-muted">
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={f.is_active} onChange={e => set('is_active', e.target.checked)} />
-          Active
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={f.include_in_set_aside} onChange={e => set('include_in_set_aside', e.target.checked)} />
-          Include in set-aside
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={f.is_autopay} onChange={e => set('is_autopay', e.target.checked)} />
-          Autopay
-        </label>
-      </div>
-      <div className="mt-3 flex gap-2">
-        <Button size="sm" onClick={save} loading={saving} disabled={!f.name.trim()}>Save</Button>
-        <Button size="sm" variant="danger" onClick={remove} disabled={saving}>Delete</Button>
-      </div>
-    </details>
+    </Modal>
   )
 }
 

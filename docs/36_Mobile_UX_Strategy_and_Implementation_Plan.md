@@ -986,7 +986,7 @@ additions to `e2e/mobile-shell.spec.ts`** (touch-target coverage, More-sheet foc
 the tightened Hub assertion). 20 Playwright test definitions total, 63 passing across the four
 viewport projects (stable across repeated runs); `tsc --noEmit` and `npm run build` both clean.
 
-### Phase 5 — Homestead
+### Phase 5 — Homestead — DONE (v0.36.2)
 
 This removes one of the largest current phone pain points.
 
@@ -996,7 +996,28 @@ This removes one of the largest current phone pain points.
 - floor plan becomes explicit full-screen spatial mode;
 - focused maintenance/appliance/project flows.
 
-### Phase 6 — Solace / Money
+**Shipped in `HomesteadPage.tsx`/`HomesteadRoomPage.tsx`.** The overview tab becomes a phone
+dashboard (`MobileHomesteadDashboard`: a `MobileSummaryCard` "Needs attention" line plus a
+`MobileListRow` per section) instead of rendering the nine-option `<select>` the shared `Tabs`
+component falls back to past three items; desktop keeps the full `Tabs` bar unchanged
+(`hidden sm:block`). Deliberately **not** converted to real subroutes: `?tab=` is a load-bearing
+deep-link contract consumed from six other places (`Hub`, `Solace`, `Quick Create`,
+`sourceLinks.ts`, the room page's own back-links) — the dashboard still writes `?tab=` under the
+hood via the same `useUrlTab`, so every existing deep link keeps working untouched. A phone-only
+`MobileScreenHeader` (`showBack`) appears once inside a section, returning to the dashboard —
+this is exactly the "genuine exception" the Phase 3 correction pass reserved `showBack` for,
+since the shell's own Back only understands route changes, not query-param tab switches on the
+same route. Rooms now defaults to the list/tile view on phone (`isPhoneViewport()`, the same
+helper Calendar's Agenda-default uses, extracted to `src/lib/viewport.ts` so it's shared rather
+than duplicated a third time); the floor plan remains one tap away as the deliberate full-screen
+spatial mode, not the default. Room detail's "Add/Edit plan item" inline `Card` form is now
+`Modal size="full"`, matching Calendar's reference sheet pattern. Maintenance/Appliances/Pool/
+Utilities/Improvements/Contacts's own inline forms were **not** converted — a full sweep of every
+form in a 2000+ line file was judged disproportionate to the doc's core ask (the dashboard/
+subroute restructuring and the floor-plan default), and can follow the same `Modal size="full"`
+pattern individually when a later pass reaches each one.
+
+### Phase 6 — Solace / Money — DONE (v0.36.2)
 
 - create action-first Money home;
 - separate Bills/Plan/Buckets/Purchases/Insights;
@@ -1004,7 +1025,20 @@ This removes one of the largest current phone pain points.
 - preserve sensitive gate;
 - ensure monetary values/status remain readable without dense dashboards.
 
-### Phase 7 — Notifications and Settings
+**Shipped in `SolacePage.tsx`.** The Now/Bills/Plan/Insights/Manage structure and the
+action-first Now tab (cycle strip, due-bills list, set-aside coverage) already matched this
+section closely and were left alone. The one real structural gap — Solace had **zero** `Modal`
+usage anywhere, every add/edit flow was an inline-expanding panel — is fixed at its single
+highest-leverage point: `CreatePanel`, the one shared wrapper behind Add Bill/Add Bucket/Add
+Purchase/Add Payday, now opens `Modal size="full"` instead of pushing an inline panel into the
+page flow, fixing all four in one change. `BillEditor` ("Edit bill", previously a `<details>`
+disclosure) got the same treatment individually since the doc names it explicitly alongside Add
+Bill. `SensitiveGate` wraps the whole page above all tab/section navigation and is untouched by
+any of this — one unlock still covers the full session. Other individual editors (bucket rules,
+purchases, paydays) keep their own inline expand/collapse for now; they can move to
+`Modal size="full"` the same way when addressed individually.
+
+### Phase 7 — Notifications and Settings — DONE (v0.36.2)
 
 Establish the reusable settings-directory pattern:
 
@@ -1013,6 +1047,32 @@ Establish the reusable settings-directory pattern:
 - dedicated subpages;
 - current-device-first push experience;
 - shorter default explanatory copy with deeper help when required.
+
+**Shipped in `NotificationSettingsPage.tsx` and `SettingsPage.tsx`.** The 12-category list moves
+from a batch table (one page-level "Save preferences" button) to `MobileSection`/
+`MobileSettingsRow` per category, each switch (in-app, push, mine-only) saving itself immediately
+— removing the duplicate inline `Toggle` component `MobileSettingsRow` was always meant to
+replace here (its own header comment named this page as an intended consumer since Phase 2).
+Quiet hours deliberately **keeps** its explicit Save button: start/end/morning-time is a coherent
+3-field record, exactly the case doc §7.4 carves out from "immediate save" ("explicit Save for
+multi-field records where the user needs to review a coherent change"). `SettingsPage.tsx`
+("Manage HomeStack") gained a real settings-directory section (`MobileListRow`: Your
+notifications, Push devices, Version history) and now also lists **People & access** — previously
+a same-level `/users` route reachable only from the admin nav group, not linked from Settings at
+all, closing a gap the Phase 5-7 grounding pass flagged. The Stacks enable/disable list (already
+immediate-save) got its 44px hit-area fix, matching the Phase 3 correction pass's switch pattern.
+**Not extracted into separate subpages:** Household name/timezone, Family colour and Meridian
+settings stay as inline `Card` sections rather than becoming five new routes — each already has
+an appropriately-scoped explicit Save, and splitting every settings group into its own page was
+judged beyond what this pass's real gaps called for.
+
+**New `e2e/homestead.spec.ts`, `e2e/solace.spec.ts`, `e2e/notifications-settings.spec.ts`
+(Phases 5-7).** 31 Playwright test definitions total. Also tightened `playwright.config.ts`
+itself this round: all four viewport projects share one real Vite dev server, and the growing
+suite was queueing it hard enough under full default concurrency (22 host cores) to produce
+genuine timing flakes — confirmed as real queueing delay via repeated isolated runs, not a logic
+bug, before capping workers (4 locally / 2 in CI) and adding one retry rather than raising every
+timeout to mask it. Stable across 5 consecutive full runs after the change.
 
 ### Phase 8 — Daily-use nodes
 

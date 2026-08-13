@@ -6,6 +6,7 @@ import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { PageHeader } from '../../../components/PageHeader'
 import { confirmDialog } from '../../../components/Dialogs'
+import { MobileSection, MobileSettingsRow } from '../../../components/mobile'
 import { deviceDetail, lastSeenLabel } from './pushDeviceFormat'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
@@ -24,28 +25,12 @@ function urlBase64ToUint8Array(base64url: string): Uint8Array<ArrayBuffer> {
   return bytes
 }
 
-function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      onClick={onClick}
-      className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors ${on ? 'bg-success' : 'bg-line-strong'}`}
-    >
-      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${on ? 'left-5' : 'left-0.5'}`} />
-    </button>
-  )
-}
-
 export function NotificationSettingsPage() {
   const [rows, setRows] = useState<NotificationPreference[]>([])
   const [settings, setSettings] = useState<UserNotificationSettings | null>(null)
   const [devices, setDevices] = useState<PushDevice[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
   const [savingSettings, setSavingSettings] = useState(false)
   const [subscribing, setSubscribing] = useState(false)
   const [busyDeviceId, setBusyDeviceId] = useState<number | null>(null)
@@ -115,18 +100,31 @@ export function NotificationSettingsPage() {
     } catch (e) { setError(errMsg(e)) } finally { setBusyDeviceId(null) }
   }
 
-  const setRow = (category: string, patch: Partial<NotificationPreference>) =>
-    setRows(prev => prev.map(row => row.category === category ? { ...row, ...patch } : row))
-
-  const save = async () => {
-    setSaving(true); setError(null)
+  // docs/36 §7.4: "prefer immediate save for simple settings switches" — each toggle saves
+  // itself the moment it's flipped, rather than batching every category behind one page-level
+  // Save button. Optimistic update, reverted on failure. Quiet hours below stays explicit-save:
+  // start/end/morning-time are a coherent 3-field record, exactly the case §7.4 calls out for
+  // "explicit Save... where the user needs to review a coherent change."
+  const [savingCategory, setSavingCategory] = useState<string | null>(null)
+  const updateCategory = async (category: string, patch: Partial<NotificationPreference>) => {
+    const previous = rows
+    const next = rows.map(row => row.category === category ? { ...row, ...patch } : row)
+    setRows(next)
+    setSavingCategory(category)
+    setError(null)
     try {
-      const saved = await api.updateNotificationPreferences(rows.map(row => ({
-        category: row.category, in_app_enabled: row.in_app_enabled,
-        push_enabled: row.push_enabled, mine_only: row.mine_only,
-      })))
-      setRows(saved)
-    } catch (e) { setError(errMsg(e)) } finally { setSaving(false) }
+      const updatedRow = next.find(row => row.category === category)!
+      const [saved] = await api.updateNotificationPreferences([{
+        category: updatedRow.category, in_app_enabled: updatedRow.in_app_enabled,
+        push_enabled: updatedRow.push_enabled, mine_only: updatedRow.mine_only,
+      }])
+      setRows(prev => prev.map(row => row.category === saved.category ? saved : row))
+    } catch (e) {
+      setRows(previous)
+      setError(errMsg(e))
+    } finally {
+      setSavingCategory(null)
+    }
   }
 
   const saveSettings = async () => {
@@ -265,39 +263,38 @@ export function NotificationSettingsPage() {
         <Button className="mt-3" onClick={saveSettings} loading={savingSettings}>Save</Button>
       </Card>
 
-      <Card title="Categories">
-        <p className="text-sm text-muted mb-4">
-          In-app always shows in the bell. Push goes to every device you've enabled above.
+      <div>
+        <p className="mb-3 px-1 text-sm text-muted">
+          In-app always shows in the bell. Push goes to every device you've enabled above. Every
+          switch below saves the moment you flip it.
         </p>
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4">
           {rows.map(row => (
-            <div key={row.category} className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-line/60 pb-4 last:border-0 last:pb-0">
-              <div className="min-w-[10rem] flex-1">
-                <div className="text-sm font-semibold text-ink">{row.label}</div>
-                {row.supports_mine_only && (
-                  <label className="mt-1 flex items-center gap-1.5 text-xs text-muted">
-                    <input
-                      type="checkbox"
-                      checked={row.mine_only}
-                      onChange={e => setRow(row.category, { mine_only: e.target.checked })}
-                    />
-                    Only things assigned to me
-                  </label>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-muted-strong w-10">In-app</span>
-                <Toggle on={row.in_app_enabled} onClick={() => setRow(row.category, { in_app_enabled: !row.in_app_enabled })} label={`${row.label} in-app`} />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-muted-strong w-10">Push</span>
-                <Toggle on={row.push_enabled} onClick={() => setRow(row.category, { push_enabled: !row.push_enabled })} label={`${row.label} push`} />
-              </div>
-            </div>
+            <MobileSection key={row.category} title={row.label}>
+              <MobileSettingsRow
+                label="In-app"
+                checked={row.in_app_enabled}
+                onToggle={v => updateCategory(row.category, { in_app_enabled: v })}
+                disabled={savingCategory === row.category}
+              />
+              <MobileSettingsRow
+                label="Push"
+                checked={row.push_enabled}
+                onToggle={v => updateCategory(row.category, { push_enabled: v })}
+                disabled={savingCategory === row.category}
+              />
+              {row.supports_mine_only && (
+                <MobileSettingsRow
+                  label="Only things assigned to me"
+                  checked={row.mine_only}
+                  onToggle={v => updateCategory(row.category, { mine_only: v })}
+                  disabled={savingCategory === row.category}
+                />
+              )}
+            </MobileSection>
           ))}
         </div>
-        <Button className="mt-4" onClick={save} loading={saving}>Save preferences</Button>
-      </Card>
+      </div>
 
       <Link to="/settings" className="font-bold text-primary hover:underline">← Manage HomeStack</Link>
     </div>

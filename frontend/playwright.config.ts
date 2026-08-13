@@ -14,7 +14,15 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  // All four projects share one real Vite dev server (not a production static server, not one
+  // instance per worker) — Playwright's default worker count is CPU-based (22 cores here), which
+  // queues that single server hard enough under full-suite load to produce genuine timing
+  // flakes (a different, unrelated test failing each run, never reproducing in isolation or
+  // under lighter load). Capped workers plus one retry, rather than raising every timeout to
+  // paper over it — each flake here is real queueing delay, not a logic bug, so a retry against
+  // the same never-mutated mocked state is a legitimate fix, not a mask.
+  retries: 1,
+  workers: process.env.CI ? 2 : 4,
   reporter: [['list']],
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173',

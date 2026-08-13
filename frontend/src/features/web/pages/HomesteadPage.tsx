@@ -29,6 +29,8 @@ import { useStacks } from '../../stacks/StacksContext'
 import { useUrlAction, useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
 import { HomeFloorPlan } from '../components/HomeFloorPlan'
+import { MobileListRow, MobileScreenHeader, MobileSection, MobileSummaryCard } from '../../../components/mobile'
+import { isPhoneViewport } from '../../../lib/viewport'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ')
@@ -255,6 +257,55 @@ function OverviewTab({ onError, onGoTab, canUseMoney }: {
 }
 
 // ---------------------------------------------------------------------------
+// Mobile dashboard — docs/36 §6.9: nine tabs is too many for a phone tab selector, so the
+// overview tab becomes a dashboard on phone instead (desktop keeps the full Tabs bar
+// unchanged). Deliberately a separate component with its own small fetch, matching
+// CalendarPage's mobile/desktop split pattern, rather than threading OverviewTab's internal
+// state through props — the two render entirely different content.
+// ---------------------------------------------------------------------------
+
+const DASHBOARD_DESTINATIONS: Array<{ key: Tab; icon: string; label: string; moneyOnly?: boolean }> = [
+  { key: 'rooms', icon: '🚪', label: 'Rooms & areas' },
+  { key: 'maintenance', icon: '🛠', label: 'Maintenance' },
+  { key: 'appliances', icon: '🔌', label: 'Appliances' },
+  { key: 'pool', icon: '🏊', label: 'Pool & spa' },
+  { key: 'usage', icon: '💧', label: 'Power & water' },
+  { key: 'improvements', icon: '🏗', label: 'Improvements' },
+  { key: 'contacts', icon: '📇', label: 'Contacts' },
+  { key: 'finances', icon: '💰', label: 'Costs & cover', moneyOnly: true },
+]
+
+function MobileHomesteadDashboard({ onGoTab, canUseMoney }: { onGoTab: (t: Tab) => void; canUseMoney: boolean }) {
+  const [counts, setCounts] = useState({ due: 0, warranties: 0, improvements: 0 })
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([api.getMaintenance(true), api.getAppliances(true), api.getImprovements(true)])
+      .then(([m, a, i]) => setCounts({ due: m.length, warranties: a.length, improvements: i.length }))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="h-40 rounded-2xl bg-sunken animate-pulse" />
+
+  const attentionLines: string[] = []
+  if (counts.due > 0) attentionLines.push(`${counts.due} maintenance job${counts.due === 1 ? '' : 's'}`)
+  if (counts.warranties > 0) attentionLines.push(`${counts.warranties} warrant${counts.warranties === 1 ? 'y' : 'ies'} expiring`)
+  if (counts.improvements > 0) attentionLines.push(`${counts.improvements} open improvement${counts.improvements === 1 ? '' : 's'}`)
+
+  return (
+    <div className="flex flex-col gap-4">
+      <MobileSummaryCard title="Needs attention" lines={attentionLines} tone="attention" />
+      <MobileSection title="Your home">
+        {DASHBOARD_DESTINATIONS.filter(d => !d.moneyOnly || canUseMoney).map(d => (
+          <MobileListRow key={d.key} icon={d.icon} title={d.label} onClick={() => onGoTab(d.key)} />
+        ))}
+      </MobileSection>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Rooms & areas — linked overview into dedicated room planning pages
 // ---------------------------------------------------------------------------
 
@@ -271,7 +322,9 @@ function RoomsTab({ onError, canEdit }: { onError: (m: string) => void; canEdit:
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [roomView, setRoomView] = useState<'plan' | 'list'>('plan')
+  // docs/36 §6.9: phone defaults to the room list/tile view, with the floor plan as a
+  // deliberate full-screen spatial mode the user opts into — not the default everyday view.
+  const [roomView, setRoomView] = useState<'plan' | 'list'>(() => (isPhoneViewport() ? 'list' : 'plan'))
   const [form, setForm] = useState({
     name: '', area_type: 'interior' as RoomAreaType, description: '', icon: '',
   })
@@ -2127,6 +2180,11 @@ const TAB_KEYS: Tab[] = [
   'overview', 'rooms', 'maintenance', 'appliances', 'pool', 'usage', 'improvements',
   'contacts', 'finances',
 ]
+const TAB_LABELS: Record<Tab, string> = {
+  overview: 'Our home', rooms: 'Rooms & areas', maintenance: 'Maintenance', appliances: 'Appliances',
+  pool: 'Pool & spa', usage: 'Power & water', improvements: 'Improvements', contacts: 'Contacts',
+  finances: 'Costs & cover',
+}
 
 export function HomesteadPage() {
   const { user } = useAuth()
@@ -2177,25 +2235,44 @@ export function HomesteadPage() {
         <SearchResults results={results} />
       ) : (
         <>
-          <Tabs
-            tabs={[
-              { key: 'overview', label: 'overview' },
-              { key: 'rooms', label: 'rooms' },
-              { key: 'maintenance', label: 'maintenance' },
-              { key: 'appliances', label: 'appliances' },
-              { key: 'pool', label: 'pool & spa' },
-              { key: 'usage', label: 'power & water' },
-              { key: 'improvements', label: 'improvements' },
-              { key: 'contacts', label: 'contacts' },
-              ...(canUseMoney ? [{ key: 'finances' as const, label: 'costs & cover' }] : []),
-            ]}
-            active={tab}
-            onChange={setTab}
-            className="w-full sm:w-fit"
-            mobileSelectLabel="Homestead section"
-          />
+          {/* Desktop keeps the full tab bar; phone gets a dashboard landing (below) plus a
+              contextual Back once inside a section — nine tabs is too many for a mobile picker
+              (docs/36 §6.9). The ?tab= query param stays the single source of truth for both,
+              so existing deep links (Hub, Solace, Quick Create, source links) are untouched. */}
+          <div className="hidden sm:block">
+            <Tabs
+              tabs={[
+                { key: 'overview', label: 'overview' },
+                { key: 'rooms', label: 'rooms' },
+                { key: 'maintenance', label: 'maintenance' },
+                { key: 'appliances', label: 'appliances' },
+                { key: 'pool', label: 'pool & spa' },
+                { key: 'usage', label: 'power & water' },
+                { key: 'improvements', label: 'improvements' },
+                { key: 'contacts', label: 'contacts' },
+                ...(canUseMoney ? [{ key: 'finances' as const, label: 'costs & cover' }] : []),
+              ]}
+              active={tab}
+              onChange={setTab}
+              className="w-full sm:w-fit"
+              mobileSelectLabel="Homestead section"
+            />
+          </div>
+          {tab !== 'overview' && (
+            <MobileScreenHeader
+              className="sm:hidden"
+              title={TAB_LABELS[tab]}
+              showBack
+              onBack={() => setTab('overview')}
+            />
+          )}
 
-          {tab === 'overview' && <OverviewTab onError={setError} onGoTab={setTab} canUseMoney={canUseMoney} />}
+          {tab === 'overview' && (
+            <>
+              <div className="sm:hidden"><MobileHomesteadDashboard onGoTab={setTab} canUseMoney={canUseMoney} /></div>
+              <div className="hidden sm:block"><OverviewTab onError={setError} onGoTab={setTab} canUseMoney={canUseMoney} /></div>
+            </>
+          )}
           {tab === 'rooms' && <RoomsTab onError={setError} canEdit={Boolean(user && user.role !== 'guest' && !user.is_child_account)} />}
           {tab === 'maintenance' && <MaintenanceTab people={people} defaultAssignee={defaultAssignee} onError={setError} canUseMoney={canUseMoney} />}
           {tab === 'appliances' && <AppliancesTab onError={setError} />}

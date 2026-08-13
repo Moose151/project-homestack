@@ -20,6 +20,7 @@ import { useStacks } from '../../stacks/StacksContext'
 import { useUrlAction } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
 import { ColourPicker } from '../../../components/ColourPicker'
+import { isPhoneViewport } from '../../../lib/viewport'
 
 // ---------------------------------------------------------------------------
 // Date helpers (no external deps)
@@ -654,11 +655,6 @@ const linkedDate = () => {
   const d = new Date(`${raw}T00:00:00`)
   return Number.isNaN(d.getTime()) ? null : d
 }
-// This page's own mobile/desktop split is the `sm:` breakpoint (matching every `sm:hidden`/
-// `hidden sm:block` below), not the app shell's `md:` — kept consistent with itself rather than
-// introduced fresh here.
-const isPhoneViewport = () => typeof window !== 'undefined' && window.innerWidth < 640
-
 export function CalendarPage() {
   const { user } = useAuth()
   const { household } = useStacks()

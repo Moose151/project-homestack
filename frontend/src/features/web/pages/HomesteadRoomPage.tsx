@@ -12,6 +12,7 @@ import { Button } from '../../../components/Button'
 import { Card } from '../../../components/Card'
 import { EmptyState } from '../../../components/EmptyState'
 import { Field, Input, Select, Textarea, fieldClass } from '../../../components/Field'
+import { Modal } from '../../../components/Modal'
 import { PageHeader } from '../../../components/PageHeader'
 import { DeleteAction, EditAction } from '../../../components/RowActions'
 import { StatCard } from '../../../components/StatCard'
@@ -487,8 +488,7 @@ export function HomesteadRoomPage() {
     setItemOpen(true)
   }
 
-  const saveItem = async (event: React.FormEvent) => {
-    event.preventDefault()
+  const saveItem = async () => {
     if (!itemForm.title.trim()) return
     setItemSaving(true)
     const payload = {
@@ -615,8 +615,18 @@ export function HomesteadRoomPage() {
       ) : null}
 
       {itemOpen && (
-        <Card title={editItemId ? 'Edit plan item' : 'Add plan item'}>
-          <form onSubmit={saveItem} className="flex flex-col gap-3">
+        <Modal
+          title={editItemId ? 'Edit plan item' : 'Add plan item'}
+          onClose={() => setItemOpen(false)}
+          size="full"
+          footer={
+            <>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setItemOpen(false)}>Cancel</Button>
+              <Button size="sm" onClick={saveItem} loading={itemSaving} disabled={!itemForm.title.trim()}>Save item</Button>
+            </>
+          }
+        >
+          <div className="flex flex-col gap-3">
             <Input value={itemForm.title} onChange={e => setItemForm(f => ({ ...f, title: e.target.value }))} placeholder="What do you want to buy or do?" autoFocus />
             <div className="grid gap-3 sm:grid-cols-3">
               <Field label="What is this?" hint="A project's parts all add up; a single item's options are alternatives.">
@@ -657,9 +667,8 @@ export function HomesteadRoomPage() {
             </div>
             <Field label="Assigned to"><AssigneeSelect people={people} value={itemForm.assigned_to_person_ids} onChange={value => setItemForm(f => ({ ...f, assigned_to_person_ids: value }))} className={fieldClass} /></Field>
             <Field label="Notes"><Textarea rows={2} value={itemForm.notes} onChange={e => setItemForm(f => ({ ...f, notes: e.target.value }))} /></Field>
-            <div className="flex justify-end gap-2"><Button type="button" variant="ghost" size="sm" onClick={() => setItemOpen(false)}>Cancel</Button><Button type="submit" size="sm" loading={itemSaving} disabled={!itemForm.title.trim()}>Save item</Button></div>
-          </form>
-        </Card>
+          </div>
+        </Modal>
       )}
 
       {grouped.active.length === 0 && grouped.completed.length === 0 && grouped.archived.length === 0 ? (

@@ -10,6 +10,7 @@ import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { PageHeader } from '../../../components/PageHeader'
 import { ColourPicker } from '../../../components/ColourPicker'
+import { MobileListRow, MobileSection } from '../../../components/mobile'
 
 const COMMON_TIMEZONES = [
   'UTC', 'Australia/Sydney', 'Australia/Melbourne', 'Australia/Brisbane',
@@ -272,14 +273,17 @@ export function SettingsPage() {
                   <div className="text-xs text-muted truncate">{guide.summary}</div>
                 </div>
                 {canToggle ? (
+                  // 44px hit area around a visually unchanged 48x28 pill (docs/36 §3.3).
                   <button
                     onClick={() => toggle(n.key, on)}
                     disabled={busy === n.key || !isManager}
                     role="switch"
                     aria-checked={on}
-                    className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 disabled:opacity-50 ${on ? 'bg-success' : 'bg-line-strong'}`}
+                    className="grid h-11 w-11 flex-shrink-0 place-items-center disabled:opacity-50"
                   >
-                    <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${on ? 'left-6' : 'left-1'}`} />
+                    <span className={`relative h-7 w-12 rounded-full transition-colors ${on ? 'bg-success' : 'bg-line-strong'}`}>
+                      <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${on ? 'left-6' : 'left-1'}`} />
+                    </span>
                   </button>
                 ) : <span className="flex-shrink-0 rounded-full bg-sunken px-2.5 py-1 text-[11px] font-bold text-muted">Future</span>}
               </li>
@@ -288,39 +292,17 @@ export function SettingsPage() {
         </ul>
       </Card>
 
-      <Card title="About this installation">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold text-ink">Version history</p>
-            <p className="text-xs text-muted">See the installed version and the major changes delivered over time.</p>
-          </div>
-          <Link to="/settings/version-history" className="flex-shrink-0 text-sm font-bold text-primary hover:underline">View history →</Link>
-        </div>
-      </Card>
-
-      <Card title="Your notifications">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold text-ink">Notification preferences</p>
-            <p className="text-xs text-muted">Personal — what you get notified about, and quiet hours. Applies to your login only.</p>
-          </div>
-          <Link to="/settings/notifications" className="flex-shrink-0 text-sm font-bold text-primary hover:underline">Manage →</Link>
-        </div>
-      </Card>
+      {/* docs/36 §6.15: a settings directory, not another dense card — the same destination
+          list regardless of screen size, since these are always one-tap-deeper navigation
+          rather than inline controls. */}
+      <MobileSection title="More">
+        {isAdmin && <MobileListRow icon="👥" to="/users" title="People & access" subtitle="Profiles, roles and sign-in" />}
+        <MobileListRow icon="🔔" to="/settings/notifications" title="Your notifications" subtitle="What you get notified about, and quiet hours — applies to your login only" />
+        {isAdmin && <MobileListRow icon="📱" to="/settings/push-devices" title="Push devices" subtitle="Household-wide — who's registered for push notifications" />}
+        <MobileListRow icon="🕘" to="/settings/version-history" title="Version history" subtitle="The installed version and what's changed over time" />
+      </MobileSection>
 
       {isAdmin && <BackupCard onError={setError} />}
-
-      {isAdmin && (
-        <Card title="Notifications">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold text-ink">Push devices</p>
-              <p className="text-xs text-muted">Household-wide — which people and devices are registered for push notifications.</p>
-            </div>
-            <Link to="/settings/push-devices" className="flex-shrink-0 text-sm font-bold text-primary hover:underline">View →</Link>
-          </div>
-        </Card>
-      )}
 
       <Card title="Family colour">
         <p className="text-sm text-muted mb-3">

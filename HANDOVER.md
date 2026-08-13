@@ -171,22 +171,30 @@ Major shipped areas include:
 Web Push is live and validated on real devices; VAPID and the hourly `notifications_run_scheduled`
 job are configured on the server.
 
-**Mobile UX v1 (v0.36.1, in progress on `feature/mobile-ux`)** — owner-directed rework of the
-phone experience per `docs/36_Mobile_UX_Strategy_and_Implementation_Plan.md`. Phases 1–4 done:
+**Mobile UX v1 (v0.36.2, in progress on `feature/mobile-ux`)** — owner-directed rework of the
+phone experience per `docs/36_Mobile_UX_Strategy_and_Implementation_Plan.md`. Phases 1–7 done:
 a Playwright mobile-viewport acceptance suite (API-mocked — see `frontend/e2e/README.md` for why
 it must never hit the real backend), a shared `src/components/mobile/` primitives layer, the
 redesigned AppShell (simplified mobile top bar with contextual Back; fixed Home/Add/More bottom
-nav with two configurable shortcuts), and Calendar as the mobile reference implementation
+nav with two configurable shortcuts), Calendar as the mobile reference implementation
 (phone-default Agenda view, a horizontal-day-strip Week view, simplified Month cells, a
-full-height event sheet). An external review of Phases 1–3 before Phase 4 landed found several
-foundation gaps, all corrected on this branch (docs/36 Phase 3's "Correction pass" has the full
-list): Back was unsafe on a cold deep link/PWA launch (now falls back to the stack's base route
-rather than a bare `navigate(-1)`); several shell/dialog controls were under the 44px
-touch-target baseline; the More sheet had a second, thinner dialog-accessibility implementation
-instead of reusing `Modal`'s (extracted into a shared `useDialogA11y` hook); the bottom-bar
-shortcut list couldn't persist genuinely zero shortcuts and didn't backfill a slot when a pinned
-node got disabled. Phases 5+ (Homestead, Solace, Notifications/Settings, the remaining daily-use
-and lower-frequency nodes) are not started. Not yet merged to `main`.
+full-height event sheet), a phone dashboard for Homestead's nine sections (preserving the
+`?tab=` deep-link contract six other places rely on) plus a list-first Rooms default and a
+full-sheet room-item editor, `Modal size="full"` sheets for Solace's Add Bill/Bucket/Purchase/
+Payday and Edit Bill (previously zero `Modal` usage anywhere in that page), and immediate-save
+notification-category switches plus a real settings-directory section (including a "People &
+access" link that was previously unreachable from Settings at all). An external review of
+Phases 1–3 before Phase 4 landed found several foundation gaps, all corrected on this branch
+(docs/36 Phase 3's "Correction pass" has the full list): Back was unsafe on a cold deep link/PWA
+launch (now falls back to the stack's base route rather than a bare `navigate(-1)`); several
+shell/dialog controls were under the 44px touch-target baseline; the More sheet had a second,
+thinner dialog-accessibility implementation instead of reusing `Modal`'s (extracted into a
+shared `useDialogA11y` hook); the bottom-bar shortcut list couldn't persist genuinely zero
+shortcuts and didn't backfill a slot when a pinned node got disabled. Also found and fixed along
+the way: `AppShell`'s `<main>` was never actually width-constrained to the viewport (a flex-item
+`min-width: auto` issue, latent until Calendar's week-day-strip was wide enough to expose it).
+Phase 8+ (Atlas, Meridian, Education, Pets, Fitness, Corners, then the lower-frequency content/
+planning nodes, then real-device acceptance) not started. Not yet merged to `main`.
 
 ---
 
