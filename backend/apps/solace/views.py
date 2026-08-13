@@ -402,7 +402,7 @@ class SolaceHealthView(SolaceAccessMixin, APIView):
         ):
             issues.append({"level": "warning", "code": "allocation_empty", "message": "Active buckets do not allocate any income."})
         if bills and not any(
-            "bill" in (row.category or "").casefold()
+            row.purpose == BudgetBucket.Purpose.BILLS
             for row in buckets
         ):
             issues.append({
