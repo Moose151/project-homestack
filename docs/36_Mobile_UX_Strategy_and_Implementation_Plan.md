@@ -986,6 +986,54 @@ additions to `e2e/mobile-shell.spec.ts`** (touch-target coverage, More-sheet foc
 the tightened Hub assertion). 20 Playwright test definitions total, 63 passing across the four
 viewport projects (stable across repeated runs); `tsc --noEmit` and `npm run build` both clean.
 
+**Correction pass (v0.36.3, external review of Phase 4 before merge).** A second review, this
+time specifically against the shipped Calendar reference implementation, found eight issues:
+
+1. **Agenda's Previous/Next/Today never actually paged anything** — Agenda always fetches a fixed
+   "today + 60 days" window regardless of `anchor`, so the controls looked interactive but were
+   inert. Hidden in Agenda (`view !== 'agenda'`) rather than wiring up paging Agenda was never
+   designed for; the period label still shows ("Upcoming").
+2. **The floating Add button and the desktop `+ Event` action both fell through to `new Date()`
+   in Week view** instead of the selected `anchor` day — the one view where Quick Add already
+   correctly used `anchor`. Both now check `view === 'day' || view === 'week'`.
+3. **Touch targets brought up to ~44px**: Previous/Next (40→44px), Today (40→44px), the mobile
+   view `<select>` (40→44px), the `Popover` "Filter" trigger (38→44px, the component is
+   Calendar-exclusive so this was safe to change at the source), the Quick Add input and its Add
+   button, and the full-sheet event editor's Save/Cancel (both bumped off the shared `Button`
+   `size="sm"` default down them to `size="md"`, scoped to this one modal rather than changing
+   `Button`'s global `sm` size and its many other call sites across the app).
+4. **The Event title field's `autoFocus` was being silently overridden.** `useDialogA11y`'s own
+   autofocus effect runs in a `requestAnimationFrame` after mount and focuses the first control
+   in the dialog when nothing is marked `data-autofocus` — which for this form is the Type
+   `<select>`, not Title. Switched the title `Input` from `autoFocus` to `data-autofocus`, the
+   mechanism the hook was always meant to be driven by.
+5. **"My events only" compared `assigned_to_person_ids` and `defaultAssignee` by array reference**
+   (`!==`), which is always `true` for two different array instances — the filter was silently
+   hiding the user's own events along with everyone else's. Fixed to an ID-membership check
+   (`defaultAssignee.some(id => e.assigned_to_person_ids.includes(id))`), matching the pattern the
+   rotation-occurrence filter already used correctly. Two related latent bugs from the same
+   "array is always truthy" mistake fixed alongside it: the quick-add default assignee (`|| undefined`
+   never triggered on `[]`) and the "My events only" toggle's own visibility check.
+6. **Added a selected-date heading below the phone Week strip** — the day strip scrolls
+   horizontally and the top-bar period label only ever shows the week's date range, so which day
+   was actually selected was easy to lose track of after scrolling.
+7. **Strengthened `e2e/calendar.spec.ts`**: Month now taps the cell that actually carries the
+   fixture event (matched via its `", 1 events"` aria-label suffix) rather than "whichever cell is
+   first"; a new test drives the Week strip to a different day and asserts both the agenda and the
+   new heading change; a new test scrolls the full-height editor to its `More options` section and
+   confirms Save still works; a new source-owned-event test asserts the deep-link `href`; new tests
+   cover the title-autofocus fix, the "My events only" fix and the 44px baseline directly. 13 test
+   definitions for this file alone (up from 6).
+8. **`MobileScreenHeader`'s `onBack` is now a compile-time requirement whenever `showBack` is
+   true**, via a discriminated prop union, rather than a runtime default that silently fell back to
+   raw `navigate(-1)` when omitted — the exact cold-deep-link failure mode the Phase 3 correction
+   pass fixed at the `AppShell` level. A future screen that forgets to pass `onBack` now fails to
+   compile instead of quietly reintroducing the bug.
+
+No architectural change. 33 Playwright test definitions total for Calendar/shell coverage combined
+with the Phase 3 additions; full suite green (120 passing, 36 skipped across four viewport
+projects, stable); `tsc --noEmit` and `npm run build` both clean.
+
 ### Phase 5 — Homestead — DONE (v0.36.2)
 
 This removes one of the largest current phone pain points.

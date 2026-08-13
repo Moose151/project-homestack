@@ -40,7 +40,7 @@ export function Popover({
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-sm font-medium transition-colors min-h-[38px] ${
+        className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-sm font-medium transition-colors min-h-11 ${
           open ? 'border-primary bg-primary-soft text-primary' : 'border-line text-muted-strong hover:text-ink'
         }`}
       >

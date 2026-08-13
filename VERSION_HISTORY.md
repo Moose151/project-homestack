@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.36.2**
+> **Current version: 0.36.3**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,38 @@
 ---
 
 ## 0.36 — Mobile UX v1 (on feature/mobile-ux)
+
+### 0.36.3 — 2026-08-13 — Calendar correction pass: agenda paging, anchor-day bugs, filter bug, touch targets (docs/36 Phase 4 review, on feature/mobile-ux)
+- **Agenda's Previous/Next/Today were inert** — Agenda always fetches a fixed "today + 60 days"
+  window regardless of `anchor`, so the controls looked interactive but did nothing. Hidden in
+  Agenda rather than wired up to fake paging it was never designed for.
+- **The floating Add button and the desktop `+ Event` action both created against `new Date()` in
+  Week view** instead of the selected `anchor` day — the one view where Quick Add already used
+  `anchor` correctly. Both fixed to match.
+- **Touch targets raised to ~44px**: Previous/Next, Today, the mobile view `<select>`, the
+  `Popover` "Filter" trigger (Calendar-exclusive, safe to fix at the source), the Quick Add input/
+  button, and the full-sheet event editor's Save/Cancel (bumped off the shared `Button`'s
+  `size="sm"` to `size="md"` for this one modal, not a global `Button` change).
+- **The Event title field's `autoFocus` was silently overridden** by `useDialogA11y`'s own
+  autofocus-the-first-control fallback, which ran after React's `autoFocus` and landed on the Type
+  `<select>` instead. Switched to the `data-autofocus` mechanism the hook was built for.
+- **"My events only" compared assignee arrays by reference (`!==`), which is always true** — the
+  filter was silently hiding the user's own events. Fixed to an ID-membership check, plus two
+  related latent bugs from the same "array is always truthy" mistake (quick-add's default
+  assignee, the toggle's own visibility check).
+- **Added a selected-date heading below the phone Week strip** — easy to lose track of the
+  selected day after scrolling the strip horizontally, since the top-bar label only shows the
+  week's date range.
+- **`MobileScreenHeader`'s `onBack` is now a compile-time requirement whenever `showBack` is
+  true**, via a discriminated prop union — closes off the raw-`navigate(-1)`-on-cold-deep-link
+  failure mode at the type level instead of a runtime default a future screen could forget to
+  override.
+- **`e2e/calendar.spec.ts` strengthened**: Month now taps the cell that actually carries the
+  fixture event; new tests cover Week-day-selection changing the agenda/heading, the full-height
+  editor staying usable after scrolling, the source-deep-link `href`, the title-autofocus fix, the
+  "My events only" fix, and the 44px baseline. 13 test definitions in this file, up from 6; 33
+  total across Calendar/shell coverage. Full suite: 120 passing, 36 skipped across four viewport
+  projects; `tsc --noEmit` and `npm run build` both clean. Still on `feature/mobile-ux`, not merged.
 
 ### 0.36.2 — 2026-08-13 — Homestead dashboard, Solace sheets, immediate-save notifications (docs/36 Phases 5-7, on feature/mobile-ux)
 - **Phase 5 — Homestead.** The overview tab becomes a phone dashboard (`MobileSummaryCard`

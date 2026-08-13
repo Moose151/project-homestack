@@ -14,7 +14,27 @@ import { useNavigate } from 'react-router-dom'
  * addition to (or narrower than) the shell's — e.g. a multi-step in-page flow the shell's
  * route-level Back doesn't know about. Two Back buttons on one screen is the failure mode this
  * guards against, so treat `showBack` as an explicit, considered opt-in, not a default.
+ *
+ * `onBack` is required whenever `showBack` is true — a raw `navigate(-1)` fallback is unsafe on
+ * a cold deep link/PWA launch/push-notification link (Back can leave HomeStack entirely), which
+ * is exactly the bug the AppShell-level fix corrected. Making `onBack` a compile-time requirement
+ * here means that fix can't quietly regress for a future screen that forgets to pass one.
  */
+type MobileScreenHeaderProps = {
+  title: ReactNode
+  subtitle?: ReactNode
+  actions?: ReactNode
+  className?: string
+} & (
+  | {
+      /** Opt-in: render this screen's own Back control instead of relying on the shell's. */
+      showBack: true
+      /** A route string always goes to a fixed parent; a function is custom behaviour. */
+      onBack: string | (() => void)
+    }
+  | { showBack?: false; onBack?: undefined }
+)
+
 export function MobileScreenHeader({
   title,
   subtitle,
@@ -22,23 +42,12 @@ export function MobileScreenHeader({
   onBack,
   actions,
   className = '',
-}: {
-  title: ReactNode
-  subtitle?: ReactNode
-  /** Opt-in: render this screen's own Back control instead of relying on the shell's. */
-  showBack?: boolean
-  /** Only used when `showBack` is true. A route string always goes to a fixed parent; a
-   * function is custom behaviour; omitted falls back to router history (-1). */
-  onBack?: string | (() => void)
-  actions?: ReactNode
-  className?: string
-}) {
+}: MobileScreenHeaderProps) {
   const navigate = useNavigate()
 
   const goBack = () => {
     if (typeof onBack === 'function') { onBack(); return }
-    if (typeof onBack === 'string') { navigate(onBack); return }
-    navigate(-1)
+    if (typeof onBack === 'string') navigate(onBack)
   }
 
   return (

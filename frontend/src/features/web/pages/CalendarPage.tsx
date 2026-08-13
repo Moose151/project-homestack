@@ -174,8 +174,8 @@ export function EventModal({
       footer={
         <>
           {event && <button onClick={remove} className="mr-auto text-sm text-danger hover:underline">Delete</button>}
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" onClick={save} loading={saving} disabled={!f.title.trim()}>Save</Button>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={save} loading={saving} disabled={!f.title.trim()}>Save</Button>
         </>
       }
     >
@@ -186,7 +186,7 @@ export function EventModal({
             <option value="appointment">Appointment</option>
           </Select>
         </Field>
-        <Input placeholder="Title" value={f.title} onChange={e => set('title', e.target.value)} autoFocus />
+        <Input placeholder="Title" value={f.title} onChange={e => set('title', e.target.value)} data-autofocus />
         <Field label="Start">
           <DateTimeField
             value={f.start_at}
@@ -272,9 +272,9 @@ function QuickAddBar({ baseDate, time24, onAdd }: {
           value={text}
           onChange={e => setText(e.target.value)}
           placeholder="Try “Dentist 3pm”"
-          className="min-h-[40px] flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted"
+          className="min-h-11 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted"
         />
-        <Button type="submit" size="sm" loading={busy} disabled={!text.trim()}>Add</Button>
+        <Button type="submit" loading={busy} disabled={!text.trim()}>Add</Button>
       </div>
       {preview && (
         <p className="px-7 pb-1 text-xs text-muted">Adds to {preview} — open the event afterwards for more detail.</p>
@@ -796,7 +796,7 @@ export function CalendarPage() {
   const visibleEvents = useMemo(
     () => events.filter(e => {
       if (hiddenSources.has(e.source_node || '__direct__')) return false
-      if (myOnly && defaultAssignee && e.assigned_to_person_ids !== defaultAssignee) return false
+      if (myOnly && defaultAssignee.length > 0 && !defaultAssignee.some(id => e.assigned_to_person_ids.includes(id))) return false
       return true
     }),
     [events, hiddenSources, myOnly, defaultAssignee],
@@ -917,7 +917,7 @@ export function CalendarPage() {
         title: p.title,
         start_at: p.startISO,
         is_all_day: p.allDay,
-        assigned_to_person_ids: defaultAssignee || undefined,
+        assigned_to_person_ids: defaultAssignee.length > 0 ? defaultAssignee : undefined,
       })
       reload()
     } catch (e) { setError(errMsg(e)) }
@@ -944,7 +944,7 @@ export function CalendarPage() {
   const calendarActions = canEditCalendar ? (
     <>
       <Button variant="ghost" size="sm" onClick={() => setScheduleModal(rotatingSchedules[0]?.id ?? 'new')}>Rotation</Button>
-      <Button size="sm" onClick={() => openNew(view === 'day' ? anchor : view === 'month' ? selectedMonthDay : new Date())}>+ Event</Button>
+      <Button size="sm" onClick={() => openNew(view === 'day' || view === 'week' ? anchor : view === 'month' ? selectedMonthDay : new Date())}>+ Event</Button>
     </>
   ) : null
 
@@ -957,10 +957,20 @@ export function CalendarPage() {
       {/* Period navigation stays generous; mobile uses one compact view picker. */}
       <div className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-2.5 shadow-soft sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-1">
-          <button onClick={() => step(-1)} className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl text-xl text-muted-strong hover:bg-sunken" aria-label="Previous period">‹</button>
-          <span className="min-w-0 flex-1 truncate px-1 text-center text-sm font-extrabold text-ink sm:ml-1 sm:text-left">{periodLabel()}</span>
-          <button onClick={() => step(1)} className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl text-xl text-muted-strong hover:bg-sunken" aria-label="Next period">›</button>
-          <button onClick={goToday} className="h-10 flex-shrink-0 rounded-xl px-2.5 text-xs font-bold text-primary hover:bg-primary-soft sm:px-3 sm:text-sm">Today</button>
+          {/* Agenda always shows "today + 60 days" regardless of anchor, so Previous/Next/Today
+              would look interactive but silently do nothing — hidden here rather than wired up
+              to fake paging (docs/36 review). */}
+          {view !== 'agenda' && (
+            <>
+              <button onClick={() => step(-1)} className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl text-xl text-muted-strong hover:bg-sunken" aria-label="Previous period">‹</button>
+              <span className="min-w-0 flex-1 truncate px-1 text-center text-sm font-extrabold text-ink sm:ml-1 sm:text-left">{periodLabel()}</span>
+              <button onClick={() => step(1)} className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl text-xl text-muted-strong hover:bg-sunken" aria-label="Next period">›</button>
+              <button onClick={goToday} className="h-11 flex-shrink-0 rounded-xl px-2.5 text-xs font-bold text-primary hover:bg-primary-soft sm:px-3 sm:text-sm">Today</button>
+            </>
+          )}
+          {view === 'agenda' && (
+            <span className="min-w-0 flex-1 truncate px-1 text-center text-sm font-extrabold text-ink sm:ml-1 sm:text-left">{periodLabel()}</span>
+          )}
         </div>
 
         <div className="flex w-full items-center gap-2 sm:w-auto">
@@ -969,7 +979,7 @@ export function CalendarPage() {
             <select
               value={view}
               onChange={event => changeView(event.target.value as View)}
-              className="min-h-10 w-full appearance-none rounded-xl border border-line bg-surface px-3 pr-9 text-sm font-bold capitalize text-ink"
+              className="min-h-11 w-full appearance-none rounded-xl border border-line bg-surface px-3 pr-9 text-sm font-bold capitalize text-ink"
             >
               <option value="month">Month view</option>
               <option value="week">Week view</option>
@@ -998,7 +1008,7 @@ export function CalendarPage() {
                   </select>
                 </Field>
 
-                {defaultAssignee && (
+                {defaultAssignee.length > 0 && (
                   <button
                     onClick={() => setMyOnly(v => !v)}
                     className={`self-start px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
@@ -1231,6 +1241,11 @@ export function CalendarPage() {
                 )
               })}
             </div>
+            {/* The day strip scrolls horizontally and the top-bar period label only shows the
+                week range, so without this the selected day is easy to lose track of. */}
+            <h2 className="px-1 text-sm font-bold text-ink">
+              {isToday(anchor) ? 'Today' : anchor.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+            </h2>
             <DayAgendaList
               date={anchor} dayEvents={dayEvents} dayRotations={dayRotations} colourFor={colourFor}
               time24={time24} canEditCalendar={canEditCalendar} onOpen={openEvent} onOpenRotation={openRotation}
@@ -1292,7 +1307,7 @@ export function CalendarPage() {
       {canEditCalendar && (
         <button
           type="button"
-          onClick={() => openNew(view === 'month' ? selectedMonthDay : view === 'day' ? anchor : new Date())}
+          onClick={() => openNew(view === 'month' ? selectedMonthDay : view === 'day' || view === 'week' ? anchor : new Date())}
           className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-4 z-20 grid h-14 w-14 place-items-center rounded-2xl bg-primary text-3xl font-light leading-none text-white shadow-card active:scale-95 sm:hidden"
           aria-label={`Add event${view === 'month' ? ` on ${selectedMonthDay.toLocaleDateString()}` : ''}`}
         >
