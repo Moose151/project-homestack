@@ -12,7 +12,10 @@ export function Modal({
   onClose: () => void
   children: ReactNode
   footer?: ReactNode
-  size?: 'sm' | 'md' | 'lg'
+  /** 'full' is docs/36 §5's "full-height/focused mobile form sheet" — edge-to-edge and
+   * near-viewport-height on phone (a whole screen's worth of a create/edit flow), but no
+   * larger than the normal 'lg' dialog on desktop, where a full-height modal would be unusual. */
+  size?: 'sm' | 'md' | 'lg' | 'full'
 }) {
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -52,7 +55,8 @@ export function Modal({
     }
   }, [])
 
-  const maxW = size === 'sm' ? 'max-w-sm' : size === 'lg' ? 'max-w-2xl' : 'max-w-lg'
+  const maxW = size === 'sm' ? 'max-w-sm' : size === 'lg' || size === 'full' ? 'max-w-2xl' : 'max-w-lg'
+  const isFull = size === 'full'
 
   return (
     <div
@@ -64,7 +68,11 @@ export function Modal({
     >
       <div
         ref={dialogRef}
-        className={`w-full ${maxW} max-h-[92vh] overflow-y-auto rounded-t-2xl bg-surface pb-[env(safe-area-inset-bottom)] shadow-card sm:rounded-2xl sm:pb-0`}
+        className={`flex w-full ${maxW} flex-col overflow-y-auto bg-surface shadow-card ${
+          isFull
+            ? 'h-[100dvh] max-h-[100dvh] rounded-none sm:h-auto sm:max-h-[92vh] sm:rounded-2xl'
+            : 'max-h-[92vh] rounded-t-2xl pb-[env(safe-area-inset-bottom)] sm:rounded-2xl sm:pb-0'
+        }`}
         onClick={e => e.stopPropagation()}
       >
         {title && (
@@ -79,9 +87,9 @@ export function Modal({
             </button>
           </div>
         )}
-        <div className="p-4 sm:p-5">{children}</div>
+        <div className={`p-4 sm:p-5 ${isFull ? 'flex-1' : ''}`}>{children}</div>
         {footer && (
-          <div className="sticky bottom-0 flex justify-end gap-2 border-t border-line bg-surface/95 px-5 py-3.5 backdrop-blur">
+          <div className={`sticky bottom-0 flex justify-end gap-2 border-t border-line bg-surface/95 px-5 py-3.5 backdrop-blur ${isFull ? 'pb-[calc(0.875rem+env(safe-area-inset-bottom))] sm:pb-3.5' : ''}`}>
             {footer}
           </div>
         )}

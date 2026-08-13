@@ -17,6 +17,9 @@ venv/
 node_modules/
 /frontend/dist/
 npm-debug.log*
+/frontend/playwright-report/
+/frontend/test-results/
+/frontend/blob-report/
 
 # --- Backups & media volumes (keep the dirs, not their contents) ---
 /backups/*

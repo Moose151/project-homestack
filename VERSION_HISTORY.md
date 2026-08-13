@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.35.1**
+> **Current version: 0.36.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,51 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.36 — Mobile UX v1 (on feature/mobile-ux)
+
+### 0.36.0 — 2026-08-13 — Mobile contract, shared primitives and a redesigned AppShell (docs/36 Phases 1-3, on feature/mobile-ux)
+- **Phase 1 — mobile contract + Playwright.** New `frontend/playwright.config.ts` (four
+  viewport projects: `phone` 390×844, `phone-dark`, `phone-stress-320`, `tablet-768`, all pinned
+  to Chromium — the iPhone device presets default to WebKit, which needs host libraries not
+  installable here without sudo) and `frontend/e2e/`. Runs against the already-live dev server
+  rather than starting a second one. **Every test goes through `e2e/fixtures/mockApi.ts`**,
+  which intercepts all `/api/v1/**` requests and answers from fixtures: this dev server shares a
+  database with real daily use, so a real login/write here could touch real household records or
+  fire a genuine push notification to someone's phone — nothing in this suite ever reaches the
+  real backend. Shared `expectNoHorizontalOverflow`/`expectMinTouchTarget` assertions in
+  `e2e/fixtures/assertions.ts` for reuse as later phases add coverage. `login.spec.ts` and
+  `mobile-shell.spec.ts` are the first two specs (39 tests total across the four projects).
+  Diagnosed and fixed a genuine test race along the way, not papered over with a longer timeout:
+  `useDarkMode`'s mount effect writes its own computed value back to `localStorage`
+  asynchronously, so overriding the key immediately after `goto()` could get silently clobbered
+  by that late write before the test's `reload()` — fixed by waiting for the key to exist first,
+  proving the initial effect had already settled.
+- **Phase 2 — shared mobile primitives.** New `frontend/src/components/mobile/`:
+  `MobileScreenHeader`, `MobileSection`, `MobileListRow`, `MobileSettingsRow` (extracts the
+  `Toggle` pattern `NotificationSettingsPage` had duplicated inline), `MobileSummaryCard`,
+  `StickyActionBar` (reuses the `5.25rem` bottom-nav-clearance constant `CalendarPage`'s floating
+  add button already established), `MobileActionMenu` (built on the existing `Modal`). `Modal`
+  gained a `size: 'full'` variant (edge-to-edge/near-viewport-height on phone, capped at `'lg'`
+  on desktop) for docs/36's "full-height/focused mobile form sheet." Deliberately did not build a
+  filter/sort sheet or a saved/success toast — neither has a real caller yet; a later phase adds
+  one shaped by whatever screen actually needs it.
+- **Phase 3 — AppShell redesign.** Mobile top bar: Search and Create move out (`hidden md:flex` —
+  desktop keeps its top bar exactly as before); the destination icon becomes a Back button
+  whenever the route is nested below its stack's base route, mobile-only. Bottom nav is now Home
+  (fixed) → shortcut → **Add** (fixed centre, opens the same Quick Create sheet) → shortcut →
+  More (fixed) — `MOBILE_SHORTCUT_SLOTS = 2` replaces the old 4-slot model, and Home is no longer
+  offered in the "Edit bottom bar" customiser since its slot is fixed. Search stays reachable on
+  phone via the existing More sheet, matching docs/36 §4.1 ("Search should remain globally
+  available through More"); giving it prominence on the Hub itself is that page's own future
+  conversion, not shell work. Found and fixed in passing: the top bar's Search/Create buttons
+  were 40px (`h-10`/`min-w-10`), short of docs/36's own 44px touch-target baseline — the
+  Playwright check written in Phase 1 caught it immediately; bumped to `h-11`/`min-w-11`.
+- **39 Playwright tests green across 4 viewport projects (stable across repeated runs);
+  backend untouched (frontend-only work); `tsc --noEmit` and `npm run build` both clean.** Not
+  yet merged to `main` — see `docs/36_Mobile_UX_Strategy_and_Implementation_Plan.md` §8 for
+  Phases 4-10 (Calendar as the reference implementation, then Homestead, Solace, Notifications/
+  Settings, the remaining daily-use and lower-frequency nodes, then real-device acceptance).
 
 ## 0.35 — Production readiness and reliability
 

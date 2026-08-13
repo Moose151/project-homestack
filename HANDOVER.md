@@ -171,11 +171,21 @@ Major shipped areas include:
 Web Push is live and validated on real devices; VAPID and the hourly `notifications_run_scheduled`
 job are configured on the server.
 
+**Mobile UX v1 (v0.36.0, in progress on `feature/mobile-ux`)** — owner-directed rework of the
+phone experience per `docs/36_Mobile_UX_Strategy_and_Implementation_Plan.md`. Phases 1–3 done:
+a Playwright mobile-viewport acceptance suite (API-mocked — see `frontend/e2e/README.md` for why
+it must never hit the real backend), a shared `src/components/mobile/` primitives layer, and the
+redesigned AppShell (simplified mobile top bar with contextual Back; fixed Home/Add/More bottom
+nav with two configurable shortcuts). Phases 4+ (Calendar as reference implementation, then
+Homestead/Solace/Notifications/the remaining nodes) are not started. Not yet merged to `main`.
+
 ---
 
 ## 6. Active/recommended next phase
 
-**Production readiness and reliability** is now the recommended primary engineering workstream.
+**Production readiness and reliability** is the recommended primary engineering workstream, run
+in parallel with the owner-directed Mobile UX v1 work above (its Phase 1 also begins item 4
+below, frontend E2E testing, scoped to mobile acceptance rather than full CI yet).
 Use `docs/34_Recommended_Next_Steps.md` for the practical plan and
 `docs/04_Development_Roadmap.md` for canonical sequencing.
 

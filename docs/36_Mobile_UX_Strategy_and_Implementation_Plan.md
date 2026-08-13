@@ -798,7 +798,7 @@ UI hiding is not a security boundary.
 The order matters. Avoid asking an implementation agent to simply “fix mobile responsiveness on all
 pages”, because that will recreate page-specific solutions and leave the product inconsistent.
 
-### Phase 1 — Define and automate the mobile contract
+### Phase 1 — Define and automate the mobile contract — DONE (v0.36.0)
 
 Primary target sizes:
 
@@ -817,7 +817,18 @@ Add Playwright/browser acceptance coverage for major routes before large layout 
 
 Create a short repeatable mobile acceptance checklist for each converted surface.
 
-### Phase 2 — Build shared mobile primitives
+**Shipped as `frontend/playwright.config.ts` + `frontend/e2e/`** (four projects: `phone` 390×844,
+`phone-dark`, `phone-stress-320`, `tablet-768`, all pinned to Chromium — the iPhone device
+presets default to WebKit, which needs host system libraries not installable here without sudo;
+real Safari/iOS behaviour is still Phase 10's job). Runs against the already-live dev server
+rather than starting a second one. **Every test goes through `e2e/fixtures/mockApi.ts`**, which
+intercepts all `/api/v1/**` requests and answers from fixtures — the dev server shares a database
+with real daily use, so a genuine login/write here could touch real household records or fire a
+real push notification; nothing in this suite ever reaches the real backend. Shared assertions
+(`expectNoHorizontalOverflow`, `expectMinTouchTarget`) live in `e2e/fixtures/assertions.ts` for
+reuse as later phases add coverage. See `frontend/e2e/README.md`.
+
+### Phase 2 — Build shared mobile primitives — DONE (v0.36.0)
 
 Implement the common screen/list/settings/sticky-action/form patterns described in section 5.
 
@@ -826,7 +837,21 @@ section navigation and saved feedback.
 
 Do this before converting large nodes.
 
-### Phase 3 — Redesign AppShell/mobile navigation
+**Shipped as `frontend/src/components/mobile/`**: `MobileScreenHeader` (Back + title for a
+focused subscreen), `MobileSection` (heading + spacing), `MobileListRow` (whole-row nav/action
+target — `to`, `onClick`, or static), `MobileSettingsRow` (immediate-save switch or
+navigate-to-subpage row, extracting the `Toggle` pattern `NotificationSettingsPage` had
+duplicated inline), `MobileSummaryCard` (compact attention banner), `StickyActionBar`
+(safe-area-aware bottom actions, offset to clear the bottom nav — reuses the same `5.25rem`
+constant `CalendarPage`'s floating add button already established), and `MobileActionMenu`
+(kebab-triggered action sheet, built on the existing `Modal`). `Modal` itself gained a `size:
+'full'` variant — edge-to-edge and near-viewport-height on phone, no larger than `'lg'` on
+desktop — for the "full-height/focused mobile form sheet" this section calls for. **Deferred, not
+built speculatively:** a standard filter/sort sheet and a standard saved/success toast — neither
+has a concrete first caller yet; add them in whichever later phase actually needs one, matching
+the shape that phase's real UI requires rather than guessing now.
+
+### Phase 3 — Redesign AppShell/mobile navigation — DONE (v0.36.0)
 
 Implement:
 
@@ -837,6 +862,22 @@ Implement:
 - More directory/search/profile;
 - proper detail-screen Back/context behaviour;
 - safe-area and keyboard checks.
+
+**Shipped in `frontend/src/features/web/AppShell.tsx`.** Mobile top bar: Search and Create move
+out (`hidden md:flex` — desktop keeps them exactly as before, per this phase's own "desktop
+sidebar behaviour can remain intact"); the destination icon is replaced by a Back button
+(`navigate(-1)`) whenever the route is nested below its stack's base route (`location.pathname
+!== currentNav.route`), mobile-only. Bottom nav is now Home (fixed) → shortcut → **Add** (fixed
+centre, opens the same Quick Create sheet the old top-bar button did) → shortcut → More (fixed);
+`MOBILE_SHORTCUT_SLOTS = 2` replaces the old 4-slot `MOBILE_PRIMARY_SLOTS`, and Home is no longer
+a choice in the "Edit bottom bar" customiser since its slot is fixed. Search remains reachable on
+phone via the existing More sheet "Quick actions" row, matching this doc's §4.1 instruction
+("Search should remain globally available through More"); giving it prominence on the Hub itself
+is deferred to Hub's own conversion (§6.1), out of scope for a shell-only phase. Found and fixed
+in passing: the top bar's Search/Create buttons were `h-10`/`min-w-10` (40px), short of this
+doc's own §3.3 baseline — bumped to `h-11`/`min-w-11` (44px), the one non-shell-structural change
+in this phase, made because the Playwright touch-target check written in Phase 1 caught it
+immediately.
 
 Desktop sidebar behaviour can remain intact.
 

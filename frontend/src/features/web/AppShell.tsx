@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import type { CSSProperties } from 'react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
@@ -39,11 +39,12 @@ const NAV_GROUPS: Array<{ key: NavItem['group']; label: string }> = [
   { key: 'money', label: 'Money' },
 ]
 
-// How many stacks (in STACKS order) get a dedicated slot in the mobile bottom bar
-// before the rest collapse into the "More" sheet. Keeps the bar to 5 tap targets.
-const MOBILE_PRIMARY_SLOTS = 4
-const MOBILE_DEFAULT_PRIORITY = [
-  'hub', 'calendar', 'atlas', 'homestead', 'pets', 'home_wiki',
+// Mobile bottom bar (docs/36_Mobile_UX_Strategy_and_Implementation_Plan.md §4.2): Home, Add and
+// More are fixed; only the two remaining slots are user-configurable shortcuts. Calendar is the
+// default first shortcut for most households.
+const MOBILE_SHORTCUT_SLOTS = 2
+const MOBILE_DEFAULT_SHORTCUT_PRIORITY = [
+  'calendar', 'atlas', 'homestead', 'pets', 'home_wiki',
   'education', 'books', 'meridian', 'solace',
   'fitness',
   'travel',
@@ -166,6 +167,29 @@ function SidebarLink({ item, accent }: { item: NavItem; accent: boolean }) {
   )
 }
 
+/** One tappable destination in the mobile bottom bar — Home or a configurable shortcut. */
+function MobileNavLink({ item }: { item: NavItem }) {
+  return (
+    <NavLink
+      to={item.route}
+      style={({ isActive }) => (isActive ? { color: item.colour } : undefined)}
+      className={({ isActive }) =>
+        `relative flex min-w-0 flex-1 flex-col items-center justify-center pb-1.5 pt-1.5 text-[11px] font-bold transition-colors ${
+          isActive ? '' : 'text-muted'
+        }`
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <span className="mb-0.5 grid h-8 min-w-11 place-items-center rounded-full px-2 text-xl transition-all" style={{ background: isActive ? softColour(item.colour, '24') : 'transparent' }}>{item.icon}</span>
+          <span className="max-w-full truncate px-1">{item.shortLabel}</span>
+          {isActive && <span className="absolute bottom-0 h-0.5 w-5 rounded-full" style={{ backgroundColor: item.colour }} />}
+        </>
+      )}
+    </NavLink>
+  )
+}
+
 function SectionLabel({ children }: { children: string }) {
   return (
     <p className="px-3 pb-1 pt-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-muted/60 select-none">
@@ -177,6 +201,7 @@ function SectionLabel({ children }: { children: string }) {
 export function AppShell() {
   const { user, logout, updateUser } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const [dark, setDark] = useDarkMode()
   const [editingProfile, setEditingProfile] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -217,23 +242,28 @@ export function AppShell() {
       ]
     : []
 
-  // Mobile bottom bar: a few primary stacks get their own slot; everything else
-  // (remaining stacks + admin + utilities) lives behind the "More" sheet.
+  // Mobile bottom bar: Home, Add and More are fixed; two remaining slots are configurable
+  // shortcuts (docs/36 §4.2). Everything else lives behind the "More" sheet.
   const availableKeys = new Set(stackNav.map(item => item.key))
-  const defaultMobileKeys = MOBILE_DEFAULT_PRIORITY
+  const hubItem = stackNav.find(item => item.key === 'hub')
+  const defaultMobileKeys = MOBILE_DEFAULT_SHORTCUT_PRIORITY
     .filter(key => availableKeys.has(key))
-    .slice(0, MOBILE_PRIMARY_SLOTS)
+    .slice(0, MOBILE_SHORTCUT_SLOTS)
   const effectiveMobileKeys = mobileKeys.length
-    ? mobileKeys.filter(key => availableKeys.has(key)).slice(0, MOBILE_PRIMARY_SLOTS)
+    ? mobileKeys.filter(key => availableKeys.has(key) && key !== 'hub').slice(0, MOBILE_SHORTCUT_SLOTS)
     : defaultMobileKeys
-  const mobilePrimary = effectiveMobileKeys
+  const mobileShortcuts = effectiveMobileKeys
     .map(key => stackNav.find(item => item.key === key))
     .filter((item): item is NavItem => Boolean(item))
   const currentNav = [...stackNav, ...adminNav].find(item => location.pathname.startsWith(item.route))
   // The destination the More button represents while you are on it, because it has no slot.
-  const moreStandsIn = currentNav && !mobilePrimary.some(item => item.key === currentNav.key)
+  const hasOwnMobileSlot = currentNav && (currentNav.key === 'hub' || mobileShortcuts.some(item => item.key === currentNav.key))
+  const moreStandsIn = currentNav && !hasOwnMobileSlot
     ? currentNav
     : null
+  // Mobile-only: the top bar shows Back instead of the destination icon once you're inside a
+  // subscreen (docs/36 §4.1) — a route nested below the matched stack's own base route.
+  const isNestedRoute = Boolean(currentNav && location.pathname !== currentNav.route)
   const contextualGuide = currentNav && !['settings', 'users'].includes(currentNav.key) && !hiddenGuides.includes(currentNav.key)
     ? currentNav
     : null
@@ -247,12 +277,13 @@ export function AppShell() {
   }
 
   const toggleMobileKey = (key: string) => {
+    if (key === 'hub') return // Home always has the fixed bottom-bar slot; nothing to toggle.
     setMobileKeys(previous => {
-      const current = previous.filter(item => availableKeys.has(item))
+      const current = previous.filter(item => availableKeys.has(item) && item !== 'hub')
       const effective = current.length ? current : effectiveMobileKeys
       const next = effective.includes(key)
         ? effective.filter(item => item !== key)
-        : effective.length < MOBILE_PRIMARY_SLOTS ? [...effective, key] : effective
+        : effective.length < MOBILE_SHORTCUT_SLOTS ? [...effective, key] : effective
       localStorage.setItem('hs-mobile-nav', JSON.stringify(next))
       return next
     })
@@ -393,8 +424,20 @@ export function AppShell() {
         <header className="sticky top-0 z-10 h-[62px] border-b border-line bg-surface/82 backdrop-blur-xl md:h-[68px]">
           <div className={`${CONTENT_CONTAINER} flex h-full items-center gap-1.5`}>
           <div className="mr-auto flex min-w-0 items-center gap-2.5">
+            {/* Mobile-only Back, replacing the destination icon once inside a subscreen
+                (docs/36 §4.1) — a simplified top bar leaves Search/Create to the bottom nav
+                and More sheet on phone; desktop keeps its full top bar unchanged (§8 Phase 3). */}
+            {isNestedRoute && (
+              <button
+                onClick={() => navigate(-1)}
+                aria-label="Back"
+                className="-ml-1.5 grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl text-2xl text-muted transition-colors hover:bg-sunken hover:text-ink md:hidden"
+              >
+                ‹
+              </button>
+            )}
             <span
-              className="inline-grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl text-lg shadow-sm"
+              className={`inline-grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl text-lg shadow-sm ${isNestedRoute ? 'hidden md:inline-grid' : ''}`}
               style={{ background: currentNav ? softColour(currentNav.colour, '22') : 'var(--hs-primary-soft)' }}
             >
               {currentNav?.icon || '◇'}
@@ -408,7 +451,7 @@ export function AppShell() {
           </div>
           <button
             onClick={() => setSearchOpen(true)}
-            className="grid h-10 min-w-10 place-items-center rounded-xl border border-transparent px-2 text-muted transition-colors hover:border-line hover:bg-sunken hover:text-ink md:flex md:gap-2 lg:min-w-[176px] lg:justify-start lg:border-line lg:bg-surface lg:px-3"
+            className="hidden h-11 min-w-11 place-items-center rounded-xl border border-transparent px-2 text-muted transition-colors hover:border-line hover:bg-sunken hover:text-ink md:flex md:gap-2 lg:min-w-[176px] lg:justify-start lg:border-line lg:bg-surface lg:px-3"
             aria-label="Search HomeStack"
             title={`Search (${SHORTCUT_MODIFIER}K)`}
           >
@@ -416,7 +459,7 @@ export function AppShell() {
           </button>
           <button
             onClick={() => setQuickOpen(true)}
-            className="grid h-10 min-w-10 place-items-center rounded-xl bg-primary px-2 text-white shadow-soft transition-all hover:bg-primary-hover active:scale-95 md:flex md:gap-1 md:px-3"
+            className="hidden h-11 min-w-11 place-items-center rounded-xl bg-primary px-2 text-white shadow-soft transition-all hover:bg-primary-hover active:scale-95 md:flex md:gap-1 md:px-3"
             aria-label="Create something"
             title="Create something"
           >
@@ -447,28 +490,19 @@ export function AppShell() {
         </main>
       </div>
 
-      {/* Bottom nav — mobile only */}
+      {/* Bottom nav — mobile only. Home, Add and More are fixed; the two remaining slots are
+          user-configurable shortcuts either side of Add (docs/36 §4.2). */}
       <nav className="mobile-bottom-nav fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-surface/94 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(50,40,25,0.06)] backdrop-blur-xl md:hidden" aria-label="Main navigation">
-        {mobilePrimary.map(item => (
-          <NavLink
-            key={item.route}
-            to={item.route}
-            style={({ isActive }) => (isActive ? { color: item.colour } : undefined)}
-            className={({ isActive }) =>
-              `relative flex min-w-0 flex-1 flex-col items-center justify-center pb-1.5 pt-1.5 text-[11px] font-bold transition-colors ${
-                isActive ? '' : 'text-muted'
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <span className="mb-0.5 grid h-8 min-w-11 place-items-center rounded-full px-2 text-xl transition-all" style={{ background: isActive ? softColour(item.colour, '24') : 'transparent' }}>{item.icon}</span>
-                <span className="max-w-full truncate px-1">{item.shortLabel}</span>
-                {isActive && <span className="absolute bottom-0 h-0.5 w-5 rounded-full" style={{ backgroundColor: item.colour }} />}
-              </>
-            )}
-          </NavLink>
-        ))}
+        {hubItem && <MobileNavLink item={hubItem} />}
+        {mobileShortcuts[0] && <MobileNavLink item={mobileShortcuts[0]} />}
+        <button
+          onClick={() => setQuickOpen(true)}
+          className="relative flex min-w-0 flex-1 flex-col items-center justify-center pb-1.5 pt-1.5"
+          aria-label="Create something"
+        >
+          <span className="grid h-11 w-11 place-items-center rounded-full bg-primary text-2xl leading-none text-white shadow-soft transition-transform active:scale-95">＋</span>
+        </button>
+        {mobileShortcuts[1] && <MobileNavLink item={mobileShortcuts[1]} />}
         {/* When you are somewhere that has no slot of its own — Fitness, Books, Money — nothing
             in the bar used to be marked, so the phone gave no answer to "where am I". The More
             button then stands in for the current destination and wears its icon and colour. */}
@@ -544,7 +578,7 @@ export function AppShell() {
                 <div className="mb-2 flex items-center justify-between gap-3 px-1">
                   <span>
                     <span className="block text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Destinations</span>
-                    {customisingNav && <span className="mt-0.5 block text-[11px] text-muted">Choose up to four for the bottom bar</span>}
+                    {customisingNav && <span className="mt-0.5 block text-[11px] text-muted">Choose up to two shortcuts either side of Add — Home is always shown</span>}
                   </span>
                   <button onClick={() => setCustomisingNav(value => !value)} className="min-h-9 rounded-lg px-2 text-xs font-bold text-primary hover:bg-primary-soft">
                     {customisingNav ? 'Finish editing' : 'Edit bottom bar'}
@@ -554,11 +588,12 @@ export function AppShell() {
                   {stackNav.map(item => {
                     const pinned = effectiveMobileKeys.includes(item.key)
                     if (customisingNav) {
+                      if (item.key === 'hub') return null // Home's slot is fixed; nothing to choose.
                       return (
                         <button
                           key={item.route}
                           onClick={() => toggleMobileKey(item.key)}
-                          disabled={!pinned && effectiveMobileKeys.length >= MOBILE_PRIMARY_SLOTS}
+                          disabled={!pinned && effectiveMobileKeys.length >= MOBILE_SHORTCUT_SLOTS}
                           className={`relative flex min-h-[72px] items-center gap-2.5 rounded-2xl border p-2.5 text-left transition-all ${
                             pinned ? 'border-primary/40 bg-primary-soft text-primary' : 'border-line bg-surface text-muted-strong disabled:opacity-40'
                           }`}
