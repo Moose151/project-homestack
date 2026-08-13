@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.36.10**
+> **Current version: 0.36.11**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -35,6 +35,19 @@
   refreshes the current position immediately, and keeps the full payment schedule one tap away.
 - Validation: frontend production build clean; focused Fitness/Corners/Money browser coverage and
   the complete four-viewport Playwright suite green (193 passed, 59 intentionally skipped).
+
+### 0.36.11 — 2026-08-14 — Mobile UX v1 live acceptance close-out
+- Documentation-only close-out after owner live validation. Mobile UX Phase 10 is now marked
+  complete: the redesigned mobile experience was deployed to the live HTTPS HomeStack installation
+  and tested successfully on real hardware/PWA/push-capable conditions.
+- Preserved the automated validation record from the software pass: focused backend checks, clean
+  frontend TypeScript, the complete four-viewport Playwright suite, and a clean temporary
+  production Vite build. The real-device Phase 10 pass is recorded as the final acceptance layer
+  above those automated checks, not a replacement for them.
+- Mobile UX v1 is no longer active work. The recommended next engineering stream is production
+  reliability: Docker/network exposure hardening, one supported deployment command, GitHub Actions
+  CI, off-server backup/recovery validation, a small System Health surface, and then stronger
+  admin/adult authentication before any future remote-exposure discussion.
 
 ### 0.36.8 — 2026-08-13 — Final software correction pass before hardware acceptance (on feature/mobile-ux)
 - Merged `main` normally into the published feature branch, bringing in the live Solace bucket-

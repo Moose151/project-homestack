@@ -1316,22 +1316,23 @@ raised control. Automated acceptance covers 320px, standard phone, dark phone an
 desktop transition; the full suite is green with 205 passed / 63 intentionally skipped, alongside
 clean TypeScript and production builds.
 
-### Phase 10 — Complete real-device acceptance — CHECKLIST READY / NOT STARTED
+### Phase 10 — Complete real-device acceptance — COMPLETE
 
-Phases 1-9 are now complete for the software-side/mobile-automation pass. Phase 10 is different in
-kind from Playwright implementation checks: it asks whether the corrected
-thing actually works in someone's hand, on real browsers/PWAs, with real push subscriptions and
-real safe-area/keyboard behaviour. **This phase needs a person with real devices to execute it
-against a production HTTPS HomeStack build; it is not something this assistant can complete on its
-own.** What follows is the concrete checklist to work through once the correction/completion pass
-is accepted.
+Phase 10 is complete as of 2026-08-14. The corrected Mobile UX v1 branch was deployed to the live
+HTTPS HomeStack installation and tested successfully on real hardware, including the PWA, Web Push,
+safe-area, browser-history, keyboard and deep-link behaviours that the mocked Playwright suite
+could only approximate.
 
-**Setup.** Do not use the plain LAN Vite dev server for installed-PWA, service-worker or push
-acceptance. Test a production frontend build on a secure HTTPS origin: ideally a temporary HTTPS
-preview/staging deployment of this branch behind Nginx Proxy Manager, or a carefully controlled
-live-branch deployment after backup and rollback preparation. For the "installed PWA" rows,
-actually add it to the home screen (Android: Chrome menu → *Install app*; iOS: Share → *Add to
-Home Screen*) rather than testing the browser tab twice.
+This real-device pass sits on top of, and does not replace, the automated validation from Phases
+1-9 and the final correction pass: focused backend checks, clean TypeScript, the full
+four-viewport mocked Playwright suite, and a clean temporary production Vite build. Keep those
+tests as regression coverage for future production-reliability work.
+
+The checklist below is preserved as the acceptance protocol that was walked for the live pass.
+
+**Setup used.** Acceptance was performed against the live production HTTPS HomeStack installation,
+not the plain LAN Vite dev server. Installed-PWA checks used actual home-screen installation rather
+than testing the browser tab twice.
 
 **Devices/environments matrix** — each row of the checklists below should be walked at least once
 per environment that's actually available:
@@ -1413,19 +1414,16 @@ the confirm-dialog step anywhere.
 airplane mode mid-session, confirm the app doesn't hard-crash, then reconnect and confirm it
 recovers (a reload if nothing better) rather than staying stuck on a stale error state.
 
-**Phase 10 gate:** run this only after reviewing the corrected branch. The checklist must still be
-executed on real hardware against a production HTTPS build, because installed PWA/service-worker
-and Web Push behaviour cannot be validated by the mocked Playwright suite.
-
-Once this checklist has actually been walked on real hardware and any genuine findings fixed,
-Phase 10 — and Mobile UX v1 as a whole — is ready for a merge-to-`main` decision, which stays the
-owner's call per this branch's established pattern.
+**Phase 10 close-out:** the checklist was walked on real hardware against the live production
+HTTPS build and passed. Mobile UX v1 is complete; future changes should preserve the automated
+coverage and treat this document as the completed mobile contract rather than an active work plan.
 
 ---
 
 ## 9. Acceptance criteria
 
-HomeStack Mobile UX v1 is not complete merely because screenshots fit at 390px.
+HomeStack Mobile UX v1 is complete after both automated mobile acceptance and live real-device
+HTTPS acceptance. The criteria below remain the regression contract for future changes.
 
 ### 9.1 Global acceptance
 

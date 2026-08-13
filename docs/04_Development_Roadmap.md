@@ -40,6 +40,7 @@ work:
 | Grocery + Shopping | Complete | Dedicated shared Atlas Grocery and Shopping surfaces. |
 | LAN HTTPS | Complete | Trusted `https://homestack.moosesoftwares.com` via Nginx Proxy Manager + Cloudflare DNS challenge + Pi-hole local DNS. |
 | PWA / Web Push | Complete v0.34.10–v0.34.13 | Per-user preferences, per-device subscriptions, VAPID delivery, PWA/service worker, quiet hours, bundling, fixed 24h/morning reminders, countdown and sensitive-safe payloads. |
+| Mobile UX v1 | Complete v0.36.9 | Phone-first shell, shared mobile primitives, sheet/detail workflows, deep-link-safe navigation, four-viewport Playwright coverage and live HTTPS real-device/PWA/push acceptance. |
 
 Historical sub-phases and release numbers are intentionally omitted here; see `VERSION_HISTORY.md`.
 
@@ -79,16 +80,14 @@ create more value than immediately adding another major node.
 
 ### 4.1 Production serving
 
-The current live stack still uses development servers in the containers. Establish a supported
-production deployment profile:
+**Status:** complete as of v0.35.0. The live stack uses Gunicorn for Django and a built React app
+served by nginx, with Nginx Proxy Manager preserved as the LAN HTTPS entry point.
 
-- Django served by a production WSGI server (for example Gunicorn);
-- frontend built with `vite build` and served as static assets rather than the Vite dev server;
-- static/admin asset handling explicitly solved;
-- preserve Nginx Proxy Manager as the external LAN TLS/reverse-proxy layer unless there is a
-  concrete reason to replace it.
+Preserve this production-serving model while hardening the remaining network exposure.
 
 ### 4.2 Docker network exposure
+
+**Status:** next active phase.
 
 Move internal services toward private container networking:
 

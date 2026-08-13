@@ -1,6 +1,6 @@
 {
-  "current_version": "0.36.10",
-  "source_sha256": "55b16ad17cd280f2ad97bf1dea2611c2c79bac3ed93e899a05bf24596708f08a",
+  "current_version": "0.36.11",
+  "source_sha256": "5799acae81b8b8867003eb7afc872d97a7a768470d471fa1c17864f0aa1eb8c0",
   "releases": [
     {
       "version": "0.36.10",
@@ -22,6 +22,16 @@
         "Corners replaces the horizontally scrolling household-name buttons with one compact Corner dropdown that preserves the active section while switching people.",
         "Money's phone **Coming up** list now has a direct **Mark paid** action for each upcoming bill, refreshes the current position immediately, and keeps the full payment schedule one tap away.",
         "Validation: frontend production build clean; focused Fitness/Corners/Money browser coverage and the complete four-viewport Playwright suite green (193 passed, 59 intentionally skipped)."
+      ]
+    },
+    {
+      "version": "0.36.11",
+      "date": "2026-08-14",
+      "title": "Mobile UX v1 live acceptance close-out",
+      "changes": [
+        "Documentation-only close-out after owner live validation. Mobile UX Phase 10 is now marked complete: the redesigned mobile experience was deployed to the live HTTPS HomeStack installation and tested successfully on real hardware/PWA/push-capable conditions.",
+        "Preserved the automated validation record from the software pass: focused backend checks, clean frontend TypeScript, the complete four-viewport Playwright suite, and a clean temporary production Vite build. The real-device Phase 10 pass is recorded as the final acceptance layer above those automated checks, not a replacement for them.",
+        "Mobile UX v1 is no longer active work. The recommended next engineering stream is production reliability: Docker/network exposure hardening, one supported deployment command, GitHub Actions CI, off-server backup/recovery validation, a small System Health surface, and then stronger admin/adult authentication before any future remote-exposure discussion."
       ]
     },
     {
