@@ -346,7 +346,18 @@ live installation. Keep these steps for audit/rollback context and for any futur
    old LAN ports still exist.
 9. Only after final review, merge/deploy the hardened Compose commit with
    `docker compose up -d --build`.
-10. Re-run the validation checklist below and then confirm from another LAN device that the old
+10. Wait for `homestack-postgres`, `homestack-backend` and `homestack-frontend` to become healthy.
+11. Because the NPM custom locations use direct `proxy_pass http://homestack-backend:8000;` style
+    upstreams, explicitly test and reload NPM's nginx after HomeStack container recreation so
+    Docker names are resolved freshly:
+
+    ```bash
+    docker exec nginx-proxy-manager nginx -t
+    docker exec nginx-proxy-manager nginx -s reload
+    ```
+
+    Stop if `nginx -t` fails.
+12. Re-run the validation checklist below and then confirm from another LAN device that the old
     HomeStack host ports are no longer reachable.
 
 ### 10.2 Rollback procedure for network hardening
@@ -377,19 +388,35 @@ live installation. Keep these steps for audit/rollback context and for any futur
 - From inside the backend container, Django can still reach PostgreSQL at
   `homestack-postgres:5432` over `project-homestack_private`.
 - Recreate one app service at a time to prove NPM/container-name routing survives new container IP
-  assignments:
+  assignments and the explicit NPM reload path keeps `/api/` and `/admin/` fresh:
 
   ```bash
   docker compose up -d --force-recreate homestack-backend
   ```
 
-  Wait for `homestack-backend` to become healthy, then verify HomeStack through HTTPS. Then run:
+  Wait for `homestack-backend` to become healthy, then reload NPM and verify backend health over
+  HTTPS:
+
+  ```bash
+  docker exec nginx-proxy-manager nginx -t
+  docker exec nginx-proxy-manager nginx -s reload
+  curl -fsS https://homestack.moosesoftwares.com/api/v1/health/; echo
+  ```
+
+  Then run:
 
   ```bash
   docker compose up -d --force-recreate homestack-frontend
   ```
 
-  Wait for `homestack-frontend` to become healthy and verify HomeStack through HTTPS again.
+  Wait for `homestack-frontend` to become healthy, then reload NPM and verify the frontend over
+  HTTPS again:
+
+  ```bash
+  docker exec nginx-proxy-manager nginx -t
+  docker exec nginx-proxy-manager nginx -s reload
+  curl -fsS -o /dev/null -w '%{http_code}\n' https://homestack.moosesoftwares.com/
+  ```
 
 ## 11. Deployment
 
@@ -454,17 +481,24 @@ production configuration while rollback is still free.
 
 Run §12 before considering the deployment done.
 
+The future supported `scripts/deploy.sh` should automate the NPM `nginx -t` and `nginx -s reload`
+step after HomeStack application-container promotion and before HTTPS/API validation.
+
 ## 12. Live smoke-test checklist
 
 ```bash
 # 1. containers up and healthy
 docker compose ps
 
-# 2. backend health (container-internal and through HTTPS)
+# 2. NPM nginx config test/reload after application container promotion
+docker exec nginx-proxy-manager nginx -t
+docker exec nginx-proxy-manager nginx -s reload
+
+# 3. backend health (container-internal and through HTTPS)
 docker exec homestack-backend python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/',timeout=5).status)"
 curl -fsS https://homestack.moosesoftwares.com/api/v1/health/; echo
 
-# 3. HTTPS frontend loads
+# 4. HTTPS frontend loads
 curl -fsS -o /dev/null -w '%{http_code}\n' https://homestack.moosesoftwares.com/
 
 # 11. deep-link refresh returns the app, not a 404

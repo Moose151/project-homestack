@@ -286,7 +286,7 @@ Recommended order:
 
 After the reliability baseline: Home Assistant, Hearth, Travel finishing work and later Health.
 
-**Docker/network hardening status (v0.37.2):** repo-side Compose and documentation are prepared,
+**Docker/network hardening status (v0.37.3):** repo-side Compose and documentation are prepared,
 but the final hardened Compose deployment has not been applied. The actual inspected Nginx Proxy
 Manager deployment is container/service `nginx-proxy-manager`, Compose project
 `nginx-proxy-manager`, external network `proxy`, with ports `80`, `81` and `443`. Before final
@@ -297,8 +297,10 @@ checks from inside `nginx-proxy-manager` returned 200 for frontend `/healthz` an
 `/api/v1/health/`, and NPM now routes the main app, `/api/` and `/admin/` to Docker container
 names. The old HomeStack host ports still exist. The prepared target removes those production
 host ports, keeps only frontend/backend on `proxy`, and keeps PostgreSQL on
-`project-homestack_private`. Development Compose remains isolated on `homestack_dev`. Final
-rollback while old ports exist is to restore NPM's old LAN upstreams
+`project-homestack_private`. Development Compose remains isolated on `homestack_dev`. After the
+hardened Compose eventually recreates HomeStack containers, run the NPM nginx config-test/reload
+gate documented in `docs/35_Production_Serving_and_Deployment.md` before HTTPS/API validation.
+Final rollback while old ports exist is to restore NPM's old LAN upstreams
 (`192.168.1.125:5173` for frontend and `192.168.1.125:8000` for `/api/`/`/admin/`); do not delete
 volumes or run Docker cleanup.
 

@@ -1,7 +1,17 @@
 {
-  "current_version": "0.37.2",
-  "source_sha256": "50da6e58f8943537a957167a7171aec536c8dc7ba5192dc3efad02e6b5264bbe",
+  "current_version": "0.37.3",
+  "source_sha256": "7ba3efc4d931ff310627e18fae4fe4d7193735b4acce34a6d356cf8c0aab1ab8",
   "releases": [
+    {
+      "version": "0.37.3",
+      "date": "2026-08-14",
+      "title": "Add NPM reload gate after container recreation",
+      "changes": [
+        "Documentation-only deployment-safety correction. The final network-hardening deployment now explicitly waits for recreated HomeStack containers to become healthy, runs `docker exec nginx-proxy-manager nginx -t`, reloads NPM with `docker exec nginx-proxy-manager nginx -s reload`, and only then performs HTTPS/API validation.",
+        "The deliberate backend/frontend recreation validation now reloads NPM after each single-service recreate before checking HTTPS backend health or frontend load, proving Docker-name routing survives container IP changes.",
+        "Noted that the future supported `scripts/deploy.sh` phase should automate this NPM config-test and reload step after application-container promotion."
+      ]
+    },
     {
       "version": "0.37.2",
       "date": "2026-08-14",

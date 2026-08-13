@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.37.2**
+> **Current version: 0.37.3**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,17 @@
 ---
 
 ## 0.37 — Production reliability and deployment safety
+
+### 0.37.3 — 2026-08-14 — Add NPM reload gate after container recreation
+- Documentation-only deployment-safety correction. The final network-hardening deployment now
+  explicitly waits for recreated HomeStack containers to become healthy, runs
+  `docker exec nginx-proxy-manager nginx -t`, reloads NPM with
+  `docker exec nginx-proxy-manager nginx -s reload`, and only then performs HTTPS/API validation.
+- The deliberate backend/frontend recreation validation now reloads NPM after each single-service
+  recreate before checking HTTPS backend health or frontend load, proving Docker-name routing
+  survives container IP changes.
+- Noted that the future supported `scripts/deploy.sh` phase should automate this NPM config-test
+  and reload step after application-container promotion.
 
 ### 0.37.2 — 2026-08-14 — Align network hardening plan with live NPM topology
 - Corrected the prepared production-hardening branch to match the actual live Nginx Proxy Manager
