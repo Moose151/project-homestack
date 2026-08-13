@@ -4,11 +4,18 @@
 # Turns the production base back into a development stack: Django `runserver` with autoreload and
 # the Vite dev server with hot module reload, both bind-mounting source so an edit is live without
 # rebuilding an image. Never use this on the live server.
+#
+# Compose merge note: the production base attaches frontend/backend to the external NPM network.
+# Development must not require that live-only network, so each service uses Compose's !override
+# merge tag to replace the inherited service network list with the ordinary project dev network.
+# Supported on the live host's Docker Compose v5.3.1.
 
 services:
   homestack-postgres:
     ports:
       - "${DB_HOST_PORT:-5432}:5432"
+    networks: !override
+      - homestack_dev
 
   homestack-backend:
     # Podman rootless: container root maps to your host UID — no user: override needed.
@@ -26,6 +33,8 @@ services:
       DJANGO_DEBUG: "1"
     ports:
       - "${BACKEND_PORT:-8000}:8000"
+    networks: !override
+      - homestack_dev
     healthcheck:
       # runserver's reloader restarts on every edit; a failing probe mid-restart is noise here.
       disable: true
@@ -44,5 +53,10 @@ services:
       - /app/node_modules
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
+    networks: !override
+      - homestack_dev
     healthcheck:
       disable: true
+
+networks:
+  homestack_dev:

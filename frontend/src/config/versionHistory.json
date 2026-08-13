@@ -1,7 +1,17 @@
 {
-  "current_version": "0.37.0",
-  "source_sha256": "319b1d37322e64b0f89beab0255c9dd5c0a50a9a88d46857b25eb8f56e0bf6b3",
+  "current_version": "0.37.1",
+  "source_sha256": "53787eb99cfebe17b6b20a43d2136b2a313052c8fd44439f9109596e9a6d1d6b",
   "releases": [
+    {
+      "version": "0.37.1",
+      "date": "2026-08-14",
+      "title": "Correct development network isolation before live cutover",
+      "changes": [
+        "Fixed the reviewed Phase 2 Compose preparation so the development override does not inherit the production-only external Nginx Proxy Manager network. `docker-compose.dev.yml` now uses Compose's `!override` merge tag to put PostgreSQL, backend and frontend on a normal HomeStack development bridge network while preserving their developer host-port mappings.",
+        "Strengthened the live cutover documentation: manually attach the existing frontend/backend to NPM's network first, inspect all three network attachments, prove `homestack-frontend:5173` and `homestack-backend:8000` from inside the `npm` container with Node HTTP checks, validate the full live app while old LAN ports still exist, then stop for review before merging/deploying the hardened Compose.",
+        "Added the final post-deployment service-recreation check so, after the hardened Compose eventually goes live, backend and frontend are recreated one at a time and HTTPS is verified after each recreate to prove NPM's container-name routing survives container IP changes."
+      ]
+    },
     {
       "version": "0.37.0",
       "date": "2026-08-14",

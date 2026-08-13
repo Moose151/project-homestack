@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.37.0**
+> **Current version: 0.37.1**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,20 @@
 ---
 
 ## 0.37 — Production reliability and deployment safety
+
+### 0.37.1 — 2026-08-14 — Correct development network isolation before live cutover
+- Fixed the reviewed Phase 2 Compose preparation so the development override does not inherit the
+  production-only external Nginx Proxy Manager network. `docker-compose.dev.yml` now uses Compose's
+  `!override` merge tag to put PostgreSQL, backend and frontend on a normal HomeStack development
+  bridge network while preserving their developer host-port mappings.
+- Strengthened the live cutover documentation: manually attach the existing frontend/backend to
+  NPM's network first, inspect all three network attachments, prove `homestack-frontend:5173` and
+  `homestack-backend:8000` from inside the `npm` container with Node HTTP checks, validate the
+  full live app while old LAN ports still exist, then stop for review before merging/deploying the
+  hardened Compose.
+- Added the final post-deployment service-recreation check so, after the hardened Compose
+  eventually goes live, backend and frontend are recreated one at a time and HTTPS is verified
+  after each recreate to prove NPM's container-name routing survives container IP changes.
 
 ### 0.37.0 — 2026-08-14 — Prepare Docker network hardening (pending live review)
 - Prepared the Phase 2 production-network target without applying it to the live containers:

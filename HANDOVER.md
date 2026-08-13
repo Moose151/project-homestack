@@ -286,16 +286,18 @@ Recommended order:
 
 After the reliability baseline: Home Assistant, Hearth, Travel finishing work and later Health.
 
-**Docker/network hardening status (v0.37.0):** repo-side Compose and documentation are prepared,
+**Docker/network hardening status (v0.37.1):** repo-side Compose and documentation are prepared,
 but the live networking cutover has not been applied. The inspected live topology has Nginx Proxy
 Manager in the `all-services` Compose project on `all-services_services-network`; HomeStack was
 still publishing backend `8001`, frontend `5173` and PostgreSQL `5433` to the LAN before this
 change. The prepared target removes those production host ports, attaches only frontend/backend
-to NPM's existing Docker network, and keeps PostgreSQL on `project-homestack_private`. Review
-`docs/35_Production_Serving_and_Deployment.md` §10 before changing NPM: first prove container-name
-routing while the old ports still exist, then deploy the hardened Compose and run the validation
-checklist. Rollback is to restore NPM's old LAN upstreams and the pre-hardening Compose commit;
-do not delete volumes or run Docker cleanup.
+to NPM's existing Docker network, and keeps PostgreSQL on `project-homestack_private`.
+Development Compose is explicitly isolated from the live NPM network through service-level
+network overrides. Review `docs/35_Production_Serving_and_Deployment.md` §10 before changing NPM:
+first manually attach the existing frontend/backend to NPM's network, prove `homestack-frontend`
+and `homestack-backend` from inside the `npm` container while the old ports still exist, then stop
+for review before merging/deploying the hardened Compose. Rollback is to restore NPM's old LAN
+upstreams and the pre-hardening Compose commit; do not delete volumes or run Docker cleanup.
 
 Explicitly avoid generic plugins/integrations, Kubernetes/microservices, Redis/Celery without
 measured need, or public exposure before the Security Architecture gate is satisfied.

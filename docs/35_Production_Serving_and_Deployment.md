@@ -96,12 +96,18 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 | Static files | `collectstatic` at build, served by WhiteNoise | Django's `DEBUG=True` handler |
 | Health checks | backend + frontend | disabled (reload restarts are noisy) |
 | LAN host ports | none for HomeStack app/database services | backend/frontend/PostgreSQL published through the dev override |
+| Docker networks | backend/frontend on NPM's external network; database on HomeStack-private network | all services on a normal project dev network; no NPM network required |
 
 `DJANGO_SETTINGS_MODULE` is pinned in each Compose file's `environment:` block, which takes
 precedence over `.env`. A stale development value in the live environment file therefore cannot
 put the production server back on development settings.
 
 Editing frontend source in development never requires a production image rebuild.
+
+`docker-compose.dev.yml` uses Compose's `!override` merge tag for service networks so development
+does not inherit the production-only external NPM network. This was validated with Docker Compose
+v5.3.1; if a workstation uses an older Compose implementation that cannot parse `!override`,
+upgrade Compose before using the merged development command.
 
 ## 4. Backend: gunicorn
 
@@ -294,14 +300,49 @@ network name differs from the inspection above.
    `docker network connect all-services_services-network homestack-frontend` and
    `docker network connect all-services_services-network homestack-backend` if they are not
    already attached.
-4. In NPM, change the main HomeStack proxy host to `homestack-frontend:5173` and the `/api/`
+4. Confirm the network attachments:
+
+   ```bash
+   docker inspect homestack-frontend --format '{{json .NetworkSettings.Networks}}'
+   docker inspect homestack-backend --format '{{json .NetworkSettings.Networks}}'
+   docker inspect npm --format '{{json .NetworkSettings.Networks}}'
+   ```
+
+5. From inside the NPM container, prove Docker-name routing before changing NPM:
+
+   ```bash
+   docker exec npm node -e "
+   require('http').get('http://homestack-frontend:5173/healthz', r => {
+     console.log('frontend:', r.statusCode);
+     process.exit(r.statusCode === 200 ? 0 : 1);
+   }).on('error', e => { console.error(e); process.exit(1); });
+   "
+   ```
+
+   ```bash
+   docker exec npm node -e "
+   require('http').get('http://homestack-backend:8000/api/v1/health/', r => {
+     console.log('backend:', r.statusCode);
+     process.exit(r.statusCode === 200 ? 0 : 1);
+   }).on('error', e => { console.error(e); process.exit(1); });
+   "
+   ```
+
+   Both commands must print `200`. If either fails, do not change NPM.
+
+6. In NPM, change the main HomeStack proxy host to `homestack-frontend:5173` and the `/api/`
    custom location to `homestack-backend:8000`.
-5. Validate HTTPS HomeStack load, backend health through HTTPS, login/logout, writes, Solace
-   re-auth, deep-link refresh, PWA assets and push test while the old host ports are still
-   available as rollback.
-6. Deploy the hardened Compose commit with `docker compose up -d --build`.
-7. Re-run the validation checklist below and then confirm from another LAN device that the old
-   HomeStack host ports are no longer reachable.
+7. While the old host ports still exist, validate HTTPS HomeStack load, `/api/v1/health/`,
+   password login/logout, PIN/avatar login, an authenticated write plus refresh, Money/Solace
+   re-auth, React deep-link refresh, `/sw.js`, `/manifest.json`, installed PWA behaviour and a
+   real push notification.
+8. Stop and report the successful NPM container-name routing proof before merging/deploying the
+   hardened Compose. The cheap rollback path stays available until this point because the old LAN
+   ports still exist.
+9. Only after that proof is accepted, merge/deploy the hardened Compose commit with
+   `docker compose up -d --build`.
+10. Re-run the validation checklist below and then confirm from another LAN device that the old
+    HomeStack host ports are no longer reachable.
 
 ### 10.2 Rollback procedure for network hardening
 
@@ -329,6 +370,20 @@ network name differs from the inspection above.
   generally reachable.
 - From inside the backend container, Django can still reach PostgreSQL at
   `homestack-postgres:5432` over `project-homestack_private`.
+- Recreate one app service at a time to prove NPM/container-name routing survives new container IP
+  assignments:
+
+  ```bash
+  docker compose up -d --force-recreate homestack-backend
+  ```
+
+  Wait for `homestack-backend` to become healthy, then verify HomeStack through HTTPS. Then run:
+
+  ```bash
+  docker compose up -d --force-recreate homestack-frontend
+  ```
+
+  Wait for `homestack-frontend` to become healthy and verify HomeStack through HTTPS again.
 
 ## 11. Deployment
 
