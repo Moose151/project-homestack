@@ -27,7 +27,7 @@ test.describe('phone layout', () => {
   test('bottom navigation shows Home, shortcuts, Add and More, each a real touch target', async ({ page }) => {
     const nav = page.getByRole('navigation', { name: 'Main navigation' })
     await expect(nav).toBeVisible()
-    // Home (hub) + up to two configurable shortcuts (fixture enables atlas/homestead/pets/
+    // Home (hub) + two configurable shortcuts (fixture enables atlas/homestead/pets/
     // meridian, so calendar + atlas fill the two slots — see e2e/fixtures/mockApi.ts).
     const links = nav.getByRole('link')
     await expect(links).toHaveCount(3)
@@ -35,11 +35,75 @@ test.describe('phone layout', () => {
     const more = nav.getByRole('button', { name: /More navigation|open all destinations/ })
     await expect(add).toBeVisible()
     await expect(more).toBeVisible()
+    await expect(nav.locator(':scope > a, :scope > button')).toHaveCount(5)
+    await expect(nav.locator('[data-nav-key="hub"]')).toHaveAttribute('aria-current', 'page')
+    await expect(nav.locator('[data-nav-key="calendar"]')).toBeVisible()
+    await expect(nav.locator('[data-nav-key="atlas"]')).toBeVisible()
+    await expect(nav.locator('[data-nav-key="add"]')).toContainText('Add')
+    await expect(nav.locator('[data-nav-key="more"]')).toContainText('More')
     for (const link of await links.all()) {
       await expectMinTouchTarget(link)
     }
     await expectMinTouchTarget(add)
     await expectMinTouchTarget(more)
+
+    const dockBox = await nav.boundingBox()
+    expect(dockBox).not.toBeNull()
+    expect(dockBox!.x).toBeGreaterThanOrEqual(12)
+    expect(page.viewportSize()!.width - dockBox!.x - dockBox!.width).toBeGreaterThanOrEqual(12)
+    expect(page.viewportSize()!.height - dockBox!.y - dockBox!.height).toBeGreaterThanOrEqual(9)
+    const activeBackground = await nav.locator('[data-nav-key="hub"]').evaluate(element => getComputedStyle(element).backgroundColor)
+    expect(activeBackground).not.toBe('rgba(0, 0, 0, 0)')
+  })
+
+  test('More keeps its icon and label while representing an unpinned Fitness area', async ({ page }) => {
+    const enabledFitness = {
+      key: 'fitness', name: 'fitness', description: '', icon: '', is_core: false,
+      supports_kiosk: false, supports_sensitive_lock: false, can_view: true, is_enabled: true,
+      is_hidden: false, requires_reauthentication: false, display_order: 0, custom_name: '', custom_icon: '',
+    }
+    await page.route('**/api/v1/nodes/', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([enabledFitness]) }))
+    await page.route('**/api/v1/people/', route => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }))
+    await page.route('**/api/v1/fitness/exercises/', route => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }))
+    await page.route('**/api/v1/fitness/programs/', route => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }))
+    await page.route('**/api/v1/fitness/records/', route => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }))
+    await page.route('**/api/v1/fitness/sessions/', route => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }))
+    await page.goto('/fitness')
+
+    const more = page.getByRole('navigation', { name: 'Main navigation' }).locator('[data-nav-key="more"]')
+    await expect(more).toContainText('☰')
+    await expect(more).toContainText('More')
+    await expect(more).not.toContainText('Fitness')
+  })
+
+  test('shortcut editor exposes two slots, swaps duplicates, resets, and persists per user', async ({ page }) => {
+    const nav = page.getByRole('navigation', { name: 'Main navigation' })
+    await nav.getByRole('button', { name: 'More navigation and profile options' }).click()
+    const launcher = page.getByRole('dialog', { name: 'All HomeStack' })
+    await launcher.getByRole('button', { name: 'Edit shortcuts' }).click()
+    const slot1 = launcher.getByRole('combobox', { name: 'Choose shortcut for Slot 1' })
+    const slot2 = launcher.getByRole('combobox', { name: 'Choose shortcut for Slot 2' })
+    await expect(slot1).toHaveValue('calendar')
+    await expect(slot2).toHaveValue('atlas')
+
+    await slot1.selectOption('atlas')
+    await expect(slot1).toHaveValue('atlas')
+    await expect(slot2).toHaveValue('calendar')
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('hs-mobile-nav-1'))).toBe('["atlas","calendar"]')
+
+    await launcher.getByRole('button', { name: 'Reset to recommended' }).click()
+    await expect(slot1).toHaveValue('calendar')
+    await expect(slot2).toHaveValue('atlas')
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('hs-mobile-nav-1'))).toBeNull()
+  })
+
+  test('a disabled saved shortcut is repaired without moving the still-valid slot', async ({ page }) => {
+    await page.evaluate(() => localStorage.setItem('hs-mobile-nav-1', JSON.stringify(['calendar', 'fitness'])))
+    await page.reload()
+    const nav = page.getByRole('navigation', { name: 'Main navigation' })
+    await expect(nav.locator('[data-nav-key="calendar"]')).toBeVisible()
+    await expect(nav.locator('[data-nav-key="atlas"]')).toBeVisible()
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('hs-mobile-nav-1'))).toBe('["calendar","atlas"]')
   })
 
   test('top bar Search and Create are not shown — they live in the bottom nav / More sheet', async ({ page }) => {
@@ -83,6 +147,17 @@ test.describe('phone layout', () => {
     await expect(dialog).not.toBeVisible()
   })
 
+  test('Quick Create prioritizes actions for the current area and keeps global actions', async ({ page }) => {
+    await page.goto('/calendar')
+    await page.getByRole('button', { name: 'Create something' }).click()
+    const dialog = page.getByRole('dialog')
+    const suggested = dialog.getByRole('region', { name: 'Suggested here' })
+    const global = dialog.getByRole('region', { name: 'More ways to add' })
+    await expect(suggested.getByRole('button', { name: /Calendar event/ })).toBeVisible()
+    await expect(global.getByRole('button', { name: /Home plan/ })).toBeVisible()
+    await expect(global.getByRole('button', { name: /Points task/ })).toBeVisible()
+  })
+
   test('Search is reachable from the More sheet without overflow', async ({ page }) => {
     const nav = page.getByRole('navigation', { name: 'Main navigation' })
     await nav.getByRole('button', { name: /More navigation|open all destinations/ }).click()
@@ -97,6 +172,13 @@ test.describe('phone layout', () => {
     await nav.getByRole('button', { name: /More navigation|open all destinations/ }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('heading', { name: 'All HomeStack' })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'Search all HomeStack' })).toBeVisible()
+    await expect(dialog.getByText('Pinned', { exact: true }).first()).toBeVisible()
+    await expect(dialog.getByText('All areas', { exact: true })).toBeVisible()
+    await expect(dialog.getByText('Account & app', { exact: true })).toBeVisible()
+    // Disabled or inaccessible nodes never leak into the launcher.
+    await expect(dialog.getByRole('link', { name: /Money/ })).toHaveCount(0)
     await expectNoHorizontalOverflow(page)
   })
 
@@ -122,7 +204,7 @@ test.describe('phone layout', () => {
     await nav.getByRole('button', { name: /More navigation|open all destinations/ }).click()
     await expectMinTouchTarget(page.getByRole('button', { name: 'Close' }))
     await expectMinTouchTarget(page.getByRole('button', { name: 'Edit', exact: true }))
-    await expectMinTouchTarget(page.getByRole('button', { name: 'Edit bottom bar' }))
+    await expectMinTouchTarget(page.getByRole('button', { name: 'Edit shortcuts' }))
   })
 
   test('a nested route shows Back instead of the destination icon', async ({ page }) => {

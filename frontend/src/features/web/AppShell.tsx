@@ -46,10 +46,8 @@ const NAV_GROUPS: Array<{ key: NavItem['group']; label: string }> = [
 // default first shortcut for most households.
 const MOBILE_SHORTCUT_SLOTS = 2
 const MOBILE_DEFAULT_SHORTCUT_PRIORITY = [
-  'calendar', 'atlas', 'homestead', 'pets', 'home_wiki',
-  'education', 'books', 'meridian', 'solace',
-  'fitness',
-  'travel',
+  'calendar', 'atlas', 'meridian', 'homestead', 'pets',
+  'education', 'home_wiki', 'solace', 'fitness', 'books', 'travel',
 ]
 
 const EMOJI_OPTS = ['🐱','🐶','🦊','🐼','🐻','🦋','🦄','🐸','🐳','🌻','🌙','⭐','🎸','🎮','🏄','🍕','🎩','🔮','🌈','🦅']
@@ -174,18 +172,23 @@ function MobileNavLink({ item }: { item: NavItem }) {
   return (
     <NavLink
       to={item.route}
-      style={({ isActive }) => (isActive ? { color: item.colour } : undefined)}
+      style={({ isActive }) => (isActive ? { color: item.colour, background: softColour(item.colour, '14') } : undefined)}
       className={({ isActive }) =>
-        `relative flex min-w-0 flex-1 flex-col items-center justify-center pb-1.5 pt-1.5 text-[11px] font-bold transition-colors ${
+        `group flex min-h-11 min-w-0 flex-col items-center justify-center rounded-[1.15rem] px-0.5 py-1 text-[10px] font-extrabold transition-[background-color,color,transform] duration-150 active:scale-[0.96] motion-reduce:transform-none motion-reduce:transition-none ${
           isActive ? '' : 'text-muted'
         }`
       }
+      data-nav-key={item.key}
     >
       {({ isActive }) => (
         <>
-          <span className="mb-0.5 grid h-8 min-w-11 place-items-center rounded-full px-2 text-xl transition-all" style={{ background: isActive ? softColour(item.colour, '24') : 'transparent' }}>{item.icon}</span>
-          <span className="max-w-full truncate px-1">{item.shortLabel}</span>
-          {isActive && <span className="absolute bottom-0 h-0.5 w-5 rounded-full" style={{ backgroundColor: item.colour }} />}
+          <span
+            className="grid h-7 min-w-10 place-items-center rounded-full px-2 text-[19px] leading-none transition-transform duration-150 group-active:scale-95 motion-reduce:transform-none motion-reduce:transition-none"
+            style={{ background: isActive ? softColour(item.colour, '24') : 'transparent' }}
+          >
+            {item.icon}
+          </span>
+          <span className="mt-0.5 max-w-full truncate px-0.5 leading-3">{item.shortLabel}</span>
         </>
       )}
     </NavLink>
@@ -209,7 +212,7 @@ function SectionLabel({ children }: { children: string }) {
  */
 function MoreSheet({
   user, editingProfile, setEditingProfile, updateUser, stackNav, customisingNav, setCustomisingNav,
-  effectiveMobileKeys, toggleMobileKey, adminNav, dark, setDark, onSearch, onQuickCreate, logout, onClose,
+  effectiveMobileKeys, setMobileSlot, resetMobileKeys, adminNav, dark, setDark, onSearch, logout, onClose,
 }: {
   user: AuthUser | null
   editingProfile: boolean
@@ -219,19 +222,23 @@ function MoreSheet({
   customisingNav: boolean
   setCustomisingNav: Dispatch<SetStateAction<boolean>>
   effectiveMobileKeys: string[]
-  toggleMobileKey: (key: string) => void
+  setMobileSlot: (slot: number, key: string) => void
+  resetMobileKeys: () => void
   adminNav: NavItem[]
   dark: boolean
   setDark: (v: boolean) => void
   onSearch: () => void
-  onQuickCreate: () => void
   logout: () => void
   onClose: () => void
 }) {
   const dialogRef = useDialogA11y(onClose)
+  const shortcutOptions = stackNav.filter(item => item.key !== 'hub')
+  const pinnedItems = effectiveMobileKeys
+    .map(key => stackNav.find(item => item.key === key))
+    .filter((item): item is NavItem => Boolean(item))
 
   return (
-    <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true" aria-label="HomeStack navigation">
+    <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true" aria-label="All HomeStack">
       <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" onClick={onClose} />
       <div
         ref={dialogRef}
@@ -240,126 +247,160 @@ function MoreSheet({
         <div className="sticky top-0 z-10 border-b border-line bg-surface/95 px-5 pb-3 pt-2 backdrop-blur-xl">
           <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-line-strong" />
           <div className="flex items-center justify-between">
-            <span>
-              <span className="block text-base font-extrabold text-ink">Go anywhere</span>
-              <span className="block text-xs text-muted">All your household spaces in one place</span>
-            </span>
+            <div>
+              <h2 className="text-base font-extrabold text-ink">All HomeStack</h2>
+              <p className="text-xs text-muted">Find any area, setting or account action</p>
+            </div>
             <button onClick={onClose} className="grid h-11 w-11 place-items-center rounded-xl text-muted hover:bg-sunken" aria-label="Close">✕</button>
           </div>
         </div>
 
         <div className="space-y-5 p-4">
-          {user && (
-            <div className="rounded-3xl border border-line p-3.5" style={{ background: `linear-gradient(135deg, ${softColour(user.colour || '#1d7a91', '18')}, var(--hs-surface) 68%)` }}>
-              <div className="flex items-center gap-3">
-                <Avatar name={user.display_name} colour={user.colour} avatar={user.avatar} size="md" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-extrabold text-ink">{user.display_name}</p>
-                  <p className="text-xs font-semibold capitalize text-muted">{user.role} profile</p>
-                </div>
-                <button
-                  onClick={() => setEditingProfile(value => !value)}
-                  className="min-h-11 rounded-xl border border-line bg-surface/80 px-3 py-2 text-xs font-bold text-primary shadow-sm"
-                >
-                  {editingProfile ? 'Done' : 'Edit'}
-                </button>
-              </div>
-              {editingProfile && (
-                <div className="mt-3">
-                  <ProfileEditor
-                    user={user}
-                    onSaved={u => { updateUser(u); setEditingProfile(false) }}
-                    onClose={() => setEditingProfile(false)}
-                  />
-                </div>
-              )}
-            </div>
-          )}
+          <button
+            onClick={() => { onClose(); onSearch() }}
+            className="flex min-h-14 w-full items-center gap-3 rounded-2xl border border-line bg-sunken/70 px-4 text-left text-sm font-bold text-ink shadow-soft transition-transform active:scale-[0.98] motion-reduce:transform-none"
+            aria-label="Search all HomeStack"
+          >
+            <span className="text-xl" aria-hidden>⌕</span>
+            <span className="flex-1">Search all HomeStack</span>
+            <span className="text-xs font-semibold text-muted">{SHORTCUT_MODIFIER}K</span>
+          </button>
 
           <div>
             <div className="mb-2 flex items-center justify-between gap-3 px-1">
               <span>
-                <span className="block text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Destinations</span>
-                {customisingNav && <span className="mt-0.5 block text-[11px] text-muted">Choose up to two shortcuts either side of Add — Home is always shown</span>}
+                <span className="block text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Pinned</span>
+                <span className="mt-0.5 block text-[11px] text-muted">Your two bottom-bar shortcuts</span>
               </span>
               <button onClick={() => setCustomisingNav(value => !value)} className="min-h-11 rounded-lg px-2 text-xs font-bold text-primary hover:bg-primary-soft">
-                {customisingNav ? 'Finish editing' : 'Edit bottom bar'}
+                {customisingNav ? 'Done' : 'Edit shortcuts'}
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              {stackNav.map(item => {
-                const pinned = effectiveMobileKeys.includes(item.key)
-                if (customisingNav) {
-                  if (item.key === 'hub') return null // Home's slot is fixed; nothing to choose.
+            {customisingNav ? (
+              <div className="space-y-2 rounded-2xl border border-line bg-sunken/45 p-2.5">
+                {[0, 1].map(slot => {
+                  const item = pinnedItems[slot]
                   return (
-                    <button
-                      key={item.route}
-                      onClick={() => toggleMobileKey(item.key)}
-                      disabled={!pinned && effectiveMobileKeys.length >= MOBILE_SHORTCUT_SLOTS}
-                      className={`relative flex min-h-[72px] items-center gap-2.5 rounded-2xl border p-2.5 text-left transition-all ${
-                        pinned ? 'border-primary/40 bg-primary-soft text-primary' : 'border-line bg-surface text-muted-strong disabled:opacity-40'
-                      }`}
-                    >
-                      <span className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl text-xl" style={{ background: softColour(item.colour, '18') }}>{item.icon}</span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-extrabold">{item.label}</span>
-                        <span className="mt-0.5 block text-[11px] font-medium opacity-70">{pinned ? 'In bottom bar' : 'Add to bottom bar'}</span>
+                    <label key={slot} className="flex min-h-[68px] items-center gap-2.5 rounded-xl bg-surface px-3 py-2 shadow-sm">
+                      <span className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl text-xl" style={{ background: item ? softColour(item.colour, '18') : 'var(--hs-primary-soft)' }}>
+                        {item?.icon ?? '◇'}
                       </span>
-                      <span className="absolute right-2 top-1.5 text-xs font-black">{pinned ? '✓' : '+'}</span>
-                    </button>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[10px] font-extrabold uppercase tracking-wide text-muted">Slot {slot + 1}</span>
+                        <span className="block truncate text-sm font-bold text-ink">{item?.label ?? 'Choose a shortcut'}</span>
+                      </span>
+                      <span className="relative flex-shrink-0">
+                        <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-[11px] font-bold text-primary">Change</span>
+                        <select
+                          value={item?.key ?? ''}
+                          onChange={event => setMobileSlot(slot, event.target.value)}
+                          aria-label={`Choose shortcut for Slot ${slot + 1}`}
+                          className="h-11 w-[5.5rem] appearance-none rounded-xl border border-line bg-surface pl-2 pr-6 text-transparent outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+                        >
+                          {shortcutOptions.map(option => <option key={option.key} value={option.key} className="text-ink">{option.label}</option>)}
+                        </select>
+                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted">⌄</span>
+                      </span>
+                    </label>
                   )
-                }
-                return (
+                })}
+                <button type="button" onClick={resetMobileKeys} className="min-h-11 w-full rounded-xl px-3 text-xs font-bold text-muted-strong hover:bg-surface hover:text-primary">
+                  Reset to recommended
+                </button>
+                <p className="px-1 text-[11px] leading-4 text-muted">Home, Add and More stay fixed. Choosing the other pinned area swaps the two slots, so duplicates are never created.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {pinnedItems.map(item => (
                   <NavLink
                     key={item.route}
                     to={item.route}
                     onClick={onClose}
                     style={({ isActive }) => (isActive ? { borderColor: item.colour, background: softColour(item.colour, '14'), color: item.colour } : undefined)}
-                    className={({ isActive }) => `flex min-h-[76px] items-center gap-2.5 rounded-2xl border p-2.5 text-left transition-all ${isActive ? 'shadow-sm' : 'border-line bg-surface text-muted-strong active:scale-[0.98]'}`}
+                    className={({ isActive }) => `flex min-h-[64px] items-center gap-2 rounded-2xl border p-2.5 text-left transition-transform active:scale-[0.98] motion-reduce:transform-none ${isActive ? 'shadow-sm' : 'border-line bg-surface text-muted-strong'}`}
                   >
-                    <span className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-2xl text-2xl" style={{ background: softColour(item.colour, '18') }}>{item.icon}</span>
+                    <span className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl text-xl" style={{ background: softColour(item.colour, '18') }}>{item.icon}</span>
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-extrabold">{item.label}</span>
-                      <span className="mt-1 block text-[11px] leading-tight opacity-70">{item.description}</span>
+                      <span className="mt-0.5 block text-[11px] opacity-70">Pinned</span>
                     </span>
                   </NavLink>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">All areas</p>
+            <div className="space-y-3">
+              {NAV_GROUPS.map(group => {
+                const items = stackNav.filter(item => item.group === group.key)
+                if (items.length === 0) return null
+                return (
+                  <section key={group.key} aria-labelledby={`more-${group.key}`}>
+                    <h3 id={`more-${group.key}`} className="mb-1.5 px-1 text-xs font-bold text-muted-strong">{group.label}</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {items.map(item => (
+                        <NavLink
+                          key={item.route}
+                          to={item.route}
+                          onClick={onClose}
+                          style={({ isActive }) => (isActive ? { borderColor: item.colour, background: softColour(item.colour, '14'), color: item.colour } : undefined)}
+                          className={({ isActive }) => `flex min-h-[72px] items-center gap-2 rounded-2xl border p-2.5 text-left transition-transform active:scale-[0.98] motion-reduce:transform-none ${isActive ? 'shadow-sm' : 'border-line bg-surface text-muted-strong'}`}
+                        >
+                          <span className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl text-xl" style={{ background: softColour(item.colour, '18') }}>{item.icon}</span>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-extrabold leading-tight">{item.label}</span>
+                            <span className="mt-0.5 line-clamp-2 text-[10px] leading-tight opacity-70">{item.description}</span>
+                          </span>
+                        </NavLink>
+                      ))}
+                    </div>
+                  </section>
                 )
               })}
             </div>
           </div>
 
           <div>
-            <p className="mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Quick actions</p>
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => { onClose(); onSearch() }} className="flex min-h-12 items-center gap-2 rounded-2xl border border-line bg-surface px-3 text-sm font-bold text-ink"><span className="text-lg">⌕</span> Search</button>
-              <button onClick={() => { onClose(); onQuickCreate() }} className="flex min-h-12 items-center gap-2 rounded-2xl bg-primary px-3 text-sm font-bold text-white shadow-soft"><span className="text-lg">＋</span> Add something</button>
-            </div>
-          </div>
-
-          {adminNav.length > 0 && (
-            <div>
-              <p className="mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Manage</p>
-              <div className="grid grid-cols-2 gap-2">
-                {adminNav.map(item => (
-                  <NavLink key={item.route} to={item.route} onClick={onClose} className={({ isActive }) => `flex min-h-[64px] items-center gap-2.5 rounded-2xl border px-3 text-left ${isActive ? 'border-primary bg-primary-soft text-primary' : 'border-line bg-surface text-muted-strong'}`}>
-                    <span className="text-xl">{item.icon}</span>
-                    <span className="min-w-0"><span className="block truncate text-sm font-bold">{item.label}</span><span className="block truncate text-[11px] text-muted">{item.description}</span></span>
-                  </NavLink>
-                ))}
+            <p className="mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Account & app</p>
+            {user && (
+              <div className="mb-2 rounded-2xl border border-line p-3" style={{ background: `linear-gradient(135deg, ${softColour(user.colour || '#1d7a91', '18')}, var(--hs-surface) 68%)` }}>
+                <div className="flex items-center gap-3">
+                  <Avatar name={user.display_name} colour={user.colour} avatar={user.avatar} size="md" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-extrabold text-ink">{user.display_name}</p>
+                    <p className="text-xs font-semibold capitalize text-muted">{user.role} profile</p>
+                  </div>
+                  <button onClick={() => setEditingProfile(value => !value)} className="min-h-11 rounded-xl border border-line bg-surface/80 px-3 py-2 text-xs font-bold text-primary shadow-sm">
+                    {editingProfile ? 'Done' : 'Edit'}
+                  </button>
+                </div>
+                {editingProfile && (
+                  <div className="mt-3">
+                    <ProfileEditor user={user} onSaved={u => { updateUser(u); setEditingProfile(false) }} onClose={() => setEditingProfile(false)} />
+                  </div>
+                )}
               </div>
-            </div>
-          )}
-
-          <div>
-            <p className="mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">App & session</p>
+            )}
             <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+              <NavLink to="/settings/notifications" onClick={onClose} className="flex min-h-12 items-center gap-3 border-b border-line px-3 text-sm font-semibold text-muted-strong hover:bg-sunken">
+                <span className="w-6 text-center text-lg">🔔</span>
+                Notifications
+              </NavLink>
               <button
                 onClick={() => setDark(!dark)}
                 className="flex min-h-12 w-full items-center gap-3 border-b border-line px-3 text-left text-sm font-semibold text-muted-strong hover:bg-sunken"
               >
                 <span className="text-lg w-6 text-center">{dark ? '☀' : '☾'}</span>
-                {dark ? 'Light mode' : 'Dark mode'}
+                Appearance · {dark ? 'Use light mode' : 'Use dark mode'}
               </button>
+              {adminNav.map(item => (
+                <NavLink key={item.route} to={item.route} onClick={onClose} className="flex min-h-12 items-center gap-3 border-b border-line px-3 text-sm font-semibold text-muted-strong hover:bg-sunken">
+                  <span className="w-6 text-center text-lg">{item.icon}</span>
+                  {item.label}
+                </NavLink>
+              ))}
               <a
                 href="/kiosk"
                 className="flex min-h-12 items-center gap-3 border-b border-line px-3 text-sm font-semibold text-muted-strong hover:bg-sunken"
@@ -406,6 +447,7 @@ export function AppShell() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [quickOpen, setQuickOpen] = useState(false)
   const guideStorageKey = `hs-hidden-guides-${user?.id ?? 'guest'}`
+  const mobileNavStorageKey = `hs-mobile-nav-${user?.id ?? 'guest'}`
   const [hiddenGuides, setHiddenGuides] = useState<string[]>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(`hs-hidden-guides-${user?.id ?? 'guest'}`) || '[]')
@@ -414,18 +456,21 @@ export function AppShell() {
   })
   const [mobileKeys, setMobileKeys] = useState<string[]>(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem('hs-mobile-nav') || '[]')
+      // Read the former household-global preference once as a migration seed. After the stack
+      // permissions load, the repair effect below moves it to this user's scoped key.
+      const stored = localStorage.getItem(`hs-mobile-nav-${user?.id ?? 'guest'}`)
+        ?? localStorage.getItem('hs-mobile-nav')
+      const saved = JSON.parse(stored || '[]')
       return Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string') : []
     } catch {
       return []
     }
   })
-  // Whether the user has ever customised their shortcuts, vs. `mobileKeys` merely being *empty*
-  // because nothing was ever saved. Without this, deliberately removing both shortcuts is
-  // indistinguishable from never having chosen any, and "up to two" can never actually mean
-  // zero — the length check alone always falls back to the defaults.
-  const hasCustomizedNav = useRef(localStorage.getItem('hs-mobile-nav') !== null)
-  const { enabledKeys, error: stacksError, refresh: refreshStacks } = useStacks()
+  const hasCustomizedNav = useRef(
+    localStorage.getItem(`hs-mobile-nav-${user?.id ?? 'guest'}`) !== null
+      || localStorage.getItem('hs-mobile-nav') !== null,
+  )
+  const { enabledKeys, loading: stacksLoading, error: stacksError, refresh: refreshStacks } = useStacks()
   useScrollRestoration()
 
   // Core surfaces (Hub, Calendar) always show; node-backed stacks only when enabled.
@@ -448,31 +493,42 @@ export function AppShell() {
   // shortcuts (docs/36 §4.2). Everything else lives behind the "More" sheet.
   const availableKeys = new Set(stackNav.map(item => item.key))
   const hubItem = stackNav.find(item => item.key === 'hub')
-  const defaultMobileKeys = MOBILE_DEFAULT_SHORTCUT_PRIORITY
-    .filter(key => availableKeys.has(key))
-    .slice(0, MOBILE_SHORTCUT_SLOTS)
-  // A saved key that's no longer in `availableKeys` means its node got disabled since it was
-  // pinned — not that the user chose to drop it — so that slot is backfilled from the defaults
-  // rather than just shrinking the bar. A saved list that's simply shorter than
-  // MOBILE_SHORTCUT_SLOTS (deliberately, via toggleMobileKey) is never backfilled: the user
-  // asked for fewer, including genuinely zero.
-  const rawSavedKeys = mobileKeys.filter(key => key !== 'hub')
-  const validSavedKeys = rawSavedKeys.filter(key => availableKeys.has(key))
-  const disabledSlotCount = rawSavedKeys.length - validSavedKeys.length
-  const backfillPool = MOBILE_DEFAULT_SHORTCUT_PRIORITY
-    .filter(key => availableKeys.has(key) && !validSavedKeys.includes(key))
+  const recommendedPool = Array.from(new Set([
+    ...MOBILE_DEFAULT_SHORTCUT_PRIORITY,
+    ...stackNav.map(item => item.key),
+  ])).filter(key => key !== 'hub' && availableKeys.has(key))
+  const defaultMobileKeys = recommendedPool.slice(0, MOBILE_SHORTCUT_SLOTS)
+  // The dock always has two configurable positions. Missing, duplicated, disabled or newly
+  // inaccessible saved choices are repaired from the documented priority, without replacing
+  // any still-valid explicit choice.
+  const rawSavedKeys = mobileKeys.filter(key => key !== 'hub').slice(0, MOBILE_SHORTCUT_SLOTS)
   const effectiveMobileKeys = hasCustomizedNav.current
-    ? [...validSavedKeys, ...backfillPool.slice(0, disabledSlotCount)].slice(0, MOBILE_SHORTCUT_SLOTS)
+    ? (() => {
+      const reserved = new Set(rawSavedKeys.filter(key => availableKeys.has(key)))
+      const used = new Set<string>()
+      return Array.from({ length: MOBILE_SHORTCUT_SLOTS }, (_, slot) => {
+        const saved = rawSavedKeys[slot]
+        if (saved && availableKeys.has(saved) && !used.has(saved)) {
+          used.add(saved)
+          return saved
+        }
+        const replacement = recommendedPool.find(key => !used.has(key) && !reserved.has(key))
+          ?? recommendedPool.find(key => !used.has(key))
+        if (replacement) used.add(replacement)
+        return replacement
+      }).filter((key): key is string => Boolean(key))
+    })()
     : defaultMobileKeys
+  const mobileKeysSignature = JSON.stringify(mobileKeys)
+  const effectiveMobileKeysSignature = JSON.stringify(effectiveMobileKeys)
   const mobileShortcuts = effectiveMobileKeys
     .map(key => stackNav.find(item => item.key === key))
     .filter((item): item is NavItem => Boolean(item))
   const currentNav = [...stackNav, ...adminNav].find(item => location.pathname.startsWith(item.route))
-  // The destination the More button represents while you are on it, because it has no slot.
   const hasOwnMobileSlot = currentNav && (currentNav.key === 'hub' || mobileShortcuts.some(item => item.key === currentNav.key))
-  const moreStandsIn = currentNav && !hasOwnMobileSlot
-    ? currentNav
-    : null
+  // More never changes identity. It only takes a subtle active treatment when the current area
+  // is reached through the launcher rather than owning one of the two shortcut slots.
+  const currentIsInMore = Boolean(!hasOwnMobileSlot && location.pathname !== '/')
   // Mobile-only: the top bar shows Back instead of the destination icon once you're inside a
   // subscreen (docs/36 §4.1) — a route nested below the matched stack's own base route.
   const isNestedRoute = Boolean(currentNav && location.pathname !== currentNav.route)
@@ -492,15 +548,38 @@ export function AppShell() {
     })
   }
 
-  const toggleMobileKey = (key: string) => {
-    if (key === 'hub') return // Home always has the fixed bottom-bar slot; nothing to toggle.
+  const persistMobileKeys = (keys: string[]) => {
     hasCustomizedNav.current = true
-    const next = effectiveMobileKeys.includes(key)
-      ? effectiveMobileKeys.filter(item => item !== key)
-      : effectiveMobileKeys.length < MOBILE_SHORTCUT_SLOTS ? [...effectiveMobileKeys, key] : effectiveMobileKeys
-    localStorage.setItem('hs-mobile-nav', JSON.stringify(next))
-    setMobileKeys(next)
+    localStorage.setItem(mobileNavStorageKey, JSON.stringify(keys))
+    setMobileKeys(keys)
   }
+
+  const setMobileSlot = (slot: number, key: string) => {
+    if (key === 'hub' || !availableKeys.has(key) || slot < 0 || slot >= MOBILE_SHORTCUT_SLOTS) return
+    const next = [...effectiveMobileKeys]
+    const otherSlot = next.indexOf(key)
+    if (otherSlot !== -1 && otherSlot !== slot) next[otherSlot] = next[slot]
+    next[slot] = key
+    persistMobileKeys(next)
+  }
+
+  const resetMobileKeys = () => {
+    hasCustomizedNav.current = false
+    localStorage.removeItem(mobileNavStorageKey)
+    // Remove the legacy global setting too, otherwise it would immediately reseed this user.
+    localStorage.removeItem('hs-mobile-nav')
+    setMobileKeys([])
+  }
+
+  useEffect(() => {
+    if (stacksLoading || !hasCustomizedNav.current) return
+    const migratingLegacyPreference = localStorage.getItem(mobileNavStorageKey) === null
+      && localStorage.getItem('hs-mobile-nav') !== null
+    if (mobileKeysSignature === effectiveMobileKeysSignature && !migratingLegacyPreference) return
+    localStorage.setItem(mobileNavStorageKey, effectiveMobileKeysSignature)
+    if (migratingLegacyPreference) localStorage.removeItem('hs-mobile-nav')
+    if (mobileKeysSignature !== effectiveMobileKeysSignature) setMobileKeys(JSON.parse(effectiveMobileKeysSignature))
+  }, [stacksLoading, mobileNavStorageKey, effectiveMobileKeysSignature, mobileKeysSignature])
 
   useEffect(() => {
     setMoreOpen(false)
@@ -690,48 +769,51 @@ export function AppShell() {
             <InlineAlert message={stacksError} onRetry={refreshStacks} />
           </div>
         )}
-        <main className={`${CONTENT_CONTAINER} min-w-0 flex-1 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] md:py-7 md:pb-8`}>
+        <main className={`${CONTENT_CONTAINER} min-w-0 flex-1 py-5 pb-[calc(7.25rem+env(safe-area-inset-bottom))] md:py-7 md:pb-8`}>
           <Outlet />
         </main>
       </div>
 
       {/* Bottom nav — mobile only. Home, Add and More are fixed; the two remaining slots are
           user-configurable shortcuts either side of Add (docs/36 §4.2). */}
-      <nav className="mobile-bottom-nav fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-surface/94 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(50,40,25,0.06)] backdrop-blur-xl md:hidden" aria-label="Main navigation">
+      <nav
+        className="mobile-bottom-nav fixed bottom-[calc(0.625rem+env(safe-area-inset-bottom))] left-3 right-3 z-30 grid h-[72px] grid-cols-5 items-stretch rounded-[1.65rem] border border-line bg-surface/90 p-1.5 shadow-[0_12px_34px_rgba(25,32,36,0.22)] backdrop-blur-xl md:hidden"
+        aria-label="Main navigation"
+        data-floating-dock
+      >
         {hubItem && <MobileNavLink item={hubItem} />}
         {mobileShortcuts[0] && <MobileNavLink item={mobileShortcuts[0]} />}
         <button
           onClick={() => setQuickOpen(true)}
-          className="relative flex min-w-0 flex-1 flex-col items-center justify-center pb-1.5 pt-1.5"
+          className="relative -translate-y-1 flex min-h-11 min-w-0 flex-col items-center justify-center rounded-[1.15rem] text-[10px] font-extrabold text-primary transition-transform duration-150 active:scale-[0.96] motion-reduce:transform-none motion-reduce:transition-none"
           aria-label="Create something"
+          data-nav-key="add"
         >
-          <span className="grid h-11 w-11 place-items-center rounded-full bg-primary text-2xl leading-none text-white shadow-soft transition-transform active:scale-95">＋</span>
+          <span className="grid h-12 w-12 place-items-center rounded-full bg-primary text-2xl leading-none text-white shadow-[0_8px_18px_rgba(29,122,145,0.32)]">＋</span>
+          <span className="mt-0.5 leading-3">Add</span>
         </button>
         {mobileShortcuts[1] && <MobileNavLink item={mobileShortcuts[1]} />}
-        {/* When you are somewhere that has no slot of its own — Fitness, Books, Money — nothing
-            in the bar used to be marked, so the phone gave no answer to "where am I". The More
-            button then stands in for the current destination and wears its icon and colour. */}
         <button
           onClick={() => setMoreOpen(true)}
-          style={moreStandsIn && !moreOpen ? { color: moreStandsIn.colour } : undefined}
-          className={`relative flex min-w-0 flex-1 flex-col items-center justify-center pb-1.5 pt-1.5 text-[11px] font-bold transition-colors ${
-            moreOpen || moreStandsIn ? '' : 'text-muted'
-          } ${moreOpen ? 'text-primary' : ''}`}
-          aria-label={moreStandsIn ? `${moreStandsIn.label} — open all destinations` : 'More navigation and profile options'}
+          style={moreOpen
+            ? { color: 'var(--hs-primary)', background: 'var(--hs-primary-soft)' }
+            : currentIsInMore
+              ? { color: currentNav?.colour ?? 'var(--hs-primary)', background: currentNav ? softColour(currentNav.colour, '14') : 'var(--hs-primary-soft)' }
+              : undefined}
+          className={`relative flex min-h-11 min-w-0 flex-col items-center justify-center rounded-[1.15rem] px-0.5 py-1 text-[10px] font-extrabold transition-[background-color,color,transform] duration-150 active:scale-[0.96] motion-reduce:transform-none motion-reduce:transition-none ${moreOpen ? 'text-primary' : currentIsInMore ? '' : 'text-muted'}`}
+          aria-label="More navigation and profile options"
+          aria-haspopup="dialog"
+          aria-expanded={moreOpen}
+          data-nav-key="more"
         >
           <span
-            className={`mb-0.5 grid h-8 min-w-11 place-items-center rounded-full px-2 text-xl ${moreOpen ? 'bg-primary-soft' : ''}`}
-            style={moreStandsIn && !moreOpen ? { background: softColour(moreStandsIn.colour, '24') } : undefined}
+            className={`relative grid h-7 min-w-10 place-items-center rounded-full px-2 text-[19px] leading-none ${moreOpen ? 'bg-primary-soft' : ''}`}
+            style={currentIsInMore && currentNav && !moreOpen ? { background: softColour(currentNav.colour, '24') } : undefined}
           >
-            {moreStandsIn && !moreOpen ? moreStandsIn.icon : '☰'}
+            ☰
+            {currentIsInMore && currentNav && !moreOpen && <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full" style={{ backgroundColor: currentNav.colour }} aria-hidden />}
           </span>
-          <span className="max-w-full truncate px-1">{moreStandsIn && !moreOpen ? moreStandsIn.shortLabel : 'More'}</span>
-          {(moreOpen || moreStandsIn) && (
-            <span
-              className="absolute bottom-0 h-0.5 w-5 rounded-full"
-              style={{ backgroundColor: moreOpen || !moreStandsIn ? 'var(--hs-primary)' : moreStandsIn.colour }}
-            />
-          )}
+          <span className="mt-0.5 max-w-full truncate px-0.5 leading-3">More</span>
         </button>
       </nav>
 
@@ -745,18 +827,18 @@ export function AppShell() {
           customisingNav={customisingNav}
           setCustomisingNav={setCustomisingNav}
           effectiveMobileKeys={effectiveMobileKeys}
-          toggleMobileKey={toggleMobileKey}
+          setMobileSlot={setMobileSlot}
+          resetMobileKeys={resetMobileKeys}
           adminNav={adminNav}
           dark={dark}
           setDark={setDark}
           onSearch={() => setSearchOpen(true)}
-          onQuickCreate={() => setQuickOpen(true)}
           logout={logout}
           onClose={() => setMoreOpen(false)}
         />
       )}
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} enabledKeys={enabledKeys} />
-      <QuickCreate open={quickOpen} onClose={() => setQuickOpen(false)} enabledKeys={enabledKeys} />
+      <QuickCreate open={quickOpen} onClose={() => setQuickOpen(false)} enabledKeys={enabledKeys} contextKey={currentNav?.key} />
       <DialogHost />
     </div>
   )

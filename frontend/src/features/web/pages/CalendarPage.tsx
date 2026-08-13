@@ -1308,7 +1308,7 @@ export function CalendarPage() {
         <button
           type="button"
           onClick={() => openNew(view === 'month' ? selectedMonthDay : view === 'day' || view === 'week' ? anchor : new Date())}
-          className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-4 z-20 grid h-14 w-14 place-items-center rounded-2xl bg-primary text-3xl font-light leading-none text-white shadow-card active:scale-95 sm:hidden"
+          className="fixed bottom-[calc(6.25rem+env(safe-area-inset-bottom))] right-4 z-20 grid h-14 w-14 place-items-center rounded-2xl bg-primary text-3xl font-light leading-none text-white shadow-card active:scale-95 sm:hidden"
           aria-label={`Add event${view === 'month' ? ` on ${selectedMonthDay.toLocaleDateString()}` : ''}`}
         >
           +

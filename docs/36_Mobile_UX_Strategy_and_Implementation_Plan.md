@@ -1298,6 +1298,24 @@ overflow at the 320px stress width. Validation: 78 focused backend tests, clean 
 passing / 56 intentionally skipped Playwright cases across all four viewport projects, and a
 clean temporary production build.
 
+**Focused mobile-navigation refinement (v0.36.10).** The phone shell now uses a floating,
+safe-area-aware dock inset from the screen edges, with five fixed semantic positions: Home,
+shortcut 1, raised Add, shortcut 2 and More. Active destinations use a soft accent pill and the
+old bottom underline is gone. More no longer morphs into the current unpinned destination; it
+always remains More and uses a subtle active treatment when it represents the current area.
+
+The More sheet is now the **All HomeStack** launcher: prominent Search, a Pinned section, all
+permission-filtered areas grouped by purpose, then Account & app controls. Shortcut editing uses
+explicit Slot 1 / Slot 2 selectors and Reset rather than disabled destination cards. Preferences
+are user-scoped, selecting the other slot swaps values to prevent duplicates, and missing or
+disabled choices are repaired in their original position from the documented Calendar → Atlas →
+Meridian → Homestead → Pets → Education → Home Wiki → Money → Fitness → Books → Travel priority.
+Quick Create promotes actions belonging to the current area while keeping every permitted global
+action. Dock-aware content, Calendar, Fitness and shared sticky-action offsets now clear the
+raised control. Automated acceptance covers 320px, standard phone, dark phone and the 768px
+desktop transition; the full suite is green with 205 passed / 63 intentionally skipped, alongside
+clean TypeScript and production builds.
+
 ### Phase 10 — Complete real-device acceptance — CHECKLIST READY / NOT STARTED
 
 Phases 1-9 are now complete for the software-side/mobile-automation pass. Phase 10 is different in

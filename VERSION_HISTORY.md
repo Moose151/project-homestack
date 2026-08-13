@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.36.9**
+> **Current version: 0.36.10**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,20 @@
 ---
 
 ## 0.36 — Mobile UX v1
+
+### 0.36.10 — 2026-08-13 — Focused mobile navigation refinement
+- The phone bottom navigation is now a safe-area-aware floating dock with five stable positions:
+  Home, shortcut 1, a raised Add action, shortcut 2 and More. Active destinations use soft accent
+  pills instead of an underline, while larger page and floating-action clearances prevent overlap.
+- More is now a consistent **All HomeStack** launcher rather than changing its icon/name to the
+  current unpinned area. Search, pinned shortcuts and permission-filtered grouped destinations
+  come first; profile, notifications, appearance, management, kiosk and sign-out controls follow.
+- Shortcut customization now exposes explicit Slot 1 and Slot 2 pickers plus Reset. Choices are
+  saved per user, duplicates swap safely, and disabled or inaccessible destinations are repaired
+  in place from the Calendar → Atlas → Meridian priority without overriding valid selections.
+- Quick Create now promotes actions relevant to the current area while retaining every permitted
+  global action. Validation: TypeScript and production Vite build clean; full four-viewport
+  Playwright suite green (205 passed, 63 intentionally skipped).
 
 ### 0.36.9 — 2026-08-13 — Faster everyday workout, Corner and Money actions
 - Fitness now defaults **Who is training?** to the household person linked to the current login,

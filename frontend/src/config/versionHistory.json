@@ -1,7 +1,18 @@
 {
-  "current_version": "0.36.9",
-  "source_sha256": "0366d25293c8bcecbdf65aaa948c2566a918e3b2f12136e57564574d710a8ab7",
+  "current_version": "0.36.10",
+  "source_sha256": "55b16ad17cd280f2ad97bf1dea2611c2c79bac3ed93e899a05bf24596708f08a",
   "releases": [
+    {
+      "version": "0.36.10",
+      "date": "2026-08-13",
+      "title": "Focused mobile navigation refinement",
+      "changes": [
+        "The phone bottom navigation is now a safe-area-aware floating dock with five stable positions: Home, shortcut 1, a raised Add action, shortcut 2 and More. Active destinations use soft accent pills instead of an underline, while larger page and floating-action clearances prevent overlap.",
+        "More is now a consistent **All HomeStack** launcher rather than changing its icon/name to the current unpinned area. Search, pinned shortcuts and permission-filtered grouped destinations come first; profile, notifications, appearance, management, kiosk and sign-out controls follow.",
+        "Shortcut customization now exposes explicit Slot 1 and Slot 2 pickers plus Reset. Choices are saved per user, duplicates swap safely, and disabled or inaccessible destinations are repaired in place from the Calendar → Atlas → Meridian priority without overriding valid selections.",
+        "Quick Create now promotes actions relevant to the current area while retaining every permitted global action. Validation: TypeScript and production Vite build clean; full four-viewport Playwright suite green (205 passed, 63 intentionally skipped)."
+      ]
+    },
     {
       "version": "0.36.9",
       "date": "2026-08-13",

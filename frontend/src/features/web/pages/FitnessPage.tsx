@@ -221,7 +221,7 @@ function LiveSession({ session, sessions, exercises, reload, onDone }: {
           </div>
         </Card>
       ) : <Button variant="secondary" className="w-full" onClick={() => setAdding(true)}>+ Add or swap an exercise</Button>}
-      <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 flex gap-2 rounded-2xl border border-line bg-surface/95 p-2 shadow-soft backdrop-blur sm:static sm:bg-transparent sm:p-0 sm:shadow-none">
+      <div className="sticky bottom-[calc(6.25rem+env(safe-area-inset-bottom))] z-10 flex gap-2 rounded-2xl border border-line bg-surface/95 p-2 shadow-soft backdrop-blur sm:static sm:bg-transparent sm:p-0 sm:shadow-none">
         <Button className="flex-1" loading={busy} onClick={() => change(async () => { await api.finishFitnessSession(session.id); onDone() })}>Finish workout</Button>
         <Button variant="danger" disabled={busy} onClick={async () => { if ((await confirmDialog({ title: 'Abandon this workout?', message: 'Logged sets will not count toward records.', confirmLabel: 'Abandon' }))) change(async () => { await api.abandonFitnessSession(session.id); onDone() }) }}>Abandon</Button>
       </div>
