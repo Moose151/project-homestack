@@ -21,6 +21,8 @@ import { DeleteAction } from '../../../components/RowActions'
 import { useAuth } from '../../auth/AuthContext'
 import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
+import { Modal } from '../../../components/Modal'
+import { MobileListRow, MobileScreenHeader, MobileSection } from '../../../components/mobile'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -332,6 +334,63 @@ function AssignmentForm({ courses, people, defaultAssignee, onCreated, onError }
   )
 }
 
+// docs/36 §6.5: assignments get a real detail screen — notes/files/status/priority/due date
+// live inside a focused sheet, not an accordion expanding inline into the list itself.
+function AssignmentDetailModal({ assessment, onClose, onChange, onDelete, onError }: {
+  assessment: EducationAssessment
+  onClose: () => void
+  onChange: (a: EducationAssessment) => void
+  onDelete: (id: number) => void
+  onError: (m: string) => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const due = dueLabel(assessment.due_at, assessment.is_all_day)
+
+  const setStatus = async (status: AssessmentStatus) => {
+    setBusy(true)
+    try { onChange(await api.updateAssessment(assessment.id, { status })) }
+    catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
+  }
+  const remove = async () => {
+    if (!(await confirmDialog({ title: 'Delete this assignment?', confirmLabel: 'Delete' }))) return
+    try { await api.deleteAssessment(assessment.id); onDelete(assessment.id) } catch (e) { onError(errMsg(e)) }
+  }
+
+  return (
+    <Modal
+      title={assessment.title}
+      onClose={onClose}
+      size="full"
+      footer={
+        <>
+          <button onClick={remove} className="mr-auto text-sm text-danger hover:underline">Delete</button>
+          <Button variant="ghost" onClick={onClose}>Close</Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs px-2 py-0.5 rounded-full bg-sunken text-muted-strong">{TYPE_LABELS[assessment.assessment_type]}</span>
+          {(assessment.course_code || assessment.course_name) && (
+            <span className="text-xs text-muted">{assessment.course_code || assessment.course_name}</span>
+          )}
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PRIORITY_TONE[assessment.priority]}`}>{assessment.priority}</span>
+          {due && (
+            <Link to={calendarDayHref(assessment.due_at)} className={`text-xs px-2 py-0.5 rounded-full font-medium ${due.tone}`}>{due.text}</Link>
+          )}
+        </div>
+        <div>
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-strong">Status</div>
+          <select value={assessment.status} onChange={e => setStatus(e.target.value as AssessmentStatus)} disabled={busy} className={inputCls}>
+            {Object.entries(STATUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </div>
+        <AssessmentDetail assessment={assessment} onError={onError} />
+      </div>
+    </Modal>
+  )
+}
+
 function AssignmentRow({ a, focused, onChange, onDelete, onError }: {
   a: EducationAssessment
   focused?: boolean
@@ -340,7 +399,7 @@ function AssignmentRow({ a, focused, onChange, onDelete, onError }: {
   onError: (m: string) => void
 }) {
   const [busy, setBusy] = useState(false)
-  const [expanded, setExpanded] = useState(Boolean(focused))
+  const [open, setOpen] = useState(Boolean(focused))
   const due = dueLabel(a.due_at, a.is_all_day)
 
   const setStatus = async (status: AssessmentStatus) => {
@@ -369,7 +428,7 @@ function AssignmentRow({ a, focused, onChange, onDelete, onError }: {
 
         <div className="flex-1 min-w-0">
           <button
-            onClick={() => setExpanded(v => !v)}
+            onClick={() => setOpen(true)}
             className="text-left w-full"
           >
             <div className={`text-sm font-medium ${a.is_complete ? 'line-through text-muted' : 'text-ink'}`}>
@@ -390,13 +449,8 @@ function AssignmentRow({ a, focused, onChange, onDelete, onError }: {
                   {due.text}
                 </Link>
               )}
-              <span className="text-xs text-muted-strong">{expanded ? '▲' : '▼'}</span>
             </div>
           </button>
-
-          {expanded && (
-            <AssessmentDetail assessment={a} onError={onError} />
-          )}
         </div>
 
         <select
@@ -409,6 +463,16 @@ function AssignmentRow({ a, focused, onChange, onDelete, onError }: {
         </select>
         <DeleteAction onClick={remove} label={a.title} />
       </div>
+
+      {open && (
+        <AssignmentDetailModal
+          assessment={a}
+          onClose={() => setOpen(false)}
+          onChange={onChange}
+          onDelete={id => { onDelete(id); setOpen(false) }}
+          onError={onError}
+        />
+      )}
     </li>
   )
 }
@@ -1217,16 +1281,101 @@ function ProfileTab({ people, institutions, defaultPersonId, onAddInstitution, o
 // Page
 // ===========================================================================
 
-type Tab = 'profile' | 'assignments' | 'courses' | 'timetable' | 'events' | 'institutions'
+type Tab = 'overview' | 'profile' | 'assignments' | 'courses' | 'timetable' | 'events' | 'institutions'
 
 const TABS: TabDef<Tab>[] = [
-  { key: 'profile', label: 'My Profile' },
+  { key: 'overview', label: 'Today' },
   { key: 'assignments', label: 'Assignments' },
   { key: 'courses', label: 'Courses' },
   { key: 'timetable', label: 'Timetable' },
   { key: 'events', label: 'Events' },
+  { key: 'profile', label: 'My Profile' },
   { key: 'institutions', label: 'Institutions' },
 ]
+
+// docs/36 §6.5: the landing screen should be deadline/timetable-first — "Today" plus "Due soon" —
+// with Profile/Institutions moved out of the primary path (they're now last in the tab order and
+// reachable from the "More" row below rather than being the default landing tab).
+function EducationOverviewTab({ onGoTab }: { onGoTab: (t: Tab) => void }) {
+  const [todaySessions, setTodaySessions] = useState<EducationClassSession[]>([])
+  const [dueSoon, setDueSoon] = useState<EducationAssessment[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([api.getClassSessions(), api.getAssessments({ open: true })])
+      .then(([sessions, assessments]) => {
+        const today = new Date()
+        setTodaySessions(
+          sessions
+            .filter(s => new Date(s.start_at).toDateString() === today.toDateString())
+            .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime()),
+        )
+        setDueSoon(
+          [...assessments]
+            .sort((a, b) => {
+              if (!a.due_at && !b.due_at) return 0
+              if (!a.due_at) return 1
+              if (!b.due_at) return -1
+              return new Date(a.due_at).getTime() - new Date(b.due_at).getTime()
+            })
+            .slice(0, 5),
+        )
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
+
+  return (
+    <div className="flex flex-col gap-4">
+      <MobileSection title="Today">
+        {todaySessions.length === 0 ? (
+          <p className="px-1 text-sm text-muted">No classes today.</p>
+        ) : (
+          todaySessions.map(s => (
+            <MobileListRow
+              key={s.id}
+              icon="🎓"
+              title={s.display_title || s.title}
+              subtitle={s.location || s.course_code || s.course_name || undefined}
+              trailing={new Date(s.start_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+              chevron={false}
+            />
+          ))
+        )}
+      </MobileSection>
+
+      <MobileSection title="Due soon">
+        {dueSoon.length === 0 ? (
+          <p className="px-1 text-sm text-muted">Nothing due — you're all caught up.</p>
+        ) : (
+          dueSoon.map(a => {
+            const due = dueLabel(a.due_at, a.is_all_day)
+            return (
+              <MobileListRow
+                key={a.id}
+                icon="📌"
+                title={a.title}
+                subtitle={a.course_code || a.course_name || TYPE_LABELS[a.assessment_type]}
+                trailing={due?.text}
+                onClick={() => onGoTab('assignments')}
+              />
+            )
+          })
+        )}
+      </MobileSection>
+
+      <MobileSection title="Sections">
+        <MobileListRow icon="📌" title="Assignments" onClick={() => onGoTab('assignments')} />
+        <MobileListRow icon="🗓" title="Timetable" onClick={() => onGoTab('timetable')} />
+        <MobileListRow icon="🏫" title="Courses" onClick={() => onGoTab('courses')} />
+        <MobileListRow icon="🎉" title="Events" onClick={() => onGoTab('events')} />
+        <MobileListRow icon="⚙️" title="More" subtitle="Profile and institutions" onClick={() => onGoTab('profile')} />
+      </MobileSection>
+    </div>
+  )
+}
 
 const INSTITUTION_TYPES = [
   { key: 'school', label: 'School' },
@@ -1319,7 +1468,7 @@ function InstitutionsTab({ institutions, onChange, onError }: {
 
 export function EducationPage() {
   const { user } = useAuth()
-  const [tab, setTab] = useUrlTab<Tab>('profile', TABS.map(item => item.key))
+  const [tab, setTab] = useUrlTab<Tab>('overview', TABS.map(item => item.key))
   const [searchParams] = useSearchParams()
   const focusedAssessmentId = Number(searchParams.get('assessment') || 0)
   const [courses, setCourses] = useState<EducationCourse[]>([])
@@ -1346,7 +1495,9 @@ export function EducationPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="School & study" icon="🎓" />
+      <div className="hidden sm:block">
+        <PageHeader title="School & study" icon="🎓" />
+      </div>
 
       <SearchField
         value={query}
@@ -1366,8 +1517,19 @@ export function EducationPage() {
         <EducationSearchResults results={results} />
       ) : (
         <>
-          <Tabs tabs={TABS} active={tab} onChange={setTab} mobileSelectLabel="Education section" />
+          <div className="hidden sm:block">
+            <Tabs tabs={TABS} active={tab} onChange={setTab} mobileSelectLabel="Education section" />
+          </div>
+          {tab !== 'overview' && (
+            <MobileScreenHeader
+              className="sm:hidden"
+              title={TABS.find(t => t.key === tab)?.label ?? ''}
+              showBack
+              onBack={() => setTab('overview')}
+            />
+          )}
 
+          {tab === 'overview' && <EducationOverviewTab onGoTab={setTab} />}
           {tab === 'profile' && <ProfileTab people={people} institutions={institutions} defaultPersonId={defaultAssignee[0] ?? null} onAddInstitution={() => setTab('institutions')} onError={setError} />}
           {tab === 'assignments' && <AssignmentsTab courses={courses} people={people} defaultAssignee={defaultAssignee} focusedAssessmentId={focusedAssessmentId || undefined} onError={setError} />}
           {tab === 'courses' && <CoursesTab courses={courses} reload={loadCourses} people={people} institutions={institutions} defaultAssignee={defaultAssignee} onAddInstitution={() => setTab('institutions')} onError={setError} />}

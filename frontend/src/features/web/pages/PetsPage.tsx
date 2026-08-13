@@ -10,6 +10,8 @@ import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
 import { DeleteAction, EditAction, RowActions } from '../../../components/RowActions'
 import { DateTimeField } from '../../../components/DateTimeField'
+import { Modal } from '../../../components/Modal'
+import { MobileListRow } from '../../../components/mobile'
 import { useAuth } from '../../auth/AuthContext'
 import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
@@ -221,30 +223,139 @@ function AppointmentRow({ appointment, onChange, onDelete, onError }: {
   )
 }
 
+function PetEditForm({ pet, onSaved, onCancel, onError }: {
+  pet: Pet; onSaved: (p: Pet) => void; onCancel: () => void; onError: (m: string) => void
+}) {
+  const [form, setForm] = useState({ name: pet.name, species: pet.species, breed: pet.breed, vet_name: pet.vet_name, vet_phone: pet.vet_phone, microchip_number: pet.microchip_number, notes: pet.notes })
+  const [busy, setBusy] = useState(false)
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    try { onSaved(await api.updatePet(pet.id, form)) }
+    catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
+  }
+
+  return (
+    <form onSubmit={save} className="space-y-2">
+      <Field label="Pet name"><Input autoFocus value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Species"><Select value={form.species} onChange={e => setForm(f => ({ ...f, species: e.target.value as PetSpecies }))}>
+          {Object.entries(SPECIES_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </Select></Field>
+        <Field label="Breed"><Input value={form.breed} onChange={e => setForm(f => ({ ...f, breed: e.target.value }))} /></Field>
+        <Field label="Vet name"><Input value={form.vet_name} onChange={e => setForm(f => ({ ...f, vet_name: e.target.value }))} /></Field>
+        <Field label="Vet phone"><Input type="tel" value={form.vet_phone} onChange={e => setForm(f => ({ ...f, vet_phone: e.target.value }))} /></Field>
+      </div>
+      <Field label="Microchip number"><Input value={form.microchip_number} onChange={e => setForm(f => ({ ...f, microchip_number: e.target.value }))} /></Field>
+      <Field label="Care notes"><Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></Field>
+      <div className="flex gap-2"><Button type="submit" size="sm" loading={busy}>Save</Button><Button type="button" size="sm" variant="ghost" onClick={onCancel}>Cancel</Button></div>
+    </form>
+  )
+}
+
+// docs/36 §6.8: treatments/appointments used to expand inline inside an already-crowded card —
+// pulled out so both the desktop card's inline expand and the phone detail sheet render the
+// exact same content, not two copies that could drift.
+function PetDetailContent({ pet, onError }: { pet: Pet; onError: (m: string) => void }) {
+  const [treatments, setTreatments] = useState<PetTreatment[] | null>(null)
+  const [appointments, setAppointments] = useState<PetAppointment[] | null>(null)
+  const [addingT, setAddingT] = useState(false)
+  const [addingA, setAddingA] = useState(false)
+
+  useEffect(() => {
+    api.getPetTreatments({ pet: pet.id }).then(setTreatments).catch(e => onError(errMsg(e)))
+    api.getPetAppointments({ pet: pet.id, upcoming: true }).then(setAppointments).catch(e => onError(errMsg(e)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pet.id])
+
+  return (
+    <div className="space-y-4">
+      {(pet.vet_name || pet.microchip_number || pet.notes) && (
+        <div className="text-xs text-muted space-y-0.5">
+          {pet.vet_name && <div>🩺 {pet.vet_name}{pet.vet_phone ? ` · ${pet.vet_phone}` : ''}</div>}
+          {pet.microchip_number && <div>🔖 Chip {pet.microchip_number}</div>}
+          {pet.notes && <div className="text-muted-strong whitespace-pre-wrap">{pet.notes}</div>}
+        </div>
+      )}
+
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs font-semibold text-muted-strong uppercase tracking-wide">Treatments</span>
+          {!addingT && <button type="button" onClick={() => setAddingT(true)} className="min-h-10 px-2 text-xs font-semibold text-primary hover:underline">+ Add treatment</button>}
+        </div>
+        {addingT && <TreatmentForm petId={pet.id} onError={onError} onCancel={() => setAddingT(false)}
+          onSaved={t => { setTreatments(prev => [...(prev ?? []), t]); setAddingT(false) }} />}
+        {treatments === null ? <p className="text-xs text-muted">Loading…</p>
+          : treatments.length === 0 ? <p className="text-xs text-muted">No treatments yet.</p>
+          : <ul className="divide-y divide-line">{treatments.map(t => (
+              <TreatmentRow key={t.id} t={t} onError={onError}
+                onChange={u => setTreatments(prev => prev!.map(x => x.id === u.id ? u : x))}
+                onDelete={id => setTreatments(prev => prev!.filter(x => x.id !== id))} />
+            ))}</ul>}
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs font-semibold text-muted-strong uppercase tracking-wide">Appointments</span>
+          {!addingA && <button type="button" onClick={() => setAddingA(true)} className="min-h-10 px-2 text-xs font-semibold text-primary hover:underline">+ Add appointment</button>}
+        </div>
+        {addingA && <AppointmentForm petId={pet.id} onError={onError} onCancel={() => setAddingA(false)}
+          onSaved={a => { setAppointments(prev => [...(prev ?? []), a]); setAddingA(false) }} />}
+        {appointments === null ? <p className="text-xs text-muted">Loading…</p>
+          : appointments.length === 0 ? <p className="text-xs text-muted">No upcoming appointments.</p>
+          : <ul className="divide-y divide-line">{appointments.map(a => (
+              <AppointmentRow key={a.id} appointment={a} onError={onError}
+                onChange={updated => setAppointments(prev => prev!.map(item => item.id === updated.id ? updated : item))}
+                onDelete={id => setAppointments(prev => prev!.filter(item => item.id !== id))} />
+            ))}</ul>}
+      </div>
+    </div>
+  )
+}
+
+// docs/36 §6.8: each pet gets a real detail screen on phone — identity + Treatments +
+// Appointments in one focused sheet, not an accordion buried inside a list of every pet.
+function PetDetailModal({ pet, canDelete, onChange, onDeleted, onError, onClose }: {
+  pet: Pet
+  canDelete: boolean
+  onChange: (p: Pet) => void
+  onDeleted: (id: number) => void
+  onError: (m: string) => void
+  onClose: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const remove = async () => {
+    if (!(await confirmDialog({ title: `Delete "${pet.name}"?`, message: 'Their treatments and appointments go too.', confirmLabel: 'Delete' }))) return
+    try { await api.deletePet(pet.id); onDeleted(pet.id); onClose() } catch (e) { onError(errMsg(e)) }
+  }
+
+  return (
+    <Modal title={pet.name} onClose={onClose} size="full">
+      {editing ? (
+        <PetEditForm pet={pet} onSaved={p => { onChange(p); setEditing(false) }} onCancel={() => setEditing(false)} onError={onError} />
+      ) : (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm text-muted">{SPECIES_LABELS[pet.species]}{pet.breed ? ` · ${pet.breed}` : ''}</span>
+            <div className="flex gap-1">
+              <button type="button" onClick={() => setEditing(true)} className="min-h-10 px-2 text-xs font-semibold text-primary hover:underline">Edit</button>
+              {canDelete && <button type="button" onClick={remove} className="min-h-10 px-2 text-xs font-semibold text-danger hover:underline">Delete</button>}
+            </div>
+          </div>
+          <PetDetailContent pet={pet} onError={onError} />
+        </div>
+      )}
+    </Modal>
+  )
+}
+
 function PetCard({ pet, onChange, onDelete, onError, canDelete }: {
   pet: Pet; onChange: (p: Pet) => void; onDelete: (id: number) => void; onError: (m: string) => void; canDelete: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
-  const [treatments, setTreatments] = useState<PetTreatment[] | null>(null)
-  const [appointments, setAppointments] = useState<PetAppointment[] | null>(null)
-  const [addingT, setAddingT] = useState(false)
-  const [addingA, setAddingA] = useState(false)
-  const [form, setForm] = useState({ name: pet.name, species: pet.species, breed: pet.breed, vet_name: pet.vet_name, vet_phone: pet.vet_phone, microchip_number: pet.microchip_number, notes: pet.notes })
-  const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    if (!expanded || treatments !== null) return
-    api.getPetTreatments({ pet: pet.id }).then(setTreatments).catch(e => onError(errMsg(e)))
-    api.getPetAppointments({ pet: pet.id, upcoming: true }).then(setAppointments).catch(e => onError(errMsg(e)))
-  }, [expanded])
-
-  const saveEdit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setBusy(true)
-    try { onChange(await api.updatePet(pet.id, form)); setEditing(false) }
-    catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
-  }
   const remove = async () => {
     if (!(await confirmDialog({ title: `Delete "${pet.name}"?`, message: 'Their treatments and appointments go too.', confirmLabel: 'Delete' }))) return
     try { await api.deletePet(pet.id); onDelete(pet.id) } catch (e) { onError(errMsg(e)) }
@@ -253,20 +364,7 @@ function PetCard({ pet, onChange, onDelete, onError, canDelete }: {
   if (editing) {
     return (
       <Card>
-        <form onSubmit={saveEdit} className="space-y-2">
-          <Field label="Pet name"><Input autoFocus value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Species"><Select value={form.species} onChange={e => setForm(f => ({ ...f, species: e.target.value as PetSpecies }))}>
-              {Object.entries(SPECIES_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </Select></Field>
-            <Field label="Breed"><Input value={form.breed} onChange={e => setForm(f => ({ ...f, breed: e.target.value }))} /></Field>
-            <Field label="Vet name"><Input value={form.vet_name} onChange={e => setForm(f => ({ ...f, vet_name: e.target.value }))} /></Field>
-            <Field label="Vet phone"><Input type="tel" value={form.vet_phone} onChange={e => setForm(f => ({ ...f, vet_phone: e.target.value }))} /></Field>
-          </div>
-          <Field label="Microchip number"><Input value={form.microchip_number} onChange={e => setForm(f => ({ ...f, microchip_number: e.target.value }))} /></Field>
-          <Field label="Care notes"><Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></Field>
-          <div className="flex gap-2"><Button type="submit" size="sm" loading={busy}>Save</Button><Button type="button" size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button></div>
-        </form>
+        <PetEditForm pet={pet} onSaved={p => { onChange(p); setEditing(false) }} onCancel={() => setEditing(false)} onError={onError} />
       </Card>
     )
   }
@@ -288,46 +386,8 @@ function PetCard({ pet, onChange, onDelete, onError, canDelete }: {
       </div>
 
       {expanded && (
-        <div className="mt-3 border-t border-line pt-3 space-y-4">
-          {(pet.vet_name || pet.microchip_number || pet.notes) && (
-            <div className="text-xs text-muted space-y-0.5">
-              {pet.vet_name && <div>🩺 {pet.vet_name}{pet.vet_phone ? ` · ${pet.vet_phone}` : ''}</div>}
-              {pet.microchip_number && <div>🔖 Chip {pet.microchip_number}</div>}
-              {pet.notes && <div className="text-muted-strong whitespace-pre-wrap">{pet.notes}</div>}
-            </div>
-          )}
-
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-semibold text-muted-strong uppercase tracking-wide">Treatments</span>
-              {!addingT && <button type="button" onClick={() => setAddingT(true)} className="min-h-10 px-2 text-xs font-semibold text-primary hover:underline">+ Add treatment</button>}
-            </div>
-            {addingT && <TreatmentForm petId={pet.id} onError={onError} onCancel={() => setAddingT(false)}
-              onSaved={t => { setTreatments(prev => [...(prev ?? []), t]); setAddingT(false) }} />}
-            {treatments === null ? <p className="text-xs text-muted">Loading…</p>
-              : treatments.length === 0 ? <p className="text-xs text-muted">No treatments yet.</p>
-              : <ul className="divide-y divide-line">{treatments.map(t => (
-                  <TreatmentRow key={t.id} t={t} onError={onError}
-                    onChange={u => setTreatments(prev => prev!.map(x => x.id === u.id ? u : x))}
-                    onDelete={id => setTreatments(prev => prev!.filter(x => x.id !== id))} />
-                ))}</ul>}
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-semibold text-muted-strong uppercase tracking-wide">Appointments</span>
-              {!addingA && <button type="button" onClick={() => setAddingA(true)} className="min-h-10 px-2 text-xs font-semibold text-primary hover:underline">+ Add appointment</button>}
-            </div>
-            {addingA && <AppointmentForm petId={pet.id} onError={onError} onCancel={() => setAddingA(false)}
-              onSaved={a => { setAppointments(prev => [...(prev ?? []), a]); setAddingA(false) }} />}
-            {appointments === null ? <p className="text-xs text-muted">Loading…</p>
-              : appointments.length === 0 ? <p className="text-xs text-muted">No upcoming appointments.</p>
-              : <ul className="divide-y divide-line">{appointments.map(a => (
-                  <AppointmentRow key={a.id} appointment={a} onError={onError}
-                    onChange={updated => setAppointments(prev => prev!.map(item => item.id === updated.id ? updated : item))}
-                    onDelete={id => setAppointments(prev => prev!.filter(item => item.id !== id))} />
-                ))}</ul>}
-          </div>
+        <div className="mt-3 border-t border-line pt-3">
+          <PetDetailContent pet={pet} onError={onError} />
         </div>
       )}
     </Card>
@@ -350,9 +410,23 @@ function PetsTab({ pets, reload, isAdmin, onError, open, setOpen }: {
   const [species, setSpecies] = useState<PetSpecies>('dog')
   const [breed, setBreed] = useState('')
   const [busy, setBusy] = useState(false)
+  const [openPetId, setOpenPetId] = useState<number | null>(null)
+  // "Next attention" on the phone summary row (docs/36 §6.8) — one cheap shared fetch of every
+  // due/overdue treatment, reduced to the earliest per pet, rather than N+1 fetches per pet.
+  const [nextDue, setNextDue] = useState<Record<number, PetTreatment>>({})
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  useEffect(() => {
+    api.getPetTreatments({ due: true }).then(rows => {
+      const map: Record<number, PetTreatment> = {}
+      for (const t of rows) {
+        const current = map[t.pet_id]
+        if (!current || (t.next_due_at && (!current.next_due_at || t.next_due_at < current.next_due_at))) map[t.pet_id] = t
+      }
+      setNextDue(map)
+    }).catch(() => {})
+  }, [pets])
+
+  const submit = async () => {
     if (!name.trim()) return
     setBusy(true)
     try {
@@ -361,30 +435,68 @@ function PetsTab({ pets, reload, isAdmin, onError, open, setOpen }: {
     } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
 
+  const openPet = pets.find(p => p.id === openPetId) ?? null
+
   return (
     <div className="space-y-4">
-      {open ? (
-        <form onSubmit={submit} className="space-y-3 bg-sunken rounded-2xl p-4">
-          <Field label="Pet name"><Input autoFocus value={name} onChange={e => setName(e.target.value)} /></Field>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Species"><Select value={species} onChange={e => setSpecies(e.target.value as PetSpecies)}>
-              {Object.entries(SPECIES_LABELS).map(([v, l]) => <option key={v} value={v}>{SPECIES_EMOJI[v as PetSpecies]} {l}</option>)}
-            </Select></Field>
-            <Field label="Breed"><Input placeholder="Optional" value={breed} onChange={e => setBreed(e.target.value)} /></Field>
-          </div>
-          <div className="flex gap-2"><Button type="submit" loading={busy}>Add pet</Button><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button></div>
-        </form>
-      ) : null}
-
       {pets.length === 0 ? (
         <EmptyState icon="🐾" title="No pets yet" hint="Add a pet to track treatments, vet visits and care notes." />
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {pets.map(p => (
-            <PetCard key={p.id} pet={p} canDelete={isAdmin}
-              onChange={() => reload()} onDelete={() => reload()} onError={onError} />
-          ))}
-        </div>
+        <>
+          {/* Phone: a summary row per pet with what needs attention next — tapping opens the
+              real detail screen instead of expanding treatments/appointments inline. */}
+          <div className="flex flex-col gap-2 sm:hidden">
+            {pets.map(p => {
+              const due = nextDue[p.id]
+              const badge = due ? dueBadge(due.next_due_at, due.is_overdue) : null
+              return (
+                <MobileListRow
+                  key={p.id}
+                  icon={p.avatar || SPECIES_EMOJI[p.species]}
+                  title={p.name}
+                  subtitle={badge ? `${due!.display_name} ${badge.text}` : `${SPECIES_LABELS[p.species]}${p.breed ? ` · ${p.breed}` : ''}`}
+                  onClick={() => setOpenPetId(p.id)}
+                />
+              )
+            })}
+          </div>
+          <div className="hidden grid-cols-1 gap-3 sm:grid lg:grid-cols-2">
+            {pets.map(p => (
+              <PetCard key={p.id} pet={p} canDelete={isAdmin}
+                onChange={() => reload()} onDelete={() => reload()} onError={onError} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {open && (
+        <Modal
+          title="Add pet"
+          onClose={() => setOpen(false)}
+          size="full"
+          footer={<><Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={submit} loading={busy} disabled={!name.trim()}>Add pet</Button></>}
+        >
+          <div className="space-y-3">
+            <Field label="Pet name"><Input autoFocus value={name} onChange={e => setName(e.target.value)} /></Field>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label="Species"><Select value={species} onChange={e => setSpecies(e.target.value as PetSpecies)}>
+                {Object.entries(SPECIES_LABELS).map(([v, l]) => <option key={v} value={v}>{SPECIES_EMOJI[v as PetSpecies]} {l}</option>)}
+              </Select></Field>
+              <Field label="Breed"><Input placeholder="Optional" value={breed} onChange={e => setBreed(e.target.value)} /></Field>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {openPet && (
+        <PetDetailModal
+          pet={openPet}
+          canDelete={isAdmin}
+          onChange={() => reload()}
+          onDeleted={() => { reload(); setOpenPetId(null) }}
+          onError={onError}
+          onClose={() => setOpenPetId(null)}
+        />
       )}
     </div>
   )

@@ -11,6 +11,7 @@ import { InlineAlert, PageSkeleton } from '../../../components/PageState'
 import { Tabs } from '../../../components/Tabs'
 import { useAuth } from '../../auth/AuthContext'
 import { useUrlTab } from '../../../hooks/useUrlTab'
+import { MobileListRow } from '../../../components/mobile'
 
 const TABS = ['overview', 'activity', 'assigned', 'lists'] as const
 type CornerTab = typeof TABS[number]
@@ -236,9 +237,12 @@ export function CornerPage() {
   }, [selectedId])
   useEffect(() => { load() }, [load])
 
-  const personalCollections = useMemo(() => corner?.collections.filter(row => row.source_node === 'atlas') || [], [corner])
-  const roomCollections = useMemo(() => corner?.collections.filter(row => row.source_node === 'homestead') || [], [corner])
-  const meridianCollections = useMemo(() => corner?.collections.filter(row => row.source_node === 'meridian') || [], [corner])
+  // A single `?.` before `.collections` only short-circuits while `corner` itself is nullish; if
+  // `corner` ever resolves truthy with `collections` missing (a malformed response), `.filter()`
+  // still throws — and with no error boundary, that takes the whole app down, not just this page.
+  const personalCollections = useMemo(() => corner?.collections?.filter(row => row.source_node === 'atlas') ?? [], [corner])
+  const roomCollections = useMemo(() => corner?.collections?.filter(row => row.source_node === 'homestead') ?? [], [corner])
+  const meridianCollections = useMemo(() => corner?.collections?.filter(row => row.source_node === 'meridian') ?? [], [corner])
   const react = async (row: CornerActivity, emoji: string) => {
     if (!corner) return
     setReacting(row.key)
@@ -296,9 +300,28 @@ export function CornerPage() {
             <div className="space-y-2">{corner.activity.slice(0, 4).map(row => <ActivityCard key={row.key} row={row} reacting={reacting} onReact={emoji => react(row, emoji)} />)}</div>
             {!corner.activity.length && <EmptyState icon="✨" title="No recent activity" hint="Completed workouts, tasks and plans will appear here." />}
           </Card>
-          <div className="space-y-4">
-            <Card title="Assigned"><p className="text-3xl font-black text-ink">{corner.summary.assignment_count}</p><p className="mt-1 text-xs text-muted">open things across HomeStack</p></Card>
-            <Card title="Lists & wishes"><p className="text-3xl font-black text-ink">{corner.summary.collection_count}</p><button onClick={() => setTab('lists')} className="mt-2 text-xs font-bold text-primary">View lists and plans →</button></Card>
+          <div className="space-y-2">
+            <MobileListRow
+              icon="✓"
+              title="Assigned"
+              subtitle="Open things across HomeStack"
+              trailing={corner.summary.assignment_count || undefined}
+              onClick={() => setTab('assigned')}
+            />
+            <MobileListRow
+              icon="🛍"
+              title="Lists & wishes"
+              subtitle="Personal lists, room plans and wishes"
+              trailing={corner.summary.collection_count || undefined}
+              onClick={() => setTab('lists')}
+            />
+            <MobileListRow
+              icon="✨"
+              title="Activity"
+              subtitle="Everything completed recently"
+              trailing={corner.summary.activity_count || undefined}
+              onClick={() => setTab('activity')}
+            />
           </div>
         </div>
       )}

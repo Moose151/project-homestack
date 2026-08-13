@@ -1122,7 +1122,7 @@ genuine timing flakes — confirmed as real queueing delay via repeated isolated
 bug, before capping workers (4 locally / 2 in CI) and adding one retry rather than raising every
 timeout to mask it. Stable across 5 consecutive full runs after the change.
 
-### Phase 8 — Daily-use nodes
+### Phase 8 — Daily-use nodes — DONE (v0.36.4)
 
 Convert in this order, reusing the now-stable patterns:
 
@@ -1132,6 +1132,79 @@ Convert in this order, reusing the now-stable patterns:
 4. Pets — pet detail model;
 5. Fitness — polish focused live workout and separate management flows;
 6. Corners — personal home + drill-down sections.
+
+**1. Atlas.** The item/list interactions the doc calls out as already-good (whole-row tap
+targets, touch-visible actions) were left untouched. The structural gap was the "Lists" tab:
+every list's full contents (items, add-item row, the lot) rendered as `ListCard`s stacked one
+after another — fine on desktop's two-column grid, unusable as a phone scroll. Phone now gets
+one summary row per list (`MobileListRow`: icon, title, "N to do"/"All done ✓"); tapping a list
+reuses the exact same `ListCard` inside `Modal size="full"` rather than a second detail
+implementation. "New list" moved from an inline-expanding form above the grid into the same
+full-sheet pattern. Grocery/Shopping/Notes/Reminders were left as-is — Grocery already reads as
+a focused mini-app in the common one-list case, and Notes/Reminders' inline-card forms are
+small enough not to be the "busy list page" problem the doc is about.
+
+**2. Meridian.** The eight-tab bar (already past the shared `Tabs` component's 3-tab picker
+threshold) becomes, on phone, the doc's named model: Tasks / Rewards / My progress / Manage.
+Tasks folds in Routines and My progress folds in Goals/Wishlist/Leaderboard, each behind a
+small `Tabs variant="secondary"` switcher once inside the group — `?tab=` stays the single
+source of truth so every existing deep link (Hub, Corners, source links) keeps working
+untouched; the grouping is purely a phone-side presentation layer over the same tab state. The
+existing `OverviewTab` (approvals, balances, recent activity — already fairly phone-suited)
+renders on both platforms, above a `MobileSection` of the four destinations on phone.
+
+**3. Education.** Added a new `overview` tab — "Today" (today's class sessions) and "Due soon"
+(the 5 nearest-due assignments) — and made it the default landing instead of "My Profile",
+which the doc explicitly asks to demote. No existing desktop overview to preserve here, so this
+one dashboard serves both platforms (unlike Homestead/Meridian's separate mobile/desktop
+versions). Profile and Institutions moved to the end of the tab order and are reachable via a
+"More" row rather than being the first thing shown. The bigger structural fix: assignment
+notes/files previously expanded inline into an accordion inside the assignments list (`AssessmentDetail`
+under an expand/collapse toggle) — now open in a `Modal size="full"` (`AssignmentDetailModal`),
+a real detail screen per the doc's ask, with status/priority/due-date context above the same
+notes/files content.
+
+**4. Pets.** Treatments/appointments previously expanded inline inside each pet's card on the
+"Pets" tab — now extracted into a shared `PetDetailContent` (also still used by the desktop
+card's inline expand, so there's one implementation, not two). Phone shows a summary row per
+pet with what's next due (one shared `getPetTreatments({ due: true })` fetch reduced to the
+earliest per pet, not N+1 fetches); tapping opens `PetDetailModal` — identity, Treatments,
+Appointments, with Edit/Delete actions inline in the sheet. "Add pet" moved to the same
+full-sheet pattern. The doc's four-destination pet-detail mock (Treatments/Appointments/Vet
+details/History as separate drill-downs) was flattened into one screen — a "History" concept
+doesn't exist as a backend feature yet, and splitting the other three into further navigation
+for what's already a short list was judged disproportionate.
+
+**5. Fitness.** The live-workout screen already matched the doc closely (large set-completion
+controls, editable rows, previous-performance context, a sticky Finish/Abandon bar) and was left
+alone. The one real gap — the page header and the 5-tab bar staying visible above an *active*
+session, exactly the "unrelated navigation/noise" the doc asks to drop — is now hidden whenever
+`tab === 'today' && active session exists`; finishing or abandoning the session (or switching to
+another HomeStack node and back) restores it. Program building and exercise administration were
+already separate tabs, already "richer" — no change needed there.
+
+**6. Corners.** Already close to the doc's model (a 4-tab overview/activity/assigned/lists
+structure, reactions already compact per the doc's own carve-out). The Overview tab's
+"Assigned"/"Lists & wishes" mini-cards (a stat number plus a small text link) became
+`MobileListRow` destinations alongside a new "Activity" row, matching the touch-target and
+visual pattern used everywhere else in Phase 8 rather than being their own one-off treatment.
+
+**Found and fixed along the way:** `CornerPage`'s `corner?.collections.filter(...)` only
+short-circuited on `corner` itself being nullish — if `corner` ever resolved to a truthy but
+malformed value (a stale/incomplete API response), `.filter()` on the missing `.collections`
+threw, and with no root error boundary that crashes the *entire app*, not just this page. Fixed
+with a second `?.` before `.filter`. This was latent in the existing code (not introduced this
+phase) and only surfaced because a new Corners test needed the page to fully render, not just
+show the shell's Back button.
+
+**New `e2e/phase8-daily-nodes.spec.ts`** — one test per node covering the change with the most
+regression risk (Atlas's focused-sheet list, Meridian's group switcher, Education's Today
+dashboard + assignment detail sheet, Pets' detail sheet, Fitness's live-session chrome-hiding,
+Corners' destination rows). Each page still mounts its old desktop layout at all times (just
+CSS-hidden below `sm:`, same as Homestead/Meridian's existing pattern), so locators are scoped to
+text unique to the new phone-only rows rather than a title/name that exists in both layers at
+once — the same collision class fixed in Calendar's Phase 4 correction pass. 138 passing, 42
+skipped across four viewport projects; `tsc --noEmit` and `npm run build` both clean.
 
 ### Phase 9 — Lower-frequency content/planning nodes
 

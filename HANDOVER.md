@@ -171,7 +171,7 @@ Major shipped areas include:
 Web Push is live and validated on real devices; VAPID and the hourly `notifications_run_scheduled`
 job are configured on the server.
 
-**Mobile UX v1 (v0.36.3, in progress on `feature/mobile-ux`)** — owner-directed rework of the
+**Mobile UX v1 (v0.36.4, in progress on `feature/mobile-ux`)** — owner-directed rework of the
 phone experience per `docs/36_Mobile_UX_Strategy_and_Implementation_Plan.md`. Phases 1–7 done:
 a Playwright mobile-viewport acceptance suite (API-mocked — see `frontend/e2e/README.md` for why
 it must never hit the real backend), a shared `src/components/mobile/` primitives layer, the
@@ -200,9 +200,28 @@ ID-membership check); `MobileScreenHeader`'s `onBack` is now a compile-time requ
 `showBack` is true, closing off the same unsafe-Back failure mode at the type level so a future
 screen can't reintroduce it by omission. Also found and fixed along the way: `AppShell`'s `<main>`
 was never actually width-constrained to the viewport (a flex-item `min-width: auto` issue, latent
-until Calendar's week-day-strip was wide enough to expose it). Phase 8+ (Atlas, Meridian,
-Education, Pets, Fitness, Corners, then the lower-frequency content/planning nodes, then
-real-device acceptance) not started. Not yet merged to `main`.
+until Calendar's week-day-strip was wide enough to expose it).
+
+Phase 8 (Atlas, Meridian, Education, Pets, Fitness, Corners — all six daily-use nodes) is now
+done too. Atlas's "Lists" tab and Pets' per-pet card both used to stack every item's full,
+expanded contents on one page; both now show a phone summary row that opens a focused detail
+sheet (Atlas reuses the existing `ListCard`; Pets extracts a shared `PetDetailContent` used by
+both the new sheet and the desktop card's inline expand, so there's one implementation, not
+two). Meridian's eight-tab bar becomes Tasks/Rewards/My progress/Manage on phone, exactly the
+model the doc names, with `?tab=` still the single source of truth so nothing else that deep
+links into Meridian had to change. Education gained a "Today"/"Due soon" landing tab (now the
+default, replacing "My Profile") and assignment notes/files moved from an inline accordion into
+a real detail sheet. Fitness's live-workout screen was already close to the doc's target and was
+left alone; the page chrome (header, 5-tab bar) now hides while a session is actually active,
+which is the "reduce unrelated navigation/noise" ask. Corners was already close to the doc's
+model; its small stat-link cards became proper `MobileListRow` destinations. Found and fixed
+along the way: `CornerPage`'s `corner?.collections.filter(...)` only short-circuited when
+`corner` itself was nullish, not when it resolved truthy-but-malformed — with no root error
+boundary, that crashed the entire app, not just Corners; latent in the existing code, not
+introduced this phase.
+
+Phase 9 (Books, Home Wiki, Travel — the lower-frequency content/planning nodes) and Phase 10
+(real-device acceptance) not started. Not yet merged to `main`.
 
 ---
 

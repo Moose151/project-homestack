@@ -18,6 +18,7 @@ import { confirmDialog } from '../../../components/Dialogs'
 import { sourcePath } from '../../../lib/sourceLinks'
 import { EventModal } from './CalendarPage'
 import { ShoppingTab } from './atlas/ShoppingTab'
+import { MobileListRow, MobileSection } from '../../../components/mobile'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -897,6 +898,9 @@ export function AtlasPage() {
   // Remount only the affected list card / self-fetching tab after a quick capture.
   const [cardRefresh, setCardRefresh] = useState<Record<number, number>>({})
   const [captureTick, setCaptureTick] = useState(0)
+  // docs/36 §6.3: opening a list should be a focused screen on phone, not one card in an
+  // already-tall stack of every list's full contents — desktop's grid is untouched.
+  const [openListId, setOpenListId] = useState<number | null>(null)
   const [searchParams] = useSearchParams()
   const focusedListId = Number(searchParams.get('list') || 0)
   const focusedItemId = Number(searchParams.get('item') || 0)
@@ -926,8 +930,7 @@ export function AtlasPage() {
     return () => clearTimeout(id)
   }, [query])
 
-  const createList = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const createList = async () => {
     if (!newTitle.trim()) return
     setCreating(true)
     try {
@@ -1016,29 +1019,6 @@ export function AtlasPage() {
 
           {tab === 'agenda' ? <AgendaTab people={people} lists={lists} defaultAssignee={defaultAssignee} onError={setError} onListsChanged={() => api.getLists().then(setLists).catch(error => setError(errMsg(error)))} /> : tab === 'schedule' ? <AppointmentsEventsTab people={people} defaultAssignee={defaultAssignee} onError={setError} /> : tab === 'lists' ? (
             <div className="flex flex-col gap-4">
-              {creatingList ? (
-                <form onSubmit={createList} className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-3 sm:flex-row">
-                  <Input
-                    value={newTitle}
-                    onChange={e => setNewTitle(e.target.value)}
-                    placeholder="New list name…"
-                    className="flex-1"
-                    autoFocus
-                  />
-                  <Select value={newType} onChange={e => setNewType(e.target.value)} className="sm:w-40">
-                    {LIST_TYPES.map(t => <option key={t.key} value={t.key}>{t.icon} {t.label}</option>)}
-                  </Select>
-                  <div className="flex gap-2">
-                    <Button type="button" variant="ghost" onClick={() => { setCreatingList(false); setNewTitle('') }} className="flex-1 sm:flex-none">
-                      Cancel
-                    </Button>
-                    <Button type="submit" loading={creating} disabled={!newTitle.trim()} className="flex-1 sm:flex-none">
-                      Create
-                    </Button>
-                  </div>
-                </form>
-              ) : null}
-
               {loading ? (
                 <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
               ) : otherLists.length === 0 ? (
@@ -1049,19 +1029,41 @@ export function AtlasPage() {
                   action={<Button onClick={() => setCreatingList(true)}>Create your first list</Button>}
                 />
               ) : (
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                  {otherLists.map(list => (
-                    <ListCard
-                      key={`${list.id}:${cardRefresh[list.id] ?? 0}`}
-                      list={list}
-                      people={people}
-                      defaultAssignee={defaultAssignee}
-                      focusedItemId={list.id === focusedListId ? focusedItemId : undefined}
-                      onDeleted={id => setLists(prev => prev.filter(l => l.id !== id))}
-                      onError={setError}
-                    />
-                  ))}
-                </div>
+                <>
+                  {/* Phone: a summary row per list, opening the full list as a focused sheet —
+                      not every list's full contents stacked one after another. */}
+                  <div className="sm:hidden">
+                    <MobileSection title="Lists" action={<button type="button" onClick={() => setCreatingList(true)}>+ New</button>}>
+                      {otherLists.map(list => {
+                        const meta = listTypeMeta(list.list_type)
+                        const pendingCount = (list.items ?? []).filter(i => !i.is_complete).length
+                        const total = (list.items ?? []).length
+                        return (
+                          <MobileListRow
+                            key={list.id}
+                            icon={meta.icon}
+                            title={list.title}
+                            subtitle={pendingCount > 0 ? `${pendingCount} to do` : total > 0 ? 'All done ✓' : meta.label}
+                            onClick={() => setOpenListId(list.id)}
+                          />
+                        )
+                      })}
+                    </MobileSection>
+                  </div>
+                  <div className="hidden grid-cols-1 gap-4 lg:grid-cols-2 sm:grid">
+                    {otherLists.map(list => (
+                      <ListCard
+                        key={`${list.id}:${cardRefresh[list.id] ?? 0}`}
+                        list={list}
+                        people={people}
+                        defaultAssignee={defaultAssignee}
+                        focusedItemId={list.id === focusedListId ? focusedItemId : undefined}
+                        onDeleted={id => setLists(prev => prev.filter(l => l.id !== id))}
+                        onError={setError}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           ) : tab === 'grocery' ? (
@@ -1092,6 +1094,49 @@ export function AtlasPage() {
           )}
         </>
       )}
+
+      {creatingList && (
+        <Modal
+          title="New list"
+          onClose={() => { setCreatingList(false); setNewTitle('') }}
+          size="full"
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => { setCreatingList(false); setNewTitle('') }}>Cancel</Button>
+              <Button onClick={createList} loading={creating} disabled={!newTitle.trim()}>Create</Button>
+            </>
+          }
+        >
+          <div className="flex flex-col gap-3">
+            <Field label="List name">
+              <Input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="New list name…" data-autofocus />
+            </Field>
+            <Field label="Type">
+              <Select value={newType} onChange={e => setNewType(e.target.value)}>
+                {LIST_TYPES.map(t => <option key={t.key} value={t.key}>{t.icon} {t.label}</option>)}
+              </Select>
+            </Field>
+          </div>
+        </Modal>
+      )}
+
+      {openListId !== null && (() => {
+        const list = otherLists.find(l => l.id === openListId)
+        if (!list) return null
+        return (
+          <Modal title={list.title} onClose={() => setOpenListId(null)} size="full">
+            <ListCard
+              key={`${list.id}:${cardRefresh[list.id] ?? 0}`}
+              list={list}
+              people={people}
+              defaultAssignee={defaultAssignee}
+              focusedItemId={list.id === focusedListId ? focusedItemId : undefined}
+              onDeleted={id => { setLists(prev => prev.filter(l => l.id !== id)); setOpenListId(null) }}
+              onError={setError}
+            />
+          </Modal>
+        )
+      })()}
     </div>
   )
 }

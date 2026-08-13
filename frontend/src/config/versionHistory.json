@@ -1,7 +1,22 @@
 {
-  "current_version": "0.36.3",
-  "source_sha256": "ad57cc916371328ff588d05ae0fe34334ab411a621a92d48d4a026da60ed9a3f",
+  "current_version": "0.36.4",
+  "source_sha256": "b79587a87f52eb5c8cf6caf2dd8fef1fac32993ceedba139a817806e318a0f35",
   "releases": [
+    {
+      "version": "0.36.4",
+      "date": "2026-08-13",
+      "title": "Daily-use nodes: Atlas, Meridian, Education, Pets, Fitness, Corners (docs/36 Phase 8, on feature/mobile-ux)",
+      "changes": [
+        "**Atlas.** The \"Lists\" tab stacked every list's full contents one after another on phone — now one summary row per list, tapping opens the existing `ListCard` inside `Modal size=\"full\"` instead of a second detail implementation. \"New list\" moved to the same full-sheet pattern. Grocery/Notes/Reminders left as-is (already close to the doc's target or too small to be the \"busy list page\" problem).",
+        "**Meridian.** Phone gets the doc's named model — Tasks / Rewards / My progress / Manage — instead of the eight-tab picker; Tasks folds in Routines, My progress folds in Goals/Wishlist/ Leaderboard, each with a small secondary switcher once inside. `?tab=` stays the single source of truth so every existing deep link keeps working.",
+        "**Education.** New \"Today\"/\"Due soon\" overview tab, now the default landing instead of \"My Profile\" (moved to the end of the tab order, reachable via \"More\"). Assignment notes/files used to expand inline into an accordion inside the list — now a real `Modal size=\"full\"` detail sheet.",
+        "**Pets.** Treatments/appointments used to expand inline inside each pet's card — extracted into a shared `PetDetailContent` used by both the desktop card's inline expand and a new phone detail sheet. Phone shows a summary row per pet with what's next due, one shared fetch reduced to the earliest per pet rather than N+1 requests.",
+        "**Fitness.** The live-workout screen already matched the doc closely and was left alone; the page header and 5-tab bar now hide while an active session is showing, dropping the \"unrelated navigation/noise\" the doc specifically calls out.",
+        "**Corners.** Already close to the doc's model; the Overview tab's small stat-number links became proper `MobileListRow` destinations (Assigned/Lists & wishes/Activity), matching the pattern used everywhere else in Phase 8.",
+        "**Found and fixed along the way:** `CornerPage`'s `corner?.collections.filter(...)` only short-circuited when `corner` itself was nullish — a truthy-but-malformed response still threw on the missing `.collections`, and with no root error boundary that crashes the entire app, not just Corners. Fixed with a second `?.`; latent in the existing code, not introduced this phase.",
+        "**New `e2e/phase8-daily-nodes.spec.ts`** — one meaningful test per node. 138 passing, 42 skipped across four viewport projects; `tsc --noEmit` and `npm run build` both clean. Still on `feature/mobile-ux`, not merged."
+      ]
+    },
     {
       "version": "0.36.3",
       "date": "2026-08-13",
