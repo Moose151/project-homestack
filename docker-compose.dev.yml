@@ -13,7 +13,7 @@
 services:
   homestack-postgres:
     ports:
-      - "${DB_HOST_PORT:-5432}:5432"
+      - "5432:5432"
     networks: !override
       - homestack_dev
 
@@ -32,7 +32,7 @@ services:
       DJANGO_SETTINGS_MODULE: config.settings.dev
       DJANGO_DEBUG: "1"
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "8000:8000"
     networks: !override
       - homestack_dev
     healthcheck:
@@ -52,7 +52,7 @@ services:
       # Keep the container's own node_modules (don't let the bind mount hide it).
       - /app/node_modules
     ports:
-      - "${FRONTEND_PORT:-5173}:5173"
+      - "5173:5173"
     networks: !override
       - homestack_dev
     healthcheck:

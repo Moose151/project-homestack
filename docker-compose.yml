@@ -92,4 +92,4 @@ networks:
     internal: true
   npm_proxy:
     external: true
-    name: ${NPM_DOCKER_NETWORK:-all-services_services-network}
+    name: ${NPM_DOCKER_NETWORK:-proxy}

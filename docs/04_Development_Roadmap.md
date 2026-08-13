@@ -87,7 +87,8 @@ Preserve this production-serving model while hardening the remaining network exp
 
 ### 4.2 Docker network exposure
 
-**Status:** prepared in v0.37.1, pending owner review and live NPM cutover.
+**Status:** prepared in v0.37.2; transitional NPM/container-name cutover completed, final
+host-port removal pending owner review and hardened Compose deployment.
 
 Move internal services toward private container networking:
 
@@ -99,8 +100,9 @@ Move internal services toward private container networking:
 Keep a development Compose profile/override that exposes developer-friendly ports where useful.
 
 The prepared target attaches `homestack-frontend` and `homestack-backend` to Nginx Proxy
-Manager's existing Docker network and keeps `homestack-postgres` on a HomeStack-private internal
-network. The live cutover is intentionally separated from the repo change so NPM routing can be
+Manager's existing `proxy` Docker network and keeps `homestack-postgres` on a HomeStack-private
+internal network. NPM routing has already been proven against container names while the old host
+ports still exist; final Compose deployment is intentionally separated so host-port removal can be
 reviewed and rolled back safely. Development Compose remains portable and does not require the
 live NPM Docker network.
 

@@ -32,19 +32,17 @@ HomeStack-private network that NPM does not join.
 ```text
 LAN client
   -> Pi-hole DNS: homestack.moosesoftwares.com -> 192.168.1.125
-  -> Nginx Proxy Manager :443   (Let's Encrypt via Cloudflare DNS-01)
+  -> Nginx Proxy Manager :443   (container: nginx-proxy-manager)
        |
-       |  Docker network: all-services_services-network
-       |
-       +-- /api/*  -> homestack-backend  :8000   gunicorn -> Django
+       |  Docker network: proxy
        |
        +-- /*      -> homestack-frontend :5173   nginx -> built React bundle
-                         |
-                         v
-                  Docker network: project-homestack_private
-                         |
-                         v
-                  homestack-postgres :5432
+       |
+       +-- /api/*  -> homestack-backend  :8000   gunicorn -> Django
+                             |
+                             |  Docker network: project-homestack_private
+                             |
+                             +-- homestack-postgres :5432
 ```
 
 HomeStack terminates no TLS of its own and adds no second reverse-proxy layer. The frontend
@@ -57,22 +55,29 @@ port `5173`; PostgreSQL still listens on container port `5432`. In production th
 container-only ports (`expose`), not LAN host ports. Development port publishing is preserved in
 `docker-compose.dev.yml`.
 
-### 2.2 Recorded pre-change Docker/NPM inspection
+### 2.2 Recorded Docker/NPM inspection and transitional cutover
 
-Before preparing the network change, the live host was inspected:
+The live host was inspected and the transitional NPM/container-name cutover has now been performed:
 
-- `docker network ls` showed NPM on `all-services_services-network` and HomeStack on
-  `project-homestack_default`.
-- `docker inspect npm` showed container `npm`, Compose project `all-services`, service
-  `nginx-proxy-manager`, `NetworkMode=all-services_services-network`, aliases `npm` and
-  `nginx-proxy-manager`, and LAN/admin host ports `81`, `8088` and `4443`.
+- Nginx Proxy Manager is container/service `nginx-proxy-manager`, in Compose project
+  `nginx-proxy-manager`, attached to the external/shared Docker network `proxy`.
+- Nginx Proxy Manager publishes ports `80`, `81` and `443`; admin port `81` remains LAN/admin-only.
+- HomeStack was on `project-homestack_default` before final hardening.
 - `docker compose config` for HomeStack showed the pre-hardening production stack publishing
-  `homestack-postgres` as host `5433 -> 5432`, `homestack-backend` as host `8001 -> 8000`, and
+  `homestack-postgres` as host `5432 -> 5432`, `homestack-backend` as host `8000 -> 8000`, and
   `homestack-frontend` as host `5173 -> 5173`.
+- The existing running `homestack-frontend` and `homestack-backend` containers were manually
+  attached to `proxy` without restarting them.
+- Direct connectivity from inside `nginx-proxy-manager` was proven:
+  `http://homestack-frontend:5173/healthz -> 200` and
+  `http://homestack-backend:8000/api/v1/health/ -> 200`.
+- Nginx Proxy Manager now routes the main HomeStack upstream to `homestack-frontend:5173`, `/api/`
+  to `homestack-backend:8000`, and `/admin/` to `homestack-backend:8000`.
+- HTTPS frontend, HTTPS `/api/v1/health/`, normal browser use, login/navigation/write and
+  Money/Solace re-auth flows passed after the NPM change.
 
-That makes the safest target: attach HomeStack frontend/backend to NPM's existing external
-network, keep PostgreSQL off that network, and remove the HomeStack host-port publications only
-after NPM is proven to route to the container names.
+The old HomeStack host ports still exist at this stage. Final hardening is now the Compose deploy
+that removes those host-port publications while preserving the proven NPM container-name routing.
 
 ## 3. Compose layout
 
@@ -256,8 +261,8 @@ VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT
 
 ## 10. Nginx Proxy Manager changes
 
-Network hardening requires changing the existing NPM proxy host upstreams from LAN host ports to
-Docker DNS names after HomeStack frontend/backend are attached to `all-services_services-network`:
+Network hardening uses the already-proven NPM proxy host upstreams on Docker DNS names after
+HomeStack frontend/backend were attached to `proxy`:
 
 | Route | Upstream after hardening |
 |---|---|
@@ -290,28 +295,28 @@ Do not add router port forwarding. Do not terminate TLS inside HomeStack.
 
 ### 10.1 Safe migration procedure for network hardening
 
-Stop for review before running this against the live installation if any NPM route, hostname or
-network name differs from the inspection above.
+The transitional proof and NPM upstream change have already been completed successfully on the
+live installation. Keep these steps for audit/rollback context and for any future host rebuild.
 
 1. Confirm a fresh HomeStack backup and record the rollback commit.
-2. Confirm `docker network ls` still contains `all-services_services-network` and `docker inspect
-   npm` still shows NPM attached to that network.
+2. Confirm `docker network ls` still contains `proxy` and `docker inspect nginx-proxy-manager`
+   still shows NPM attached to that network.
 3. Transitional proof step, while old LAN ports still exist: run
-   `docker network connect all-services_services-network homestack-frontend` and
-   `docker network connect all-services_services-network homestack-backend` if they are not
+   `docker network connect proxy homestack-frontend` and
+   `docker network connect proxy homestack-backend` if they are not
    already attached.
 4. Confirm the network attachments:
 
    ```bash
    docker inspect homestack-frontend --format '{{json .NetworkSettings.Networks}}'
    docker inspect homestack-backend --format '{{json .NetworkSettings.Networks}}'
-   docker inspect npm --format '{{json .NetworkSettings.Networks}}'
+   docker inspect nginx-proxy-manager --format '{{json .NetworkSettings.Networks}}'
    ```
 
 5. From inside the NPM container, prove Docker-name routing before changing NPM:
 
    ```bash
-   docker exec npm node -e "
+   docker exec nginx-proxy-manager node -e "
    require('http').get('http://homestack-frontend:5173/healthz', r => {
      console.log('frontend:', r.statusCode);
      process.exit(r.statusCode === 200 ? 0 : 1);
@@ -320,7 +325,7 @@ network name differs from the inspection above.
    ```
 
    ```bash
-   docker exec npm node -e "
+   docker exec nginx-proxy-manager node -e "
    require('http').get('http://homestack-backend:8000/api/v1/health/', r => {
      console.log('backend:', r.statusCode);
      process.exit(r.statusCode === 200 ? 0 : 1);
@@ -330,16 +335,16 @@ network name differs from the inspection above.
 
    Both commands must print `200`. If either fails, do not change NPM.
 
-6. In NPM, change the main HomeStack proxy host to `homestack-frontend:5173` and the `/api/`
-   custom location to `homestack-backend:8000`.
+6. In NPM, change the main HomeStack proxy host to `homestack-frontend:5173`, the `/api/`
+   custom location to `homestack-backend:8000`, and `/admin/` to `homestack-backend:8000`.
 7. While the old host ports still exist, validate HTTPS HomeStack load, `/api/v1/health/`,
    password login/logout, PIN/avatar login, an authenticated write plus refresh, Money/Solace
    re-auth, React deep-link refresh, `/sw.js`, `/manifest.json`, installed PWA behaviour and a
    real push notification.
 8. Stop and report the successful NPM container-name routing proof before merging/deploying the
-   hardened Compose. The cheap rollback path stays available until this point because the old LAN
-   ports still exist.
-9. Only after that proof is accepted, merge/deploy the hardened Compose commit with
+   hardened Compose. This has now been done; the cheap rollback path remains available because the
+   old LAN ports still exist.
+9. Only after final review, merge/deploy the hardened Compose commit with
    `docker compose up -d --build`.
 10. Re-run the validation checklist below and then confirm from another LAN device that the old
     HomeStack host ports are no longer reachable.
@@ -347,7 +352,8 @@ network name differs from the inspection above.
 ### 10.2 Rollback procedure for network hardening
 
 1. In NPM, restore the previous LAN upstreams:
-   frontend `192.168.1.125:5173`; backend/API `192.168.1.125:8001` for the inspected live host.
+   frontend `192.168.1.125:5173`; backend/API/admin `192.168.1.125:8000` for the inspected live
+   host.
 2. Roll the repo back to the recorded pre-hardening commit or temporarily restore the previous
    `ports:` mappings for `homestack-frontend`, `homestack-backend` and `homestack-postgres`.
 3. Run `docker compose up -d --build`.

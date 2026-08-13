@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.37.1**
+> **Current version: 0.37.2**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -11,6 +11,20 @@
 
 ## 0.37 — Production reliability and deployment safety
 
+### 0.37.2 — 2026-08-14 — Align network hardening plan with live NPM topology
+- Corrected the prepared production-hardening branch to match the actual live Nginx Proxy Manager
+  deployment: container/service `nginx-proxy-manager`, Compose project `nginx-proxy-manager`,
+  shared external Docker network `proxy`, and pre-hardening HomeStack host ports
+  `5432 -> 5432`, `8000 -> 8000` and `5173 -> 5173`.
+- Updated production Compose so `npm_proxy` defaults to `${NPM_DOCKER_NETWORK:-proxy}` while
+  preserving the corrected development override: development uses `homestack_dev` only and
+  publishes `5432`, `8000` and `5173` without depending on the external NPM network.
+- Recorded that the transitional live NPM cutover has now been completed and validated:
+  existing frontend/backend containers were attached to `proxy`, connectivity from inside
+  `nginx-proxy-manager` returned 200 for frontend `/healthz` and backend `/api/v1/health/`, and
+  NPM now routes the main app, `/api/` and `/admin/` to Docker container names. Final host-port
+  removal is still pending review/deployment of the hardened Compose.
+
 ### 0.37.1 — 2026-08-14 — Correct development network isolation before live cutover
 - Fixed the reviewed Phase 2 Compose preparation so the development override does not inherit the
   production-only external Nginx Proxy Manager network. `docker-compose.dev.yml` now uses Compose's
@@ -18,9 +32,9 @@
   bridge network while preserving their developer host-port mappings.
 - Strengthened the live cutover documentation: manually attach the existing frontend/backend to
   NPM's network first, inspect all three network attachments, prove `homestack-frontend:5173` and
-  `homestack-backend:8000` from inside the `npm` container with Node HTTP checks, validate the
-  full live app while old LAN ports still exist, then stop for review before merging/deploying the
-  hardened Compose.
+  `homestack-backend:8000` from inside the Nginx Proxy Manager container with Node HTTP checks,
+  validate the full live app while old LAN ports still exist, then stop for review before
+  merging/deploying the hardened Compose.
 - Added the final post-deployment service-recreation check so, after the hardened Compose
   eventually goes live, backend and frontend are recreated one at a time and HTTPS is verified
   after each recreate to prove NPM's container-name routing survives container IP changes.
@@ -29,12 +43,12 @@
 - Prepared the Phase 2 production-network target without applying it to the live containers:
   production Compose now removes LAN host-port publication for PostgreSQL, backend and frontend;
   backend/frontend attach to Nginx Proxy Manager's existing external Docker network
-  (`all-services_services-network` by default); PostgreSQL stays only on a HomeStack-private
+  (`proxy` by default); PostgreSQL stays only on a HomeStack-private
   internal network; and `docker-compose.dev.yml` preserves convenient development port publishing.
-- Documented the observed live topology before the change: `docker network ls`, `docker inspect
-  npm`, and `docker compose config` showed NPM in the `all-services` Compose project on
-  `all-services_services-network`, while HomeStack was publishing backend `8001 -> 8000`,
-  frontend `5173 -> 5173`, and PostgreSQL `5433 -> 5432` from `project-homestack_default`.
+- Documented the observed live topology before final host-port removal: NPM is
+  `nginx-proxy-manager` on the external `proxy` network, while HomeStack was publishing backend
+  `8000 -> 8000`, frontend `5173 -> 5173`, and PostgreSQL `5432 -> 5432` from
+  `project-homestack_default`.
 - Updated the production-serving documentation with the target topology, exact NPM upstreams
   (`homestack-frontend:5173`, `homestack-backend:8000`), a staged migration procedure, rollback
   procedure and validation checklist. This is not yet a live networking cutover; NPM/live routing
