@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type { NotificationPreference, PushDevice, UserNotificationSettings } from '../../../api/types'
@@ -6,7 +6,7 @@ import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { PageHeader } from '../../../components/PageHeader'
 import { confirmDialog } from '../../../components/Dialogs'
-import { MobileSection, MobileSettingsRow } from '../../../components/mobile'
+import { MobileScreenHeader, MobileSection, MobileSettingsRow } from '../../../components/mobile'
 import { deviceDetail, lastSeenLabel } from './pushDeviceFormat'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
@@ -37,6 +37,7 @@ export function NotificationSettingsPage() {
   const [testedDeviceId, setTestedDeviceId] = useState<number | null>(null)
   const [renamingId, setRenamingId] = useState<number | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
+  const [openCategory, setOpenCategory] = useState<string | null>(null)
 
   const loadDevices = () => api.getPushDevices().then(setDevices).catch(e => setError(errMsg(e)))
 
@@ -105,25 +106,38 @@ export function NotificationSettingsPage() {
   // Save button. Optimistic update, reverted on failure. Quiet hours below stays explicit-save:
   // start/end/morning-time are a coherent 3-field record, exactly the case §7.4 calls out for
   // "explicit Save... where the user needs to review a coherent change."
-  const [savingCategory, setSavingCategory] = useState<string | null>(null)
+  const [savingCategories, setSavingCategories] = useState<Record<string, boolean>>({})
+  const [savedCategory, setSavedCategory] = useState<string | null>(null)
+  const categoryRequestIds = useRef<Record<string, number>>({})
   const updateCategory = async (category: string, patch: Partial<NotificationPreference>) => {
-    const previous = rows
-    const next = rows.map(row => row.category === category ? { ...row, ...patch } : row)
-    setRows(next)
-    setSavingCategory(category)
+    const requestId = (categoryRequestIds.current[category] ?? 0) + 1
+    categoryRequestIds.current[category] = requestId
+    const previous = rows.find(row => row.category === category)
+    const nextRow = previous ? { ...previous, ...patch } : null
+    if (!previous || !nextRow) return
+    setRows(current => current.map(row => row.category === category ? nextRow : row))
+    setSavingCategories(current => ({ ...current, [category]: true }))
+    setSavedCategory(null)
     setError(null)
     try {
-      const updatedRow = next.find(row => row.category === category)!
       const [saved] = await api.updateNotificationPreferences([{
-        category: updatedRow.category, in_app_enabled: updatedRow.in_app_enabled,
-        push_enabled: updatedRow.push_enabled, mine_only: updatedRow.mine_only,
+        category: nextRow.category, in_app_enabled: nextRow.in_app_enabled,
+        push_enabled: nextRow.push_enabled, mine_only: nextRow.mine_only,
       }])
       setRows(prev => prev.map(row => row.category === saved.category ? saved : row))
+      setSavedCategory(saved.category)
+      window.setTimeout(() => setSavedCategory(current => current === saved.category ? null : current), 1800)
     } catch (e) {
-      setRows(previous)
+      if (categoryRequestIds.current[category] === requestId) {
+        setRows(current => current.map(row => row.category === category ? previous : row))
+      }
       setError(errMsg(e))
     } finally {
-      setSavingCategory(null)
+      setSavingCategories(current => {
+        const next = { ...current }
+        delete next[category]
+        return next
+      })
     }
   }
 
@@ -137,6 +151,44 @@ export function NotificationSettingsPage() {
   }
 
   if (loading) return <div className="mx-auto max-w-2xl"><div className="h-40 animate-pulse rounded-2xl bg-sunken" /></div>
+  const openCategoryRow = rows.find(row => row.category === openCategory) ?? null
+
+  if (openCategoryRow) {
+    return (
+      <div className="mx-auto flex max-w-2xl flex-col gap-5">
+        <MobileScreenHeader title={openCategoryRow.label} showBack onBack={() => setOpenCategory(null)} />
+        {error && (
+          <div className="flex items-center justify-between gap-3 bg-danger-soft text-danger text-sm rounded-xl px-4 py-2.5">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} aria-label="Dismiss">×</button>
+          </div>
+        )}
+        <MobileSection title="Notify me">
+          <MobileSettingsRow
+            label="In-app"
+            checked={openCategoryRow.in_app_enabled}
+            onToggle={v => updateCategory(openCategoryRow.category, { in_app_enabled: v })}
+            disabled={Boolean(savingCategories[openCategoryRow.category])}
+          />
+          <MobileSettingsRow
+            label="Push"
+            checked={openCategoryRow.push_enabled}
+            onToggle={v => updateCategory(openCategoryRow.category, { push_enabled: v })}
+            disabled={Boolean(savingCategories[openCategoryRow.category])}
+          />
+          {openCategoryRow.supports_mine_only && (
+            <MobileSettingsRow
+              label="Only things assigned to me"
+              checked={openCategoryRow.mine_only}
+              onToggle={v => updateCategory(openCategoryRow.category, { mine_only: v })}
+              disabled={Boolean(savingCategories[openCategoryRow.category])}
+            />
+          )}
+        </MobileSection>
+        {savedCategory === openCategoryRow.category && <p className="px-1 text-sm font-semibold text-success">Saved</p>}
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-5">
@@ -265,35 +317,23 @@ export function NotificationSettingsPage() {
 
       <div>
         <p className="mb-3 px-1 text-sm text-muted">
-          In-app always shows in the bell. Push goes to every device you've enabled above. Every
-          switch below saves the moment you flip it.
+          In-app always shows in the bell. Push goes to every device you've enabled above.
+          {savedCategory && <span className="ml-2 font-semibold text-success">Saved</span>}
         </p>
-        <div className="flex flex-col gap-4">
+        <MobileSection title="What to notify me about">
           {rows.map(row => (
-            <MobileSection key={row.category} title={row.label}>
-              <MobileSettingsRow
-                label="In-app"
-                checked={row.in_app_enabled}
-                onToggle={v => updateCategory(row.category, { in_app_enabled: v })}
-                disabled={savingCategory === row.category}
-              />
-              <MobileSettingsRow
-                label="Push"
-                checked={row.push_enabled}
-                onToggle={v => updateCategory(row.category, { push_enabled: v })}
-                disabled={savingCategory === row.category}
-              />
-              {row.supports_mine_only && (
-                <MobileSettingsRow
-                  label="Only things assigned to me"
-                  checked={row.mine_only}
-                  onToggle={v => updateCategory(row.category, { mine_only: v })}
-                  disabled={savingCategory === row.category}
-                />
-              )}
-            </MobileSection>
+            <MobileSettingsRow
+              key={row.category}
+              label={row.label}
+              description={[
+                row.in_app_enabled ? 'In-app' : '',
+                row.push_enabled ? 'Push' : '',
+                row.supports_mine_only && row.mine_only ? 'Mine only' : '',
+              ].filter(Boolean).join(' · ') || 'Off'}
+              onClick={() => setOpenCategory(row.category)}
+            />
           ))}
-        </div>
+        </MobileSection>
       </div>
 
       <Link to="/settings" className="font-bold text-primary hover:underline">← Manage HomeStack</Link>

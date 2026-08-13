@@ -21,7 +21,7 @@ test.describe('phone', () => {
     test.skip(testInfo.project.name === 'tablet-768', 'phone-only: each page splits mobile/desktop at its own sm: breakpoint')
   })
 
-  test('Books: Add book and Edit book both open as full-height sheets', async ({ page }) => {
+  test('Books: Add/Edit sheets and tap-to-detail are available on phone', async ({ page }) => {
     await mockAuthenticatedApi(page, {
       '/api/v1/nodes/': [enabledNode('books')],
       '/api/v1/books/personal/': {
@@ -53,6 +53,13 @@ test.describe('phone', () => {
     const editDialog = page.getByRole('dialog')
     await expect(editDialog).toBeVisible()
     await expect(editDialog.locator('input[value="Project Hail Mary"]')).toBeVisible()
+    await editDialog.getByRole('button', { name: 'Cancel' }).click()
+
+    await page.getByRole('button', { name: 'Open Project Hail Mary' }).click()
+    const detailDialog = page.getByRole('dialog')
+    await expect(detailDialog).toBeVisible()
+    await expect(detailDialog.getByRole('heading', { name: 'Project Hail Mary' })).toBeVisible()
+    await expect(detailDialog.getByLabel('Detail shelf for Project Hail Mary')).toBeVisible()
     await expectNoHorizontalOverflow(page)
   })
 
@@ -76,6 +83,24 @@ test.describe('phone', () => {
     await expect(dialog.getByText('HomeStack-5G', { exact: false })).toBeVisible()
     await expect(dialog.getByRole('button', { name: 'Edit' })).toBeVisible()
     await expectNoHorizontalOverflow(page)
+  })
+
+  test('Home Wiki: a direct page URL opens the page reader and preserves the URL state', async ({ page }) => {
+    await mockAuthenticatedApi(page, {
+      '/api/v1/nodes/': [enabledNode('home_wiki')],
+      '/api/v1/wiki/categories/': [],
+      '/api/v1/wiki/pages/': [{
+        id: 3, title: 'Emergency shutoffs', body: 'Water is under the laundry sink.',
+        category_id: null, category_name: '', category_colour: '', tags: '', tag_list: [],
+        is_favourite: false, is_emergency: true, is_kiosk_safe: false, visibility: 'household',
+        sensitivity: 'normal', created_at: '', updated_at: '',
+      }],
+    })
+    await page.goto('/wiki?page=3')
+    await expect(page).toHaveURL(/page=3/)
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('heading', { name: 'Emergency shutoffs' })).toBeVisible()
   })
 
   test('Travel: Plan a trip, and a trip\'s booking/itinerary forms, all open as full-height sheets', async ({ page }) => {
@@ -108,6 +133,13 @@ test.describe('phone', () => {
     const bookingDialog = page.getByRole('dialog')
     await expect(bookingDialog).toBeVisible()
     await expect(bookingDialog.getByRole('heading', { name: 'Add a booking' })).toBeVisible()
+    await bookingDialog.getByRole('button', { name: 'Cancel' }).click()
+
+    await page.getByRole('button', { name: '+ Add something to do' }).click()
+    const itineraryDialog = page.getByRole('dialog')
+    await expect(itineraryDialog).toBeVisible()
+    await expect(itineraryDialog.getByRole('heading', { name: 'Add something to do' })).toBeVisible()
+    await expect(itineraryDialog.getByRole('button', { name: 'Add to itinerary' })).toBeVisible()
     await expectNoHorizontalOverflow(page)
   })
 })

@@ -18,10 +18,14 @@ test.beforeEach(async ({}, testInfo) => {
 })
 
 test('phone shows a dashboard on the overview tab, not the nine-option picker', async ({ page }) => {
+  let maintenanceRequests = 0
   await mockAuthenticatedApi(page, {
     '/api/v1/homestead/maintenance/': [{ id: 1 }],
     '/api/v1/homestead/appliances/': [],
     '/api/v1/homestead/improvements/': [],
+  })
+  page.on('request', request => {
+    if (new URL(request.url()).pathname === '/api/v1/homestead/maintenance/') maintenanceRequests += 1
   })
   await page.goto('/homestead')
   // Not "Needs attention" alone — the desktop OverviewTab (hidden, not unmounted, on phone)
@@ -31,6 +35,9 @@ test('phone shows a dashboard on the overview tab, not the nine-option picker', 
   await expect(page.getByRole('button', { name: 'Rooms & areas' })).toBeVisible()
   // The old mobile <select> picker is gone on the dashboard itself.
   await expect(page.getByLabel('Homestead section')).toBeHidden()
+  // React dev effects can replay once under the dev server; the old hidden mobile+desktop
+  // composition produced an additional logical fetch path on top of that.
+  expect(maintenanceRequests).toBeLessThanOrEqual(2)
   await expectNoHorizontalOverflow(page)
 })
 

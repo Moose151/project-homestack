@@ -62,8 +62,14 @@ function PlanForm({ kind, people, existing, onCancel, onSaved, onError }: {
       }
     } catch (error) { onError(errMsg(error)) } finally { setBusy(false) }
   }
-  return <Modal title={existing ? `Edit ${kind}` : kind === 'trip' ? 'Plan a trip' : 'Add somewhere to go'} onClose={onCancel} size="full">
-    <form onSubmit={save} className="grid gap-3 sm:grid-cols-2">
+  const formId = `travel-${kind}-form`
+  return <Modal
+    title={existing ? `Edit ${kind}` : kind === 'trip' ? 'Plan a trip' : 'Add somewhere to go'}
+    onClose={onCancel}
+    size="full"
+    footer={<><Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button><Button type="submit" form={formId} loading={busy} disabled={!f.title.trim() || !f.destination.trim()}>Save</Button></>}
+  >
+    <form id={formId} onSubmit={save} className="grid gap-3 sm:grid-cols-2">
       <Field label={kind === 'trip' ? 'Trip name' : 'Idea name'}><Input value={f.title} onChange={e => set('title', e.target.value)} placeholder="Japan 2027" data-autofocus /></Field>
       <Field label="Where"><Input value={f.destination} onChange={e => set('destination', e.target.value)} placeholder="Tokyo, Japan" /></Field>
       {kind === 'trip' && <><Field label="Trip type"><Select value={f.trip_type} onChange={e => set('trip_type', e.target.value)}><option value="multi_day">Multi-day trip</option><option value="day_trip">Day trip</option></Select></Field><Field label={f.trip_type === 'day_trip' ? 'Date' : 'Starts'}><Input type="date" value={f.start_date} onChange={e => set('start_date', e.target.value)} /></Field>{f.trip_type !== 'day_trip' && <Field label="Ends"><Input type="date" value={f.end_date} onChange={e => set('end_date', e.target.value)} /></Field>}</>}
@@ -75,8 +81,7 @@ function PlanForm({ kind, people, existing, onCancel, onSaved, onError }: {
       {kind === 'idea' && <Field label="Rough total cost"><Input type="number" min="0" value={f.rough_cost} onChange={e => set('rough_cost', e.target.value)} placeholder="0.00" /></Field>}
       <Field label="Shared notes" className="sm:col-span-2"><Textarea value={f.notes} onChange={e => set('notes', e.target.value)} rows={4} placeholder="Ideas, links and things to remember…" /></Field>
       <Field label="Image links" hint="One public image URL per line; the first becomes the cover." className="sm:col-span-2"><Textarea value={f.image_urls} onChange={e => set('image_urls', e.target.value)} rows={3} placeholder="https://…/photo.jpg" /></Field>
-      {peopleWithLogins.length > 0 && <Field label="Keep this a surprise" hint="Selected users will not see it in Travel, Calendar, Agenda, notifications, Search or Corners." className="sm:col-span-2"><div className="flex flex-wrap gap-2">{peopleWithLogins.map(person => { const userId = person.linked_user_id!; const hidden = f.hidden_from_user_ids.includes(userId); return <button key={person.id} type="button" onClick={() => set('hidden_from_user_ids', hidden ? f.hidden_from_user_ids.filter(id => id !== userId) : [...f.hidden_from_user_ids, userId])} className={`min-h-10 rounded-xl border px-3 text-sm ${hidden ? 'border-warning bg-warning-soft text-warning' : 'border-line text-muted'}`}>{hidden ? '🙈 Hidden from ' : 'Hide from '}{person.preferred_name || person.display_name}</button> })}</div></Field>}
-      <div className="flex gap-2 sm:col-span-2 sm:justify-end"><Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button><Button type="submit" loading={busy} disabled={!f.title.trim() || !f.destination.trim()}>Save</Button></div>
+      {peopleWithLogins.length > 0 && <Field label="Keep this a surprise" hint="Selected users will not see it in Travel, Calendar, Agenda, notifications, Search or Corners." className="sm:col-span-2"><div className="flex flex-wrap gap-2">{peopleWithLogins.map(person => { const userId = person.linked_user_id!; const hidden = f.hidden_from_user_ids.includes(userId); return <button key={person.id} type="button" onClick={() => set('hidden_from_user_ids', hidden ? f.hidden_from_user_ids.filter(id => id !== userId) : [...f.hidden_from_user_ids, userId])} className={`min-h-11 rounded-xl border px-3 text-sm ${hidden ? 'border-warning bg-warning-soft text-warning' : 'border-line text-muted'}`}>{hidden ? '🙈 Hidden from ' : 'Hide from '}{person.preferred_name || person.display_name}</button> })}</div></Field>}
     </form>
   </Modal>
 }
@@ -98,14 +103,20 @@ function BookingForm({ trip, initialKind, existing, onSaved, onCancel, onError }
   } : { kind: initialKind, title: initialKind === 'flight' ? 'Flights' : initialKind === 'accommodation' ? 'Accommodation' : '', provider: '', quoted_amount: '', booked_amount: '', status: 'planned', start_at: '', end_at: '', book_by: '', flight_number: '', departure_airport: '', arrival_airport: '', location: '', booking_reference: '', notes: '' })
   const [busy, setBusy] = useState(false); const set = (key: string, value: string) => setF(previous => ({ ...previous, [key]: value }))
   const save = async (event: React.FormEvent) => { event.preventDefault(); if (!f.title.trim()) return; setBusy(true); try { const data = { ...f, quoted_amount: f.quoted_amount || null, booked_amount: f.booked_amount || null, start_at: f.start_at ? new Date(f.start_at).toISOString() : null, end_at: f.end_at ? new Date(f.end_at).toISOString() : null, book_by: f.book_by || null, currency: 'AUD' }; if (existing) await api.updateTravelBooking(existing.id, data); else await api.createTravelBooking(trip.id, data); onSaved() } catch (error) { onError(errMsg(error)) } finally { setBusy(false) } }
-  return <Modal title={existing ? `Edit ${existing.title}` : 'Add a booking'} onClose={onCancel} size="full"><form onSubmit={save} className="grid gap-3 sm:grid-cols-2">
+  const formId = 'travel-booking-form'
+  return <Modal
+    title={existing ? `Edit ${existing.title}` : 'Add a booking'}
+    onClose={onCancel}
+    size="full"
+    footer={<><Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button><Button type="submit" form={formId} loading={busy}>{existing ? 'Save changes' : 'Add booking'}</Button></>}
+  ><form id={formId} onSubmit={save} className="grid gap-3 sm:grid-cols-2">
     <Field label="Type"><Select value={f.kind} onChange={e => set('kind', e.target.value)}><option value="flight">Flight</option><option value="accommodation">Accommodation</option><option value="transport">Transport</option><option value="activity">Activity</option><option value="restaurant">Restaurant</option><option value="other">Other</option></Select></Field>
     <Field label="What is it?"><Input value={f.title} onChange={e => set('title', e.target.value)} data-autofocus /></Field><Field label="Provider"><Input value={f.provider} onChange={e => set('provider', e.target.value)} /></Field><Field label="Quoted whole-party total"><Input type="number" min="0" value={f.quoted_amount} onChange={e => set('quoted_amount', e.target.value)} /></Field>
     <Field label="Book by"><Input type="date" value={f.book_by} onChange={e => set('book_by', e.target.value)} /></Field><Field label="Status"><Select value={f.status} onChange={e => set('status', e.target.value)}><option value="researching">Researching</option><option value="planned">Planned</option><option value="booked">Booked</option></Select></Field>
     <Field label={f.kind === 'accommodation' ? 'Check-in' : 'Starts / departs'}><Input type="datetime-local" value={f.start_at} onChange={e => set('start_at', e.target.value)} /></Field><Field label={f.kind === 'accommodation' ? 'Check-out' : 'Ends / arrives'}><Input type="datetime-local" value={f.end_at} onChange={e => set('end_at', e.target.value)} /></Field>
     {f.kind === 'flight' && <><Field label="Flight number"><Input value={f.flight_number} onChange={e => set('flight_number', e.target.value)} /></Field><Field label="Route"><div className="flex gap-2"><Input value={f.departure_airport} onChange={e => set('departure_airport', e.target.value)} placeholder="BNE" /><Input value={f.arrival_airport} onChange={e => set('arrival_airport', e.target.value)} placeholder="NRT" /></div></Field></>}
     <Field label="Location"><Input value={f.location} onChange={e => set('location', e.target.value)} /></Field><Field label="Booking reference"><Input value={f.booking_reference} onChange={e => set('booking_reference', e.target.value)} /></Field>
-    <Field label="Notes" className="sm:col-span-2"><Textarea value={f.notes} onChange={e => set('notes', e.target.value)} /></Field><div className="flex gap-2 sm:col-span-2 sm:justify-end"><Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button><Button type="submit" loading={busy}>{existing ? 'Save changes' : 'Add booking'}</Button></div>
+    <Field label="Notes" className="sm:col-span-2"><Textarea value={f.notes} onChange={e => set('notes', e.target.value)} /></Field>
   </form></Modal>
 }
 
@@ -146,7 +157,13 @@ function ItineraryForm({ trip, existing, onCancel, onSaved, onError }: {
       onSaved()
     } catch (error) { onError(errMsg(error)) } finally { setBusy(false) }
   }
-  return <Modal title={existing ? `Edit ${existing.title}` : 'Add something to do'} onClose={onCancel} size="full"><form onSubmit={save} className="grid gap-3 sm:grid-cols-2">
+  const formId = 'travel-itinerary-form'
+  return <Modal
+    title={existing ? `Edit ${existing.title}` : 'Add something to do'}
+    onClose={onCancel}
+    size="full"
+    footer={<><Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button><Button type="submit" form={formId} loading={busy} disabled={!f.title.trim()}>{existing ? 'Save changes' : 'Add to itinerary'}</Button></>}
+  ><form id={formId} onSubmit={save} className="grid gap-3 sm:grid-cols-2">
     <Field label="What is it?" className="sm:col-span-2"><Input value={f.title} onChange={e => set('title', e.target.value)} placeholder="TeamLab museum" data-autofocus /></Field>
     <Field label="Day" hint={days.length ? undefined : 'Set trip dates to assign a day, or leave as an option to do.'}>
       <Select value={f.scheduled_date} onChange={e => set('scheduled_date', e.target.value)}>
@@ -157,7 +174,6 @@ function ItineraryForm({ trip, existing, onCancel, onSaved, onError }: {
     <Field label="Time (optional)"><Input type="time" value={f.scheduled_time} onChange={e => set('scheduled_time', e.target.value)} disabled={!f.scheduled_date} /></Field>
     <Field label="Location"><Input value={f.location} onChange={e => set('location', e.target.value)} /></Field>
     <Field label="Notes" className="sm:col-span-2"><Textarea value={f.notes} onChange={e => set('notes', e.target.value)} rows={2} /></Field>
-    <div className="flex gap-2 sm:col-span-2 sm:justify-end"><Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button><Button type="submit" loading={busy} disabled={!f.title.trim()}>{existing ? 'Save changes' : 'Add to itinerary'}</Button></div>
   </form></Modal>
 }
 

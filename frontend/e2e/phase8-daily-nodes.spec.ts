@@ -47,6 +47,27 @@ test.describe('phone', () => {
     await expectNoHorizontalOverflow(page)
   })
 
+  test('Atlas: a cold item deep link opens the focused list sheet on phone', async ({ page }) => {
+    await mockAuthenticatedApi(page, {
+      '/api/v1/atlas/lists/': [{
+        id: 4, title: 'Packing list', list_type: 'todo', visibility: 'household', owner_person_id: null,
+        items: [{
+          id: 44, atlas_list_id: 4, title: 'Passports', notes: '', quantity: '', priority: '', position: 0,
+          due_at: null, calendar_event_id: null, product_url: '', source_image_url: '', cached_image_url: '',
+          image_attachment_id: null, retailer: '', unit_price: null, currency: '', imported_at: null,
+          price_watch: null, assigned_to_person_ids: [], completed_at: null,
+        }],
+        created_at: '', updated_at: '',
+      }],
+      '/api/v1/people/': [],
+    })
+    await page.goto('/atlas?tab=lists&item=44')
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByText('Passports')).toBeVisible()
+    await expect(dialog.locator('#atlas-item-44')).toHaveClass(/ring-2/)
+  })
+
   test('Meridian: Tasks and Routines are grouped under one phone destination with a secondary switcher', async ({ page }) => {
     await mockAuthenticatedApi(page, {
       '/api/v1/meridian/settings/': { points_label: 'points', group_goals_enabled: false, wishlist_requests_enabled: false, auto_end_streaks: false },
@@ -92,6 +113,28 @@ test.describe('phone', () => {
     await expectNoHorizontalOverflow(page)
   })
 
+  test('Education: cold assignment deep link opens the specific assignment detail', async ({ page }) => {
+    await mockAuthenticatedApi(page, {
+      '/api/v1/nodes/': [enabledNode('education')],
+      '/api/v1/education/courses/': [],
+      '/api/v1/education/assessments/': [{
+        id: 7, title: 'Cryptography essay', assessment_type: 'assignment', course_id: null, course_name: '',
+        course_code: '', assigned_to_person_ids: [], due_at: new Date().toISOString(), is_all_day: true,
+        status: 'todo', priority: 'high', weight: '', description: '', is_complete: false,
+        calendar_event_id: null, visibility: 'household', sensitivity: 'normal', created_at: '', updated_at: '',
+      }],
+      '/api/v1/education/classes/': [],
+      '/api/v1/education/institutions/': [],
+      '/api/v1/education/assessments/7/notes/': [],
+      '/api/v1/education/assessments/7/files/': [],
+      '/api/v1/people/': [],
+    })
+    await page.goto('/education?tab=assignments&assessment=7')
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('heading', { name: 'Cryptography essay' })).toBeVisible()
+  })
+
   test('Pets: the phone dashboard shows what needs attention next, and opens a pet in a detail sheet', async ({ page }) => {
     await mockAuthenticatedApi(page, {
       '/api/v1/pets/pets/': [{
@@ -115,6 +158,52 @@ test.describe('phone', () => {
     await expect(dialog).toBeVisible()
     await expect(dialog.getByText('Treatments')).toBeVisible()
     await expectNoHorizontalOverflow(page)
+  })
+
+  test('Pets: treatment editing uses a focused state inside the pet sheet', async ({ page }) => {
+    await mockAuthenticatedApi(page, {
+      '/api/v1/pets/pets/': [{
+        id: 1, name: 'Milo', species: 'dog', breed: 'Labrador', avatar: '', colour: '', date_of_birth: null,
+        adoption_date: null, notes: '', vet_name: '', vet_phone: '', microchip_number: '',
+        insurance_provider: '', insurance_policy_number: '',
+      }],
+      '/api/v1/pets/treatments/': [{
+        id: 1, pet_id: 1, pet_name: 'Milo', treatment_type: 'flea', name: 'Flea treatment',
+        display_name: 'Flea treatment', last_done_at: null, next_due_at: new Date().toISOString(),
+        recurrence_rule: '', notes: '', is_overdue: false, calendar_event_id: null, visibility: 'household',
+        created_at: '', updated_at: '',
+      }],
+      '/api/v1/pets/appointments/': [],
+    })
+    await page.goto('/pets')
+    await page.locator('button', { hasText: 'Flea treatment' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByRole('button', { name: 'Edit Flea treatment' }).click()
+    await expect(dialog.getByRole('button', { name: /Pet details/ })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'Save treatment' })).toBeVisible()
+  })
+
+  test('Pets: exact treatment and pet deep links open the focused context', async ({ page }) => {
+    await mockAuthenticatedApi(page, {
+      '/api/v1/pets/pets/': [{
+        id: 1, name: 'Milo', species: 'dog', breed: 'Labrador', avatar: '', colour: '', date_of_birth: null,
+        adoption_date: null, notes: '', vet_name: '', vet_phone: '', microchip_number: '',
+        insurance_provider: '', insurance_policy_number: '',
+      }],
+      '/api/v1/pets/treatments/': [{
+        id: 9, pet_id: 1, pet_name: 'Milo', treatment_type: 'flea', name: 'Flea treatment',
+        display_name: 'Flea treatment', last_done_at: null, next_due_at: new Date().toISOString(),
+        recurrence_rule: '', notes: '', is_overdue: false, calendar_event_id: null, visibility: 'household',
+        created_at: '', updated_at: '',
+      }],
+      '/api/v1/pets/appointments/': [],
+    })
+    await page.goto('/pets?tab=reminders&treatment=9')
+    await expect(page.locator('#pet-treatment-9')).toHaveClass(/ring-2/)
+
+    await page.goto('/pets?tab=pets&pet=1')
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Milo' })).toBeVisible()
   })
 
   test('Fitness: the section tab bar is hidden during an active live session', async ({ page }) => {

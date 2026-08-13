@@ -171,7 +171,7 @@ Major shipped areas include:
 Web Push is live and validated on real devices; VAPID and the hourly `notifications_run_scheduled`
 job are configured on the server.
 
-**Mobile UX v1 (v0.36.5, in progress on `feature/mobile-ux`)** — owner-directed rework of the
+**Mobile UX v1 (v0.36.7, in progress on `feature/mobile-ux`)** — owner-directed rework of the
 phone experience per `docs/36_Mobile_UX_Strategy_and_Implementation_Plan.md`. Phases 1–7 done:
 a Playwright mobile-viewport acceptance suite (API-mocked — see `frontend/e2e/README.md` for why
 it must never hit the real backend), a shared `src/components/mobile/` primitives layer, the
@@ -202,8 +202,8 @@ screen can't reintroduce it by omission. Also found and fixed along the way: `Ap
 was never actually width-constrained to the viewport (a flex-item `min-width: auto` issue, latent
 until Calendar's week-day-strip was wide enough to expose it).
 
-Phase 8 (Atlas, Meridian, Education, Pets, Fitness, Corners — all six daily-use nodes) is now
-done too. Atlas's "Lists" tab and Pets' per-pet card both used to stack every item's full,
+Phase 8 (Atlas, Meridian, Education, Pets, Fitness, Corners — all six daily-use nodes) is complete
+for the software-side mobile pass. Atlas's "Lists" tab and Pets' per-pet card both used to stack every item's full,
 expanded contents on one page; both now show a phone summary row that opens a focused detail
 sheet (Atlas reuses the existing `ListCard`; Pets extracts a shared `PetDetailContent` used by
 both the new sheet and the desktop card's inline expand, so there's one implementation, not
@@ -219,8 +219,14 @@ along the way: `CornerPage`'s `corner?.collections.filter(...)` only short-circu
 `corner` itself was nullish, not when it resolved truthy-but-malformed — with no root error
 boundary, that crashed the entire app, not just Corners; latent in the existing code, not
 introduced this phase.
+The v0.36.7 correction pass added cold Atlas `?item=` phone deep-link opening/highlighting,
+sanitized unauthorized Meridian `?tab=settings`, moved Education assignment creation to a full
+sheet, linked Education search results to exact assignments/classes and moved pet treatment/
+appointment edit flows into a focused state inside the pet sheet. Pets now receives exact pet/
+treatment/appointment deep links.
 
-Phase 9 (Books, Home Wiki, Travel — the lower-frequency content/planning nodes) is done too.
+Phase 9 (Books, Home Wiki, Travel — the lower-frequency content/planning nodes) is complete for
+the software-side mobile pass.
 All three already had good bones (Books' shelf/card model, Home Wiki's search-first layout,
 Travel's `?trip=`-based per-trip project view all pre-dated this phase and were left alone); the
 common gap across all three was "long inline forms" — Add/Edit book, wiki page create/edit,
@@ -231,16 +237,22 @@ an inline-body-expand-then-inline-edit-form sequence. Found and fixed along the 
 grids had no explicit base `grid-cols-1`, the CSS Grid analogue of the AppShell `<main>` flex bug
 from Phase 4 — a grid item's default `min-width: auto` let a wide card dictate the implicit
 column's width instead of the container's, pushing the grid past the viewport at 320px.
+The v0.36.7 correction pass added a focused book detail sheet, URL-addressable Wiki pages
+(`?page=`), sticky Travel form footers and itinerary-form Playwright coverage.
 
-Phases 1–9 are now all implemented and Playwright-verified — that's the full extent of what's
-achievable without a physical device. **Phase 10 (real-device acceptance) is a checklist, not
-code** — docs/36's Phase 10 section now has the full structured protocol (device matrix, §9.1/9.2
-walkthroughs, deep-link checks, destructive-op checks, a list of deliberate Phase 8/9 scope gaps
-so they don't get re-reported as bugs). It genuinely needs a person with a phone, not another
-coding session — push notifications end-to-end in particular can't be exercised by the mocked
-Playwright suite at all. Once that's walked and any real findings fixed, Mobile UX v1 is ready for
-a merge-to-`main` decision, which stays the owner's call as with every push on this branch so far.
-Not yet merged to `main`.
+Phase 5-7 correction completion in v0.36.7: Money now has a true phone home/current-position
+screen with destination rows instead of the five-primary-tab selector; Notifications now uses
+category drill-down for In-app/Push/Mine-only rather than rendering every category expanded;
+Manage HomeStack opens as a phone settings directory with focused sections; Homestead overview
+uses shared data instead of duplicate hidden mobile/desktop effect paths; Meridian setting
+switches use 44px hit areas.
+
+**Pre-Phase-10 status:** Phases 1-9 are complete for software-side/mobile-automation acceptance.
+Phase 10 is CHECKLIST READY / NOT STARTED. Do not run Phase 10 installed
+PWA/push acceptance against the plain LAN Vite dev server; use a production build on a secure
+HTTPS origin (for example a temporary HTTPS preview/staging deployment behind Nginx Proxy
+Manager, or a controlled live-branch deployment with backup/rollback prepared). Phases 5–9 should
+now be reviewed as complete before Phase 10 real-device acceptance. Not yet merged to `main`.
 
 ---
 

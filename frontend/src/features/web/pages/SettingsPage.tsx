@@ -10,7 +10,7 @@ import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { PageHeader } from '../../../components/PageHeader'
 import { ColourPicker } from '../../../components/ColourPicker'
-import { MobileListRow, MobileSection } from '../../../components/mobile'
+import { MobileListRow, MobileScreenHeader, MobileSection } from '../../../components/mobile'
 
 const COMMON_TIMEZONES = [
   'UTC', 'Australia/Sydney', 'Australia/Melbourne', 'Australia/Brisbane',
@@ -143,6 +143,7 @@ export function SettingsPage() {
 
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [mobileSection, setMobileSection] = useState<'home' | 'household' | 'stacks' | 'backups' | 'appearance' | 'system' | 'meridian'>('home')
 
   // Household general
   const [householdName, setHouseholdName] = useState('')
@@ -201,6 +202,20 @@ export function SettingsPage() {
 
   const inputCls = 'w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary/40'
 
+  const directory = (
+    <MobileSection title="Settings">
+      {isManager && <MobileListRow icon="🏠" title="Household" subtitle="Name and timezone" onClick={() => setMobileSection('household')} />}
+      {isAdmin && <MobileListRow icon="👥" to="/users" title="People & access" subtitle="Profiles, roles and sign-in" />}
+      <MobileListRow icon="🧩" title="Stacks" subtitle="Enabled HomeStack areas" onClick={() => setMobileSection('stacks')} />
+      {isAdmin && <MobileListRow icon="💾" title="Backups" subtitle="Run and review backups" onClick={() => setMobileSection('backups')} />}
+      <MobileListRow icon="🔔" to="/settings/notifications" title="Notifications" subtitle="Your notification preferences" />
+      {isAdmin && <MobileListRow icon="📱" to="/settings/push-devices" title="Push devices" subtitle="Registered notification devices" />}
+      <MobileListRow icon="🎨" title="Appearance" subtitle="Family colour" onClick={() => setMobileSection('appearance')} />
+      {meridianEnabled && meridian && <MobileListRow icon="⭐" title="Meridian" subtitle="Tasks and rewards settings" onClick={() => setMobileSection('meridian')} />}
+      <MobileListRow icon="🕘" title="Version & system" subtitle="Version history and guides" onClick={() => setMobileSection('system')} />
+    </MobileSection>
+  )
+
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-5">
       <PageHeader title="Manage HomeStack" icon="⚙️" subtitle="Household-wide stacks and settings that apply to everyone." />
@@ -212,6 +227,20 @@ export function SettingsPage() {
         </div>
       )}
 
+      <div className="sm:hidden">
+        {mobileSection === 'home' ? directory : (
+          <MobileScreenHeader
+            title={{
+              household: 'Household', stacks: 'Stacks', backups: 'Backups', appearance: 'Appearance',
+              system: 'Version & system', meridian: 'Meridian', home: 'Manage HomeStack',
+            }[mobileSection]}
+            showBack
+            onBack={() => setMobileSection('home')}
+          />
+        )}
+      </div>
+
+      <div className={mobileSection === 'household' ? '' : 'hidden sm:block'}>
       {isManager && (
         <Card title="Household">
           <p className="text-sm text-muted mb-3">Name and timezone shown across the app.</p>
@@ -229,7 +258,9 @@ export function SettingsPage() {
           </div>
         </Card>
       )}
+      </div>
 
+      <div className={mobileSection === 'stacks' ? '' : 'hidden sm:block'}>
       <Card title="Stacks">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm text-muted">Turn stacks on or off for the whole household. Guides remain available while a node is disabled.</p>
@@ -291,19 +322,15 @@ export function SettingsPage() {
           })}
         </ul>
       </Card>
+      </div>
 
-      {/* docs/36 §6.15: a settings directory, not another dense card — the same destination
-          list regardless of screen size, since these are always one-tap-deeper navigation
-          rather than inline controls. */}
-      <MobileSection title="More">
-        {isAdmin && <MobileListRow icon="👥" to="/users" title="People & access" subtitle="Profiles, roles and sign-in" />}
-        <MobileListRow icon="🔔" to="/settings/notifications" title="Your notifications" subtitle="What you get notified about, and quiet hours — applies to your login only" />
-        {isAdmin && <MobileListRow icon="📱" to="/settings/push-devices" title="Push devices" subtitle="Household-wide — who's registered for push notifications" />}
-        <MobileListRow icon="🕘" to="/settings/version-history" title="Version history" subtitle="The installed version and what's changed over time" />
-      </MobileSection>
+      <div className="hidden sm:block">{directory}</div>
 
-      {isAdmin && <BackupCard onError={setError} />}
+      <div className={mobileSection === 'backups' ? '' : 'hidden sm:block'}>
+        {isAdmin && <BackupCard onError={setError} />}
+      </div>
 
+      <div className={mobileSection === 'appearance' ? '' : 'hidden sm:block'}>
       <Card title="Family colour">
         <p className="text-sm text-muted mb-3">
           The accent used on the calendar for "Whole family" events and tasks (anything not
@@ -320,7 +347,9 @@ export function SettingsPage() {
           <Button onClick={saveColour} loading={savingColour} disabled={!isManager || familyColour === household?.family_colour}>Save</Button>
         </div>
       </Card>
+      </div>
 
+      <div className={mobileSection === 'meridian' ? '' : 'hidden sm:block'}>
       {meridianEnabled && meridian && (
         <Card title="Meridian">
           <p className="text-sm text-muted mb-4">Configure Meridian behaviour for the whole household.</p>
@@ -350,9 +379,11 @@ export function SettingsPage() {
                   aria-checked={!!meridian[key]}
                   onClick={() => isManager && setMeridian(m => m ? { ...m, [key]: !m[key] } : m)}
                   disabled={!isManager}
-                  className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors disabled:opacity-50 ${meridian[key] ? 'bg-success' : 'bg-line-strong'}`}
+                  className="grid h-11 w-11 flex-shrink-0 place-items-center disabled:opacity-50"
                 >
-                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${meridian[key] ? 'left-5' : 'left-0.5'}`} />
+                  <span className={`relative h-6 w-11 rounded-full transition-colors ${meridian[key] ? 'bg-success' : 'bg-line-strong'}`}>
+                    <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${meridian[key] ? 'left-5' : 'left-0.5'}`} />
+                  </span>
                 </button>
               </div>
             ))}
@@ -361,6 +392,14 @@ export function SettingsPage() {
             )}
           </div>
         </Card>
+      )}
+      </div>
+
+      {mobileSection === 'system' && (
+        <MobileSection title="Version & system">
+          <MobileListRow icon="🕘" to="/settings/version-history" title="Version history" subtitle="Installed version and changes" />
+          <MobileListRow icon="📚" to="/settings/guides/hub" title="Guides" subtitle="Open a stack guide" />
+        </MobileSection>
       )}
     </div>
   )

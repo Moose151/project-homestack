@@ -655,7 +655,7 @@ function SearchResults({ results, lists }: { results: AtlasSearchResults; lists:
       {results.lists.length > 0 && (
         <Section title="Lists">
           {results.lists.map(l => (
-            <Link key={`l${l.id}`} to={`/atlas?tab=${listTabFor(l.list_type)}`} className="group block">
+            <Link key={`l${l.id}`} to={`/atlas?tab=${listTabFor(l.list_type)}&list=${l.id}`} className="group block">
               <Card className="transition-colors group-hover:border-primary/40">
                 <span className="text-sm font-medium text-ink">{l.title}</span>
                 <span className="text-xs text-muted capitalize"> · {l.list_type}</span>
@@ -669,7 +669,7 @@ function SearchResults({ results, lists }: { results: AtlasSearchResults; lists:
           {results.items.map(i => {
             const parentType = lists.find(l => l.id === i.atlas_list_id)?.list_type ?? 'general'
             return (
-              <Link key={`i${i.id}`} to={`/atlas?tab=${listTabFor(parentType)}`} className="block min-h-11 rounded-xl bg-sunken px-3 py-2.5 text-sm text-ink transition-colors hover:bg-primary-soft">
+              <Link key={`i${i.id}`} to={`/atlas?tab=${listTabFor(parentType)}&list=${i.atlas_list_id}&item=${i.id}`} className="block min-h-11 rounded-xl bg-sunken px-3 py-2.5 text-sm text-ink transition-colors hover:bg-primary-soft">
                 {i.quantity && <span className="text-muted-strong mr-1.5">{i.quantity}×</span>}{i.title}
               </Link>
             )
@@ -904,14 +904,25 @@ export function AtlasPage() {
   const [searchParams] = useSearchParams()
   const focusedListId = Number(searchParams.get('list') || 0)
   const focusedItemId = Number(searchParams.get('item') || 0)
+  const effectiveFocusedListId = focusedListId || lists.find(list => list.items?.some(item => item.id === focusedItemId))?.id || 0
 
   useEffect(() => {
     api.getLists().then(setLists).catch(e => setError(errMsg(e))).finally(() => setLoading(false))
   }, [])
   useEffect(() => { api.getPeople().then(setPeople).catch(() => {}) }, [])
   useEffect(() => {
-    if (!loading && focusedListId) window.setTimeout(() => document.getElementById(focusedItemId ? `atlas-item-${focusedItemId}` : `atlas-list-${focusedListId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
-  }, [loading, focusedListId, focusedItemId])
+    if (loading || (!focusedListId && !focusedItemId)) return
+    if (!effectiveFocusedListId) return
+    const focusedList = lists.find(list => list.id === effectiveFocusedListId)
+    if (focusedList && focusedList.list_type !== 'grocery' && focusedList.list_type !== 'shopping') {
+      setTab('lists')
+      setOpenListId(effectiveFocusedListId)
+    }
+    window.setTimeout(() => {
+      document.getElementById(focusedItemId ? `atlas-item-${focusedItemId}` : `atlas-list-${effectiveFocusedListId}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 0)
+  }, [effectiveFocusedListId, focusedItemId, loading, lists, setTab])
 
   const defaultAssignee = personIdForUser(people, user?.id)
   // Grocery and Shopping now have their own dedicated tabs; the generic Lists tab keeps
@@ -1057,7 +1068,7 @@ export function AtlasPage() {
                         list={list}
                         people={people}
                         defaultAssignee={defaultAssignee}
-                        focusedItemId={list.id === focusedListId ? focusedItemId : undefined}
+                        focusedItemId={list.id === effectiveFocusedListId ? focusedItemId : undefined}
                         onDeleted={id => setLists(prev => prev.filter(l => l.id !== id))}
                         onError={setError}
                       />
@@ -1071,7 +1082,7 @@ export function AtlasPage() {
               lists={lists}
               people={people}
               defaultAssignee={defaultAssignee}
-              focusedListId={focusedListId}
+              focusedListId={effectiveFocusedListId}
               focusedItemId={focusedItemId}
               onListCreated={list => setLists(prev => [list, ...prev])}
               onListDeleted={id => setLists(prev => prev.filter(l => l.id !== id))}
@@ -1130,7 +1141,7 @@ export function AtlasPage() {
               list={list}
               people={people}
               defaultAssignee={defaultAssignee}
-              focusedItemId={list.id === focusedListId ? focusedItemId : undefined}
+              focusedItemId={list.id === effectiveFocusedListId ? focusedItemId : undefined}
               onDeleted={id => { setLists(prev => prev.filter(l => l.id !== id)); setOpenListId(null) }}
               onError={setError}
             />

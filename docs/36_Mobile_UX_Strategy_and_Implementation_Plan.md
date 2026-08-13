@@ -1263,21 +1263,43 @@ defaults.
 Wiki's read-full-screen-then-Edit-inside flow, Travel's trip/booking/itinerary sheets). 147
 passing, 45 skipped across four viewport projects; `tsc --noEmit` and `npm run build` both clean.
 
-### Phase 10 — Complete real-device acceptance — CHECKLIST READY, execution pending
+**Pre-Phase-10 correction pass (v0.36.7).** External handover review found that several
+Phase 5-9 items were still overstated as complete. This pass corrected the first concrete set:
+Atlas cold `?item=` phone links now open the focused list sheet and highlight the item; exact
+source links use IDs for Atlas, Pets and Education where available; unauthorized Meridian
+`?tab=settings` is sanitized back to Overview; Education assignment creation is a full sheet and
+search results link to exact assignments/classes; Books has a tap-to-detail sheet; pet
+treatment/appointment edit flows use a focused state inside the pet sheet; Wiki pages preserve
+reader state with `?page=`; Travel forms use sticky modal footers and the itinerary form is
+covered; notification category saves track pending state per category, roll back only the failed
+category and show brief Saved feedback; HTML/non-readable 5xx API responses render a concise
+HomeStack error instead of a server HTML document. The completion pass also delivered the remaining
+handover blockers: Money now has a true phone home/current-position screen with destination rows;
+Notifications uses category drill-down for In-app/Push/Mine-only; Manage HomeStack opens as a
+phone settings directory with focused sections; Homestead shares overview data instead of
+duplicating hidden mobile/desktop effect paths; Meridian setting switches use 44px hit areas; Pets
+receives exact pet/treatment/appointment context. Validation: `npm exec tsc -- --noEmit`, focused
+affected phone suites, full `npx playwright test` (172 passed / 52 skipped), and
+`npx vite build --outDir dist-check --emptyOutDir` all clean. Normal
+`npm run build` was blocked by the existing root-owned `frontend/dist/` directory, not by
+TypeScript or bundling.
 
-Phases 1–9 are implementation and Playwright-verified — everything Claude can do without a
-physical device or a live household. Phase 10 is different in kind: it asks whether the finished
-thing actually works in someone's hand, which is not something a mocked-API browser automation
-run can answer. **This phase needs a person with real devices to execute it against the running
-household server; it is not something this assistant can complete on its own.** What follows is
-the concrete checklist to work through — a structured version of this section's original bullet
-list, cross-referenced against §9's acceptance criteria and Phase 8/9's scope-limiting notes so a
-deliberate scope decision doesn't get reported back as a bug.
+### Phase 10 — Complete real-device acceptance — CHECKLIST READY / NOT STARTED
 
-**Setup.** Reach the dev server from a phone on the home Wi-Fi at the LAN hostname already
-allow-listed in `frontend/vite.config.ts` (`.home.arpa`/`.local`) — no separate deploy needed.
-For the "installed PWA" rows, actually add it to the home screen (Android: Chrome menu → *Install
-app*; iOS: Share → *Add to Home Screen*) rather than testing the browser tab twice.
+Phases 1-9 are now complete for the software-side/mobile-automation pass. Phase 10 is different in
+kind from Playwright implementation checks: it asks whether the corrected
+thing actually works in someone's hand, on real browsers/PWAs, with real push subscriptions and
+real safe-area/keyboard behaviour. **This phase needs a person with real devices to execute it
+against a production HTTPS HomeStack build; it is not something this assistant can complete on its
+own.** What follows is the concrete checklist to work through once the correction/completion pass
+is accepted.
+
+**Setup.** Do not use the plain LAN Vite dev server for installed-PWA, service-worker or push
+acceptance. Test a production frontend build on a secure HTTPS origin: ideally a temporary HTTPS
+preview/staging deployment of this branch behind Nginx Proxy Manager, or a carefully controlled
+live-branch deployment after backup and rollback preparation. For the "installed PWA" rows,
+actually add it to the home screen (Android: Chrome menu → *Install app*; iOS: Share → *Add to
+Home Screen*) rather than testing the browser tab twice.
 
 **Devices/environments matrix** — each row of the checklists below should be walked at least once
 per environment that's actually available:
@@ -1290,7 +1312,7 @@ per environment that's actually available:
 | iPhone, Home Screen PWA | if an iPhone is available |
 | A small phone (≤375px CSS width, e.g. iPhone SE/mini) | |
 | A larger phone/phablet | |
-| Tablet, touch input | confirms the `md:`/`sm:` shell-vs-page breakpoint mismatch (a known, deliberately-unresolved inconsistency — see HANDOVER §5) doesn't produce a broken in-between state |
+| Tablet, touch input | confirms the `md:`/`sm:` shell-vs-page breakpoint mismatch does not produce a broken in-between state |
 
 **§9.1 Global acceptance** — check across the whole app, not just one page:
 
@@ -1359,12 +1381,9 @@ the confirm-dialog step anywhere.
 airplane mode mid-session, confirm the app doesn't hard-crash, then reconnect and confirm it
 recovers (a reload if nothing better) rather than staying stuck on a stale error state.
 
-**Known, deliberate gaps — not bugs, don't re-report:** Homestead's Maintenance/Appliances/Pool/
-Utilities/Improvements/Contacts inline forms; Solace's Bucket/Purchase/Payday editors; Settings'
-Household/Family-colour/Meridian sections; Atlas's Notes/Reminders creation forms; Pets' "Vet
-details"/"History" as separate destinations (flattened into one screen); Travel's Packing/
-Documents destinations (not a real feature yet). Each is called out with its reasoning in the
-relevant phase's write-up above.
+**Phase 10 gate:** run this only after reviewing the corrected branch. The checklist must still be
+executed on real hardware against a production HTTPS build, because installed PWA/service-worker
+and Web Push behaviour cannot be validated by the mocked Playwright suite.
 
 Once this checklist has actually been walked on real hardware and any genuine findings fixed,
 Phase 10 — and Mobile UX v1 as a whole — is ready for a merge-to-`main` decision, which stays the

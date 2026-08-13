@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type { WikiCategory, WikiPage } from '../../../api/types'
 import { Card } from '../../../components/Card'
@@ -179,15 +180,21 @@ function PageDetailModal({ page, categories, onChange, onDelete, onError, onClos
   )
 }
 
-function PageCard({ page, categories, onChange, onDelete, onError, canDelete }: {
+function PageCard({ page, categories, onChange, onDelete, onError, canDelete, open, onOpen, onClose }: {
   page: WikiPage
   categories: WikiCategory[]
   onChange: (p: WikiPage) => void
   onDelete: (id: number) => void
   onError: (m: string) => void
   canDelete: boolean
+  open?: boolean
+  onOpen?: () => void
+  onClose?: () => void
 }) {
-  const [open, setOpen] = useState(false)
+  const [localOpen, setLocalOpen] = useState(false)
+  const isOpen = open ?? localOpen
+  const openPage = onOpen ?? (() => setLocalOpen(true))
+  const closePage = onClose ?? (() => setLocalOpen(false))
 
   const toggleFavourite = async () => {
     try { onChange(await api.updateWikiPage(page.id, { is_favourite: !page.is_favourite })) }
@@ -198,20 +205,20 @@ function PageCard({ page, categories, onChange, onDelete, onError, canDelete }: 
     <>
       <Card className="group">
         <div className="flex items-start justify-between gap-2">
-          <button type="button" className="min-h-10 min-w-0 flex-1 text-left" onClick={() => setOpen(true)}>
+          <button type="button" className="min-h-11 min-w-0 flex-1 text-left" onClick={openPage}>
             <div className="font-semibold text-ink truncate">{page.title}</div>
             <div className="mt-1"><Flags page={page} /></div>
           </button>
-          <button type="button" onClick={toggleFavourite} className="grid min-h-10 min-w-10 flex-shrink-0 place-items-center text-muted hover:text-warning" aria-label={page.is_favourite ? `Remove ${page.title} from favourites` : `Add ${page.title} to favourites`}>
+          <button type="button" onClick={toggleFavourite} className="grid min-h-11 min-w-11 flex-shrink-0 place-items-center text-muted hover:text-warning" aria-label={page.is_favourite ? `Remove ${page.title} from favourites` : `Add ${page.title} to favourites`}>
             {page.is_favourite ? '⭐' : '☆'}
           </button>
         </div>
       </Card>
-      {open && (
+      {isOpen && (
         <PageDetailModal
           page={page} categories={categories} canDelete={canDelete}
           onChange={onChange} onDelete={onDelete} onError={onError}
-          onClose={() => setOpen(false)}
+          onClose={closePage}
         />
       )}
     </>
@@ -224,8 +231,11 @@ function PageCard({ page, categories, onChange, onDelete, onError, canDelete }: 
 
 type Filter = 'all' | 'favourites' | 'emergency'
 
-function PagesTab({ categories, isAdmin, onError }: {
+function PagesTab({ categories, isAdmin, onError, openedPageId, onOpenPage, onClosePage }: {
   categories: WikiCategory[]; isAdmin: boolean; onError: (m: string) => void
+  openedPageId: number
+  onOpenPage: (id: number) => void
+  onClosePage: () => void
 }) {
   const [pages, setPages] = useState<WikiPage[]>([])
   const [loading, setLoading] = useState(true)
@@ -272,7 +282,7 @@ function PagesTab({ categories, isAdmin, onError }: {
               type="button"
               key={fl.key}
               onClick={() => setFilter(fl.key)}
-              className={`min-h-10 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${filter === fl.key ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'}`}
+              className={`min-h-11 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${filter === fl.key ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'}`}
             >
               {fl.label}
             </button>
@@ -305,6 +315,9 @@ function PagesTab({ categories, isAdmin, onError }: {
               onChange={u => setPages(prev => prev.map(x => x.id === u.id ? u : x))}
               onDelete={id => setPages(prev => prev.filter(x => x.id !== id))}
               onError={onError}
+              open={openedPageId === p.id}
+              onOpen={() => onOpenPage(p.id)}
+              onClose={onClosePage}
             />
           ))}
         </div>
@@ -404,7 +417,9 @@ export function HomeWikiPage() {
   const [categories, setCategories] = useState<WikiCategory[]>([])
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useUrlQueryState()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [results, setResults] = useState<WikiPage[] | null>(null)
+  const openedPageId = Number(searchParams.get('page') || 0)
 
   useEffect(() => { api.getWikiCategories(isAdmin).then(setCategories).catch(e => setError(errMsg(e))) }, [isAdmin])
 
@@ -416,6 +431,17 @@ export function HomeWikiPage() {
   }, [query])
 
   const visibleCategories = useMemo(() => categories.filter(c => isAdmin || !c.is_hidden), [categories, isAdmin])
+  const openPage = (id: number) => {
+    const next = new URLSearchParams(searchParams)
+    next.set('page', String(id))
+    next.set('tab', 'pages')
+    setSearchParams(next)
+  }
+  const closePage = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('page')
+    setSearchParams(next)
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -441,6 +467,9 @@ export function HomeWikiPage() {
                 onChange={u => setResults(prev => prev ? prev.map(x => x.id === u.id ? u : x) : prev)}
                 onDelete={id => setResults(prev => prev ? prev.filter(x => x.id !== id) : prev)}
                 onError={setError}
+                open={openedPageId === p.id}
+                onOpen={() => openPage(p.id)}
+                onClose={closePage}
               />
             ))}
           </div>
@@ -448,7 +477,7 @@ export function HomeWikiPage() {
       ) : (
         <>
           <Tabs tabs={TABS} active={tab} onChange={setTab} />
-          {tab === 'pages' && <PagesTab categories={visibleCategories} isAdmin={user?.role === 'admin'} onError={setError} />}
+          {tab === 'pages' && <PagesTab categories={visibleCategories} isAdmin={user?.role === 'admin'} onError={setError} openedPageId={openedPageId} onOpenPage={openPage} onClosePage={closePage} />}
           {tab === 'categories' && <CategoriesTab categories={categories} onChange={setCategories} isAdmin={isAdmin} onError={setError} />}
         </>
       )}

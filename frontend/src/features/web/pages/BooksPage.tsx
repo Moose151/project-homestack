@@ -42,6 +42,29 @@ function BookLine({ title, author, genre, pages, publicationDate, coverUrl }: { 
   )
 }
 
+function BookDetailModal({ book, children, onClose }: {
+  book: Book
+  children: React.ReactNode
+  onClose: () => void
+}) {
+  return (
+    <Modal title={book.title} onClose={onClose} size="full">
+      <div className="space-y-4">
+        <BookLine
+          title={book.title}
+          author={book.author}
+          genre={book.genre}
+          pages={book.pages}
+          publicationDate={book.publication_date}
+          coverUrl={book.cover_url}
+        />
+        {book.description && <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-strong">{book.description}</p>}
+        {children}
+      </div>
+    </Modal>
+  )
+}
+
 function TabButton({ active, children, onClick, colour }: {
   active: boolean
   children: React.ReactNode
@@ -374,13 +397,16 @@ function PersonalBookCard({ entry, clubs, onRefresh, onMove, onDelete, onAddToCl
 }) {
   const [clubId, setClubId] = useState<number | ''>(clubs[0]?.id || '')
   const [editing, setEditing] = useState(false)
+  const [details, setDetails] = useState(false)
 
   useEffect(() => setClubId(clubs[0]?.id || ''), [clubs.length])
 
   return (
     <div className="rounded-xl border border-line bg-surface p-3 space-y-3">
       <div className="flex items-start gap-2">
-        <BookLine title={entry.book.title} author={entry.book.author} genre={entry.book.genre} pages={entry.book.pages} publicationDate={entry.book.publication_date} coverUrl={entry.book.cover_url} />
+        <button type="button" onClick={() => setDetails(true)} className="min-w-0 flex-1 text-left" aria-label={`Open ${entry.book.title}`}>
+          <BookLine title={entry.book.title} author={entry.book.author} genre={entry.book.genre} pages={entry.book.pages} publicationDate={entry.book.publication_date} coverUrl={entry.book.cover_url} />
+        </button>
         <div className="ml-auto flex items-center gap-1">
           <button type="button" onClick={() => setEditing(v => !v)} className="min-h-10 px-2 text-xs font-semibold text-muted hover:text-primary" aria-label={`Edit ${entry.book.title}`}>Edit</button>
           <RemoveAction onClick={onDelete} label={entry.book.title} />
@@ -390,6 +416,19 @@ function PersonalBookCard({ entry, clubs, onRefresh, onMove, onDelete, onAddToCl
         <Modal title={`Edit "${entry.book.title}"`} onClose={() => setEditing(false)} size="full">
           <EditBookPanel book={entry.book} onCancel={() => setEditing(false)} onSaved={onRefresh} />
         </Modal>
+      )}
+      {details && (
+        <BookDetailModal book={entry.book} onClose={() => setDetails(false)}>
+          <div className="space-y-3">
+            <Field label="Shelf">
+              <select aria-label={`Detail shelf for ${entry.book.title}`} className={selectCls} value={entry.status} onChange={e => onMove(e.target.value as BookShelfStatus)}>
+                {statuses.map(s => <option key={s} value={s}>{shelfLabels[s]}</option>)}
+              </select>
+            </Field>
+            <RatingEditor bookId={entry.book_id} rating={entry.rating} notes={entry.notes} onSaved={onRefresh} />
+            <Button type="button" variant="secondary" onClick={() => { setDetails(false); setEditing(true) }}>Edit</Button>
+          </div>
+        </BookDetailModal>
       )}
       <div className="space-y-2">
         <select aria-label={`Shelf for ${entry.book.title}`} className={selectCls} value={entry.status} onChange={e => onMove(e.target.value as BookShelfStatus)}>
@@ -420,11 +459,14 @@ function ClubBookCard({ entry, club, onRefresh, onMove, onDelete, onQueue }: {
   onQueue: () => Promise<void>
 }) {
   const [editing, setEditing] = useState(false)
+  const [details, setDetails] = useState(false)
 
   return (
     <div className="rounded-xl border border-line bg-surface p-3 space-y-3" style={{ borderLeftColor: entry.added_by_colour || club.colour, borderLeftWidth: 4 }}>
       <div className="flex items-start gap-2">
-        <BookLine title={entry.book.title} author={entry.book.author} genre={entry.book.genre} pages={entry.book.pages} publicationDate={entry.book.publication_date} coverUrl={entry.book.cover_url} />
+        <button type="button" onClick={() => setDetails(true)} className="min-w-0 flex-1 text-left" aria-label={`Open ${entry.book.title}`}>
+          <BookLine title={entry.book.title} author={entry.book.author} genre={entry.book.genre} pages={entry.book.pages} publicationDate={entry.book.publication_date} coverUrl={entry.book.cover_url} />
+        </button>
         <div className="ml-auto flex items-center gap-1">
           <button type="button" onClick={() => setEditing(v => !v)} className="min-h-10 px-2 text-xs font-semibold text-muted hover:text-primary" aria-label={`Edit ${entry.book.title}`}>Edit</button>
           <RemoveAction onClick={onDelete} label={entry.book.title} />
@@ -434,6 +476,24 @@ function ClubBookCard({ entry, club, onRefresh, onMove, onDelete, onQueue }: {
         <Modal title={`Edit "${entry.book.title}"`} onClose={() => setEditing(false)} size="full">
           <EditBookPanel book={entry.book} onCancel={() => setEditing(false)} onSaved={onRefresh} />
         </Modal>
+      )}
+      {details && (
+        <BookDetailModal book={entry.book} onClose={() => setDetails(false)}>
+          <div className="space-y-3">
+            <Field label="Club shelf">
+              <select aria-label={`Detail club shelf for ${entry.book.title}`} className={selectCls} value={entry.status} onChange={e => onMove(e.target.value as BookShelfStatus)}>
+                {statuses.map(s => <option key={s} value={s}>{shelfLabels[s]}</option>)}
+              </select>
+            </Field>
+            <RatingEditor
+              bookId={entry.book_id}
+              rating={entry.my_rating}
+              notes={entry.ratings.find(r => r.book_id === entry.book_id && r.rating === entry.my_rating)?.notes || ''}
+              onSaved={onRefresh}
+            />
+            <Button type="button" variant="secondary" onClick={() => { setDetails(false); setEditing(true) }}>Edit</Button>
+          </div>
+        </BookDetailModal>
       )}
       <div className="flex items-center gap-2">
         <select aria-label={`Club shelf for ${entry.book.title}`} className={selectCls} value={entry.status} onChange={e => onMove(e.target.value as BookShelfStatus)}>

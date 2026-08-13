@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type { Pet, PetSpecies, PetTreatment, PetAppointment, TreatmentType } from '../../../api/types'
 import { Card } from '../../../components/Card'
@@ -91,8 +91,8 @@ function TreatmentForm({ petId, treatment, onSaved, onError, onCancel }: {
         </Select></Field>
       </div>
       <div className="flex gap-2">
-        <Button type="submit" size="sm" loading={busy}>{treatment ? 'Save treatment' : 'Add treatment'}</Button>
-        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button type="submit" loading={busy}>{treatment ? 'Save treatment' : 'Add treatment'}</Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
       </div>
     </form>
   )
@@ -129,8 +129,8 @@ function AppointmentForm({ petId, appointment, onSaved, onError, onCancel }: {
       </div>
       <Field label="When"><DateTimeField value={start} allDay={false} allowAllDay={false} onChange={({ value }) => setStart(value)} /></Field>
       <div className="flex gap-2">
-        <Button type="submit" size="sm" loading={busy} disabled={!title.trim() || !start}>{appointment ? 'Save appointment' : 'Add appointment'}</Button>
-        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button type="submit" loading={busy} disabled={!title.trim() || !start}>{appointment ? 'Save appointment' : 'Add appointment'}</Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
       </div>
     </form>
   )
@@ -140,10 +140,10 @@ function AppointmentForm({ petId, appointment, onSaved, onError, onCancel }: {
 // Pet card (with inline treatments + appointments)
 // ===========================================================================
 
-function TreatmentRow({ t, onChange, onDelete, onError }: {
+function TreatmentRow({ t, onChange, onDelete, onError, onEdit }: {
   t: PetTreatment; onChange: (t: PetTreatment) => void; onDelete: (id: number) => void; onError: (m: string) => void
+  onEdit: (t: PetTreatment) => void
 }) {
-  const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
   const badge = dueBadge(t.next_due_at, t.is_overdue)
   const complete = async () => {
@@ -153,14 +153,6 @@ function TreatmentRow({ t, onChange, onDelete, onError }: {
   const remove = async () => {
     if (!(await confirmDialog({ title: 'Delete this treatment?', confirmLabel: 'Delete' }))) return
     try { await api.deletePetTreatment(t.id); onDelete(t.id) } catch (e) { onError(errMsg(e)) }
-  }
-  if (editing) {
-    return (
-      <li className="py-2">
-        <TreatmentForm petId={t.pet_id} treatment={t} onError={onError} onCancel={() => setEditing(false)}
-          onSaved={saved => { onChange(saved); setEditing(false) }} />
-      </li>
-    )
   }
   return (
     <li className="flex items-center gap-1 py-2 group">
@@ -175,21 +167,19 @@ function TreatmentRow({ t, onChange, onDelete, onError }: {
       </div>
       {t.next_due_at && <Button size="sm" variant="secondary" loading={busy} onClick={complete}>Done</Button>}
       <RowActions>
-        <EditAction onClick={() => setEditing(true)} label={t.display_name} />
+        <EditAction onClick={() => onEdit(t)} label={t.display_name} />
         <DeleteAction onClick={remove} label={t.display_name} />
       </RowActions>
     </li>
   )
 }
 
-function AppointmentRow({ appointment, onChange, onDelete, onError }: {
+function AppointmentRow({ appointment, onDelete, onError, onEdit }: {
   appointment: PetAppointment
-  onChange: (appointment: PetAppointment) => void
   onDelete: (id: number) => void
   onError: (message: string) => void
+  onEdit: (appointment: PetAppointment) => void
 }) {
-  const [editing, setEditing] = useState(false)
-
   const remove = async () => {
     if (!(await confirmDialog({ title: `Delete "${appointment.display_title}"?`, confirmLabel: 'Delete' }))) return
     try {
@@ -200,15 +190,6 @@ function AppointmentRow({ appointment, onChange, onDelete, onError }: {
     }
   }
 
-  if (editing) {
-    return (
-      <li className="py-2">
-        <AppointmentForm petId={appointment.pet_id} appointment={appointment} onError={onError} onCancel={() => setEditing(false)}
-          onSaved={saved => { onChange(saved); setEditing(false) }} />
-      </li>
-    )
-  }
-
   return (
     <li className="flex items-center gap-1 py-2 text-sm">
       <span className="min-w-0 flex-1 truncate text-ink">{appointment.display_title}{appointment.provider ? ` · ${appointment.provider}` : ''}</span>
@@ -216,7 +197,7 @@ function AppointmentRow({ appointment, onChange, onDelete, onError }: {
         {new Date(appointment.start_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
       </Link>
       <RowActions>
-        <EditAction onClick={() => setEditing(true)} label={appointment.display_title} />
+        <EditAction onClick={() => onEdit(appointment)} label={appointment.display_title} />
         <DeleteAction onClick={remove} label={appointment.display_title} />
       </RowActions>
     </li>
@@ -262,12 +243,54 @@ function PetDetailContent({ pet, onError }: { pet: Pet; onError: (m: string) => 
   const [appointments, setAppointments] = useState<PetAppointment[] | null>(null)
   const [addingT, setAddingT] = useState(false)
   const [addingA, setAddingA] = useState(false)
+  const [editingTreatment, setEditingTreatment] = useState<PetTreatment | null>(null)
+  const [editingAppointment, setEditingAppointment] = useState<PetAppointment | null>(null)
 
   useEffect(() => {
     api.getPetTreatments({ pet: pet.id }).then(setTreatments).catch(e => onError(errMsg(e)))
     api.getPetAppointments({ pet: pet.id, upcoming: true }).then(setAppointments).catch(e => onError(errMsg(e)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pet.id])
+
+  if (addingT || editingTreatment) {
+    return (
+      <div className="space-y-3">
+        <button type="button" onClick={() => { setAddingT(false); setEditingTreatment(null) }} className="min-h-11 text-sm font-semibold text-muted hover:text-primary">← Pet details</button>
+        <TreatmentForm
+          petId={pet.id}
+          treatment={editingTreatment ?? undefined}
+          onError={onError}
+          onCancel={() => { setAddingT(false); setEditingTreatment(null) }}
+          onSaved={saved => {
+            setTreatments(prev => editingTreatment
+              ? (prev ?? []).map(item => item.id === saved.id ? saved : item)
+              : [...(prev ?? []), saved])
+            setAddingT(false); setEditingTreatment(null)
+          }}
+        />
+      </div>
+    )
+  }
+
+  if (addingA || editingAppointment) {
+    return (
+      <div className="space-y-3">
+        <button type="button" onClick={() => { setAddingA(false); setEditingAppointment(null) }} className="min-h-11 text-sm font-semibold text-muted hover:text-primary">← Pet details</button>
+        <AppointmentForm
+          petId={pet.id}
+          appointment={editingAppointment ?? undefined}
+          onError={onError}
+          onCancel={() => { setAddingA(false); setEditingAppointment(null) }}
+          onSaved={saved => {
+            setAppointments(prev => editingAppointment
+              ? (prev ?? []).map(item => item.id === saved.id ? saved : item)
+              : [...(prev ?? []), saved])
+            setAddingA(false); setEditingAppointment(null)
+          }}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
@@ -284,14 +307,13 @@ function PetDetailContent({ pet, onError }: { pet: Pet; onError: (m: string) => 
           <span className="text-xs font-semibold text-muted-strong uppercase tracking-wide">Treatments</span>
           {!addingT && <button type="button" onClick={() => setAddingT(true)} className="min-h-10 px-2 text-xs font-semibold text-primary hover:underline">+ Add treatment</button>}
         </div>
-        {addingT && <TreatmentForm petId={pet.id} onError={onError} onCancel={() => setAddingT(false)}
-          onSaved={t => { setTreatments(prev => [...(prev ?? []), t]); setAddingT(false) }} />}
         {treatments === null ? <p className="text-xs text-muted">Loading…</p>
           : treatments.length === 0 ? <p className="text-xs text-muted">No treatments yet.</p>
           : <ul className="divide-y divide-line">{treatments.map(t => (
               <TreatmentRow key={t.id} t={t} onError={onError}
                 onChange={u => setTreatments(prev => prev!.map(x => x.id === u.id ? u : x))}
-                onDelete={id => setTreatments(prev => prev!.filter(x => x.id !== id))} />
+                onDelete={id => setTreatments(prev => prev!.filter(x => x.id !== id))}
+                onEdit={setEditingTreatment} />
             ))}</ul>}
       </div>
 
@@ -300,14 +322,12 @@ function PetDetailContent({ pet, onError }: { pet: Pet; onError: (m: string) => 
           <span className="text-xs font-semibold text-muted-strong uppercase tracking-wide">Appointments</span>
           {!addingA && <button type="button" onClick={() => setAddingA(true)} className="min-h-10 px-2 text-xs font-semibold text-primary hover:underline">+ Add appointment</button>}
         </div>
-        {addingA && <AppointmentForm petId={pet.id} onError={onError} onCancel={() => setAddingA(false)}
-          onSaved={a => { setAppointments(prev => [...(prev ?? []), a]); setAddingA(false) }} />}
         {appointments === null ? <p className="text-xs text-muted">Loading…</p>
           : appointments.length === 0 ? <p className="text-xs text-muted">No upcoming appointments.</p>
           : <ul className="divide-y divide-line">{appointments.map(a => (
               <AppointmentRow key={a.id} appointment={a} onError={onError}
-                onChange={updated => setAppointments(prev => prev!.map(item => item.id === updated.id ? updated : item))}
-                onDelete={id => setAppointments(prev => prev!.filter(item => item.id !== id))} />
+                onDelete={id => setAppointments(prev => prev!.filter(item => item.id !== id))}
+                onEdit={setEditingAppointment} />
             ))}</ul>}
       </div>
     </div>
@@ -398,13 +418,14 @@ function PetCard({ pet, onChange, onDelete, onError, canDelete }: {
 // Pets tab (profiles)
 // ===========================================================================
 
-function PetsTab({ pets, reload, isAdmin, onError, open, setOpen }: {
+function PetsTab({ pets, reload, isAdmin, onError, open, setOpen, focusedPetId }: {
   pets: Pet[]
   reload: () => void
   isAdmin: boolean
   onError: (m: string) => void
   open: boolean
   setOpen: (open: boolean) => void
+  focusedPetId?: number
 }) {
   const [name, setName] = useState('')
   const [species, setSpecies] = useState<PetSpecies>('dog')
@@ -425,6 +446,9 @@ function PetsTab({ pets, reload, isAdmin, onError, open, setOpen }: {
       setNextDue(map)
     }).catch(() => {})
   }, [pets])
+  useEffect(() => {
+    if (focusedPetId) setOpenPetId(focusedPetId)
+  }, [focusedPetId])
 
   const submit = async () => {
     if (!name.trim()) return
@@ -506,7 +530,7 @@ function PetsTab({ pets, reload, isAdmin, onError, open, setOpen }: {
 // Reminders tab (all due treatments)
 // ===========================================================================
 
-function RemindersTab({ onError }: { onError: (m: string) => void }) {
+function RemindersTab({ onError, focusedTreatmentId }: { onError: (m: string) => void; focusedTreatmentId?: number }) {
   const [treatments, setTreatments] = useState<PetTreatment[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -524,7 +548,7 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
         {treatments.map(t => {
           const badge = dueBadge(t.next_due_at, t.is_overdue)
           return (
-            <li key={t.id} className="flex items-center gap-3 py-2.5">
+            <li key={t.id} id={`pet-treatment-${t.id}`} className={`flex items-center gap-3 rounded-xl py-2.5 ${focusedTreatmentId === t.id ? 'bg-primary-soft px-2 ring-2 ring-primary' : ''}`}>
               <div className="flex-1 min-w-0">
                 <div className="text-sm text-ink truncate"><span className="text-muted">{t.pet_name}</span> · {t.display_name}</div>
                 {badge && <Link to={calendarDayHref(t.next_due_at)} className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.tone}`}>{badge.text}</Link>}
@@ -542,7 +566,7 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
 // Appointments tab
 // ===========================================================================
 
-function AppointmentsTab({ onError }: { onError: (m: string) => void }) {
+function AppointmentsTab({ onError, focusedAppointmentId }: { onError: (m: string) => void; focusedAppointmentId?: number }) {
   const [appointments, setAppointments] = useState<PetAppointment[]>([])
   const [loading, setLoading] = useState(true)
   useEffect(() => {
@@ -555,7 +579,7 @@ function AppointmentsTab({ onError }: { onError: (m: string) => void }) {
     <Card>
       <ul className="divide-y divide-line -mt-1">
         {appointments.map(a => (
-          <li key={a.id} className="flex items-center gap-3 py-2.5">
+          <li key={a.id} id={`pet-appointment-${a.id}`} className={`flex items-center gap-3 rounded-xl py-2.5 ${focusedAppointmentId === a.id ? 'bg-primary-soft px-2 ring-2 ring-primary' : ''}`}>
             <div className="flex-1 min-w-0">
               <div className="text-sm text-ink truncate"><span className="text-muted">{a.pet_name}</span> · {a.display_title}</div>
               {a.provider && <div className="text-xs text-muted">{a.provider}{a.location ? ` · ${a.location}` : ''}</div>}
@@ -584,6 +608,10 @@ const TABS: TabDef<Tab>[] = [
 export function PetsPage() {
   const { user } = useAuth()
   const [tab, setTab] = useUrlTab<Tab>('pets', TABS.map(item => item.key))
+  const [searchParams] = useSearchParams()
+  const focusedPetId = Number(searchParams.get('pet') || 0)
+  const focusedTreatmentId = Number(searchParams.get('treatment') || 0)
+  const focusedAppointmentId = Number(searchParams.get('appointment') || 0)
   const [pets, setPets] = useState<Pet[]>([])
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useUrlQueryState()
@@ -639,7 +667,7 @@ export function PetsPage() {
               <div className="flex flex-col gap-1.5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">Pets</p>
                 {results.pets.map(p => (
-                  <Link key={`p${p.id}`} to="/pets" className="group block">
+                  <Link key={`p${p.id}`} to={`/pets?tab=pets&pet=${p.id}`} className="group block">
                     <Card className="transition-colors group-hover:border-primary/40">
                       <span className="text-sm font-medium text-ink">{SPECIES_EMOJI[p.species]} {p.name}</span>
                     </Card>
@@ -651,7 +679,7 @@ export function PetsPage() {
               <div className="flex flex-col gap-1.5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">Treatments</p>
                 {results.treatments.map(t => (
-                  <Link key={`t${t.id}`} to="/pets?tab=reminders" className="group block">
+                  <Link key={`t${t.id}`} to={`/pets?tab=reminders&treatment=${t.id}`} className="group block">
                     <Card className="transition-colors group-hover:border-primary/40">
                       <span className="text-sm font-medium text-ink">{t.pet_name} · {t.display_name}</span>
                     </Card>
@@ -663,10 +691,10 @@ export function PetsPage() {
               <div className="flex flex-col gap-1.5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">Appointments</p>
                 {results.appointments.map(a => (
-                  <Link key={`a${a.id}`} to={calendarDayHref(a.start_at)} className="group block">
+                  <Link key={`a${a.id}`} to={`/pets?tab=appointments&appointment=${a.id}`} className="group block">
                     <Card className="transition-colors group-hover:border-primary/40">
                       <span className="text-sm font-medium text-ink">{a.pet_name} · {a.display_title}</span>
-                      <span className="ml-2 text-xs text-primary">Open date →</span>
+                      <span className="ml-2 text-xs text-primary">Open appointment →</span>
                     </Card>
                   </Link>
                 ))}
@@ -677,9 +705,9 @@ export function PetsPage() {
       ) : (
         <>
           <Tabs tabs={TABS} active={tab} onChange={setTab} />
-          {tab === 'pets' && <PetsTab pets={pets} reload={load} isAdmin={isAdmin} onError={setError} open={addingPet} setOpen={setAddingPet} />}
-          {tab === 'reminders' && <RemindersTab onError={setError} />}
-          {tab === 'appointments' && <AppointmentsTab onError={setError} />}
+          {tab === 'pets' && <PetsTab pets={pets} reload={load} isAdmin={isAdmin} onError={setError} open={addingPet} setOpen={setAddingPet} focusedPetId={focusedPetId || undefined} />}
+          {tab === 'reminders' && <RemindersTab onError={setError} focusedTreatmentId={focusedTreatmentId || undefined} />}
+          {tab === 'appointments' && <AppointmentsTab onError={setError} focusedAppointmentId={focusedAppointmentId || undefined} />}
         </>
       )}
     </div>

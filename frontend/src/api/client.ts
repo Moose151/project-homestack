@@ -297,6 +297,32 @@ function cachedGet<T>(path: string, ttlMs = 30_000): Promise<T> {
   return request
 }
 
+function readableErrorDetail(status: number, contentType: string | null, body: string): string {
+  const text = body.trim()
+  if (!text) {
+    return status >= 500 ? 'HomeStack hit a server error. Try again.' : 'HomeStack could not complete that request.'
+  }
+  if (contentType?.includes('application/json')) {
+    try {
+      const parsed = JSON.parse(text) as unknown
+      if (typeof parsed === 'string') return parsed
+      if (parsed && typeof parsed === 'object') {
+        const obj = parsed as Record<string, unknown>
+        const detail = obj.detail ?? obj.error ?? obj.message ?? obj.non_field_errors
+        if (Array.isArray(detail)) return detail.join(' ')
+        if (typeof detail === 'string') return detail
+      }
+    } catch {
+      return text
+    }
+  }
+  if (status >= 500 && (contentType?.includes('text/html') || /^<!doctype html>|^<html[\s>]/i.test(text))) {
+    console.error('HomeStack API server error response', { status, body: text })
+    return 'HomeStack hit a server error. Try again.'
+  }
+  return text
+}
+
 function apiError(path: string, status: number, statusText: string, detail: string): ApiError {
   const isAuthEndpoint = path.startsWith('/auth/')
   const sessionExpired = (status === 401 || status === 403)
@@ -337,7 +363,7 @@ async function _fetch<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     const text = await res.text()
-    throw apiError(path, res.status, res.statusText, text)
+    throw apiError(path, res.status, res.statusText, readableErrorDetail(res.status, res.headers.get('Content-Type'), text))
   }
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
@@ -363,7 +389,7 @@ async function _fetchRaw<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     const text = await res.text()
-    throw apiError(path, res.status, res.statusText, text)
+    throw apiError(path, res.status, res.statusText, readableErrorDetail(res.status, res.headers.get('Content-Type'), text))
   }
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>

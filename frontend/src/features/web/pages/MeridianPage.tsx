@@ -42,6 +42,9 @@ export function MeridianPage() {
   useEffect(() => {
     api.getMeridianSettings().then(s => setPointsLabel(s.points_label || 'points')).catch(() => {})
   }, [])
+  useEffect(() => {
+    if (tab === 'settings' && !canManage) setTab('overview')
+  }, [canManage, setTab, tab])
 
   const tabKeys: Tab[] = ['overview', 'tasks', 'routines', 'shop', 'goals', 'wishlist', 'leaderboard']
   if (canManage) tabKeys.push('settings')

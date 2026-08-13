@@ -24,6 +24,7 @@ import { CloseoutTab, HealthPanel, ManagementTab } from './SolaceManagement'
 import { setSolaceCurrencySymbol, solaceMoney as money } from './solaceFormat'
 import { useStacks } from '../../stacks/StacksContext'
 import { confirmDialog } from '../../../components/Dialogs'
+import { MobileListRow, MobileScreenHeader, MobileSection, MobileSummaryCard } from '../../../components/mobile'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ')
@@ -2259,6 +2260,49 @@ function NowTab({ now, health, checklist, onAction, onTab, onSection }: {
   )
 }
 
+function MoneyMobileHome({ now, health, onTab, onSection }: {
+  now: SolaceNow | null
+  health: SolaceHealth | null
+  onTab: (tab: Tab) => void
+  onSection: (tab: Tab, section: string) => void
+}) {
+  if (!now) return <div className="h-64 animate-pulse rounded-2xl bg-sunken" />
+  const lines = [
+    `${money(now.due_total)} due before next payday`,
+    `${money(now.bucket_total)} set aside`,
+    `${now.days_until_cycle_end <= 0 ? 'Payday today' : `${now.days_until_cycle_end} days until next pay cycle`}`,
+  ]
+  const nextDue = now.due.slice(0, 3)
+  return (
+    <div className="flex flex-col gap-4 sm:hidden">
+      {health && health.status !== 'healthy' && <HealthPanel health={health} onManage={() => onTab('manage')} />}
+      <MobileSummaryCard title="Current position" lines={lines} tone={now.overdue_count > 0 ? 'attention' : 'neutral'} />
+      <MobileSection title="Coming up">
+        {nextDue.length === 0 ? (
+          <p className="rounded-2xl border border-line bg-surface px-4 py-3 text-sm text-muted shadow-soft">Nothing left to pay this cycle.</p>
+        ) : nextDue.map(occurrence => (
+          <MobileListRow
+            key={occurrence.id}
+            icon="💸"
+            title={occurrence.bill_name}
+            subtitle={dateOnly(occurrence.due_at)}
+            trailing={money(occurrence.amount)}
+            onClick={() => onSection('bills', 'schedule')}
+          />
+        ))}
+      </MobileSection>
+      <MobileSection title="Money">
+        <MobileListRow icon="🧾" title="Bills" subtitle="Bills and payment schedule" onClick={() => onSection('bills', 'bills')} />
+        <MobileListRow icon="✅" title="Pay plan" subtitle="This cycle's checklist and allocations" onClick={() => onSection('plan', 'payplan')} />
+        <MobileListRow icon="🪣" title="Buckets" subtitle="Set-asides and rules" onClick={() => onSection('plan', 'buckets')} />
+        <MobileListRow icon="🛒" title="Purchases" subtitle="Planned spending goals" onClick={() => onSection('plan', 'purchases')} />
+        <MobileListRow icon="📈" title="Insights" subtitle="Forecasts and history" onClick={() => onTab('insights')} />
+        <MobileListRow icon="⚙️" title="Manage" subtitle="Settings and balances" onClick={() => onTab('manage')} />
+      </MobileSection>
+    </div>
+  )
+}
+
 /** Past pay cycles. These were being recorded at closeout and then never shown again. */
 function CycleHistoryTab({ onError }: { onError: (message: string) => void }) {
   const [rows, setRows] = useState<SolaceCycleHistoryRow[] | null>(null)
@@ -2586,36 +2630,44 @@ export function SolacePage() {
         />
         <Button variant="ghost" onClick={load} loading={loading} className="sm:flex-none">Refresh</Button>
       </div>
-      <Tabs
-        tabs={SOLACE_TABS}
-        active={tab}
-        onChange={setTab}
-        mobileSelectLabel="Solace section"
-      />
-      {tab === 'now' && (
-        <NowTab
-          now={now}
-          health={health}
-          onAction={updateOccurrence}
-          onTab={setTab}
-          onSection={goSection}
-          checklist={
-            <ChecklistTab
-              items={checklist}
-              preferences={checklistPreferences}
-              plan={plan}
-              generating={generatingChecklist}
-              reload={load}
-              onGenerate={generateChecklist}
-              onChange={setChecklist}
-              onError={setError}
-            />
-          }
+      <div className="hidden sm:block">
+        <Tabs
+          tabs={SOLACE_TABS}
+          active={tab}
+          onChange={setTab}
+          mobileSelectLabel="Solace section"
         />
+      </div>
+      {tab === 'now' && (
+        <>
+          <MoneyMobileHome now={now} health={health} onTab={setTab} onSection={goSection} />
+          <div className="hidden sm:block">
+            <NowTab
+              now={now}
+              health={health}
+              onAction={updateOccurrence}
+              onTab={setTab}
+              onSection={goSection}
+              checklist={
+                <ChecklistTab
+                  items={checklist}
+                  preferences={checklistPreferences}
+                  plan={plan}
+                  generating={generatingChecklist}
+                  reload={load}
+                  onGenerate={generateChecklist}
+                  onChange={setChecklist}
+                  onError={setError}
+                />
+              }
+            />
+          </div>
+        </>
       )}
 
       {tab === 'bills' && (
         <div className="flex flex-col gap-4">
+          <MobileScreenHeader className="sm:hidden" title={billsSection === 'schedule' ? 'Payment schedule' : 'Bills'} showBack onBack={() => setTab('now')} />
           <Tabs tabs={BILLS_SECTIONS} active={billsSection} onChange={setBillsSection} variant="secondary" />
           {billsSection === 'bills' && (
             <BillsTab
@@ -2640,6 +2692,7 @@ export function SolacePage() {
 
       {tab === 'plan' && (
         <div className="flex flex-col gap-4">
+          <MobileScreenHeader className="sm:hidden" title={PLAN_SECTIONS.find(row => row.key === planSection)?.label ?? 'Pay plan'} showBack onBack={() => setTab('now')} />
           <Tabs tabs={PLAN_SECTIONS} active={planSection} onChange={setPlanSection} variant="secondary" />
           {planSection === 'payplan' && <PayPlan plan={plan} generating={generatingChecklist} onGenerate={generateChecklist} onSection={goSection} onError={setError} />}
           {planSection === 'buckets' && <BucketsTab buckets={buckets} reload={load} onError={setError} />}
@@ -2657,6 +2710,7 @@ export function SolacePage() {
 
       {tab === 'insights' && (
         <div className="flex flex-col gap-4">
+          <MobileScreenHeader className="sm:hidden" title="Insights" showBack onBack={() => setTab('now')} />
           <Tabs tabs={INSIGHTS_SECTIONS} active={insightsSection} onChange={setInsightsSection} variant="secondary" />
           {insightsSection === 'forecast' && <ForecastTab initial={forecast} onManage={() => setTab('manage')} onError={setError} />}
           {insightsSection === 'closeout' && <CloseoutTab closeout={closeout} reload={load} onOccurrence={updateOccurrence} onError={setError} />}
@@ -2666,15 +2720,18 @@ export function SolacePage() {
       )}
 
       {tab === 'manage' && (
-        <ManagementTab
-          settings={settings}
-          categories={categories}
-          balances={balances}
-          report={categoryReport}
-          health={health}
-          reload={load}
-          onError={setError}
-        />
+        <div className="flex flex-col gap-4">
+          <MobileScreenHeader className="sm:hidden" title="Manage" showBack onBack={() => setTab('now')} />
+          <ManagementTab
+            settings={settings}
+            categories={categories}
+            balances={balances}
+            report={categoryReport}
+            health={health}
+            reload={load}
+            onError={setError}
+          />
+        </div>
       )}
     </div>
   )

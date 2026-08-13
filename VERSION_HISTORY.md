@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.36.6**
+> **Current version: 0.36.7**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,39 @@
 ---
 
 ## 0.36 — Mobile UX v1 (on feature/mobile-ux)
+
+### 0.36.7 — 2026-08-13 — Pre-Phase-10 correction pass completion (on feature/mobile-ux)
+- Corrected the remaining concrete Phase 5-9 blockers from the handover before real-device acceptance:
+  Money now has a true phone home/current-position screen with destination rows for Bills, Pay
+  plan, Buckets, Purchases, Insights and Manage while desktop keeps the existing tabs; notification
+  categories now drill into focused In-app/Push/Mine-only screens instead of rendering every switch
+  expanded on the main phone page; Manage HomeStack opens as a phone settings directory with
+  focused Household/Stacks/Backups/Appearance/Meridian/System sections; Homestead's phone and
+  desktop overview presentations share one logical data load rather than duplicate hidden
+  fetch/effect paths; Meridian settings switches use 44px hit areas; Pets and Atlas search/deep
+  links now receive exact record state.
+- Earlier in the same correction pass:
+  Atlas cold `?item=` links now open the focused phone list sheet and highlight the item; exact
+  source links now use IDs for Atlas, Pets and Education where available; Meridian sanitizes
+  unauthorized `?tab=settings` back to Overview; Education assignment creation moved to a full
+  sheet and Education search results link to exact assignment/session IDs; Books now has a
+  tap-to-detail phone sheet; Pets treatment/appointment editing uses a focused state inside the
+  pet sheet; Home Wiki pages are URL-addressable via `?page=`; Travel forms use sticky modal
+  footers and the itinerary form is actually covered; notification preference writes now track
+  pending state per category, roll back only the affected category and show brief Saved feedback;
+  HTML/non-readable 5xx API responses now display a concise HomeStack server-error message.
+- Added targeted mocked-API Playwright coverage for the corrected behaviours:
+  `e2e/api-errors.spec.ts`, plus strengthened `notifications-settings`, `phase8-daily-nodes`
+  and `phase9-content-nodes`.
+- Validation: `npm exec tsc -- --noEmit` clean; focused affected phone suites clean
+  (`homestead`, `solace`, `notifications-settings`, `phase8-daily-nodes`); full `npx playwright test`
+  clean with 172 passed / 52 skipped; `npx vite build --outDir dist-check --emptyOutDir` clean. The normal
+  `npm run build` reaches Vite but cannot clear `frontend/dist/assets` because the existing
+  generated `dist/` directory is owned by `root`; the temporary outDir confirms bundling without
+  altering those root-owned files.
+- Phases 1-9 are now treated as complete for the software-side mobile pass. Phase 10 remains
+  CHECKLIST READY / NOT STARTED and must run against a production HTTPS origin, not the plain LAN
+  Vite dev server.
 
 ### 0.36.6 — 2026-08-13 — Phase 10 real-device acceptance checklist (docs/36, on feature/mobile-ux)
 - Docs-only change, no app code. Phases 1–9 are fully implemented and Playwright-verified —

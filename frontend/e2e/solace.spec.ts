@@ -4,8 +4,8 @@ import { expectNoHorizontalOverflow } from './fixtures/assertions'
 
 // docs/36 §6.10 (Phase 6) — Add Bill/Add Bucket/Add Purchase/Add Payday all share one
 // `CreatePanel` wrapper, now a full-height sheet (Modal size="full") instead of an
-// inline-expanding panel; Edit Bill got the same treatment. The sensitive gate and the
-// Now/Bills/Plan/Insights/Manage tab structure are untouched.
+// inline-expanding panel; Edit Bill got the same treatment. Phone Money now lands on a
+// destination home instead of the old five-tab selector.
 
 const SOLACE_ENABLED_NODE = {
   key: 'solace', name: 'solace', description: '', icon: '', is_core: false, supports_kiosk: false,
@@ -51,6 +51,22 @@ function bootstrapFixture(bills: ReturnType<typeof billFixture>[] = []) {
   }
 }
 
+function nowFixture() {
+  return {
+    cycle_start: '2026-08-01', cycle_end: '2026-08-14', days_until_cycle_end: 1,
+    income_total: '0.00',
+    set_aside: null,
+    due: [{
+      id: 1, bill_id: 1, bill_name: 'Electricity', amount: '150.00',
+      due_at: new Date().toISOString(), status: 'due', paid_at: null, skipped_at: null,
+      calendar_event_id: null, source_record_type: '', source_record_id: null,
+    }],
+    due_total: '150.00', overdue_count: 0, overdue_total: '0.00',
+    paid_this_cycle_count: 0, paid_this_cycle_total: '0.00',
+    bucket_total: '0.00', buckets: [],
+  }
+}
+
 test.beforeEach(async ({}, testInfo) => {
   test.skip(testInfo.project.name === 'tablet-768', 'phone-only: the full-sheet pattern is what changed')
 })
@@ -72,6 +88,22 @@ test('Add bill opens as a full-height sheet, not an inline-expanding panel', asy
   await expectNoHorizontalOverflow(page)
   await page.keyboard.press('Escape')
   await expect(dialog).not.toBeVisible()
+})
+
+test('phone Money home uses destination rows instead of the five-tab picker', async ({ page }) => {
+  await mockAuthenticatedApi(page, {
+    '/api/v1/nodes/': [SOLACE_ENABLED_NODE],
+    '/api/v1/solace/bootstrap/': bootstrapFixture([billFixture()]),
+    '/api/v1/solace/now/': nowFixture(),
+  })
+  await page.goto('/solace')
+  await expect(page.getByText('Current position')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Bills/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Pay plan/ })).toBeVisible()
+  await expect(page.getByLabel('Solace section')).toBeHidden()
+  await page.getByRole('button', { name: /Buckets/ }).click()
+  await expect(page).toHaveURL(/tab=plan&section=buckets/)
+  await expect(page.getByRole('button', { name: 'Back' })).toBeVisible()
 })
 
 test('Edit bill opens as a full-height sheet', async ({ page }) => {

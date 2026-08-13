@@ -297,40 +297,44 @@ function AssignmentForm({ courses, people, defaultAssignee, onCreated, onError }
   if (!open) {
     return <Button variant="secondary" onClick={() => setOpen(true)}>+ Add assignment</Button>
   }
+  const formId = 'education-assignment-form'
   return (
-    <form onSubmit={submit} className="space-y-3 bg-sunken rounded-2xl p-4">
-      <input autoFocus className={inputCls} placeholder="Assignment title" value={title}
-        onChange={e => setTitle(e.target.value)} />
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <select className={inputCls} value={type} onChange={e => setType(e.target.value as AssessmentType)}>
-          {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select>
-        <select className={inputCls} value={courseId} onChange={e => setCourseId(e.target.value)}>
-          <option value="">No course</option>
-          {courses.map(c => <option key={c.id} value={c.id}>{c.code || c.name}</option>)}
-        </select>
-        <select className={inputCls} value={priority} onChange={e => setPriority(e.target.value as AssessmentPriority)}>
-          <option value="low">Low priority</option>
-          <option value="medium">Medium priority</option>
-          <option value="high">High priority</option>
-        </select>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <div className="text-xs text-muted-strong mb-1">Due</div>
-          <DateTimeField value={due} allDay={dueAllDay}
-            onChange={({ value, allDay }) => { setDue(value); setDueAllDay(allDay) }} />
+    <Modal
+      title="Add assignment"
+      onClose={() => setOpen(false)}
+      size="full"
+      footer={<><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" form={formId} loading={busy} disabled={!title.trim()}>Add</Button></>}
+    >
+      <form id={formId} onSubmit={submit} className="space-y-3">
+        <input className={inputCls} placeholder="Assignment title" value={title}
+          onChange={e => setTitle(e.target.value)} data-autofocus />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <select className={inputCls} value={type} onChange={e => setType(e.target.value as AssessmentType)}>
+            {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+          <select className={inputCls} value={courseId} onChange={e => setCourseId(e.target.value)}>
+            <option value="">No course</option>
+            {courses.map(c => <option key={c.id} value={c.id}>{c.code || c.name}</option>)}
+          </select>
+          <select className={inputCls} value={priority} onChange={e => setPriority(e.target.value as AssessmentPriority)}>
+            <option value="low">Low priority</option>
+            <option value="medium">Medium priority</option>
+            <option value="high">High priority</option>
+          </select>
         </div>
-        <div>
-          <div className="text-xs text-muted-strong mb-1">Assign to</div>
-          <AssigneeSelect people={people} value={assignee} onChange={setAssignee} className={inputCls} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <div className="text-xs text-muted-strong mb-1">Due</div>
+            <DateTimeField value={due} allDay={dueAllDay}
+              onChange={({ value, allDay }) => { setDue(value); setDueAllDay(allDay) }} />
+          </div>
+          <div>
+            <div className="text-xs text-muted-strong mb-1">Assign to</div>
+            <AssigneeSelect people={people} value={assignee} onChange={setAssignee} className={inputCls} />
+          </div>
         </div>
-      </div>
-      <div className="flex gap-2">
-        <Button type="submit" loading={busy}>Add</Button>
-        <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-      </div>
-    </form>
+      </form>
+    </Modal>
   )
 }
 
@@ -1563,7 +1567,7 @@ function EducationSearchResults({ results }: {
         <div className="flex flex-col gap-1.5">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Assignments</p>
           {results.assessments.map(a => (
-            <Link key={`a${a.id}`} to="/education?tab=assignments" className="group block">
+            <Link key={`a${a.id}`} to={`/education?tab=assignments&assessment=${a.id}`} className="group block">
               <Card className="transition-colors group-hover:border-primary/40">
                 <span className="text-sm text-ink">{a.title}</span>
                 {a.due_at && <span className="ml-2 text-xs text-muted">{new Date(a.due_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
@@ -1576,7 +1580,7 @@ function EducationSearchResults({ results }: {
         <div className="flex flex-col gap-1.5">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Classes</p>
           {results.class_sessions.map(s => (
-            <Link key={`s${s.id}`} to="/education?tab=timetable" className="group block">
+            <Link key={`s${s.id}`} to={`/education?tab=timetable&session=${s.id}`} className="group block">
               <Card className="transition-colors group-hover:border-primary/40"><span className="text-sm text-ink">{s.display_title}</span></Card>
             </Link>
           ))}

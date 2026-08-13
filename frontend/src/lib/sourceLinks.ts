@@ -25,13 +25,25 @@ export function sourcePath(ref: SourceRef): string | null {
   const query = encodeURIComponent(ref.title)
   switch (ref.source_node) {
     case 'atlas':
+      if (ref.source_record_type === 'AtlasListItem' && ref.source_record_id) return `/atlas?tab=lists&item=${ref.source_record_id}`
+      if (ref.source_record_type === 'AtlasList' && ref.source_record_id) return `/atlas?tab=lists&list=${ref.source_record_id}`
       return `/atlas?tab=reminders&q=${query}`
     case 'pets':
+      if (ref.source_record_id) {
+        if (ref.source_record_type === 'PetAppointment') return `/pets?tab=appointments&appointment=${ref.source_record_id}`
+        if (ref.source_record_type === 'PetTreatment') return `/pets?tab=reminders&treatment=${ref.source_record_id}`
+        if (ref.source_record_type === 'Pet') return `/pets?tab=pets&pet=${ref.source_record_id}`
+      }
       return `/pets?tab=${ref.source_record_type === 'PetAppointment' ? 'appointments' : 'reminders'}&q=${query}`
     case 'education': {
       const tab = ref.source_record_type === 'EducationClassSession'
         ? 'timetable'
         : ref.source_record_type === 'EducationEvent' ? 'events' : 'assignments'
+      if (ref.source_record_id) {
+        if (ref.source_record_type === 'EducationAssessment') return `/education?tab=assignments&assessment=${ref.source_record_id}`
+        if (ref.source_record_type === 'EducationClassSession') return `/education?tab=timetable&session=${ref.source_record_id}`
+        if (ref.source_record_type === 'EducationEvent') return `/education?tab=events&event=${ref.source_record_id}`
+      }
       return `/education?tab=${tab}&q=${query}`
     }
     case 'homestead':

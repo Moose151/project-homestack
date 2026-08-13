@@ -152,32 +152,23 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function OverviewTab({ onError, onGoTab, canUseMoney }: {
-  onError: (m: string) => void
+function OverviewTab({ property, loading, counts, onSave, onGoTab, canUseMoney }: {
+  property: Property | null
+  loading: boolean
+  counts: { due: number; warranties: number; improvements: number }
+  onSave: (data: typeof EMPTY_PROPERTY) => Promise<void>
   onGoTab: (t: Tab) => void
   canUseMoney: boolean
 }) {
-  const [property, setProperty] = useState<Property | null>(null)
-  const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [counts, setCounts] = useState({ due: 0, warranties: 0, improvements: 0 })
-
-  const load = () => {
-    api.getProperties().then(ps => setProperty(ps[0] ?? null)).catch(e => onError(errMsg(e))).finally(() => setLoading(false))
-    Promise.all([api.getMaintenance(true), api.getAppliances(true), api.getImprovements(true)])
-      .then(([m, a, i]) => setCounts({ due: m.length, warranties: a.length, improvements: i.length }))
-      .catch(() => {})
-  }
-  useEffect(load, [onError])
 
   const save = async (data: typeof EMPTY_PROPERTY) => {
     setSaving(true)
-    const payload = { ...data, purchase_date: data.purchase_date || null, move_in_date: data.move_in_date || null }
     try {
-      const saved = property ? await api.updateProperty(property.id, payload) : await api.createProperty(payload)
-      setProperty(saved); setEditing(false)
-    } catch (e) { onError(errMsg(e)) } finally { setSaving(false) }
+      await onSave(data)
+      setEditing(false)
+    } finally { setSaving(false) }
   }
 
   if (loading) return <div className="h-40 rounded-2xl bg-sunken animate-pulse" />
@@ -275,17 +266,7 @@ const DASHBOARD_DESTINATIONS: Array<{ key: Tab; icon: string; label: string; mon
   { key: 'finances', icon: '💰', label: 'Costs & cover', moneyOnly: true },
 ]
 
-function MobileHomesteadDashboard({ onGoTab, canUseMoney }: { onGoTab: (t: Tab) => void; canUseMoney: boolean }) {
-  const [counts, setCounts] = useState({ due: 0, warranties: 0, improvements: 0 })
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    Promise.all([api.getMaintenance(true), api.getAppliances(true), api.getImprovements(true)])
-      .then(([m, a, i]) => setCounts({ due: m.length, warranties: a.length, improvements: i.length }))
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
-
+function MobileHomesteadDashboard({ counts, loading, onGoTab, canUseMoney }: { counts: { due: number; warranties: number; improvements: number }; loading: boolean; onGoTab: (t: Tab) => void; canUseMoney: boolean }) {
   if (loading) return <div className="h-40 rounded-2xl bg-sunken animate-pulse" />
 
   const attentionLines: string[] = []
@@ -2194,8 +2175,34 @@ export function HomesteadPage() {
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useUrlQueryState()
   const [results, setResults] = useState<HomesteadSearchResults | null>(null)
+  const [overviewProperty, setOverviewProperty] = useState<Property | null>(null)
+  const [overviewCounts, setOverviewCounts] = useState({ due: 0, warranties: 0, improvements: 0 })
+  const [overviewLoading, setOverviewLoading] = useState(true)
 
   useEffect(() => { api.getPeople().then(setPeople).catch(() => {}) }, [])
+
+  const loadOverview = () => {
+    setOverviewLoading(true)
+    Promise.all([
+      api.getProperties(),
+      api.getMaintenance(true),
+      api.getAppliances(true),
+      api.getImprovements(true),
+    ])
+      .then(([properties, maintenance, appliances, improvements]) => {
+        setOverviewProperty(properties[0] ?? null)
+        setOverviewCounts({ due: maintenance.length, warranties: appliances.length, improvements: improvements.length })
+      })
+      .catch(e => setError(errMsg(e)))
+      .finally(() => setOverviewLoading(false))
+  }
+  useEffect(loadOverview, [])
+
+  const saveOverviewProperty = async (data: typeof EMPTY_PROPERTY) => {
+    const payload = { ...data, purchase_date: data.purchase_date || null, move_in_date: data.move_in_date || null }
+    const saved = overviewProperty ? await api.updateProperty(overviewProperty.id, payload) : await api.createProperty(payload)
+    setOverviewProperty(saved)
+  }
 
   useEffect(() => {
     const q = query.trim()
@@ -2269,8 +2276,8 @@ export function HomesteadPage() {
 
           {tab === 'overview' && (
             <>
-              <div className="sm:hidden"><MobileHomesteadDashboard onGoTab={setTab} canUseMoney={canUseMoney} /></div>
-              <div className="hidden sm:block"><OverviewTab onError={setError} onGoTab={setTab} canUseMoney={canUseMoney} /></div>
+              <div className="sm:hidden"><MobileHomesteadDashboard counts={overviewCounts} loading={overviewLoading} onGoTab={setTab} canUseMoney={canUseMoney} /></div>
+              <div className="hidden sm:block"><OverviewTab property={overviewProperty} loading={overviewLoading} counts={overviewCounts} onSave={saveOverviewProperty} onGoTab={setTab} canUseMoney={canUseMoney} /></div>
             </>
           )}
           {tab === 'rooms' && <RoomsTab onError={setError} canEdit={Boolean(user && user.role !== 'guest' && !user.is_child_account)} />}
