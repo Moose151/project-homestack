@@ -1,7 +1,19 @@
 {
-  "current_version": "0.36.4",
-  "source_sha256": "b79587a87f52eb5c8cf6caf2dd8fef1fac32993ceedba139a817806e318a0f35",
+  "current_version": "0.36.5",
+  "source_sha256": "c33337b2b24116eb027953318f0dd626bfb77526737c6c5d9433dd18bff8544a",
   "releases": [
+    {
+      "version": "0.36.5",
+      "date": "2026-08-13",
+      "title": "Lower-frequency nodes: Books, Home Wiki, Travel (docs/36 Phase 9, on feature/mobile-ux)",
+      "changes": [
+        "**Books.** Personal/Book Club segmented control and shelf navigation already matched the doc via the existing `Tabs` component. Add book and Edit book (used by both personal and club-book cards) were inline-expanding forms pushing the rest of the page/card down — now `Modal size=\"full\"`. Rating entry and shelf/queue controls left as their existing compact inline widgets.",
+        "**Home Wiki.** Search and Favourites/Emergency shortcuts already existed. Pages used to expand their body text inline in the browse grid, with Edit replacing the card in place — now a `PageDetailModal` reads the page full-screen, with Edit as an action inside it rather than an inline form in the list. New page moved to the same sheet.",
+        "**Travel.** Tapping a trip already opened its own `TripDetail` project via `?trip=`. Trip, booking and itinerary forms used to render inline as cards pushing the rest of the page down — now `Modal size=\"full\"` each. The doc's Packing/Documents drill-down destinations were not built — neither is a real feature in this app's backend yet.",
+        "**Found and fixed along the way:** Books' book grids had no explicit base `grid-cols-1` — the CSS Grid analogue of the AppShell `<main>` flex bug from Phase 4: a grid item's default `min-width: auto` let a wide-enough card dictate the implicit column's width instead of the container's, pushing the grid past the viewport at 320px. Fixed with an explicit `grid-cols-1` base class.",
+        "**New `e2e/phase9-content-nodes.spec.ts`**, one test per node. 147 passing, 45 skipped across four viewport projects; `tsc --noEmit` and `npm run build` both clean. Still on `feature/mobile-ux`, not merged."
+      ]
+    },
     {
       "version": "0.36.4",
       "date": "2026-08-13",

@@ -7,6 +7,7 @@ import type {
 import { Button } from '../../../components/Button'
 import { Card } from '../../../components/Card'
 import { Field, fieldClass, SearchField } from '../../../components/Field'
+import { Modal } from '../../../components/Modal'
 import { PageHeader } from '../../../components/PageHeader'
 import { Tabs } from '../../../components/Tabs'
 import { RemoveAction } from '../../..//components/RowActions'
@@ -300,7 +301,7 @@ function AddBookPanel({ mode, clubs, selectedClub, defaultStatus, onClose, onAdd
   }
 
   return (
-    <Card title={mode === 'club' ? 'Add a book to this club' : 'Add a book to your shelves'}>
+    <Modal title={mode === 'club' ? 'Add a book to this club' : 'Add a book to your shelves'} onClose={onClose} size="full">
       <form onSubmit={submit} className="space-y-3">
         {error && <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
         <div className="rounded-xl border border-line bg-sunken p-3">
@@ -314,7 +315,7 @@ function AddBookPanel({ mode, clubs, selectedClub, defaultStatus, onClose, onAdd
           {warnings.length > 0 && <ul className="mt-2 space-y-1 text-xs text-warning">{warnings.map(warning => <li key={warning}>• {warning}</li>)}</ul>}
         </div>
         <div className="grid md:grid-cols-[1.3fr_1fr_7rem_1fr] gap-2">
-          <Field label="Title"><input autoFocus className={inputCls} value={title} onChange={e => { setTitle(e.target.value); setPicked(false) }} placeholder="Start typing to find an existing book" /></Field>
+          <Field label="Title"><input data-autofocus className={inputCls} value={title} onChange={e => { setTitle(e.target.value); setPicked(false) }} placeholder="Start typing to find an existing book" /></Field>
           <Field label="Author"><input className={inputCls} value={author} onChange={e => setAuthor(e.target.value)} /></Field>
           <Field label="Pages"><input className={inputCls} type="number" min={1} inputMode="numeric" value={pages} onChange={e => setPages(e.target.value)} /></Field>
           <Field label="Genre"><input className={inputCls} value={genre} onChange={e => setGenre(e.target.value)} /></Field>
@@ -359,7 +360,7 @@ function AddBookPanel({ mode, clubs, selectedClub, defaultStatus, onClose, onAdd
           <Button type="button" className="md:self-end" variant="ghost" onClick={onClose}>Cancel</Button>
         </div>
       </form>
-    </Card>
+    </Modal>
   )
 }
 
@@ -385,7 +386,11 @@ function PersonalBookCard({ entry, clubs, onRefresh, onMove, onDelete, onAddToCl
           <RemoveAction onClick={onDelete} label={entry.book.title} />
         </div>
       </div>
-      {editing && <EditBookPanel book={entry.book} onCancel={() => setEditing(false)} onSaved={onRefresh} />}
+      {editing && (
+        <Modal title={`Edit "${entry.book.title}"`} onClose={() => setEditing(false)} size="full">
+          <EditBookPanel book={entry.book} onCancel={() => setEditing(false)} onSaved={onRefresh} />
+        </Modal>
+      )}
       <div className="space-y-2">
         <select aria-label={`Shelf for ${entry.book.title}`} className={selectCls} value={entry.status} onChange={e => onMove(e.target.value as BookShelfStatus)}>
           {statuses.map(s => <option key={s} value={s}>{shelfLabels[s]}</option>)}
@@ -425,7 +430,11 @@ function ClubBookCard({ entry, club, onRefresh, onMove, onDelete, onQueue }: {
           <RemoveAction onClick={onDelete} label={entry.book.title} />
         </div>
       </div>
-      {editing && <EditBookPanel book={entry.book} onCancel={() => setEditing(false)} onSaved={onRefresh} />}
+      {editing && (
+        <Modal title={`Edit "${entry.book.title}"`} onClose={() => setEditing(false)} size="full">
+          <EditBookPanel book={entry.book} onCancel={() => setEditing(false)} onSaved={onRefresh} />
+        </Modal>
+      )}
       <div className="flex items-center gap-2">
         <select aria-label={`Club shelf for ${entry.book.title}`} className={selectCls} value={entry.status} onChange={e => onMove(e.target.value as BookShelfStatus)}>
           {statuses.map(s => <option key={s} value={s}>{shelfLabels[s]}</option>)}
@@ -755,7 +764,7 @@ export function BooksPage() {
         <div className="flex flex-col gap-5">
           <div className="space-y-3">
             {personalItems.length > 0 ? (
-              <div className="grid lg:grid-cols-2 2xl:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-3">
                 {personalItems.map(entry => (
                   <PersonalBookCard
                     key={entry.id}
@@ -802,7 +811,7 @@ export function BooksPage() {
         <div className="flex flex-col gap-5">
           <div className="space-y-3">
             {visibleClubBooks.length > 0 ? (
-              <div className="grid lg:grid-cols-2 2xl:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-3">
                 {visibleClubBooks.map(entry => (
                   <ClubBookCard
                     key={entry.id}

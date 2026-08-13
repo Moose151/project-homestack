@@ -171,7 +171,7 @@ Major shipped areas include:
 Web Push is live and validated on real devices; VAPID and the hourly `notifications_run_scheduled`
 job are configured on the server.
 
-**Mobile UX v1 (v0.36.4, in progress on `feature/mobile-ux`)** — owner-directed rework of the
+**Mobile UX v1 (v0.36.5, in progress on `feature/mobile-ux`)** — owner-directed rework of the
 phone experience per `docs/36_Mobile_UX_Strategy_and_Implementation_Plan.md`. Phases 1–7 done:
 a Playwright mobile-viewport acceptance suite (API-mocked — see `frontend/e2e/README.md` for why
 it must never hit the real backend), a shared `src/components/mobile/` primitives layer, the
@@ -220,8 +220,19 @@ along the way: `CornerPage`'s `corner?.collections.filter(...)` only short-circu
 boundary, that crashed the entire app, not just Corners; latent in the existing code, not
 introduced this phase.
 
-Phase 9 (Books, Home Wiki, Travel — the lower-frequency content/planning nodes) and Phase 10
-(real-device acceptance) not started. Not yet merged to `main`.
+Phase 9 (Books, Home Wiki, Travel — the lower-frequency content/planning nodes) is done too.
+All three already had good bones (Books' shelf/card model, Home Wiki's search-first layout,
+Travel's `?trip=`-based per-trip project view all pre-dated this phase and were left alone); the
+common gap across all three was "long inline forms" — Add/Edit book, wiki page create/edit,
+trip/booking/itinerary forms all used to expand inline and push the rest of the page down, now
+`Modal size="full"` everywhere, the same sheet pattern used since Calendar's Phase 4. Home Wiki
+also gained a proper "tap to read full-screen, Edit as an action inside" detail sheet in place of
+an inline-body-expand-then-inline-edit-form sequence. Found and fixed along the way: Books' book
+grids had no explicit base `grid-cols-1`, the CSS Grid analogue of the AppShell `<main>` flex bug
+from Phase 4 — a grid item's default `min-width: auto` let a wide card dictate the implicit
+column's width instead of the container's, pushing the grid past the viewport at 320px.
+
+Phase 10 (real-device acceptance) not started. Not yet merged to `main`.
 
 ---
 

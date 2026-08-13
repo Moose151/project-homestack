@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.36.4**
+> **Current version: 0.36.5**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,29 @@
 ---
 
 ## 0.36 — Mobile UX v1 (on feature/mobile-ux)
+
+### 0.36.5 — 2026-08-13 — Lower-frequency nodes: Books, Home Wiki, Travel (docs/36 Phase 9, on feature/mobile-ux)
+- **Books.** Personal/Book Club segmented control and shelf navigation already matched the doc
+  via the existing `Tabs` component. Add book and Edit book (used by both personal and club-book
+  cards) were inline-expanding forms pushing the rest of the page/card down — now
+  `Modal size="full"`. Rating entry and shelf/queue controls left as their existing compact
+  inline widgets.
+- **Home Wiki.** Search and Favourites/Emergency shortcuts already existed. Pages used to expand
+  their body text inline in the browse grid, with Edit replacing the card in place — now a
+  `PageDetailModal` reads the page full-screen, with Edit as an action inside it rather than an
+  inline form in the list. New page moved to the same sheet.
+- **Travel.** Tapping a trip already opened its own `TripDetail` project via `?trip=`. Trip,
+  booking and itinerary forms used to render inline as cards pushing the rest of the page down —
+  now `Modal size="full"` each. The doc's Packing/Documents drill-down destinations were not
+  built — neither is a real feature in this app's backend yet.
+- **Found and fixed along the way:** Books' book grids had no explicit base `grid-cols-1` —
+  the CSS Grid analogue of the AppShell `<main>` flex bug from Phase 4: a grid item's default
+  `min-width: auto` let a wide-enough card dictate the implicit column's width instead of the
+  container's, pushing the grid past the viewport at 320px. Fixed with an explicit `grid-cols-1`
+  base class.
+- **New `e2e/phase9-content-nodes.spec.ts`**, one test per node. 147 passing, 45 skipped across
+  four viewport projects; `tsc --noEmit` and `npm run build` both clean. Still on
+  `feature/mobile-ux`, not merged.
 
 ### 0.36.4 — 2026-08-13 — Daily-use nodes: Atlas, Meridian, Education, Pets, Fitness, Corners (docs/36 Phase 8, on feature/mobile-ux)
 - **Atlas.** The "Lists" tab stacked every list's full contents one after another on phone —

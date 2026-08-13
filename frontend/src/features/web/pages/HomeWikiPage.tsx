@@ -4,6 +4,7 @@ import type { WikiCategory, WikiPage } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { Input, SearchField, Textarea, Select, Field } from '../../../components/Field'
+import { Modal } from '../../../components/Modal'
 import { Tabs, type TabDef } from '../../../components/Tabs'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
@@ -90,7 +91,7 @@ function PageForm({ categories, initial, onSubmit, onCancel, submitting }: {
       onSubmit={e => { e.preventDefault(); if (f.title.trim()) onSubmit(f) }}
       className="space-y-3 bg-sunken rounded-2xl p-4"
     >
-      <Field label="Page title"><Input autoFocus placeholder="e.g. Wi-Fi or bin night" value={f.title} onChange={e => set('title', e.target.value)} /></Field>
+      <Field label="Page title"><Input data-autofocus placeholder="e.g. Wi-Fi or bin night" value={f.title} onChange={e => set('title', e.target.value)} /></Field>
       <Field label="Household information"><Textarea placeholder="Write the details here…" rows={5} value={f.body} onChange={e => set('body', e.target.value)} /></Field>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Category">
@@ -119,15 +120,17 @@ function PageForm({ categories, initial, onSubmit, onCancel, submitting }: {
   )
 }
 
-function PageCard({ page, categories, onChange, onDelete, onError, canDelete }: {
+// docs/36 §6.7: tapping a page reads it full-screen, and Edit is an action on that page rather
+// than an inline form replacing the card in the middle of the browse grid.
+function PageDetailModal({ page, categories, onChange, onDelete, onError, onClose, canDelete }: {
   page: WikiPage
   categories: WikiCategory[]
   onChange: (p: WikiPage) => void
   onDelete: (id: number) => void
   onError: (m: string) => void
+  onClose: () => void
   canDelete: boolean
 }) {
-  const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -145,47 +148,73 @@ function PageCard({ page, categories, onChange, onDelete, onError, canDelete }: 
   }
   const remove = async () => {
     if (!(await confirmDialog({ title: `Delete "${page.title}"?`, confirmLabel: 'Delete' }))) return
-    try { await api.deleteWikiPage(page.id); onDelete(page.id) } catch (e) { onError(errMsg(e)) }
+    try { await api.deleteWikiPage(page.id); onDelete(page.id); onClose() } catch (e) { onError(errMsg(e)) }
   }
   const toggleFavourite = async () => {
     try { onChange(await api.updateWikiPage(page.id, { is_favourite: !page.is_favourite })) }
     catch (e) { onError(errMsg(e)) }
   }
 
-  if (editing) {
-    return (
-      <Card>
+  return (
+    <Modal title={editing ? `Edit "${page.title}"` : page.title} onClose={onClose} size="full">
+      {editing ? (
         <PageForm categories={categories} initial={fromPage(page)} onSubmit={save} onCancel={() => setEditing(false)} submitting={busy} />
-      </Card>
-    )
+      ) : (
+        <div className="flex flex-col gap-4">
+          <Flags page={page} />
+          {page.body ? (
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">{page.body}</p>
+          ) : (
+            <p className="text-sm italic text-muted">No details yet — tap Edit to add some.</p>
+          )}
+          <TagRow tags={page.tag_list} />
+          <div className="flex flex-wrap gap-2 border-t border-line pt-3">
+            <Button variant="secondary" onClick={toggleFavourite}>{page.is_favourite ? '⭐ Favourited' : '☆ Add to favourites'}</Button>
+            <Button variant="secondary" onClick={() => setEditing(true)}>Edit</Button>
+            {canDelete && <Button variant="danger" onClick={remove}>Delete</Button>}
+          </div>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+function PageCard({ page, categories, onChange, onDelete, onError, canDelete }: {
+  page: WikiPage
+  categories: WikiCategory[]
+  onChange: (p: WikiPage) => void
+  onDelete: (id: number) => void
+  onError: (m: string) => void
+  canDelete: boolean
+}) {
+  const [open, setOpen] = useState(false)
+
+  const toggleFavourite = async () => {
+    try { onChange(await api.updateWikiPage(page.id, { is_favourite: !page.is_favourite })) }
+    catch (e) { onError(errMsg(e)) }
   }
 
   return (
-    <Card className="group">
-      <div className="flex items-start justify-between gap-2">
-        <button type="button" className="min-h-10 min-w-0 flex-1 text-left" onClick={() => setExpanded(v => !v)}>
-          <div className="font-semibold text-ink truncate">{page.title}</div>
-          <div className="mt-1"><Flags page={page} /></div>
-        </button>
-        <div className="flex flex-shrink-0 items-center gap-1">
-          <button type="button" onClick={toggleFavourite} className="grid min-h-10 min-w-10 place-items-center text-muted hover:text-warning" aria-label={page.is_favourite ? `Remove ${page.title} from favourites` : `Add ${page.title} to favourites`}>
+    <>
+      <Card className="group">
+        <div className="flex items-start justify-between gap-2">
+          <button type="button" className="min-h-10 min-w-0 flex-1 text-left" onClick={() => setOpen(true)}>
+            <div className="font-semibold text-ink truncate">{page.title}</div>
+            <div className="mt-1"><Flags page={page} /></div>
+          </button>
+          <button type="button" onClick={toggleFavourite} className="grid min-h-10 min-w-10 flex-shrink-0 place-items-center text-muted hover:text-warning" aria-label={page.is_favourite ? `Remove ${page.title} from favourites` : `Add ${page.title} to favourites`}>
             {page.is_favourite ? '⭐' : '☆'}
           </button>
-          <button type="button" onClick={() => setEditing(true)} className="min-h-10 rounded-lg px-2 text-xs font-semibold text-muted transition hover:bg-sunken hover:text-ink sm:opacity-0 sm:group-hover:opacity-100">Edit</button>
-          {canDelete && <button type="button" onClick={remove} className="min-h-10 rounded-lg px-2 text-xs font-semibold text-muted transition hover:text-danger sm:opacity-0 sm:group-hover:opacity-100">Delete</button>}
         </div>
-      </div>
-      {expanded && (
-        <div className="mt-3 border-t border-line pt-3">
-          {page.body ? (
-            <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed">{page.body}</p>
-          ) : (
-            <p className="text-sm text-muted italic">No details yet — click Edit to add some.</p>
-          )}
-          <TagRow tags={page.tag_list} />
-        </div>
+      </Card>
+      {open && (
+        <PageDetailModal
+          page={page} categories={categories} canDelete={canDelete}
+          onChange={onChange} onDelete={onDelete} onError={onError}
+          onClose={() => setOpen(false)}
+        />
       )}
-    </Card>
+    </>
   )
 }
 
@@ -259,7 +288,9 @@ function PagesTab({ categories, isAdmin, onError }: {
       </div>
 
       {creating && (
-        <PageForm categories={categories} initial={blankForm(categoryId ? Number(categoryId) : null)} onSubmit={create} onCancel={() => setCreating(false)} submitting={busy} />
+        <Modal title="New page" onClose={() => setCreating(false)} size="full">
+          <PageForm categories={categories} initial={blankForm(categoryId ? Number(categoryId) : null)} onSubmit={create} onCancel={() => setCreating(false)} submitting={busy} />
+        </Modal>
       )}
 
       {loading ? (

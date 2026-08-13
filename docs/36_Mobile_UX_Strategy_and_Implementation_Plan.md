@@ -1206,7 +1206,7 @@ text unique to the new phone-only rows rather than a title/name that exists in b
 once — the same collision class fixed in Calendar's Phase 4 correction pass. 138 passing, 42
 skipped across four viewport projects; `tsc --noEmit` and `npm run build` both clean.
 
-### Phase 9 — Lower-frequency content/planning nodes
+### Phase 9 — Lower-frequency content/planning nodes — DONE (v0.36.5)
 
 Convert:
 
@@ -1215,7 +1215,53 @@ Convert:
 - Travel.
 
 They should now be able to reuse the established list/detail/form/settings primitives rather than
-inventing new responsive patterns.
+inventing new responsive patterns. All three did — no new pattern was invented this phase, only
+the `Modal size="full"` sheet used everywhere since Calendar's Phase 4.
+
+**Books.** Already the doc's lowest-priority page ("its shelf/card model already suits mobile"),
+and the Personal/Book Club segmented control and shelf-status navigation were already exactly
+the doc's model via the existing `Tabs` component — untouched. The real gap was "add/edit
+metadata moves to a sheet": `AddBookPanel` (Add book) and `EditBookPanel` (used by both
+`PersonalBookCard` and `ClubBookCard`) were inline-expanding forms that pushed the rest of the
+page/card down — now `Modal size="full"`. Rating entry and the shelf/queue controls stayed as
+their existing compact inline widgets — small enough not to be the "busy" problem the doc is
+about. "Tap a book to open a focused detail screen" was judged already satisfied by the existing
+card content (cover, title, author, meta all visible without a tap) rather than worth adding a
+second always-open detail view on top of it.
+
+**Home Wiki.** Search-at-top and Favourites/Emergency shortcuts already existed as a filter pill
+row. The structural fix: pages used to expand their full body text inline within the browse grid
+on tap, and Edit replaced the card's content in place — now `PageDetailModal` (`Modal
+size="full"`) does the tap-to-read-full-screen the doc asks for, with Edit as an action inside it
+(switching the same modal into `PageForm`) rather than an inline form in the list. "New page"
+also moved to the same sheet.
+
+**Travel.** Already had the doc's core idea — tapping a trip opens `TripDetail`, its own
+mobile project via `?trip=` — untouched. The concrete, achievable ask ("progressive focused
+editors rather than long inline forms") is fixed: `PlanForm` (create/edit a trip or idea),
+`BookingForm` and `ItineraryForm` all used to render inline as `Card`s that pushed the rest of
+`TripDetail` down the page — now `Modal size="full"` each, with no other change to their fields
+or the save flow. The doc's Itinerary/Bookings/Things to do/Packing/Documents/People
+drill-down-destination mock was **not** built — Packing and Documents aren't things this app's
+backend models today, and splitting the two sections that do exist (bookings, itinerary) into
+separate destinations instead of the two cards already on `TripDetail` was judged unnecessary
+restructuring for what the doc's own text names as the actually load-bearing complaint (long
+inline forms, now fixed).
+
+**Found and fixed along the way:** Books' two book grids (`grid lg:grid-cols-2 2xl:grid-cols-3`)
+had no explicit base `grid-cols-1` — same class of bug as the AppShell `<main>` fix from Phase 4,
+just for CSS Grid instead of Flexbox: a grid item's default `min-width: auto` lets its own
+content dictate the implicit single column's width instead of the container's available width,
+so a wide-enough card silently pushed the whole grid past the viewport. Confirmed via the same
+bounding-rect-scan technique used for the AppShell bug — a card 369px wide inside a 320px
+viewport, entirely invisible until a real fixture with a real book gave the card enough content
+to trigger it. Fixed with an explicit `grid-cols-1` base class, which is what makes Tailwind
+actually emit `minmax(0, 1fr)` instead of leaving column sizing to the browser's implicit
+defaults.
+
+**New `e2e/phase9-content-nodes.spec.ts`** — one test per node (Books' Add/Edit sheets, Home
+Wiki's read-full-screen-then-Edit-inside flow, Travel's trip/booking/itinerary sheets). 147
+passing, 45 skipped across four viewport projects; `tsc --noEmit` and `npm run build` both clean.
 
 ### Phase 10 — Complete real-device acceptance
 
