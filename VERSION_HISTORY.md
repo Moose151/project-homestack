@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.36.8**
+> **Current version: 0.36.9**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -9,7 +9,18 @@
 
 ---
 
-## 0.36 — Mobile UX v1 (on feature/mobile-ux)
+## 0.36 — Mobile UX v1
+
+### 0.36.9 — 2026-08-13 — Faster everyday workout, Corner and Money actions
+- Fitness now defaults **Who is training?** to the household person linked to the current login,
+  adds name/muscle/type search and filtering when adding an exercise mid-workout, and gives each
+  live exercise a History control showing the five most recent completed performances.
+- Corners replaces the horizontally scrolling household-name buttons with one compact Corner
+  dropdown that preserves the active section while switching people.
+- Money's phone **Coming up** list now has a direct **Mark paid** action for each upcoming bill,
+  refreshes the current position immediately, and keeps the full payment schedule one tap away.
+- Validation: frontend production build clean; focused Fitness/Corners/Money browser coverage and
+  the complete four-viewport Playwright suite green (193 passed, 59 intentionally skipped).
 
 ### 0.36.8 — 2026-08-13 — Final software correction pass before hardware acceptance (on feature/mobile-ux)
 - Merged `main` normally into the published feature branch, bringing in the live Solace bucket-

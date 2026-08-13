@@ -2260,12 +2260,14 @@ function NowTab({ now, health, checklist, onAction, onTab, onSection }: {
   )
 }
 
-function MoneyMobileHome({ now, health, onTab, onSection }: {
+function MoneyMobileHome({ now, health, onTab, onSection, onAction }: {
   now: SolaceNow | null
   health: SolaceHealth | null
   onTab: (tab: Tab) => void
   onSection: (tab: Tab, section: string) => void
+  onAction: (id: number, action: 'paid' | 'unpaid' | 'skip') => Promise<SolaceBillOccurrence>
 }) {
+  const [payingId, setPayingId] = useState<number | null>(null)
   if (!now) return <div className="h-64 animate-pulse rounded-2xl bg-sunken" />
   const lines = [
     `${money(now.due_total)} due before next payday`,
@@ -2286,10 +2288,26 @@ function MoneyMobileHome({ now, health, onTab, onSection }: {
             icon="💸"
             title={occurrence.bill_name}
             subtitle={dateOnly(occurrence.due_at)}
-            trailing={money(occurrence.amount)}
-            onClick={() => onSection('bills', 'schedule')}
+            chevron={false}
+            trailing={(
+              <div className="flex flex-col items-end gap-1">
+                <span className="font-semibold text-ink">{money(occurrence.amount)}</span>
+                <Button
+                  size="sm"
+                  loading={payingId === occurrence.id}
+                  onClick={async () => {
+                    setPayingId(occurrence.id)
+                    try { await onAction(occurrence.id, 'paid') }
+                    finally { setPayingId(null) }
+                  }}
+                >Mark paid</Button>
+              </div>
+            )}
           />
         ))}
+        {nextDue.length > 0 && (
+          <Button variant="ghost" className="w-full" onClick={() => onSection('bills', 'schedule')}>Open payment schedule</Button>
+        )}
       </MobileSection>
       <MobileSection title="Money">
         <MobileListRow icon="🧾" title="Bills" subtitle="Bills and payment schedule" onClick={() => onSection('bills', 'bills')} />
@@ -2640,7 +2658,7 @@ export function SolacePage() {
       </div>
       {tab === 'now' && (
         <>
-          <MoneyMobileHome now={now} health={health} onTab={setTab} onSection={goSection} />
+          <MoneyMobileHome now={now} health={health} onTab={setTab} onSection={goSection} onAction={updateOccurrence} />
           <div className="hidden sm:block">
             <NowTab
               now={now}

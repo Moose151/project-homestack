@@ -15,6 +15,7 @@ import { InlineAlert } from '../../../components/PageState'
 import { Tabs } from '../../../components/Tabs'
 import { useUrlTab } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
+import { useAuth } from '../../auth/AuthContext'
 
 declare global {
   interface String { replaceAll(searchValue: string, replaceValue: string): string }
@@ -53,6 +54,26 @@ const lastTimeSummary = (entry: FitnessSessionExercise) => {
   if (!parts.length) return null
   return `Last time, ${new Date(history.performed_at).toLocaleDateString()}: ${parts.join(' · ')}`
 }
+
+const completedSetSummary = (entry: FitnessSessionExercise) => entry.sets
+  .filter(set => set.is_completed)
+  .map(set => {
+    if (set.weight && set.reps) return `${Number(set.weight)} ${entry.exercise.weight_unit} × ${set.reps}`
+    if (set.reps) return `${set.reps} reps`
+    if (Number(set.distance)) return `${Number(set.distance)} ${entry.exercise.distance_unit}${set.duration_seconds ? ` in ${formatDuration(set.duration_seconds)}` : ''}`
+    if (set.duration_seconds) return formatDuration(set.duration_seconds)
+    return ''
+  })
+  .filter(Boolean)
+  .join(' · ')
+
+const exerciseHistory = (sessions: FitnessSession[], personId: number, exerciseId: number) => sessions
+  .filter(row => row.status === 'completed' && row.person_id === personId)
+  .flatMap(row => row.exercises
+    .filter(entry => entry.status === 'active' && entry.exercise.id === exerciseId)
+    .map(entry => ({ session: row, entry })))
+  .filter(row => completedSetSummary(row.entry))
+  .slice(0, 5)
 
 function Elapsed({ startedAt }: { startedAt: string }) {
   const [, redraw] = useState(0)
@@ -98,13 +119,24 @@ function SetEditor({ set, measurement, onSaved }: {
   )
 }
 
-function LiveSession({ session, exercises, reload, onDone }: {
-  session: FitnessSession; exercises: FitnessExercise[]; reload: () => Promise<void>; onDone: () => void
+function LiveSession({ session, sessions, exercises, reload, onDone }: {
+  session: FitnessSession; sessions: FitnessSession[]; exercises: FitnessExercise[]; reload: () => Promise<void>; onDone: () => void
 }) {
   const [adding, setAdding] = useState(false)
   const [exerciseId, setExerciseId] = useState('')
+  const [exerciseQuery, setExerciseQuery] = useState('')
+  const [exerciseType, setExerciseType] = useState('')
+  const [historyExerciseId, setHistoryExerciseId] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const activeExerciseIds = new Set(session.exercises.filter(row => row.status === 'active').map(row => row.exercise.id))
+  const exerciseTypes = [...new Set(exercises.map(exercise => exercise.exercise_type))].sort()
+  const addableExercises = exercises.filter(exercise => {
+    if (activeExerciseIds.has(exercise.id)) return false
+    if (exerciseType && exercise.exercise_type !== exerciseType) return false
+    const terms = `${exercise.name} ${exercise.muscle_group} ${exercise.exercise_type}`.toLowerCase()
+    return terms.includes(exerciseQuery.trim().toLowerCase())
+  })
   const change = async (action: () => Promise<unknown>) => {
     setBusy(true); setError(null)
     try { await action(); await reload() } catch (e) { setError(errorText(e)) } finally { setBusy(false) }
@@ -118,25 +150,75 @@ function LiveSession({ session, exercises, reload, onDone }: {
         </div>
       </Card>
       {error && <InlineAlert message={error} />}
-      {session.exercises.filter(row => row.status === 'active').map(entry => (
-        <Card key={entry.id} contentClassName="p-3 sm:p-4">
+      {session.exercises.filter(row => row.status === 'active').map(entry => {
+        const history = exerciseHistory(sessions, session.person_id, entry.exercise.id)
+        const historyOpen = historyExerciseId === entry.exercise.id
+        return <Card key={entry.id} contentClassName="p-3 sm:p-4">
           <div className="mb-3 flex items-start justify-between gap-2">
             <div>
               <h3 className="font-bold text-ink">{entry.exercise.name}</h3>
               <p className="text-xs text-muted">{entry.exercise.muscle_group} · {entry.exercise.measurement.replace('_', ' ')}</p>
               {lastTimeSummary(entry) && <p className="mt-1 text-xs font-semibold text-primary">{lastTimeSummary(entry)}</p>}
             </div>
-            <Button size="sm" variant="ghost" disabled={busy} onClick={() => change(() => api.dropFitnessSessionExercise(entry.id))}>Drop</Button>
+            <div className="flex flex-wrap justify-end gap-1">
+              <Button
+                size="sm"
+                variant="secondary"
+                aria-expanded={historyOpen}
+                onClick={() => setHistoryExerciseId(current => current === entry.exercise.id ? null : entry.exercise.id)}
+              >{historyOpen ? 'Hide history' : 'History'}</Button>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => change(() => api.dropFitnessSessionExercise(entry.id))}>Drop</Button>
+            </div>
           </div>
+          {historyOpen && (
+            <div className="mb-3 rounded-xl border border-line bg-sunken p-3" aria-label={`${entry.exercise.name} history`}>
+              <h4 className="text-xs font-bold uppercase tracking-wide text-muted-strong">Exercise history</h4>
+              {history.length ? (
+                <div className="mt-2 space-y-2">
+                  {history.map(row => (
+                    <div key={row.session.id} className="rounded-lg bg-surface px-3 py-2">
+                      <p className="text-sm font-bold text-ink">{new Date(row.session.started_at).toLocaleDateString()} · {row.session.name}</p>
+                      <p className="mt-0.5 text-xs text-muted">{completedSetSummary(row.entry)}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="mt-2 text-sm text-muted">No completed history for this exercise yet.</p>}
+            </div>
+          )}
           <div className="space-y-2">{entry.sets.map(set => <SetEditor key={set.id} set={set} measurement={entry.exercise.measurement} onSaved={reload} />)}</div>
           <Button size="sm" variant="secondary" className="mt-3" disabled={busy} onClick={() => change(() => api.addFitnessSessionSet(entry.id))}>+ Add set</Button>
         </Card>
-      ))}
+      })}
       {adding ? (
-        <Card contentClassName="p-3 flex flex-col sm:flex-row gap-2">
-          <select className={input} value={exerciseId} onChange={e => setExerciseId(e.target.value)}><option value="">Choose exercise…</option>{exercises.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}</select>
-          <Button disabled={!exerciseId || busy} onClick={() => change(async () => { await api.addFitnessSessionExercise(session.id, { exercise_id: Number(exerciseId), target_sets: 1 }); setAdding(false); setExerciseId('') })}>Add</Button>
-          <Button variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
+        <Card contentClassName="p-3 space-y-3">
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(10rem,1fr)]">
+            <Field label="Search exercises">
+              <SearchField
+                aria-label="Search exercises"
+                value={exerciseQuery}
+                onChange={event => { setExerciseQuery(event.target.value); setExerciseId('') }}
+                onClear={() => { setExerciseQuery(''); setExerciseId('') }}
+                placeholder="Name or muscle group…"
+              />
+            </Field>
+            <Field label="Filter by type">
+              <select aria-label="Filter exercises by type" className={input} value={exerciseType} onChange={event => { setExerciseType(event.target.value); setExerciseId('') }}>
+                <option value="">All exercise types</option>
+                {exerciseTypes.map(type => <option key={type} value={type}>{type}</option>)}
+              </select>
+            </Field>
+          </div>
+          <Field label={`Choose exercise (${addableExercises.length} available)`}>
+            <select aria-label="Exercise to add" className={input} value={exerciseId} onChange={e => setExerciseId(e.target.value)}>
+              <option value="">Choose exercise…</option>
+              {addableExercises.map(ex => <option key={ex.id} value={ex.id}>{ex.name} · {ex.muscle_group || ex.exercise_type}</option>)}
+            </select>
+          </Field>
+          {!addableExercises.length && <p className="text-sm text-muted">No unused exercises match those filters.</p>}
+          <div className="flex gap-2">
+            <Button disabled={!exerciseId || busy} onClick={() => change(async () => { await api.addFitnessSessionExercise(session.id, { exercise_id: Number(exerciseId), target_sets: 1 }); setAdding(false); setExerciseId(''); setExerciseQuery(''); setExerciseType('') })}>Add exercise</Button>
+            <Button variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
+          </div>
         </Card>
       ) : <Button variant="secondary" className="w-full" onClick={() => setAdding(true)}>+ Add or swap an exercise</Button>}
       <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 flex gap-2 rounded-2xl border border-line bg-surface/95 p-2 shadow-soft backdrop-blur sm:static sm:bg-transparent sm:p-0 sm:shadow-none">
@@ -242,6 +324,7 @@ function ExerciseLibrary({ exercises, reload }: { exercises: FitnessExercise[]; 
 }
 
 export function FitnessPage() {
+  const { user } = useAuth()
   const [tab, setTab] = useUrlTab<Tab>('today', TABS.map(row => row.key))
   const [searchParams] = useSearchParams()
   const selectedSessionId = Number(searchParams.get('session') || 0)
@@ -258,7 +341,11 @@ export function FitnessPage() {
     try {
       const [p, ex, plans, logs, prs] = await Promise.all([api.getPeople(), api.getFitnessExercises(), api.getFitnessPrograms(), api.getFitnessSessions(), api.getFitnessRecords()])
       setPeople(p); setExercises(ex); setPrograms(plans); setSessions(logs); setRecords(prs)
-      if (!startPerson && p[0]) setStartPerson(String(p[0].id))
+      setStartPerson(current => {
+        if (current) return current
+        const currentPerson = p.find(person => person.linked_user_id === user?.id)
+        return String((currentPerson ?? p[0])?.id ?? '')
+      })
     } catch (e) { setError(errorText(e)) }
   }
   useEffect(() => { load() }, [])
@@ -279,7 +366,7 @@ export function FitnessPage() {
   // drop the page header and tab row rather than surrounding it with unrelated navigation.
   const inLiveSession = tab === 'today' && Boolean(active)
   return <div className="space-y-4">{!inLiveSession && <PageHeader title="Fitness & training" subtitle="Programs, live workouts and household personal bests" icon="🏋️" />}{error && <InlineAlert tone="danger">{error}</InlineAlert>}{!inLiveSession && <Tabs tabs={TABS} active={tab} onChange={setTab} mobileSelectLabel="Fitness section" />}
-    {tab === 'today' && (active ? <LiveSession session={active} exercises={exercises} reload={reloadActive} onDone={async () => { await load(); setTab('history') }} /> : <div className="space-y-3"><Card title="Start a workout"><Field label="Who is training?"><select className={input} value={startPerson} onChange={e => setStartPerson(e.target.value)}>{people.map(person => <option key={person.id} value={person.id}>{personName(person)}</option>)}</select></Field></Card>{programs.filter(program => !startPerson || program.assignments.some(a => a.person_id === Number(startPerson))).map(program => <Card key={program.id} title={program.name}><p className="mb-3 text-sm text-muted">{program.description || `${program.workouts.length} workout days`}</p><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{program.workouts.map(workout => <button key={workout.id} onClick={async () => { await api.startFitnessSession({ person_id: Number(startPerson), workout_id: workout.id }); await load() }} className="min-h-16 rounded-xl bg-primary px-4 py-3 text-left font-bold text-white"><span className="block">Start {workout.name}</span><span className="text-xs font-normal opacity-80">{workout.exercises.length} exercises</span></button>)}</div></Card>)}<Button variant="secondary" onClick={async () => { await api.startFitnessSession({ person_id: Number(startPerson), name: 'Open workout' }); await load() }}>Start an empty workout</Button></div>)}
+    {tab === 'today' && (active ? <LiveSession session={active} sessions={sessions} exercises={exercises} reload={reloadActive} onDone={async () => { await load(); setTab('history') }} /> : <div className="space-y-3"><Card title="Start a workout"><Field label="Who is training?"><select aria-label="Who is training?" className={input} value={startPerson} onChange={e => setStartPerson(e.target.value)}>{people.map(person => <option key={person.id} value={person.id}>{personName(person)}</option>)}</select></Field></Card>{programs.filter(program => !startPerson || program.assignments.some(a => a.person_id === Number(startPerson))).map(program => <Card key={program.id} title={program.name}><p className="mb-3 text-sm text-muted">{program.description || `${program.workouts.length} workout days`}</p><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{program.workouts.map(workout => <button key={workout.id} onClick={async () => { await api.startFitnessSession({ person_id: Number(startPerson), workout_id: workout.id }); await load() }} className="min-h-16 rounded-xl bg-primary px-4 py-3 text-left font-bold text-white"><span className="block">Start {workout.name}</span><span className="text-xs font-normal opacity-80">{workout.exercises.length} exercises</span></button>)}</div></Card>)}<Button variant="secondary" onClick={async () => { await api.startFitnessSession({ person_id: Number(startPerson), name: 'Open workout' }); await load() }}>Start an empty workout</Button></div>)}
     {tab === 'programs' && (building ? <ProgramBuilder people={people} exercises={exercises} onSaved={load} onCancel={() => setBuilding(false)} /> : <div className="space-y-3"><Button onClick={() => setBuilding(true)}>+ New program</Button>{programs.map(program => <div key={program.id} id={`fitness-program-${program.id}`} className={selectedProgramId === program.id ? 'rounded-2xl ring-2 ring-primary ring-offset-2 ring-offset-paper' : ''}><Card title={program.name}><p className="text-sm text-muted">{program.description || 'No description'}</p><p className="mt-2 text-xs font-semibold text-primary">{program.workouts.length} days · {program.assignments.map(a => a.person_name).join(', ') || 'Not assigned'}</p><div className="mt-3 space-y-2">{program.workouts.map(workout => <div key={workout.id} className="rounded-xl bg-sunken p-3"><p className="font-bold text-ink">{workout.name}</p><p className="text-xs text-muted">{workout.exercises.map(row => `${row.exercise.name} × ${row.target_sets}`).join(' · ') || 'No exercises'}</p></div>)}</div></Card></div>)}</div>)}
     {tab === 'history' && <div className="space-y-3">{sessions.filter(session => session.status !== 'active').map(session => <div key={session.id} id={`fitness-session-${session.id}`} className={selectedSessionId === session.id ? 'rounded-2xl ring-2 ring-primary ring-offset-2 ring-offset-paper' : ''}><Card><details open={selectedSessionId === session.id}><summary className="cursor-pointer list-none"><div className="flex justify-between gap-3"><div><p className="font-bold text-ink">{session.person_name} · {session.name}</p><p className="text-xs text-muted">{new Date(session.started_at).toLocaleString()} · {formatDuration(session.duration_seconds)} · {session.total_reps} reps · {Number(session.total_volume).toLocaleString()} kg volume</p></div><span className="text-sm font-bold text-primary">{session.personal_records.length ? `🏆 ${session.personal_records.length}` : 'Details ▾'}</span></div></summary><div className="mt-3 space-y-2 border-t border-line pt-3">{session.exercises.filter(entry => entry.status === 'active').map(entry => <div key={entry.id} className="rounded-xl bg-sunken p-3"><p className="font-bold text-ink">{entry.exercise.name}</p><p className="mt-1 text-xs text-muted">{entry.sets.filter(set => set.is_completed).map(set => set.weight && set.reps ? `${Number(set.weight)} ${entry.exercise.weight_unit} × ${set.reps}` : set.reps ? `${set.reps} reps` : Number(set.distance) ? `${Number(set.distance)} ${entry.exercise.distance_unit}${set.duration_seconds ? ` in ${formatDuration(set.duration_seconds)}` : ''}` : set.duration_seconds ? formatDuration(set.duration_seconds) : '').filter(Boolean).join(' · ') || 'No completed sets'}</p></div>)}</div></details></Card></div>)}</div>}
     {tab === 'records' && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{records.map(record => <Card key={record.id}><p className="text-xs font-bold uppercase tracking-wide text-muted">{record.person_name}</p><p className="mt-1 font-black text-ink">{record.exercise_name}</p><p className="mt-2 text-xl font-black text-primary">{recordLabel(record)}</p><p className="text-xs text-muted">{record.kind.replaceAll('_', ' ')} · {new Date(record.achieved_at).toLocaleDateString()}</p></Card>)}</div>}

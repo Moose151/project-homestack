@@ -226,17 +226,88 @@ test.describe('phone', () => {
     await expectNoHorizontalOverflow(page)
   })
 
-  test('Corners: the overview surfaces Assigned/Lists & wishes/Activity as destination rows', async ({ page }) => {
+  test('Fitness: defaults the trainer to the person linked to the current login', async ({ page }) => {
     await mockAuthenticatedApi(page, {
-      '/api/v1/people/': [{ id: 1, display_name: 'Test User', preferred_name: 'Test User', avatar: '', colour: '#1d7a91', profile_type: 'adult', linked_user_id: 1, date_of_birth: null }],
+      '/api/v1/nodes/': [enabledNode('fitness')],
+      '/api/v1/people/': [
+        { id: 2, display_name: 'Alex', preferred_name: 'Alex', avatar: '', colour: '', profile_type: 'adult', linked_user_id: 2, date_of_birth: null },
+        { id: 1, display_name: 'Test User', preferred_name: 'Test User', avatar: '', colour: '', profile_type: 'adult', linked_user_id: 1, date_of_birth: null },
+      ],
+      '/api/v1/fitness/exercises/': [],
+      '/api/v1/fitness/programs/': [],
+      '/api/v1/fitness/records/': [],
+      '/api/v1/fitness/sessions/': [],
+    })
+    await page.goto('/fitness')
+    await expect(page.getByRole('combobox', { name: 'Who is training?' })).toHaveValue('1')
+  })
+
+  test('Fitness: mid-workout exercise search filters choices and exercise cards reveal history', async ({ page }) => {
+    const squat = {
+      id: 1, name: 'Back squat', exercise_type: 'strength', muscle_group: 'Legs',
+      measurement: 'reps_weight', weight_unit: 'kg', distance_unit: 'km', is_system: true,
+      is_archived: false, notes: '', created_at: '', updated_at: '',
+    }
+    const bench = { ...squat, id: 2, name: 'Bench press', muscle_group: 'Chest' }
+    const run = { ...squat, id: 3, name: 'Easy run', exercise_type: 'running', muscle_group: 'Cardio', measurement: 'distance_time' }
+    const activeSession = {
+      id: 10, person_id: 1, person_name: 'Test User', program_id: null, program_name: '',
+      source_workout_id: null, name: 'Leg day', status: 'active', started_at: new Date().toISOString(),
+      finished_at: null, duration_seconds: null, total_reps: 0, total_volume: '0', notes: '',
+      visibility: 'household', personal_records: [], created_at: '', updated_at: '',
+      exercises: [{
+        id: 100, exercise: squat, position: 0, status: 'active', notes: '', last_performance: null,
+        sets: [{ id: 1000, position: 0, reps: 8, weight: '80.00', duration_seconds: null, distance: '0', is_completed: false, completed_at: null }],
+      }],
+    }
+    const completedSession = {
+      ...activeSession, id: 9, name: 'Previous leg day', status: 'completed',
+      started_at: '2026-08-01T08:00:00Z', finished_at: '2026-08-01T09:00:00Z', duration_seconds: 3600,
+      exercises: [{
+        id: 90, exercise: squat, position: 0, status: 'active', notes: '', last_performance: null,
+        sets: [{ id: 900, position: 0, reps: 8, weight: '77.50', duration_seconds: null, distance: '0', is_completed: true, completed_at: '2026-08-01T08:10:00Z' }],
+      }],
+    }
+    await mockAuthenticatedApi(page, {
+      '/api/v1/nodes/': [enabledNode('fitness')],
+      '/api/v1/people/': [{ id: 1, display_name: 'Test User', preferred_name: 'Test User', avatar: '', colour: '', profile_type: 'adult', linked_user_id: 1, date_of_birth: null }],
+      '/api/v1/fitness/exercises/': [squat, bench, run],
+      '/api/v1/fitness/programs/': [],
+      '/api/v1/fitness/records/': [],
+      '/api/v1/fitness/sessions/': [activeSession, completedSession],
+    })
+    await page.goto('/fitness')
+
+    await page.getByRole('button', { name: 'History' }).click()
+    const history = page.getByLabel('Back squat history')
+    await expect(history).toContainText('Previous leg day')
+    await expect(history).toContainText('77.5 kg × 8')
+
+    await page.getByRole('button', { name: '+ Add or swap an exercise' }).click()
+    await page.getByRole('searchbox', { name: 'Search exercises' }).fill('bench')
+    const choice = page.getByRole('combobox', { name: 'Exercise to add' })
+    await expect(choice.locator('option')).toHaveCount(2)
+    await expect(choice.locator('option').nth(1)).toContainText('Bench press')
+    await expect(choice).not.toContainText('Easy run')
+    await expectNoHorizontalOverflow(page)
+  })
+
+  test('Corners: the overview uses destination rows and one household-member dropdown', async ({ page }) => {
+    await mockAuthenticatedApi(page, {
+      '/api/v1/people/': [
+        { id: 1, display_name: 'Test User', preferred_name: 'Test User', avatar: '', colour: '#1d7a91', profile_type: 'adult', linked_user_id: 1, date_of_birth: null },
+        { id: 2, display_name: 'Alex Smith', preferred_name: 'Alex', avatar: '', colour: '#795548', profile_type: 'adult', linked_user_id: 2, date_of_birth: null },
+      ],
     })
     // getCorner() appends ?days=30 — the trailing ** matters, or this falls through to the
     // generic mock fallback and crashes the whole app (see the CornerPage fix alongside this).
-    await page.route('**/api/v1/corners/1/**', async route => {
+    await page.route('**/api/v1/corners/*/**', async route => {
+      const selectedId = Number(new URL(route.request().url()).pathname.split('/').filter(Boolean).at(-1)) || 1
+      const mine = selectedId === 1
       await route.fulfill({
         status: 200, contentType: 'application/json',
         body: JSON.stringify({
-          person: { id: 1, display_name: 'Test User', preferred_name: 'Test User', avatar: '', colour: '#1d7a91', profile_type: 'adult', linked_user_id: 1, date_of_birth: null, name: 'Test User', is_me: true },
+          person: { id: selectedId, display_name: mine ? 'Test User' : 'Alex Smith', preferred_name: mine ? 'Test User' : 'Alex', avatar: '', colour: mine ? '#1d7a91' : '#795548', profile_type: 'adult', linked_user_id: selectedId, date_of_birth: null, name: mine ? 'Test User' : 'Alex', is_me: mine },
           summary: { activity_count: 2, assignment_count: 3, collection_count: 1 },
           activity: [], assignments: [], collections: [],
         }),
@@ -245,6 +316,12 @@ test.describe('phone', () => {
     await page.goto('/corners/1')
     await page.locator('button', { hasText: 'Open things across HomeStack' }).click()
     await expect(page).toHaveURL(/tab=assigned/)
+    const cornerPicker = page.getByRole('combobox', { name: 'Choose a Corner' })
+    await expect(cornerPicker).toHaveValue('1')
+    await expect(page.getByLabel('Household Corners')).toHaveCount(0)
+    await cornerPicker.selectOption('2')
+    await expect(page).toHaveURL(/\/corners\/2\?tab=assigned/)
+    await expect(cornerPicker).toHaveValue('2')
     await expectNoHorizontalOverflow(page)
   })
 })

@@ -106,6 +106,41 @@ test('phone Money home uses destination rows instead of the five-tab picker', as
   await expect(page.getByRole('button', { name: 'Back' })).toBeVisible()
 })
 
+test('phone Money home can mark an upcoming bill paid without opening the schedule', async ({ page }) => {
+  let paid = false
+  await mockAuthenticatedApi(page, {
+    '/api/v1/nodes/': [SOLACE_ENABLED_NODE],
+    '/api/v1/solace/bootstrap/': bootstrapFixture([billFixture()]),
+    '/api/v1/solace/schedule/': {
+      start: '2026-08-01', end: '2026-08-31', occurrences: nowFixture().due,
+      income_events: [], summary: { bills_total: '150.00', paid_total: '0.00', unpaid_total: '150.00', skipped_total: '0.00', income_total: '0.00' },
+    },
+    '/api/v1/solace/forecast/': bootstrapFixture().forecast,
+  })
+  await page.route('**/api/v1/solace/now/', async route => {
+    const fixture = nowFixture()
+    await route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify(paid ? { ...fixture, due: [], due_total: '0.00', paid_this_cycle_count: 1, paid_this_cycle_total: '150.00' } : fixture),
+    })
+  })
+  await page.route('**/api/v1/solace/occurrences/1/paid/', async route => {
+    paid = true
+    await route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ ...nowFixture().due[0], status: 'paid', paid_at: new Date().toISOString() }),
+    })
+  })
+
+  await page.goto('/solace')
+  const payButton = page.getByRole('button', { name: 'Mark paid' })
+  await expect(payButton).toBeVisible()
+  await payButton.click()
+  await expect(page.getByText('Nothing left to pay this cycle.')).toBeVisible()
+  await expect(page).not.toHaveURL(/section=schedule/)
+  await expectNoHorizontalOverflow(page)
+})
+
 test('Edit bill opens as a full-height sheet', async ({ page }) => {
   await mockAuthenticatedApi(page, {
     '/api/v1/nodes/': [SOLACE_ENABLED_NODE],

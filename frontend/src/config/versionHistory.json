@@ -1,7 +1,18 @@
 {
-  "current_version": "0.36.8",
-  "source_sha256": "33e55fb2bb25480bae0e9f57562f8eebc29dd1d6f65c859e3acb14e08d9053d6",
+  "current_version": "0.36.9",
+  "source_sha256": "0366d25293c8bcecbdf65aaa948c2566a918e3b2f12136e57564574d710a8ab7",
   "releases": [
+    {
+      "version": "0.36.9",
+      "date": "2026-08-13",
+      "title": "Faster everyday workout, Corner and Money actions",
+      "changes": [
+        "Fitness now defaults **Who is training?** to the household person linked to the current login, adds name/muscle/type search and filtering when adding an exercise mid-workout, and gives each live exercise a History control showing the five most recent completed performances.",
+        "Corners replaces the horizontally scrolling household-name buttons with one compact Corner dropdown that preserves the active section while switching people.",
+        "Money's phone **Coming up** list now has a direct **Mark paid** action for each upcoming bill, refreshes the current position immediately, and keeps the full payment schedule one tap away.",
+        "Validation: frontend production build clean; focused Fitness/Corners/Money browser coverage and the complete four-viewport Playwright suite green (193 passed, 59 intentionally skipped)."
+      ]
+    },
     {
       "version": "0.36.8",
       "date": "2026-08-13",

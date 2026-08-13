@@ -276,13 +276,20 @@ export function CornerPage() {
               <p className="text-xs text-muted">What’s happening, what’s assigned, and the things they’re planning.</p>
             </div>
           </div>
-          <div className="mt-4 flex gap-2 overflow-x-auto pb-1" aria-label="Household Corners">
-            {people.map(person => (
-              <button key={person.id} onClick={() => navigate(`/corners/${person.id}?tab=${tab}`)} className={`flex min-h-11 flex-shrink-0 items-center gap-2 rounded-full border px-2.5 pr-3 text-xs font-bold ${person.id === corner.person.id ? 'border-primary bg-primary-soft text-primary' : 'border-line bg-surface text-muted-strong hover:bg-sunken'}`}>
-                <Avatar name={person.display_name} colour={person.colour} avatar={person.avatar} size="sm" />
-                {person.linked_user_id === user?.id ? 'My Corner' : person.preferred_name || person.display_name}
-              </button>
-            ))}
+          <div className="mt-4 max-w-sm">
+            <Field label="View Corner">
+              <Select
+                aria-label="Choose a Corner"
+                value={corner.person.id}
+                onChange={event => navigate(`/corners/${event.target.value}?tab=${tab}`)}
+              >
+                {people.map(person => (
+                  <option key={person.id} value={person.id}>
+                    {person.linked_user_id === user?.id ? 'My Corner' : `${person.preferred_name || person.display_name}’s Corner`}
+                  </option>
+                ))}
+              </Select>
+            </Field>
           </div>
         </div>
       </section>
