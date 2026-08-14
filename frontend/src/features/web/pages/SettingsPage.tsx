@@ -211,7 +211,7 @@ export function SettingsPage() {
       <MobileListRow icon="🔔" to="/settings/notifications" title="Notifications" subtitle="Your notification preferences" />
       {isAdmin && <MobileListRow icon="📱" to="/settings/push-devices" title="Push devices" subtitle="Registered notification devices" />}
       <MobileListRow icon="🎨" title="Appearance" subtitle="Family colour" onClick={() => setMobileSection('appearance')} />
-      {meridianEnabled && meridian && <MobileListRow icon="⭐" title="Meridian" subtitle="Tasks and rewards settings" onClick={() => setMobileSection('meridian')} />}
+      {meridianEnabled && meridian && <MobileListRow icon="⭐" title="Tasks" subtitle="Tasks and rewards settings" onClick={() => setMobileSection('meridian')} />}
       <MobileListRow icon="🕘" title="Version & system" subtitle="Version history and guides" onClick={() => setMobileSection('system')} />
     </MobileSection>
   )
@@ -232,7 +232,7 @@ export function SettingsPage() {
           <MobileScreenHeader
             title={{
               household: 'Household', stacks: 'Stacks', backups: 'Backups', appearance: 'Appearance',
-              system: 'Version & system', meridian: 'Meridian', home: 'Manage HomeStack',
+              system: 'Version & system', meridian: 'Tasks', home: 'Manage HomeStack',
             }[mobileSection]}
             showBack
             onBack={() => setMobileSection('home')}
@@ -351,8 +351,8 @@ export function SettingsPage() {
 
       <div className={mobileSection === 'meridian' ? '' : 'hidden sm:block'}>
       {meridianEnabled && meridian && (
-        <Card title="Meridian">
-          <p className="text-sm text-muted mb-4">Configure Meridian behaviour for the whole household.</p>
+        <Card title="Tasks">
+          <p className="text-sm text-muted mb-4">Configure Tasks behaviour for the whole household.</p>
           <div className="space-y-4">
             <div>
               <div className="text-xs text-muted-strong mb-1">Points label (e.g. "Stars", "Coins")</div>
@@ -388,7 +388,7 @@ export function SettingsPage() {
               </div>
             ))}
             {isManager && (
-              <Button onClick={saveMeridian} loading={savingMeridian}>Save Meridian settings</Button>
+              <Button onClick={saveMeridian} loading={savingMeridian}>Save Tasks settings</Button>
             )}
           </div>
         </Card>

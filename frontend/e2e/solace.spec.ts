@@ -19,6 +19,8 @@ function billFixture() {
     id: 1, name: 'Electricity', category: 'utilities', provider: 'PowerCo', amount: '150.00',
     due_at: now, recurrence_rule: 'FREQ=MONTHLY', end_date: null, is_active: true,
     is_autopay: false, include_in_set_aside: true, notes: '', source_node: null,
+    is_paid: false, is_overdue: false, next_due_at: now, next_occurrence_id: 1,
+    annual_amount: '1800.00', fortnightly_amount: '69.23',
     created_at: now, updated_at: now,
   }
 }
@@ -100,7 +102,7 @@ test('phone Money home uses destination rows instead of the five-tab picker', as
   await expect(page.getByText('Current position')).toBeVisible()
   await expect(page.getByRole('button', { name: /Bills/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /Pay plan/ })).toBeVisible()
-  await expect(page.getByLabel('Solace section')).toBeHidden()
+  await expect(page.getByLabel('Money section')).toBeHidden()
   await page.getByRole('button', { name: /Buckets/ }).click()
   await expect(page).toHaveURL(/tab=plan&section=buckets/)
   await expect(page.getByRole('button', { name: 'Back' })).toBeVisible()
@@ -153,6 +155,17 @@ test('Edit bill opens as a full-height sheet', async ({ page }) => {
   await expect(dialog).toBeVisible()
   await expect(dialog.getByRole('heading', { name: 'Edit Electricity' })).toBeVisible()
   await expectNoHorizontalOverflow(page)
+})
+
+test('direct bill deep link opens the selected Money bill instead of a blank Bills page', async ({ page }) => {
+  await mockAuthenticatedApi(page, {
+    '/api/v1/nodes/': [SOLACE_ENABLED_NODE],
+    '/api/v1/solace/bootstrap/': bootstrapFixture([billFixture()]),
+    '/api/v1/solace/now/': nowFixture(),
+  })
+  await page.goto('/solace?tab=bills&bill=1&occurrence=1')
+  await expect(page.getByText('Electricity')).toBeVisible()
+  await expect(page.getByText('No bills yet')).toHaveCount(0)
 })
 
 test('sensitive gate still applies when the node requires re-authentication', async ({ page }) => {

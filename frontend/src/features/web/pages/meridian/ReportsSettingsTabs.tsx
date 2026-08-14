@@ -243,7 +243,7 @@ export function SettingsTab() {
     <div className="flex flex-col gap-4">
       {error && <div className="rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">{error}</div>}
 
-      <Card title="Meridian settings">
+      <Card title="Tasks settings">
         <div className="flex flex-col gap-2 max-w-lg">
           <label className="flex flex-col gap-1 mb-2">
             <span className="text-ink font-medium">Points label</span>

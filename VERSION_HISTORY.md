@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.37.3**
+> **Current version: 0.37.4**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,18 @@
 ---
 
 ## 0.37 — Production reliability and deployment safety
+
+### 0.37.4 — 2026-08-14 — Dashboard and Money UX corrections
+- Dashboard Upcoming now treats appointments and events as scheduled things, not due items:
+  future/today/tomorrow appointments use neutral timing labels while overdue wording is reserved
+  for tasks, bills, reminders and deadlines.
+- Money bill state and navigation are tighter: Dashboard bill links carry the bill/occurrence
+  identifiers into Money, direct bill deep links open the selected bill, and the Dashboard bill
+  widget refreshes the current next unpaid occurrence before deciding whether a bill is overdue.
+- The Money page now loads from an explicit unlock-driven bootstrap path instead of a blank-search
+  debounce, reducing first-load races while preserving re-authentication and live search.
+- User-facing node names have been standardized around Dashboard, Lists & Notes, Tasks, Money,
+  Home, Home Guide and Meals while preserving existing internal slugs, routes and API names.
 
 ### 0.37.3 — 2026-08-14 — Add NPM reload gate after container recreation
 - Documentation-only deployment-safety correction. The final network-hardening deployment now

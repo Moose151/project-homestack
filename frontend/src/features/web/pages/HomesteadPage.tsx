@@ -236,7 +236,7 @@ function OverviewTab({ property, loading, counts, onSave, onGoTab, canUseMoney }
             <p className="font-semibold text-ink">Costs &amp; cover</p>
             <p className="text-sm text-muted">
               {canUseMoney
-                ? 'Insurance, rates and utilities are protected and synced into Solace.'
+                ? 'Insurance, rates and utilities are protected and synced into Money.'
                 : 'Home finance access is not enabled for this account.'}
             </p>
           </div>
@@ -622,8 +622,8 @@ function MaintenanceTab({ people, defaultAssignee, onError, canUseMoney }: {
                     <span className="font-medium text-ink">{t.title}</span>
                     <Badge>{cap(t.category)}</Badge>
                     {t.solace_bill_ref && canUseMoney && (
-                      <Link to={`/solace?tab=bills&q=${encodeURIComponent(t.title)}`} aria-label={`Open ${t.title} in Solace`}>
-                        <Badge tone="success">Cost tracked in Solace →</Badge>
+                      <Link to={`/solace?tab=bills&q=${encodeURIComponent(t.title)}`} aria-label={`Open ${t.title} in Money`}>
+                        <Badge tone="success">Cost tracked in Money →</Badge>
                       </Link>
                     )}
                     {t.recurrence_rule && <Badge tone="primary">↻ {recurrenceLabel(t.recurrence_rule)}</Badge>}
@@ -651,7 +651,7 @@ function MaintenanceTab({ people, defaultAssignee, onError, canUseMoney }: {
       )}
       {costTask && (
         <Modal
-          title="Track maintenance cost in Solace"
+          title="Track maintenance cost in Money"
           onClose={closeCost}
           size="sm"
           footer={(
@@ -663,14 +663,14 @@ function MaintenanceTab({ people, defaultAssignee, onError, canUseMoney }: {
         >
           <form id="maintenance-cost-form" onSubmit={trackCost} className="flex flex-col gap-4">
             <div className="rounded-xl bg-primary-soft px-3 py-2.5 text-sm text-ink">
-              <strong>{costTask.title}</strong> stays owned by Homestead. Solace will hold the
+              <strong>{costTask.title}</strong> stays owned by Home. Money will hold the
               amount and payment history, using the same due date and recurrence.
             </div>
             {costError && <div className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{costError}</div>}
             <Field label="Expected cost">
               <Input type="number" min="0.01" step="0.01" inputMode="decimal" value={costAmount} onChange={e => setCostAmount(e.target.value)} placeholder="0.00" autoFocus />
             </Field>
-            <Field label="Solace category">
+            <Field label="Money category">
               <Select value={costCategory} onChange={e => setCostCategory(e.target.value)}>
                 {['other', 'utilities', 'insurance', 'council', 'mortgage'].map(category => <option key={category} value={category}>{cap(category)}</option>)}
               </Select>
@@ -1977,10 +1977,10 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 rounded-xl bg-primary-soft px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="font-semibold text-ink">Bills are managed in Solace</p>
-          <p className="mt-0.5 text-muted-strong">This page shows home-related bills. Change amounts, dates, recurrence, payment status and autopay in Solace; Homestead keeps only policy and account details.</p>
+          <p className="font-semibold text-ink">Bills are managed in Money</p>
+          <p className="mt-0.5 text-muted-strong">This page shows home-related bills. Change amounts, dates, recurrence, payment status and autopay in Money; Home keeps only policy and account details.</p>
         </div>
-        <Link to="/solace?tab=bills" className="flex min-h-11 flex-shrink-0 items-center font-semibold text-primary">Open Solace bills →</Link>
+        <Link to="/solace?tab=bills" className="flex min-h-11 flex-shrink-0 items-center font-semibold text-primary">Open Money bills →</Link>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <Card><p className="text-2xl font-extrabold text-ink">{policies.filter(p => p.is_active).length}</p><p className="text-sm text-muted">Active policies</p></Card>
@@ -2002,7 +2002,7 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold text-ink">Insurance</h2>
-            <p className="text-sm text-muted">Solace supplies premiums and renewals; policy details stay here.</p>
+            <p className="text-sm text-muted">Money supplies premiums and renewals; policy details stay here.</p>
           </div>
         </div>
 
@@ -2027,7 +2027,7 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
         )}
 
         {shownPolicies.length === 0 ? (
-          <EmptyState icon="🛡️" title={q ? 'No matching policies' : 'No home insurance bills yet'} hint={q ? 'Try a different search.' : 'Create an insurance bill in Solace and choose “Home insurance / cover”.'} />
+          <EmptyState icon="🛡️" title={q ? 'No matching policies' : 'No home insurance bills yet'} hint={q ? 'Try a different search.' : 'Create an insurance bill in Money and choose “Home insurance / cover”.'} />
         ) : (
           <div className="grid gap-3 lg:grid-cols-2">
             {shownPolicies.map(policy => {
@@ -2041,8 +2041,8 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
                         <Badge>{cap(policy.policy_type)}</Badge>
                         {!policy.is_active && <Badge tone="neutral">Inactive</Badge>}
                         {policy.solace_bill_ref && (
-                          <Link to={`/solace?tab=bills&q=${encodeURIComponent(policy.name)}`} aria-label={`Open ${policy.name} in Solace`}>
-                            <Badge tone="success">Managed in Solace →</Badge>
+                          <Link to={`/solace?tab=bills&q=${encodeURIComponent(policy.name)}`} aria-label={`Open ${policy.name} in Money`}>
+                            <Badge tone="success">Managed in Money →</Badge>
                           </Link>
                         )}
                       </div>
@@ -2074,7 +2074,7 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold text-ink">Rates &amp; household services</h2>
-            <p className="text-sm text-muted">A read-through of home-related Solace bills, with optional account details.</p>
+            <p className="text-sm text-muted">A read-through of home-related Money bills, with optional account details.</p>
           </div>
         </div>
 
@@ -2094,7 +2094,7 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
         )}
 
         {shownCosts.length === 0 ? (
-          <EmptyState icon="🧾" title={q ? 'No matching household costs' : 'No home-related bills yet'} hint={q ? 'Try a different search.' : 'Create the bill in Solace and organise it as a home cost.'} />
+          <EmptyState icon="🧾" title={q ? 'No matching household costs' : 'No home-related bills yet'} hint={q ? 'Try a different search.' : 'Create the bill in Money and organise it as a home cost.'} />
         ) : (
           <div className="grid gap-3 lg:grid-cols-2">
             {shownCosts.map(cost => {
@@ -2108,8 +2108,8 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
                         <Badge>{cap(cost.cost_type)}</Badge>
                         {!cost.is_active && <Badge tone="neutral">Inactive</Badge>}
                         {cost.solace_bill_ref && (
-                          <Link to={`/solace?tab=bills&q=${encodeURIComponent(cost.name)}`} aria-label={`Open ${cost.name} in Solace`}>
-                            <Badge tone="success">Managed in Solace →</Badge>
+                          <Link to={`/solace?tab=bills&q=${encodeURIComponent(cost.name)}`} aria-label={`Open ${cost.name} in Money`}>
+                            <Badge tone="success">Managed in Money →</Badge>
                           </Link>
                         )}
                       </div>
@@ -2184,7 +2184,7 @@ const TAB_KEYS: Tab[] = [
   'contacts', 'finances',
 ]
 const TAB_LABELS: Record<Tab, string> = {
-  overview: 'Our home', rooms: 'Rooms & areas', maintenance: 'Maintenance', appliances: 'Appliances',
+  overview: 'Home', rooms: 'Rooms & areas', maintenance: 'Maintenance', appliances: 'Appliances',
   pool: 'Pool & spa', usage: 'Power & water', improvements: 'Improvements', contacts: 'Contacts',
   finances: 'Costs & cover',
 }
@@ -2244,7 +2244,7 @@ export function HomesteadPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Our home" icon="🏠" />
+      <PageHeader title="Home" icon="🏠" />
 
       <SearchField
         value={query}
@@ -2284,7 +2284,7 @@ export function HomesteadPage() {
               active={tab}
               onChange={setTab}
               className="w-full sm:w-fit"
-              mobileSelectLabel="Homestead section"
+              mobileSelectLabel="Home section"
             />
           </div>
           {tab !== 'overview' && (

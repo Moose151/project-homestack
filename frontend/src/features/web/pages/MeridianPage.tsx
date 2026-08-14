@@ -57,7 +57,7 @@ export function MeridianPage() {
     <div className="flex flex-col gap-4 sm:gap-5">
       <div className="hidden sm:block">
         <PageHeader
-          title="Tasks & rewards"
+          title="Tasks"
           icon="⭐"
         />
       </div>

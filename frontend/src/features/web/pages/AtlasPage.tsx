@@ -983,7 +983,7 @@ export function AtlasPage() {
     <div className="flex flex-col gap-4 sm:gap-5">
       <div className="hidden sm:block">
         <PageHeader
-          title="Lists & notes"
+          title="Lists & Notes"
           icon="🗒"
           actions={tab === 'lists' && lists.length > 0 && !creatingList
             ? <Button size="sm" onClick={() => setCreatingList(true)}>+ New list</Button>

@@ -605,7 +605,7 @@ export function CloseoutTab({ closeout, reload, onOccurrence, onError }: {
   const [saving, setSaving] = useState(false)
   const [viewed, setViewed] = useState<SolaceCloseoutResponse | null>(closeout)
   useEffect(() => setViewed(closeout), [closeout])
-  if (!viewed) return <EmptyState icon="🧾" title="Preparing cycle closeout" hint="Refresh Solace to calculate the current cycle." />
+  if (!viewed) return <EmptyState icon="🧾" title="Preparing cycle closeout" hint="Refresh Money to calculate the current cycle." />
   const navigate = async (date?: string) => {
     setSaving(true)
     try {

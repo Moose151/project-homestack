@@ -252,7 +252,7 @@ export function TravelPage() {
   const selected = trips.find(row => row.id === selectedId)
   const setTab = (next: string) => { setParams(next === 'ideas' ? { tab: 'ideas' } : {}); setCreating(false); setEditingIdea(null) }
   if (selected) return <TripDetail trip={selected} people={people} onBack={() => setParams({})} onDeleted={async () => { setParams({}); await load() }} reload={load} onError={setError} />
-  return <div className="flex flex-col gap-4"><PageHeader title="Trips & holidays" icon="✈️" subtitle="From somewhere you would love to go through to fully booked." actions={<Button size="sm" onClick={() => setCreating(true)}>+ {tab === 'ideas' ? 'Destination' : 'Trip'}</Button>} />
+  return <div className="flex flex-col gap-4"><PageHeader title="Travel" icon="✈️" subtitle="From somewhere you would love to go through to fully booked." actions={<Button size="sm" onClick={() => setCreating(true)}>+ {tab === 'ideas' ? 'Destination' : 'Trip'}</Button>} />
     <Tabs tabs={[{ key: 'trips', label: 'Trips', badge: trips.length || undefined }, { key: 'ideas', label: 'To go', badge: ideas.filter(row => row.status === 'active').length || undefined }]} active={tab} onChange={setTab} />
     {error && <div className="rounded-xl bg-danger-soft p-3 text-sm text-danger">{error}</div>}
     {(creating || editingIdea) && <PlanForm kind={tab === 'ideas' ? 'idea' : 'trip'} people={people} existing={editingIdea} onCancel={() => { setCreating(false); setEditingIdea(null) }} onSaved={(trip) => { setCreating(false); setEditingIdea(null); void load(); if (trip) setParams({ trip: String(trip.id) }) }} onError={setError} />}

@@ -82,15 +82,48 @@ function widgetAccent(key: string): { colour: string; icon: string } {
   return { colour: STACK_BY_KEY.hub.colour, icon: '' } // clock, greeting, other core widgets
 }
 
+const DUE_RECORD_TYPES = new Set([
+  'AtlasReminder',
+  'Bill',
+  'BillOccurrence',
+  'EducationAssessment',
+  'MaintenanceTask',
+  'MeridianTask',
+  'PetTreatment',
+  'PlannedPurchase',
+])
+
+function dayDiff(iso: string) {
+  const d = new Date(iso)
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  return Math.round((target - today) / 86400000)
+}
+
 function formatDue(iso: string | null) {
+  if (!iso) return null
+  const diff = dayDiff(iso)
+  if (diff === 0) return 'Due today'
+  if (diff === 1) return 'Due tomorrow'
+  if (diff < 0) return `${Math.abs(diff)}d overdue`
+  if (diff <= 7) return `Due in ${diff} days`
+  return `Due ${new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+}
+
+function formatEventWhen(iso: string | null, isAllDay = false) {
   if (!iso) return null
   const d = new Date(iso)
   const now = new Date()
-  const diff = Math.round((d.getTime() - now.getTime()) / 86400000)
+  const diff = dayDiff(iso)
+  if (diff === 0 && !isAllDay) {
+    const hours = Math.ceil((d.getTime() - now.getTime()) / 3_600_000)
+    if (hours > 0 && hours <= 12) return `Starts in ${hours} hour${hours === 1 ? '' : 's'}`
+    return `At ${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`
+  }
   if (diff === 0) return 'Today'
   if (diff === 1) return 'Tomorrow'
-  if (diff === -1) return 'Yesterday'
-  if (diff < 0) return `${Math.abs(diff)}d overdue`
+  if (diff > 1 && diff <= 7) return `In ${diff} days`
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
@@ -134,7 +167,7 @@ function RemindersWidget({ items }: { items: AtlasReminder[] }) {
               <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 font-medium ${
                 due.includes('overdue')
                   ? 'bg-danger-soft text-danger'
-                  : due === 'Today'
+                  : due === 'Due today'
                   ? 'bg-primary-soft text-primary'
                   : 'bg-sunken text-muted'
               }`}>
@@ -292,6 +325,11 @@ function dayHeading(dateKey: string, todayKey: string) {
   return date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
+function upcomingRowLabel(item: CalendarEvent) {
+  if (DUE_RECORD_TYPES.has(item.source_record_type)) return formatDue(item.start_at)
+  return formatEventWhen(item.start_at, item.is_all_day)
+}
+
 function UpcomingWidget({ items, horizons }: { items: CalendarEvent[]; horizons?: UpcomingHorizon[] }) {
   const ranges = horizons?.length ? horizons : [{ key: 'week', label: 'Next 7 days', until: '9999-12-31' }]
   const [horizonKey, setHorizonKey] = useState(
@@ -351,9 +389,7 @@ function UpcomingWidget({ items, horizons }: { items: CalendarEvent[]; horizons?
               <ul className="flex flex-col gap-1.5">
                 {group.items.map(item => {
                   const href = sourcePath(item) ?? calendarDayHref(item.start_at)
-                  const time = item.is_all_day
-                    ? null
-                    : new Date(item.start_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+                  const when = upcomingRowLabel(item)
                   return (
                     <li key={item.id}>
                       <Link
@@ -369,7 +405,7 @@ function UpcomingWidget({ items, horizons }: { items: CalendarEvent[]; horizons?
                           <span className="block truncate text-sm font-medium text-ink">{item.title}</span>
                           <span className="block truncate text-xs text-muted">{sourceLabel(item.source_node)}</span>
                         </span>
-                        {time && <span className="flex-shrink-0 text-xs tabular-nums text-muted">{time}</span>}
+                        {when && <span className="flex-shrink-0 text-xs tabular-nums text-muted">{when}</span>}
                       </Link>
                     </li>
                   )
@@ -388,10 +424,7 @@ function CalendarUpcomingWidget({ items }: { items: CalendarEvent[] }) {
   return (
     <ul className="flex flex-col gap-2">
       {items.slice(0, 6).map(e => {
-        const d = new Date(e.start_at)
-        const label = e.is_all_day
-          ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-          : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+        const label = formatEventWhen(e.start_at, e.is_all_day)
         return (
           <li key={e.id} className="flex items-center justify-between gap-3 text-sm">
             <span className="text-ink truncate">{e.title}</span>
@@ -593,17 +626,21 @@ function SolaceBillsWidget({ items }: { items: SolaceBill[] }) {
   if (!items.length) return <p className="text-sm text-muted">No unpaid bills due</p>
   return (
     <ul className="space-y-2.5">
-      {items.slice(0, 6).map(bill => (
-        <li key={bill.id} className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-ink">{bill.name}</p>
-            <p className="text-xs text-muted">{moneyLabel(bill.amount)}</p>
-          </div>
-          <Link to="/solace?tab=bills" className="shrink-0 text-xs text-primary hover:underline">
-            {formatDue(bill.next_due_at || bill.due_at)}
-          </Link>
-        </li>
-      ))}
+      {items.slice(0, 6).map(bill => {
+        const params = new URLSearchParams({ tab: 'bills', bill: String(bill.id) })
+        if (bill.next_occurrence_id) params.set('occurrence', String(bill.next_occurrence_id))
+        return (
+          <li key={bill.id} className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-ink">{bill.name}</p>
+              <p className="text-xs text-muted">{moneyLabel(bill.amount)}</p>
+            </div>
+            <Link to={`/solace?${params.toString()}`} className="shrink-0 text-xs text-primary hover:underline">
+              {formatDue(bill.next_due_at || bill.due_at)}
+            </Link>
+          </li>
+        )
+      })}
     </ul>
   )
 }

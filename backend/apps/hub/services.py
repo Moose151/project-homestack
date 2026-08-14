@@ -416,14 +416,20 @@ def _solace_widget_content(key: str, user) -> list:
         from django.utils import timezone
 
         from apps.solace.bill_schedule import ensure_bill_occurrences
+        from apps.solace.models import BillOccurrence
 
         bills = s.list_bills(user, upcoming_only=True, unpaid_only=True, active_only=True)
         today = timezone.localdate()
         for bill in bills:
             ensure_bill_occurrences(bill, today - timedelta(days=30), today + timedelta(days=90))
+            bill._solace_next_occurrence = bill.occurrences.filter(
+                status=BillOccurrence.Status.UPCOMING,
+            ).order_by("due_at").first()
         bills.sort(
             key=lambda bill: (
-                bill.occurrences.filter(status="upcoming").values_list("due_at", flat=True).first()
+                getattr(bill, "_solace_next_occurrence", None).due_at
+                if getattr(bill, "_solace_next_occurrence", None)
+                else None
                 or bill.due_at
                 or timezone.now() + timedelta(days=3650)
             )

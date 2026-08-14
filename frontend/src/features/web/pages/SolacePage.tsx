@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type {
@@ -204,7 +204,7 @@ function BillForm({ categories, initialCategory, categoryLocked = false, nameLab
     <Card contentClassName="p-4">
       <div className="mb-4 rounded-xl bg-primary-soft px-3 py-3 text-sm text-ink">
         <p className="font-semibold">Enter home information once</p>
-        <p className="mt-0.5 text-muted-strong">Choose a Homestead destination below and this bill will appear in the right home workspace automatically.</p>
+        <p className="mt-0.5 text-muted-strong">Choose a Home destination below and this bill will appear in the right home workspace automatically.</p>
       </div>
       <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <Field label={nameLabel}><Input value={f.name} onChange={e => set('name', e.target.value)} placeholder={nameLabel === 'Subscription' ? 'Streaming service' : 'Electricity'} /></Field>
@@ -213,7 +213,7 @@ function BillForm({ categories, initialCategory, categoryLocked = false, nameLab
         <Field label="Category"><Select disabled={categoryLocked} value={f.category} onChange={e => setF(prev => ({ ...prev, category: e.target.value, home_destination: homeDestinationForCategory(e.target.value) }))}>{!categories.includes(f.category) && <option value={f.category}>{cap(f.category)}</option>}{categories.map(c => <option key={c} value={c}>{cap(c)}</option>)}</Select></Field>
         <Field label="First due"><input type="date" className={fieldClass} value={f.due_at} onChange={e => set('due_at', e.target.value)} /></Field>
         <Field label="Repeats"><Select value={f.recurrence_rule} onChange={e => set('recurrence_rule', e.target.value)}>{RECURRENCE.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}</Select></Field>
-        <Field label="Organise in Homestead" hint="Homestead becomes the place for home details; Solace keeps the amount and payment schedule." className="sm:col-span-2 xl:col-span-3">
+        <Field label="Organise in Home" hint="Home becomes the place for home details; Money keeps the amount and payment schedule." className="sm:col-span-2 xl:col-span-3">
           <Select value={f.home_destination} onChange={e => set('home_destination', e.target.value)}>
             <option value="">No — finance only</option>
             <option value="insurance_policy">Home insurance / cover</option>
@@ -349,7 +349,7 @@ function BillEditor({ bill, categories, reload, onError }: {
           </Select>
         </Field>
         {!bill.source_node && (
-          <Field label="Organise in Homestead" hint="Use the information already here—no re-entry needed." className="sm:col-span-2">
+          <Field label="Organise in Home" hint="Use the information already here—no re-entry needed." className="sm:col-span-2">
             <Select value={f.home_destination} onChange={e => set('home_destination', e.target.value)}>
               <option value="">Keep as finance only</option>
               <option value="insurance_policy">Home insurance / cover</option>
@@ -449,16 +449,20 @@ function BillDetails({ bill }: { bill: SolaceBill }) {
   )
 }
 
-function BillCard({ bill, categories, reload, onError, onPay, paying }: {
+function BillCard({ bill, categories, reload, onError, onPay, paying, highlighted }: {
   bill: SolaceBill
   categories: string[]
   reload: () => void
   onError: (message: string) => void
   onPay: (bill: SolaceBill) => void
   paying: number | null
+  highlighted?: boolean
 }) {
   return (
-    <Card contentClassName="p-4">
+    <Card
+      className={highlighted ? 'ring-2 ring-primary/70' : ''}
+      contentClassName="p-4"
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="font-semibold text-ink truncate">{bill.name}</h3>
@@ -466,7 +470,7 @@ function BillCard({ bill, categories, reload, onError, onPay, paying }: {
           {bill.is_active && bill.include_in_set_aside && (
             <p className="text-xs text-muted">{money(bill.fortnightly_amount)}/fortnight · {money(bill.annual_amount)}/year</p>
           )}
-          {bill.source_node === 'homestead' && <div className="mt-1"><Badge tone="success">Shown in Homestead</Badge></div>}
+          {bill.source_node === 'homestead' && <div className="mt-1"><Badge tone="success">Shown in Home</Badge></div>}
         </div>
         <DueBadge iso={bill.next_due_at || bill.due_at} paid={bill.is_paid && !bill.recurrence_rule} />
       </div>
@@ -488,19 +492,21 @@ function BillCard({ bill, categories, reload, onError, onPay, paying }: {
       </div>
       <BillDetails bill={bill} />
       {bill.source_node === 'homestead' && (
-        <Link to={homeDestinationPath(bill.source_record_type)} className="mt-3 flex min-h-11 items-center justify-between gap-3 border-t border-line pt-3 text-sm font-semibold text-primary">View home details in Homestead <span aria-hidden>→</span></Link>
+        <Link to={homeDestinationPath(bill.source_record_type)} className="mt-3 flex min-h-11 items-center justify-between gap-3 border-t border-line pt-3 text-sm font-semibold text-primary">View home details in Home <span aria-hidden>→</span></Link>
       )}
       <BillEditor bill={bill} categories={categories} reload={reload} onError={onError} />
     </Card>
   )
 }
 
-function BillsTab({ bills, categories, reload, onOccurrence, onError }: {
+function BillsTab({ bills, categories, reload, onOccurrence, onError, focusedBillId, focusedOccurrenceId }: {
   bills: SolaceBill[]
   categories: string[]
   reload: () => void
   onOccurrence: (id: number, action: 'paid' | 'unpaid' | 'skip') => Promise<SolaceBillOccurrence>
   onError: (m: string) => void
+  focusedBillId: number | null
+  focusedOccurrenceId: number | null
 }) {
   const [undoOccurrence, setUndoOccurrence] = useState<{ id: number; name: string } | null>(null)
   const [paying, setPaying] = useState<number | null>(null)
@@ -546,6 +552,21 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError }: {
       return left.name.localeCompare(right.name)
     })
   }, [billSort, bills, categoryFilter, statusFilter])
+  const highlightedBillId = focusedBillId
+    ?? bills.find(bill => focusedOccurrenceId && bill.next_occurrence_id === focusedOccurrenceId)?.id
+    ?? null
+  useEffect(() => {
+    if (!highlightedBillId) return
+    setCategoryFilter('all')
+    setStatusFilter('all')
+    const id = window.setTimeout(() => {
+      document.getElementById(`solace-bill-${highlightedBillId}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+    }, 50)
+    return () => window.clearTimeout(id)
+  }, [highlightedBillId])
   return (
     <div className="flex flex-col gap-4">
       <CreatePanel label="Add bill">
@@ -585,10 +606,12 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError }: {
       {bills.length === 0 ? <EmptyState icon="💸" title="No bills yet" hint="Add a recurring or one-off bill to start forecasting what the household needs to set aside." /> : (
         visibleBills.length === 0 ? <EmptyState icon="🔎" title="No bills match these filters" hint="Try another category or status." /> : <div className="grid gap-3 lg:grid-cols-2">
           {visibleBills.map(b => (
-            <BillCard
-              key={b.id} bill={b} categories={categories} reload={reload} onError={onError}
-              onPay={pay} paying={paying}
-            />
+            <div key={b.id} id={`solace-bill-${b.id}`}>
+              <BillCard
+                bill={b} categories={categories} reload={reload} onError={onError}
+                onPay={pay} paying={paying} highlighted={b.id === highlightedBillId}
+              />
+            </div>
           ))}
         </div>
       )}
@@ -1793,7 +1816,7 @@ function ForecastTab({ initial, onManage, onError }: {
   }
 
   if (!forecast) {
-    return <EmptyState icon="📈" title="Forecast is not available" hint="Refresh Solace to calculate the bills-account forecast." />
+    return <EmptyState icon="📈" title="Forecast is not available" hint="Refresh Money to calculate the bills-account forecast." />
   }
   if (!forecast.latest_balance) {
     return (
@@ -1801,7 +1824,7 @@ function ForecastTab({ initial, onManage, onError }: {
         <EmptyState
           icon="🏦"
           title="Record the bills-account balance"
-          hint={`Solace needs an opening balance to calculate what can be withdrawn. Based on scheduled cash flow, at least ${money(forecast.required_opening_balance)} is required through ${dateOnly(forecast.through)}.`}
+          hint={`Money needs an opening balance to calculate what can be withdrawn. Based on scheduled cash flow, at least ${money(forecast.required_opening_balance)} is required through ${dateOnly(forecast.through)}.`}
           action={<Button onClick={onManage}>Add balance</Button>}
         />
       </div>
@@ -1944,7 +1967,7 @@ function PayPlan({ plan, generating, onGenerate, onSection, onError }: {
       <EmptyState
         icon="🧮"
         title="Pay plan is not available"
-        hint="Refresh Solace to calculate the current cycle."
+        hint="Refresh Money to calculate the current cycle."
       />
     )
   }
@@ -2530,6 +2553,13 @@ export function SolacePage() {
   const [scheduleMonth, setScheduleMonth] = useState(currentMonthKey)
   const [scheduleLoading, setScheduleLoading] = useState(false)
   const [q, setQ] = useUrlQueryState()
+  const loadSeq = useRef(0)
+  const scheduleSeq = useRef(0)
+  const searchWasActive = useRef(false)
+  const workspaceLoaded = useRef(false)
+  const deepLinkParams = useMemo(() => new URLSearchParams(location.search), [location.search])
+  const focusedBillId = Number(deepLinkParams.get('bill')) || null
+  const focusedOccurrenceId = Number(deepLinkParams.get('occurrence')) || null
 
   const billCategoryNames = useMemo(() => {
     const names = categories
@@ -2541,52 +2571,75 @@ export function SolacePage() {
     if (!requiresPasswordUnlock) setUnlocked(true)
   }, [requiresPasswordUnlock])
 
-  const loadSchedule = async (month = scheduleMonth) => {
+  const applyBootstrap = useCallback((data: Awaited<ReturnType<typeof api.getSolaceBootstrap>>) => {
+    setSolaceCurrencySymbol(data.settings.currency_symbol)
+    setBills(data.bills); setPaydays(data.paydays); setPurchases(data.purchases)
+    setBuckets(data.buckets); setChecklist(data.checklist)
+    setPlan(data.plan); setSettings(data.settings); setCategories(data.categories)
+    setBalances(data.balances); setHealth(data.health); setCategoryReport(data.category_report)
+    setCloseout(data.closeout); setForecast(data.forecast)
+    setChecklistPreferences(data.checklist_preferences)
+  }, [])
+
+  const loadSchedule = useCallback(async (month = scheduleMonth) => {
+    const requestId = ++scheduleSeq.current
     const { start, end } = monthBounds(month)
     setScheduleLoading(true)
     try {
-      setSchedule(await api.getSolaceSchedule(start, end))
+      const data = await api.getSolaceSchedule(start, end)
+      if (requestId === scheduleSeq.current) setSchedule(data)
     } catch (e) {
       setError(errMsg(e))
     } finally {
-      setScheduleLoading(false)
+      if (requestId === scheduleSeq.current) setScheduleLoading(false)
     }
-  }
+  }, [scheduleMonth])
 
-  const load = async () => {
+  const load = useCallback(async () => {
+    const requestId = ++loadSeq.current
     setLoading(true); setError('')
     try {
+      const { start, end } = monthBounds(scheduleMonth)
+      const schedulePromise = api.getSolaceSchedule(start, end).catch(() => null)
+      const nowPromise = api.getSolaceNow().catch(() => null)
       const data = await api.getSolaceBootstrap()
-      setSolaceCurrencySymbol(data.settings.currency_symbol)
-      setBills(data.bills); setPaydays(data.paydays); setPurchases(data.purchases)
-      setBuckets(data.buckets); setChecklist(data.checklist)
-      setPlan(data.plan); setSettings(data.settings); setCategories(data.categories)
-      setBalances(data.balances); setHealth(data.health); setCategoryReport(data.category_report)
-      setCloseout(data.closeout); setForecast(data.forecast)
-      setChecklistPreferences(data.checklist_preferences)
+      if (requestId !== loadSeq.current) return
+      applyBootstrap(data)
+      const [scheduleData, nowData] = await Promise.all([schedulePromise, nowPromise])
+      if (requestId !== loadSeq.current) return
+      if (scheduleData) setSchedule(scheduleData)
+      if (nowData) setNow(nowData)
+      workspaceLoaded.current = true
       setUnlocked(true)
-      void loadSchedule()
-      void api.getSolaceNow().then(setNow).catch(() => {})
     } catch (e) {
       setError(errMsg(e))
       if (String(errMsg(e)).includes('re-authentication')) setUnlocked(false)
     } finally {
-      setLoading(false)
+      if (requestId === loadSeq.current) setLoading(false)
     }
-  }
+  }, [applyBootstrap, scheduleMonth])
 
   useEffect(() => {
-    if (unlocked) void loadSchedule(scheduleMonth)
-    // scheduleMonth is the explicit navigation state for this request.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scheduleMonth])
+    if (unlocked && !loading && !workspaceLoaded.current && !q.trim()) void load()
+  }, [unlocked, loading, q, load])
+
+  useEffect(() => {
+    if (unlocked && workspaceLoaded.current) void loadSchedule(scheduleMonth)
+  }, [scheduleMonth, unlocked, loadSchedule])
 
   // Every other node searches as you type; Money asking for a button press was the odd one.
   useEffect(() => {
     if (!unlocked) return
     const term = q.trim()
+    if (!term) {
+      if (searchWasActive.current) {
+        searchWasActive.current = false
+        void load()
+      }
+      return
+    }
     const id = setTimeout(() => {
-      if (!term) { void load(); return }
+      searchWasActive.current = true
       api.searchSolace(term)
         .then(r => {
           setBills(r.bills); setPaydays(r.paydays); setPurchases(r.purchases)
@@ -2595,7 +2648,7 @@ export function SolacePage() {
         .catch(e => setError(errMsg(e)))
     }, 300)
     return () => clearTimeout(id)
-  }, [q, unlocked])
+  }, [q, unlocked, load])
 
   const generateChecklist = async (date?: string) => {
     setGeneratingChecklist(true); setError('')
@@ -2622,9 +2675,14 @@ export function SolacePage() {
         ...previous,
         occurrences: previous.occurrences.map(row => row.id === updated.id ? updated : row),
       } : previous)
-      setBills(await api.getSolaceBills())
-      setForecast(await api.getSolaceForecast())
-      setNow(await api.getSolaceNow())
+      const [nextBills, nextForecast, nextNow] = await Promise.all([
+        api.getSolaceBills(),
+        api.getSolaceForecast(),
+        api.getSolaceNow(),
+      ])
+      setBills(nextBills)
+      setForecast(nextForecast)
+      setNow(nextNow)
       void loadSchedule()
       return updated
     } catch (e) {
@@ -2653,7 +2711,7 @@ export function SolacePage() {
           tabs={SOLACE_TABS}
           active={tab}
           onChange={setTab}
-          mobileSelectLabel="Solace section"
+          mobileSelectLabel="Money section"
         />
       </div>
       {tab === 'now' && (
@@ -2694,6 +2752,8 @@ export function SolacePage() {
               reload={load}
               onOccurrence={updateOccurrence}
               onError={setError}
+              focusedBillId={focusedBillId}
+              focusedOccurrenceId={focusedOccurrenceId}
             />
           )}
           {billsSection === 'schedule' && (

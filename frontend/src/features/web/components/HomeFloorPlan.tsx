@@ -275,7 +275,7 @@ export function HomeFloorPlan({
     >
       <div className="flex flex-col gap-3 border-b border-line px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h3 className="font-bold text-ink">Our home</h3>
+          <h3 className="font-bold text-ink">Home</h3>
           <p className="text-sm text-muted">Select a space to highlight, link or open it · {savedCount} saved{suggestedCount ? ` · ${suggestedCount} suggested` : ''}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

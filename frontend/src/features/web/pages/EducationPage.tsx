@@ -1500,7 +1500,7 @@ export function EducationPage() {
   return (
     <div className="flex flex-col gap-5">
       <div className="hidden sm:block">
-        <PageHeader title="School & study" icon="🎓" />
+        <PageHeader title="Education" icon="🎓" />
       </div>
 
       <SearchField

@@ -19,8 +19,8 @@ type ListSection = 'personal' | 'rooms' | 'meridian'
 const REACTIONS = ['❤️', '👍', '🎉', '💪', '👏']
 
 const sourceNames: Record<string, string> = {
-  atlas: 'Lists', fitness: 'Fitness', meridian: 'Tasks & rewards', travel: 'Trips & holidays',
-  education: 'School & study', homestead: 'Our home',
+  atlas: 'Lists & Notes', fitness: 'Fitness', meridian: 'Tasks', travel: 'Travel',
+  education: 'Education', homestead: 'Home',
 }
 
 function when(value: string | null) {

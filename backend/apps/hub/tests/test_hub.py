@@ -39,6 +39,14 @@ def _login(client, username, pin="1234"):
     )
 
 
+def _reauth(client, password="pass123!"):
+    client.post(
+        reverse("auth-reauth"),
+        {"password": password},
+        content_type="application/json",
+    )
+
+
 def _future(hours=24):
     return timezone.now() + timezone.timedelta(hours=hours)
 
@@ -204,6 +212,78 @@ class UpcomingWidgetTests(TestCase):
 
         create_event(self.admin, title="Last week's party", start_at=_future(hours=-72))
         self.assertIsNone(self._upcoming())
+
+    def test_today_appointment_is_included(self):
+        from apps.pets.services import create_appointment, create_pet
+
+        pet = create_pet(self.admin, name="Allan", species="cat")
+        create_appointment(self.admin, pet=pet, title="Vet check", start_at=_future(1))
+        self.assertIn("Allan: Vet check", [i["title"] for i in self._upcoming()["items"]])
+
+    def test_tomorrow_appointment_is_included(self):
+        from apps.pets.services import create_appointment, create_pet
+
+        pet = create_pet(self.admin, name="Allan", species="cat")
+        create_appointment(self.admin, pet=pet, title="Grooming", start_at=_future(24))
+        self.assertIn("Allan: Grooming", [i["title"] for i in self._upcoming()["items"]])
+
+    def test_future_appointment_is_included(self):
+        from apps.pets.services import create_appointment, create_pet
+
+        pet = create_pet(self.admin, name="Allan", species="cat")
+        create_appointment(self.admin, pet=pet, title="Dental", start_at=_future(72))
+        self.assertIn("Allan: Dental", [i["title"] for i in self._upcoming()["items"]])
+
+    def test_past_appointment_is_dropped(self):
+        from apps.pets.services import create_appointment, create_pet
+
+        pet = create_pet(self.admin, name="Allan", species="cat")
+        create_appointment(self.admin, pet=pet, title="Old appointment", start_at=_future(-72))
+        self.assertIsNone(self._upcoming())
+
+    def test_overdue_task_is_kept(self):
+        from apps.meridian.services import create_task
+
+        create_task(self.admin, title="Overdue task", points=5, due_at=_future(-48))
+        self.assertIn("Overdue task", [i["title"] for i in self._upcoming()["items"]])
+
+    def test_overdue_unpaid_bill_is_kept_after_reauth(self):
+        from apps.nodes.services import enable_node
+        from apps.solace.services import create_bill
+
+        enable_node(self.admin, "solace")
+        grant_user_permission(self.admin, "solace.view")
+        create_bill(self.admin, name="Overdue electricity", amount="120.00", due_at=_future(-48))
+        _reauth(self.client)
+        self.assertIn("Bill: Overdue electricity", [i["title"] for i in self._upcoming()["items"]])
+
+    def test_paid_recurring_bill_uses_next_unpaid_occurrence(self):
+        from apps.nodes.services import enable_node
+        from apps.hub.models import HouseholdHubWidget, HubWidget
+        from apps.hub.services import _solace_widget_content
+        from apps.solace.models import BillOccurrence
+        from apps.solace.services import create_bill, mark_occurrence_paid
+
+        enable_node(self.admin, "solace")
+        widget = HubWidget.objects.get(key="solace_bills_due")
+        HouseholdHubWidget.objects.get_or_create(
+            household=self.admin.household,
+            widget=widget,
+            defaults={"is_enabled": True, "display_order": 1, "size": "small"},
+        )
+        bill = create_bill(
+            self.admin,
+            name="Internet",
+            amount="89.00",
+            due_at=_future(-48),
+            recurrence_rule="FREQ=WEEKLY",
+        )
+        stale = BillOccurrence.objects.filter(bill=bill, status=BillOccurrence.Status.UPCOMING).order_by("due_at").first()
+        self.assertIsNotNone(stale)
+        mark_occurrence_paid(self.admin, stale)
+        row = next(item for item in _solace_widget_content("solace_bills_due", self.admin) if item["name"] == "Internet")
+        self.assertFalse(row["is_overdue"])
+        self.assertNotEqual(row["next_occurrence_id"], stale.id)
 
     def test_meta_offers_horizons(self):
         create_reminder(self.admin, title="Doctor visit", due_at=_future(48))

@@ -95,14 +95,15 @@ class BillSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def _next_occurrence(obj):
+        if hasattr(obj, "_solace_next_occurrence"):
+            return obj._solace_next_occurrence
         prefetched = getattr(obj, "upcoming_occurrences", None)
         if prefetched is not None:
             return prefetched[0] if prefetched else None
-        cached = getattr(obj, "_solace_next_occurrence", None)
-        if cached is None and not hasattr(obj, "_solace_next_occurrence"):
-            cached = obj.occurrences.filter(status=BillOccurrence.Status.UPCOMING).first()
-            obj._solace_next_occurrence = cached
-        return cached
+        obj._solace_next_occurrence = obj.occurrences.filter(
+            status=BillOccurrence.Status.UPCOMING,
+        ).first()
+        return obj._solace_next_occurrence
 
     def get_annual_amount(self, obj):
         from apps.solace.bill_schedule import annual_cost

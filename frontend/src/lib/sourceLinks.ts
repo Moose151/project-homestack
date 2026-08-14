@@ -49,6 +49,10 @@ export function sourcePath(ref: SourceRef): string | null {
     case 'homestead':
       return `/homestead?tab=${ref.source_record_type === 'Improvement' ? 'improvements' : 'maintenance'}&q=${query}`
     case 'solace':
+      if (ref.source_record_id) {
+        if (ref.source_record_type === 'Bill') return `/solace?tab=bills&bill=${ref.source_record_id}`
+        if (ref.source_record_type === 'BillOccurrence') return `/solace?tab=bills&occurrence=${ref.source_record_id}`
+      }
       return `/solace?tab=${SOLACE_TABS[ref.source_record_type] || 'schedule'}&q=${query}`
     case 'meridian':
       return '/meridian?tab=tasks'

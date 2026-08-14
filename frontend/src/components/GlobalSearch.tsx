@@ -124,7 +124,7 @@ export function GlobalSearch({
         {error && <InlineAlert message={error} onDismiss={() => setError('')} />}
         {lockedNodes.includes('solace') && (
           <button onClick={() => go(`/solace?q=${encodeURIComponent(query)}`)} className="w-full rounded-xl bg-warning-soft px-3 py-2 text-left text-xs text-warning">
-            Solace results are protected. Open Solace and enter your password to include them.
+            Money results are protected. Open Money and enter your password to include them.
           </button>
         )}
         {query.trim().length < 2 ? (
