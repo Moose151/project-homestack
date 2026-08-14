@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.37.4**
+> **Current version: 0.37.5**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,23 @@
 ---
 
 ## 0.37 — Production reliability and deployment safety
+
+### 0.37.5 — 2026-08-14 — Prepare one-command production deployment
+- Added `scripts/deploy-production.sh`, a conservative production deployment command that gates on
+  a clean `main`, reachable `origin`, valid Compose config, healthy starting containers, complete
+  recent backup, hardened Docker topology and absence of host bindings for PostgreSQL, backend and
+  frontend before building or recreating anything.
+- The script builds backend/frontend images before promotion, handles migrations only with the
+  explicit `--migrate` flag, recreates backend and frontend independently, tests and reloads
+  Nginx Proxy Manager after each application-container promotion, validates HTTPS/API health and
+  prints a rollback SHA plus concise completion summary.
+- Added a mocked shell test harness for the critical safety gates, including dirty/wrong-branch
+  rejection, missing proxy network, stale/incomplete backups, unhealthy starting stack, migration
+  flag behaviour, health timeout, `nginx -t` failure, sensitive host-port publication, dry-run
+  non-mutation and completion summary coverage.
+- Updated production deployment, handover and roadmap documentation to describe the supported
+  script flow, dry runs, backup requirement, explicit migration handling and manual rollback
+  procedure while preserving the hardened NPM/proxy/private-network topology.
 
 ### 0.37.4 — 2026-08-14 — Dashboard and Money UX corrections
 - Dashboard Upcoming now treats appointments and events as scheduled things, not due items:

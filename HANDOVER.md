@@ -58,8 +58,13 @@ served by WhiteNoise, so admin stays styled under `DEBUG=False`.
 `docs/35_Production_Serving_and_Deployment.md` is canonical for how this is served, deployed,
 smoke-tested and rolled back.
 
-The remaining production-readiness work is container/network exposure — published ports are
-deliberately unchanged for now — plus a single supported deploy command and CI.
+Production network hardening is complete: the production Compose stack publishes no HomeStack
+PostgreSQL/backend/frontend host ports; Nginx Proxy Manager reaches the app over the external
+`proxy` Docker network; PostgreSQL stays isolated on `project-homestack_private`.
+
+The next production-readiness work after this branch is review/live adoption of the safe one-command
+deployment script (`scripts/deploy-production.sh`), then CI, off-server backup validation and
+System Health.
 
 ### Live HTTPS environment
 
@@ -276,9 +281,9 @@ Use `docs/34_Recommended_Next_Steps.md` for the practical plan and
 Recommended order:
 
 1. ~~replace Django `runserver` and Vite dev serving with production serving~~ — **done, v0.35.0**;
-2. reduce unnecessary LAN-exposed database/backend/frontend ports — **prepared in v0.37.0,
-   pending owner review and live NPM cutover**;
-3. create one supported deploy command with migration + smoke validation;
+2. ~~reduce unnecessary LAN-exposed database/backend/frontend ports~~ — **done, v0.37.x**;
+3. create one supported deploy command with migration + smoke validation — **prepared for review
+   in `scripts/deploy-production.sh`**;
 4. add frontend unit/E2E testing and CI;
 5. establish encrypted off-server backup + recovery validation;
 6. add small operational/System Health visibility;
@@ -286,23 +291,20 @@ Recommended order:
 
 After the reliability baseline: Home Assistant, Hearth, Travel finishing work and later Health.
 
-**Docker/network hardening status (v0.37.3):** repo-side Compose and documentation are prepared,
-but the final hardened Compose deployment has not been applied. The actual inspected Nginx Proxy
-Manager deployment is container/service `nginx-proxy-manager`, Compose project
-`nginx-proxy-manager`, external network `proxy`, with ports `80`, `81` and `443`. Before final
-hardening, HomeStack was on `project-homestack_default` and publishing backend `8000`, frontend
-`5173` and PostgreSQL `5432` to the LAN. The transitional live cutover has now succeeded:
-existing `homestack-frontend` and `homestack-backend` containers were attached to `proxy`, direct
-checks from inside `nginx-proxy-manager` returned 200 for frontend `/healthz` and backend
-`/api/v1/health/`, and NPM now routes the main app, `/api/` and `/admin/` to Docker container
-names. The old HomeStack host ports still exist. The prepared target removes those production
-host ports, keeps only frontend/backend on `proxy`, and keeps PostgreSQL on
-`project-homestack_private`. Development Compose remains isolated on `homestack_dev`. After the
-hardened Compose eventually recreates HomeStack containers, run the NPM nginx config-test/reload
-gate documented in `docs/35_Production_Serving_and_Deployment.md` before HTTPS/API validation.
-Final rollback while old ports exist is to restore NPM's old LAN upstreams
-(`192.168.1.125:5173` for frontend and `192.168.1.125:8000` for `/api/`/`/admin/`); do not delete
-volumes or run Docker cleanup.
+**Docker/network hardening status (v0.37.x):** complete. The actual inspected Nginx Proxy Manager
+deployment is container/service `nginx-proxy-manager`, Compose project `nginx-proxy-manager`,
+external network `proxy`, with ports `80`, `81` and `443`. HomeStack production Compose publishes
+no PostgreSQL/backend/frontend host ports. NPM routes the main app to
+`homestack-frontend:5173`, and `/api/` plus `/admin/` to `homestack-backend:8000` over Docker DNS.
+Frontend is attached only to `proxy`; backend is attached to `proxy` plus
+`project-homestack_private`; PostgreSQL is attached only to `project-homestack_private`.
+Development Compose remains isolated on `homestack_dev`.
+
+**Deployment automation status (v0.37.5):** `scripts/deploy-production.sh` is prepared for review.
+It performs preflight, backup freshness/completeness gating, fast-forward-only Git update,
+build-before-promotion, explicit `--migrate` handling, backend/frontend recreation one at a time,
+NPM `nginx -t`/reload after each app-container promotion, HTTPS/API checks and final topology
+validation. Do not use it for a live deployment until the branch has been reviewed and merged.
 
 Explicitly avoid generic plugins/integrations, Kubernetes/microservices, Redis/Celery without
 measured need, or public exposure before the Security Architecture gate is satisfied.

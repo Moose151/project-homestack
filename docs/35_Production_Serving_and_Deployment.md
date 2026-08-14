@@ -1,8 +1,9 @@
 # Production Serving and Deployment
 
-> **Status: production serving implemented; Docker network hardening prepared, pending reviewed
-> live rollout.** This is the canonical contract for how HomeStack is served in production and how
-> a deployment is performed, validated and rolled back.
+> **Status: production serving and Docker network hardening implemented.** This is the canonical
+> contract for how HomeStack is served in production and how a deployment is performed, validated
+> and rolled back. The supported deployment command is now prepared in
+> `scripts/deploy-production.sh`, pending operator review before live use.
 >
 > It replaces the previous live path, which ran Django `runserver` and the Vite development server.
 > Any older prose describing those as the live servers is stale.
@@ -75,9 +76,8 @@ The live host was inspected and the transitional NPM/container-name cutover has 
   to `homestack-backend:8000`, and `/admin/` to `homestack-backend:8000`.
 - HTTPS frontend, HTTPS `/api/v1/health/`, normal browser use, login/navigation/write and
   Money/Solace re-auth flows passed after the NPM change.
-
-The old HomeStack host ports still exist at this stage. Final hardening is now the Compose deploy
-that removes those host-port publications while preserving the proven NPM container-name routing.
+- Final Compose hardening removes HomeStack host-port publication for PostgreSQL, backend and
+  frontend while preserving the proven Docker DNS upstreams.
 
 ## 3. Compose layout
 
@@ -293,15 +293,17 @@ location /static/ {
 
 Do not add router port forwarding. Do not terminate TLS inside HomeStack.
 
-### 10.1 Safe migration procedure for network hardening
+### 10.1 Historical network-hardening rollout record
 
 The transitional proof and NPM upstream change have already been completed successfully on the
-live installation. Keep these steps for audit/rollback context and for any future host rebuild.
+live installation, and the hardened Compose topology is now the production model. Keep these steps
+for audit context and for any future host rebuild; do not treat them as the routine deployment
+procedure. Routine deployments use `scripts/deploy-production.sh` (§11).
 
 1. Confirm a fresh HomeStack backup and record the rollback commit.
 2. Confirm `docker network ls` still contains `proxy` and `docker inspect nginx-proxy-manager`
    still shows NPM attached to that network.
-3. Transitional proof step, while old LAN ports still exist: run
+3. Transitional proof step used during the original cutover: run
    `docker network connect proxy homestack-frontend` and
    `docker network connect proxy homestack-backend` if they are not
    already attached.
@@ -337,15 +339,13 @@ live installation. Keep these steps for audit/rollback context and for any futur
 
 6. In NPM, change the main HomeStack proxy host to `homestack-frontend:5173`, the `/api/`
    custom location to `homestack-backend:8000`, and `/admin/` to `homestack-backend:8000`.
-7. While the old host ports still exist, validate HTTPS HomeStack load, `/api/v1/health/`,
+7. During the original cutover, validate HTTPS HomeStack load, `/api/v1/health/`,
    password login/logout, PIN/avatar login, an authenticated write plus refresh, Money/Solace
    re-auth, React deep-link refresh, `/sw.js`, `/manifest.json`, installed PWA behaviour and a
    real push notification.
-8. Stop and report the successful NPM container-name routing proof before merging/deploying the
-   hardened Compose. This has now been done; the cheap rollback path remains available because the
-   old LAN ports still exist.
-9. Only after final review, merge/deploy the hardened Compose commit with
-   `docker compose up -d --build`.
+8. Stop and report the successful NPM container-name routing proof before deploying hardened
+   Compose. This has now been done.
+9. Deploy the hardened Compose commit after review.
 10. Wait for `homestack-postgres`, `homestack-backend` and `homestack-frontend` to become healthy.
 11. Because the NPM custom locations use direct `proxy_pass http://homestack-backend:8000;` style
     upstreams, explicitly test and reload NPM's nginx after HomeStack container recreation so
@@ -420,69 +420,105 @@ live installation. Keep these steps for audit/rollback context and for any futur
 
 ## 11. Deployment
 
-### 11.1 Back up first
+### 11.1 Supported command
 
-Backups are triggered through the application, not a management command (`docs/restore.md` §1):
-sign in as an admin and `POST /api/v1/backups/`, or use the Manage HomeStack backup action. The
-run is synchronous and returns `status: "complete"`.
-
-Then record the commit to roll back to, and confirm the artefacts landed:
+Routine production deployment is now captured in one reviewed script:
 
 ```bash
 cd /opt/docker/project-homestack
-git rev-parse HEAD > /tmp/homestack-rollback-commit.txt            # the known-good commit
-cat /tmp/homestack-rollback-commit.txt
-
-docker exec homestack-backend ls -lh /app/backups | tail -5        # recent db + media artefacts
+./scripts/deploy-production.sh
 ```
 
-Do not continue without a recent, complete backup. See `docs/restore.md` for verification and the
-restore path itself.
+The script is intentionally conservative. It stops on failed prerequisites, never tries to repair
+the host with broad Docker cleanup, and never runs destructive data operations. It does **not**
+merge to `main`, change Nginx Proxy Manager proxy-host settings or alter the approved
+proxy/private-network topology.
 
-### 11.2 Deploy
-
-The order matters: the new image must **prove itself before it replaces the running containers**.
-`docker compose run --rm` starts a throwaway container from the newly built image — it does not
-stop, replace or touch the containers currently serving the household, and it publishes no ports.
-If it exits non-zero, the previous deployment is still up and nothing has been promoted.
+Useful modes:
 
 ```bash
-cd /opt/docker/project-homestack
-git fetch origin
-git checkout main && git pull
+# Inspect safety gates without fetching, building, recreating containers, migrating or reloading NPM
+./scripts/deploy-production.sh --dry-run
 
-# 1. Build the new images. Nothing is promoted yet; the old containers keep serving.
-docker compose build homestack-backend homestack-frontend
+# Use only when the release contains reviewed Django migrations
+./scripts/deploy-production.sh --migrate
 
-# 2. Run the production deployment checks on the NEW image against the real .env.
-#    Non-zero here means stop: fix .env per §9 and rebuild. Nothing has changed yet.
-docker compose run --rm --no-deps homestack-backend python manage.py check
-
-# 3. Apply migrations from the NEW image, still before promotion (see the caveat below).
-docker compose run --rm --no-deps homestack-backend python manage.py migrate
-
-# 4. Only now promote the new containers.
-docker compose up -d
+# Emergency/manual operator override: complete backup required, but age ignored
+./scripts/deploy-production.sh --skip-backup-age-check
 ```
 
-`--no-deps` keeps Compose from restarting PostgreSQL, which is already running and healthy; the
-one-off container joins the same network and reaches it normally.
+The default constants match the live server and can be overridden by environment only when needed:
 
-Step 2 is not optional even for a release with no migrations — it is the step that rejects a bad
-production configuration while rollback is still free.
+| Setting | Default |
+|---|---|
+| `COMPOSE_PROJECT_DIR` | `/opt/docker/project-homestack` |
+| `COMPOSE_PROJECT_NAME` | `project-homestack` |
+| `NPM_CONTAINER` | `nginx-proxy-manager` |
+| `NPM_NETWORK` | `proxy` |
+| `PUBLIC_BASE_URL` | `https://homestack.moosesoftwares.com` |
+| `BACKUP_MAX_AGE_HOURS` | `24` |
+| `HEALTH_TIMEOUT` | `180` seconds |
 
-> **Migrating before promotion** means the schema is upgraded while the *previous* code is still
-> serving. That is safe for additive migrations, which is what HomeStack has shipped so far, and it
-> is what makes a failed deploy cheap to abandon. For a release containing a destructive migration
-> (dropping or renaming a column the old code still reads), accept a brief outage instead:
-> `docker compose stop homestack-backend`, run the migration, then `docker compose up -d`.
+### 11.2 What the script does
 
-### 11.3 Smoke test
+The phases are printed in the terminal as they run:
 
-Run §12 before considering the deployment done.
+1. **Preflight** — verifies repository location, `main` branch, clean working tree, reachable
+   `origin`, non-diverged `main`, Docker/Compose availability, `docker compose config --quiet`,
+   expected services/containers/volumes, `proxy`, `nginx-proxy-manager`, healthy starting stack,
+   exact container network attachments and absence of host bindings for `5432`, `8000` and `5173`.
+   It captures the current Git SHA as the rollback reference before making changes.
+2. **Backup gate** — requires the newest `/app/backups/backup_YYYYMMDD_HHMMSS/` directory to be
+   recent enough and to contain non-empty `db.dump` and `media.tar.gz`. If this fails, create a
+   backup through HomeStack and retry.
+3. **Git update** — `git fetch origin`, confirms the relationship again and fast-forwards `main`
+   with `--ff-only`. Divergence or local-ahead state stops the deploy.
+4. **Build before promotion** — builds `homestack-backend` and `homestack-frontend` before any
+   running application container is recreated.
+5. **Migration handling** — always runs `python manage.py check` from the newly built backend
+   image. Without `--migrate`, `python manage.py migrate --check` must report no pending
+   migrations. With `--migrate`, the script runs a migration plan check and then
+   `python manage.py migrate --noinput`. It never resets, flushes or recreates the database.
+6. **Backend promotion** — recreates only `homestack-backend` with
+   `docker compose up -d --no-deps --force-recreate homestack-backend`, then waits for Docker
+   health. Failure prints a limited backend log tail and stops before touching the frontend.
+7. **Backend validation** — runs `docker exec nginx-proxy-manager nginx -t`; only if that passes
+   does it reload NPM. It verifies HTTPS `/api/v1/health/` and a harmless Django database
+   connection check from the backend container.
+8. **Frontend promotion** — recreates only `homestack-frontend`, waits for health, tests/reloads
+   NPM again, then verifies the HTTPS frontend.
+9. **Final topology validation** — confirms all three HomeStack containers are healthy, frontend is
+   only on `proxy`, backend is on `proxy` plus `project-homestack_private`, PostgreSQL is only on
+   `project-homestack_private`, and no sensitive host ports are published.
+10. **Completion summary** — prints previous SHA, deployed SHA, rollback SHA, health, HTTPS status,
+    NPM reload status, direct-host-port status, backup used and migration status.
 
-The future supported `scripts/deploy.sh` should automate the NPM `nginx -t` and `nginx -s reload`
-step after HomeStack application-container promotion and before HTTPS/API validation.
+The script intentionally does **not** recreate PostgreSQL during ordinary frontend/backend
+deployments. PostgreSQL is stateful, isolated on the private network and only needs recreation for
+explicit database/container maintenance, not for application image promotion.
+
+NPM is reloaded after backend and frontend recreation because custom locations such as
+`proxy_pass http://homestack-backend:8000;` can hold a resolved container IP. Testing and reloading
+NPM after recreation makes Docker DNS resolution fresh before HTTPS validation.
+
+### 11.3 Failure messages
+
+Failures stop at the safest point practical and print the current phase plus the rollback SHA when
+available. Common meanings:
+
+| Failure | Meaning / operator action |
+|---|---|
+| Dirty tree or wrong branch | Stop; get the live repo back to clean `main`. |
+| Local main ahead/diverged | Stop; resolve Git history manually before production deployment. |
+| Missing/stale/incomplete backup | Create a HomeStack backup through Manage HomeStack or the backup API and retry. |
+| Published `5432`, `8000` or `5173` | Stop; production topology no longer matches the hardened model. |
+| `migrate --check` fails without `--migrate` | Review migrations, then rerun with `--migrate` if approved. |
+| `nginx -t` fails | NPM was not reloaded; inspect NPM config/logs before retrying. |
+| Backend health fails | Frontend was not touched; inspect backend logs and use the rollback SHA if needed. |
+
+Commands that are intentionally absent from the deployment path: `docker compose down`,
+`docker compose down -v`, Docker prune/volume/network deletion, `git reset --hard`,
+`git clean -fd` and `python manage.py flush`.
 
 ## 12. Live smoke-test checklist
 
@@ -544,25 +580,43 @@ frontend container does not invalidate them. The service worker re-registers on 
 
 ## 13. Rollback
 
-Rollback is "check out the previous commit and rebuild". This change adds no migrations, so nothing
-has to be undone in the database.
+The deployment script prints the previous known-good SHA prominently. Rollback is a manual,
+operator-reviewed procedure because database migrations can make automatic rollback unsafe.
 
-Two cheaper outcomes come first, because §11.2 validates before promoting:
+Cheaper outcomes come first:
 
-- **`check` failed** — nothing was promoted and no schema changed. Fix `.env` per §9 and rebuild.
-- **`migrate` failed** — Django applies each migration in its own transaction, so the database is
-  at a consistent point and the previous containers are still serving. Resolve the migration
-  before promoting.
+- **Preflight, backup, Git or build failed** — no application container was promoted. Fix the
+  reported prerequisite and retry.
+- **`check` or migration inspection failed before promotion** — no app container was promoted.
+  Resolve the production config or migration decision before retrying.
+- **Backend promotion failed** — frontend was not touched. Inspect backend logs, then either fix
+  forward or manually roll backend/frontend code back to the printed rollback SHA.
+- **Frontend promotion failed** — backend may already be on the new image; decide whether to fix
+  frontend forward or roll both app services back.
 
-Full rollback, once new containers are already live:
+Manual code rollback, once new containers are already live:
 
 ```bash
 cd /opt/docker/project-homestack
-git checkout "$(cat /tmp/homestack-rollback-commit.txt)"     # the pre-deployment commit
+git fetch origin
+git checkout <rollback-sha-from-the-deploy-output>
 docker compose build homestack-backend homestack-frontend
-docker compose up -d --force-recreate
+docker compose up -d --no-deps --force-recreate homestack-backend
+# wait for homestack-backend healthy
+docker exec nginx-proxy-manager nginx -t
+docker exec nginx-proxy-manager nginx -s reload
 curl -fsS https://homestack.moosesoftwares.com/api/v1/health/; echo
+docker compose up -d --no-deps --force-recreate homestack-frontend
+# wait for homestack-frontend healthy
+docker exec nginx-proxy-manager nginx -t
+docker exec nginx-proxy-manager nginx -s reload
+curl -fsS https://homestack.moosesoftwares.com/api/v1/health/; echo
+curl -fsS -o /dev/null -w '%{http_code}\n' https://homestack.moosesoftwares.com/
 ```
+
+Do not delete or recreate data volumes during code rollback. If the deployment used `--migrate`,
+rolling code back may also require separate migration/recovery analysis. Do not assume the old code
+can read a newer schema until the migration has been reviewed.
 
 Symptom-specific guidance:
 
@@ -581,9 +635,6 @@ does not lose household data. Push subscriptions, sessions and all records live 
 
 ## 14. Follow-ups deliberately not in this change
 
-- reduce published host ports and put PostgreSQL on an internal-only network
-  (`34_Recommended_Next_Steps.md` §4);
-- one supported `./scripts/deploy.sh` that performs the §11/§12 sequence (§5 there);
 - frontend unit/E2E tests and CI (§6 there);
 - a Content-Security-Policy for the frontend, authored against the real bundle;
 - Django admin over HTTPS by default, if the optional NPM locations prove worth standardising.

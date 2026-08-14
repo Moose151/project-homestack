@@ -87,8 +87,9 @@ Preserve this production-serving model while hardening the remaining network exp
 
 ### 4.2 Docker network exposure
 
-**Status:** prepared in v0.37.2; transitional NPM/container-name cutover completed, final
-host-port removal pending owner review and hardened Compose deployment.
+**Status:** complete in v0.37.x. Transitional NPM/container-name cutover was validated first, then
+production Compose hardening removed HomeStack host-port publication while preserving NPM's Docker
+DNS upstreams.
 
 Move internal services toward private container networking:
 
@@ -99,16 +100,16 @@ Move internal services toward private container networking:
 
 Keep a development Compose profile/override that exposes developer-friendly ports where useful.
 
-The prepared target attaches `homestack-frontend` and `homestack-backend` to Nginx Proxy
+The production target attaches `homestack-frontend` and `homestack-backend` to Nginx Proxy
 Manager's existing `proxy` Docker network and keeps `homestack-postgres` on a HomeStack-private
-internal network. NPM routing has already been proven against container names while the old host
-ports still exist; final Compose deployment is intentionally separated so host-port removal can be
-reviewed and rolled back safely. Development Compose remains portable and does not require the
-live NPM Docker network.
+internal network. Development Compose remains portable and does not require the live NPM Docker
+network.
 
 ### 4.3 Deployment automation
 
-Create one supported deployment command/script that performs the required sequence safely:
+**Status:** prepared for review in `scripts/deploy-production.sh`.
+
+One supported deployment command/script now performs the required sequence safely:
 
 1. preflight/working-tree checks;
 2. backup or verified recent backup;
@@ -121,7 +122,7 @@ Create one supported deployment command/script that performs the required sequen
 9. clear failure output and rollback guidance.
 
 This exists to remove recurring human errors such as pulling new code without rebuilding or
-forgetting a migration.
+forgetting a migration. It still needs operator review before becoming the live deployment habit.
 
 ### 4.4 CI and frontend automated testing
 
