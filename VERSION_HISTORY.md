@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.37.5**
+> **Current version: 0.37.6**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,18 @@
 ---
 
 ## 0.37 — Production reliability and deployment safety
+
+### 0.37.6 — 2026-08-14 — Track deployed production SHA independently
+- Fixed `scripts/deploy-production.sh` so deployment no-op and rollback decisions use the last
+  successfully deployed SHA recorded in `.git/homestack-deployed-sha`, not the current Git checkout.
+- Added first-time marker bootstrap support, dry-run target reporting from locally cached
+  `origin/main`, and final marker recording only after backend/frontend promotion and all validation
+  succeed.
+- Expanded the deployment-script tests to cover successful marker recording, failed deployments
+  leaving the marker unchanged, retries when Git is already at the target, migration retries, older
+  deployed markers and genuine deployed-target no-ops.
+- Documented the marker model, safe bootstrap procedure, dry-run cache behavior and the need for
+  routine migrations to remain backwards-compatible until the new backend is promoted.
 
 ### 0.37.5 — 2026-08-14 — Prepare one-command production deployment
 - Added `scripts/deploy-production.sh`, a conservative production deployment command that gates on

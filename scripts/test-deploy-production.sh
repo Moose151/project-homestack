@@ -9,18 +9,29 @@ source "$ROOT/scripts/deploy-production.sh"
 PASS=0
 FAILURES=0
 MUTATIONS=0
+MOCK_CHECKOUT_SHA=""
+MOCK_TARGET_SHA=""
+MOCK_FAIL_PHASE=""
 
 reset_state() {
   PHASE="test"
   RUN_MIGRATIONS=0
   SKIP_BACKUP_AGE_CHECK=0
   DRY_RUN=0
+  BOOTSTRAP_DEPLOYED_SHA=""
   HEALTH_TIMEOUT=1
   HEALTH_INTERVAL=1
   BACKUP_MAX_AGE_HOURS=24
+  CHECKOUT_SHA=""
+  TARGET_SHA=""
+  DEPLOYED_SHA=""
+  ROLLBACK_SHA=""
   BACKUP_DIR_USED=""
   NPM_RELOADED=0
   MUTATIONS=0
+  MOCK_CHECKOUT_SHA=""
+  MOCK_TARGET_SHA=""
+  MOCK_FAIL_PHASE=""
 }
 
 pass() {
@@ -173,10 +184,152 @@ test_dry_run_skips_mutations() {
 
 test_success_summary_mentions_rollback() {
   ROLLBACK_SHA="abc123"
-  NEW_SHA="def456"
+  TARGET_SHA="def456"
   BACKUP_DIR_USED="/app/backups/backup_20990101_000000"
   NPM_RELOADED=1
   completion_summary "not run" "OK" | grep -q 'Rollback SHA: abc123'
+}
+
+setup_mock_deploy() {
+  local checkout="$1"
+  local deployed="$2"
+  local target="$3"
+  local fail_phase="${4:-}"
+  local state="$5"
+  MOCK_CHECKOUT_SHA="$checkout"
+  MOCK_TARGET_SHA="$target"
+  MOCK_FAIL_PHASE="$fail_phase"
+  DEPLOYED_SHA_FILE="$state"
+  printf '%s\n' "$deployed" > "$state"
+  require_valid_commit() { :; }
+  require_repo_dir() { :; }
+  require_branch_main() { :; }
+  require_clean_tree() { :; }
+  require_tools() { :; }
+  require_origin_reachable() { :; }
+  require_main_not_ahead_or_diverged() { :; }
+  require_compose_config() { :; }
+  require_network_exists() { :; }
+  require_starting_stack_healthy() { :; }
+  require_volumes_exist() { :; }
+  require_topology() { :; }
+  require_recent_backup() { :; }
+  changed_migration_files() {
+    if [[ "$MOCK_FAIL_PHASE" == "migration-required" ]]; then
+      printf 'backend/apps/example/migrations/0002_example.py\n'
+    fi
+  }
+  git() {
+    case "$*" in
+      "rev-parse HEAD") printf '%s\n' "$MOCK_CHECKOUT_SHA" ;;
+      "rev-parse origin/main") printf '%s\n' "$MOCK_TARGET_SHA" ;;
+      "fetch origin") return 0 ;;
+      "merge --ff-only origin/main") return 0 ;;
+      *) command git "$@" ;;
+    esac
+  }
+  compose() {
+    case "$*" in
+      "build $BACKEND_SERVICE $FRONTEND_SERVICE") MUTATIONS=$((MUTATIONS + 1)); return 0 ;;
+      "run --rm --no-deps $BACKEND_SERVICE python manage.py migrate --check")
+        [[ "$MOCK_FAIL_PHASE" == "migration-required" ]] && return 1
+        return 0
+        ;;
+      "run --rm --no-deps $BACKEND_SERVICE python manage.py migrate --noinput")
+        MUTATIONS=$((MUTATIONS + 1)); return 0 ;;
+      *) return 0 ;;
+    esac
+  }
+  deploy_backend() {
+    [[ "$MOCK_FAIL_PHASE" == "backend" ]] && fail "backend failed"
+    MUTATIONS=$((MUTATIONS + 1))
+  }
+  validate_backend() { MUTATIONS=$((MUTATIONS + 1)); }
+  deploy_frontend() { MUTATIONS=$((MUTATIONS + 1)); }
+  final_validation() {
+    [[ "$MOCK_FAIL_PHASE" == "final" ]] && fail "final failed"
+    MUTATIONS=$((MUTATIONS + 1))
+  }
+}
+
+run_mock_deploy_sequence() {
+  preflight || return $?
+  backup_gate || return $?
+  git_update || return $?
+  build_images || return $?
+  migration_phase || return $?
+  deploy_backend || return $?
+  validate_backend || return $?
+  deploy_frontend || return $?
+  final_validation || return $?
+  write_deployed_sha "$TARGET_SHA" || return $?
+}
+
+run_mock_deploy() {
+  local checkout="$1"
+  local deployed="$2"
+  local target="$3"
+  local fail_phase="${4:-}"
+  local state
+  state="$(mktemp)"
+  setup_mock_deploy "$checkout" "$deployed" "$target" "$fail_phase" "$state"
+  run_mock_deploy_sequence
+  [[ "$(tr -d '[:space:]' < "$state")" == "$target" ]]
+}
+
+test_successful_deployment_records_target_sha() {
+  run_mock_deploy "old-sha" "old-sha" "target-sha"
+}
+
+test_failed_deployment_does_not_advance_deployed_sha() {
+  local state
+  state="$(mktemp)"
+  setup_mock_deploy "target-sha" "old-sha" "target-sha" "final" "$state"
+  if ( run_mock_deploy_sequence ); then
+    return 1
+  fi
+  [[ "$(tr -d '[:space:]' < "$state")" == "old-sha" ]]
+}
+
+test_retry_after_failed_deployment_proceeds_when_checkout_at_target() {
+  run_mock_deploy "target-sha" "old-sha" "target-sha"
+  (( MUTATIONS > 0 ))
+}
+
+test_initial_without_migrate_then_retry_with_migrate_proceeds() {
+  local state
+  state="$(mktemp)"
+  setup_mock_deploy "target-sha" "old-sha" "target-sha" "migration-required" "$state"
+  if ( run_mock_deploy_sequence ); then
+    return 1
+  fi
+  [[ "$(tr -d '[:space:]' < "$state")" == "old-sha" ]] || return 1
+
+  RUN_MIGRATIONS=1
+  setup_mock_deploy "target-sha" "old-sha" "target-sha" "migration-required" "$state"
+  run_mock_deploy_sequence
+  [[ "$(tr -d '[:space:]' < "$state")" == "target-sha" ]]
+}
+
+test_checkout_at_target_with_older_deployed_marker_deploys() {
+  run_mock_deploy "target-sha" "old-sha" "target-sha"
+  (( MUTATIONS > 0 ))
+}
+
+test_checkout_at_target_with_deployed_marker_at_target_noops() {
+  local state
+  state="$(mktemp)"
+  setup_mock_deploy "target-sha" "target-sha" "target-sha" "" "$state"
+  git() {
+    case "$*" in
+      "rev-parse HEAD"|"rev-parse origin/main") printf 'target-sha\n' ;;
+      "fetch origin") return 0 ;;
+      "merge --ff-only origin/main") fail "merge should not run for a deployed-target no-op" ;;
+      *) command git "$@" ;;
+    esac
+  }
+  ( preflight; git_update )
+  [[ "$(tr -d '[:space:]' < "$state")" == "target-sha" ]]
 }
 
 expect_failure "dirty Git tree rejects deployment" test_dirty_git_rejected
@@ -191,6 +344,12 @@ expect_failure "nginx -t failure prevents reload" test_nginx_test_failure_preven
 expect_failure "published sensitive host ports are detected" test_published_sensitive_port_rejected
 expect_success "dry-run performs no mutations" test_dry_run_skips_mutations
 expect_success "successful path reaches completion summary" test_success_summary_mentions_rollback
+expect_success "successful deployment records target SHA" test_successful_deployment_records_target_sha
+expect_success "failed deployment does not advance deployed SHA" test_failed_deployment_does_not_advance_deployed_sha
+expect_success "retry after failed deployment proceeds when Git is already at target" test_retry_after_failed_deployment_proceeds_when_checkout_at_target
+expect_success "initial run without --migrate followed by retry with --migrate proceeds" test_initial_without_migrate_then_retry_with_migrate_proceeds
+expect_success "checkout at target with older deployed marker still deploys" test_checkout_at_target_with_older_deployed_marker_deploys
+expect_success "checkout at target with deployed marker at target gives genuine no-op" test_checkout_at_target_with_deployed_marker_at_target_noops
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAILURES"
 [[ "$FAILURES" -eq 0 ]]

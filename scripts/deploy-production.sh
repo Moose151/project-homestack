@@ -20,6 +20,7 @@ BACKUP_MAX_AGE_HOURS="${BACKUP_MAX_AGE_HOURS:-24}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
 HEALTH_INTERVAL="${HEALTH_INTERVAL:-5}"
 LOG_TAIL_LINES="${LOG_TAIL_LINES:-80}"
+DEPLOYED_SHA_FILE="${DEPLOYED_SHA_FILE:-.git/homestack-deployed-sha}"
 
 BACKEND_SERVICE="${BACKEND_SERVICE:-homestack-backend}"
 FRONTEND_SERVICE="${FRONTEND_SERVICE:-homestack-frontend}"
@@ -38,9 +39,12 @@ REQUIRED_VOLUMES=(
 RUN_MIGRATIONS=0
 SKIP_BACKUP_AGE_CHECK=0
 DRY_RUN=0
+BOOTSTRAP_DEPLOYED_SHA=""
 PHASE="startup"
+CHECKOUT_SHA=""
+TARGET_SHA=""
+DEPLOYED_SHA=""
 ROLLBACK_SHA=""
-NEW_SHA=""
 BACKUP_DIR_USED=""
 NPM_RELOADED=0
 
@@ -52,6 +56,8 @@ Options:
   --migrate                 Run reviewed Django migrations from the newly built backend image.
   --skip-backup-age-check   Emergency/manual use only: require complete backup files but ignore age.
   --dry-run                 Run preflight and backup inspection only; do not fetch/build/recreate/reload.
+  --bootstrap-deployed-sha SHA
+                            First-time setup only: record the SHA already running in production.
   --help                    Show this help.
 
 Normal deployment:
@@ -63,7 +69,7 @@ Deployment with reviewed migrations:
 
 Environment overrides:
   COMPOSE_PROJECT_DIR, COMPOSE_PROJECT_NAME, NPM_CONTAINER, NPM_NETWORK, PUBLIC_BASE_URL,
-  BACKUP_MAX_AGE_HOURS, HEALTH_TIMEOUT, HEALTH_INTERVAL.
+  BACKUP_MAX_AGE_HOURS, HEALTH_TIMEOUT, HEALTH_INTERVAL, DEPLOYED_SHA_FILE.
 USAGE
 }
 
@@ -91,11 +97,54 @@ parse_args() {
       --migrate) RUN_MIGRATIONS=1 ;;
       --skip-backup-age-check) SKIP_BACKUP_AGE_CHECK=1 ;;
       --dry-run) DRY_RUN=1 ;;
+      --bootstrap-deployed-sha)
+        shift
+        [[ $# -gt 0 ]] || fail "--bootstrap-deployed-sha requires a commit SHA"
+        BOOTSTRAP_DEPLOYED_SHA="$1"
+        ;;
       --help) usage; exit 0 ;;
       *) fail "Unknown option: $1" ;;
     esac
     shift
   done
+}
+
+require_valid_commit() {
+  local sha="$1"
+  git rev-parse --verify --quiet "$sha^{commit}" >/dev/null || fail "Commit SHA is not present in this repository: $sha"
+}
+
+read_deployed_sha() {
+  if [[ ! -f "$DEPLOYED_SHA_FILE" ]]; then
+    fail "No deployed SHA marker found at $DEPLOYED_SHA_FILE. Bootstrap once with: ./scripts/deploy-production.sh --bootstrap-deployed-sha <sha-currently-running-in-production>"
+  fi
+  local sha
+  sha="$(tr -d '[:space:]' < "$DEPLOYED_SHA_FILE")"
+  [[ -n "$sha" ]] || fail "Deployed SHA marker is empty: $DEPLOYED_SHA_FILE"
+  require_valid_commit "$sha"
+  printf '%s\n' "$sha"
+}
+
+write_deployed_sha() {
+  local sha="$1"
+  require_valid_commit "$sha"
+  local tmp="${DEPLOYED_SHA_FILE}.tmp"
+  printf '%s\n' "$sha" > "$tmp"
+  mv "$tmp" "$DEPLOYED_SHA_FILE"
+}
+
+bootstrap_deployed_sha() {
+  PHASE="bootstrap deployed SHA"
+  require_repo_dir
+  require_branch_main
+  require_clean_tree
+  [[ -n "$BOOTSTRAP_DEPLOYED_SHA" ]] || fail "No bootstrap SHA supplied"
+  [[ ! -f "$DEPLOYED_SHA_FILE" ]] || fail "Deployed SHA marker already exists at $DEPLOYED_SHA_FILE"
+  require_valid_commit "$BOOTSTRAP_DEPLOYED_SHA"
+  write_deployed_sha "$BOOTSTRAP_DEPLOYED_SHA"
+  printf 'Recorded deployed SHA marker: %s\n' "$BOOTSTRAP_DEPLOYED_SHA"
+  printf 'Marker file: %s\n' "$DEPLOYED_SHA_FILE"
+  printf 'No deployment was performed.\n'
 }
 
 require_repo_dir() {
@@ -283,7 +332,11 @@ preflight() {
   require_starting_stack_healthy
   require_volumes_exist
   require_topology
-  ROLLBACK_SHA="$(git rev-parse HEAD)"
+  CHECKOUT_SHA="$(git rev-parse HEAD)"
+  DEPLOYED_SHA="$(read_deployed_sha)"
+  ROLLBACK_SHA="$DEPLOYED_SHA"
+  info "Checkout SHA: $CHECKOUT_SHA"
+  info "Last deployed SHA: $DEPLOYED_SHA"
   info "Rollback SHA captured: $ROLLBACK_SHA"
 }
 
@@ -295,22 +348,33 @@ backup_gate() {
 
 git_update() {
   PHASE="phase 3: git update"
-  if (( DRY_RUN == 1 )); then
-    log "Dry run: skipping git fetch/pull"
-    NEW_SHA="$ROLLBACK_SHA"
-    return
-  fi
   log "Fetching origin and fast-forwarding main only"
   git fetch origin
   require_main_not_ahead_or_diverged
-  git merge --ff-only origin/main
-  NEW_SHA="$(git rev-parse HEAD)"
-  info "Previous SHA: $ROLLBACK_SHA"
-  info "Target SHA:   $NEW_SHA"
-  if [[ "$NEW_SHA" == "$ROLLBACK_SHA" ]]; then
-    info "No code changes found; deployment can stop without recreating containers."
-    completion_summary "not run" "not needed"
+  TARGET_SHA="$(git rev-parse origin/main)"
+  info "Checkout SHA: $CHECKOUT_SHA"
+  info "Target SHA:   $TARGET_SHA"
+  info "Deployed SHA: $DEPLOYED_SHA"
+  info "Rollback SHA: $ROLLBACK_SHA"
+  if [[ "$TARGET_SHA" == "$DEPLOYED_SHA" ]]; then
+    no_op_summary
     exit 0
+  fi
+  git merge --ff-only origin/main
+  CHECKOUT_SHA="$(git rev-parse HEAD)"
+}
+
+dry_run_target_summary() {
+  PHASE="dry run target inspection"
+  TARGET_SHA="$(git rev-parse origin/main)"
+  log "Dry run uses locally cached origin/main; it does not fetch"
+  info "Checkout SHA: $CHECKOUT_SHA"
+  info "Cached target SHA: $TARGET_SHA"
+  info "Recorded deployed SHA: $DEPLOYED_SHA"
+  if [[ "$TARGET_SHA" == "$DEPLOYED_SHA" ]]; then
+    info "A live run would be a no-op because cached origin/main equals the deployed marker."
+  else
+    info "A live run would attempt to deploy cached origin/main after fetching and rechecking Git state."
   fi
 }
 
@@ -325,7 +389,7 @@ build_images() {
 }
 
 changed_migration_files() {
-  git diff --name-only "$ROLLBACK_SHA" "$NEW_SHA" -- 'backend/**/migrations/*.py' \
+  git diff --name-only "$ROLLBACK_SHA" "$TARGET_SHA" -- 'backend/**/migrations/*.py' \
     | grep -v '/__init__\.py$' || true
 }
 
@@ -446,7 +510,7 @@ completion_summary() {
 HomeStack production deployment successful
 
 Previous SHA: ${ROLLBACK_SHA:-unknown}
-Deployed SHA: ${NEW_SHA:-$ROLLBACK_SHA}
+Deployed SHA: ${TARGET_SHA:-$ROLLBACK_SHA}
 Rollback SHA: ${ROLLBACK_SHA:-unknown}
 Backend: healthy
 Frontend: healthy
@@ -460,14 +524,33 @@ Migrations: $migrations
 SUMMARY
 }
 
+no_op_summary() {
+  PHASE="phase 3: no-op"
+  cat <<SUMMARY
+
+HomeStack production deployment not needed
+
+Target SHA: ${TARGET_SHA:-unknown}
+Recorded deployed SHA: ${DEPLOYED_SHA:-unknown}
+Checkout SHA: ${CHECKOUT_SHA:-unknown}
+
+No containers were recreated and the deployed SHA marker was not changed.
+SUMMARY
+}
+
 main() {
   parse_args "$@"
+  if [[ -n "$BOOTSTRAP_DEPLOYED_SHA" ]]; then
+    bootstrap_deployed_sha
+    exit 0
+  fi
   if (( SKIP_BACKUP_AGE_CHECK == 1 )); then
     warn "Emergency override enabled: backup age will not block deployment."
   fi
   preflight
   backup_gate
   if (( DRY_RUN == 1 )); then
+    dry_run_target_summary
     PHASE="dry run complete"
     log "Dry run completed. No git fetch, build, migration, container recreation, or NPM reload was performed."
     exit 0
@@ -479,6 +562,10 @@ main() {
   validate_backend
   deploy_frontend
   final_validation
+  PHASE="phase 10: record deployed SHA"
+  log "Recording successfully deployed SHA"
+  write_deployed_sha "$TARGET_SHA"
+  DEPLOYED_SHA="$TARGET_SHA"
   completion_summary "$([[ "$RUN_MIGRATIONS" -eq 1 ]] && printf 'completed' || printf 'not run')" "OK"
 }
 

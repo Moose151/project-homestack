@@ -300,11 +300,13 @@ Frontend is attached only to `proxy`; backend is attached to `proxy` plus
 `project-homestack_private`; PostgreSQL is attached only to `project-homestack_private`.
 Development Compose remains isolated on `homestack_dev`.
 
-**Deployment automation status (v0.37.5):** `scripts/deploy-production.sh` is prepared for review.
+**Deployment automation status (v0.37.6):** `scripts/deploy-production.sh` is prepared for review.
 It performs preflight, backup freshness/completeness gating, fast-forward-only Git update,
 build-before-promotion, explicit `--migrate` handling, backend/frontend recreation one at a time,
 NPM `nginx -t`/reload after each app-container promotion, HTTPS/API checks and final topology
-validation. Do not use it for a live deployment until the branch has been reviewed and merged.
+validation. It tracks the last successfully deployed commit in `.git/homestack-deployed-sha` and
+updates that marker only after the full deployment succeeds. Do not use it for a live deployment
+until the branch has been reviewed and merged.
 
 Explicitly avoid generic plugins/integrations, Kubernetes/microservices, Redis/Celery without
 measured need, or public exposure before the Security Architecture gate is satisfied.

@@ -445,7 +445,29 @@ Useful modes:
 
 # Emergency/manual operator override: complete backup required, but age ignored
 ./scripts/deploy-production.sh --skip-backup-age-check
+
+# First-time marker setup only; use the SHA already running in production containers
+./scripts/deploy-production.sh --bootstrap-deployed-sha <sha-currently-running-in-production>
 ```
+
+The script tracks deployment state separately from Git checkout state in
+`.git/homestack-deployed-sha`. The checkout SHA is the current repository `HEAD`; the target SHA is
+`origin/main`; the deployed SHA is the last commit that completed the whole production deployment
+successfully; and the rollback SHA is the deployed SHA recorded before the current deployment.
+
+On the first run after introducing this marker, bootstrap it once with the commit that is actually
+running in production containers:
+
+```bash
+cd /opt/docker/project-homestack
+git fetch origin
+git rev-parse HEAD
+./scripts/deploy-production.sh --bootstrap-deployed-sha <sha-currently-running-in-production>
+```
+
+Bootstrapping records the marker only; it does not fetch, build, migrate, recreate containers or
+reload NPM. Use the commit known to be serving production, not merely the newest checkout. If the
+marker already exists, bootstrap stops and leaves it unchanged.
 
 The default constants match the live server and can be overridden by environment only when needed:
 
@@ -458,6 +480,7 @@ The default constants match the live server and can be overridden by environment
 | `PUBLIC_BASE_URL` | `https://homestack.moosesoftwares.com` |
 | `BACKUP_MAX_AGE_HOURS` | `24` |
 | `HEALTH_TIMEOUT` | `180` seconds |
+| `DEPLOYED_SHA_FILE` | `.git/homestack-deployed-sha` |
 
 ### 11.2 What the script does
 
@@ -467,18 +490,23 @@ The phases are printed in the terminal as they run:
    `origin`, non-diverged `main`, Docker/Compose availability, `docker compose config --quiet`,
    expected services/containers/volumes, `proxy`, `nginx-proxy-manager`, healthy starting stack,
    exact container network attachments and absence of host bindings for `5432`, `8000` and `5173`.
-   It captures the current Git SHA as the rollback reference before making changes.
+   It reads the last successfully deployed SHA marker and captures that value as the rollback
+   reference before making changes.
 2. **Backup gate** — requires the newest `/app/backups/backup_YYYYMMDD_HHMMSS/` directory to be
    recent enough and to contain non-empty `db.dump` and `media.tar.gz`. If this fails, create a
    backup through HomeStack and retry.
 3. **Git update** — `git fetch origin`, confirms the relationship again and fast-forwards `main`
-   with `--ff-only`. Divergence or local-ahead state stops the deploy.
+   with `--ff-only`. Divergence or local-ahead state stops the deploy. The only genuine no-op is
+   when the fetched `origin/main` target equals `.git/homestack-deployed-sha`; a checkout already at
+   the target still deploys when the marker records an older successfully deployed SHA.
 4. **Build before promotion** — builds `homestack-backend` and `homestack-frontend` before any
    running application container is recreated.
 5. **Migration handling** — always runs `python manage.py check` from the newly built backend
    image. Without `--migrate`, `python manage.py migrate --check` must report no pending
    migrations. With `--migrate`, the script runs a migration plan check and then
-   `python manage.py migrate --noinput`. It never resets, flushes or recreates the database.
+   `python manage.py migrate --noinput`. Migrations are applied before the new backend container is
+   promoted, so routine migrations must remain backwards-compatible with the backend version still
+   serving traffic during rollout. It never resets, flushes or recreates the database.
 6. **Backend promotion** — recreates only `homestack-backend` with
    `docker compose up -d --no-deps --force-recreate homestack-backend`, then waits for Docker
    health. Failure prints a limited backend log tail and stops before touching the frontend.
@@ -490,8 +518,14 @@ The phases are printed in the terminal as they run:
 9. **Final topology validation** — confirms all three HomeStack containers are healthy, frontend is
    only on `proxy`, backend is on `proxy` plus `project-homestack_private`, PostgreSQL is only on
    `project-homestack_private`, and no sensitive host ports are published.
-10. **Completion summary** — prints previous SHA, deployed SHA, rollback SHA, health, HTTPS status,
-    NPM reload status, direct-host-port status, backup used and migration status.
+10. **Record deployed SHA and summarize** — only after backend/frontend promotion and final
+    validation succeed, writes the target SHA to `.git/homestack-deployed-sha`, then prints previous
+    SHA, deployed SHA, rollback SHA, health, HTTPS status, NPM reload status, direct-host-port
+    status, backup used and migration status. A failed deployment leaves the previous deployed SHA
+    marker unchanged so a retry still proceeds even if Git `HEAD` already equals the target commit.
+
+`--dry-run` deliberately does not fetch. It uses the locally cached `origin/main` only to summarize
+what a live run would try after fetching and rechecking Git state.
 
 The script intentionally does **not** recreate PostgreSQL during ordinary frontend/backend
 deployments. PostgreSQL is stateful, isolated on the private network and only needs recreation for
