@@ -92,8 +92,36 @@ class CalendarEvent(HouseholdBaseModel):
         default=Sensitivity.NORMAL,
     )
 
+    # --- Source-managed mirror metadata (Calendar Sources) ---
+    # Set only for entries a CalendarSource owns. A hand-made HomeStack event leaves every one
+    # of these empty and behaves exactly as it always has.
+    calendar_source = models.ForeignKey(
+        "scheduling.CalendarSource",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="events",
+    )
+    # The feed's own UID (or a provider-derived stable key). Identity for re-sync: the same UID
+    # updates its existing event rather than creating a second one, so a fixture that moves
+    # venue or kick-off time moves instead of duplicating.
+    external_uid = models.CharField(max_length=255, blank=True, default="")
+    # iCalendar SEQUENCE, when the feed provides one.
+    external_sequence = models.IntegerField(null=True, blank=True)
+    # The source's sync_revision when this event was last seen in the feed. An event whose
+    # revision falls behind has disappeared upstream.
+    last_seen_revision = models.PositiveIntegerField(null=True, blank=True)
+    # A multi-day range (school term, school holidays) rendered as one banner rather than one
+    # event per day.
+    is_range = models.BooleanField(default=False)
+
     objects = HouseholdManager()
     all_objects = AllObjectsManager()
+
+    @property
+    def is_source_managed(self) -> bool:
+        """Owned by a CalendarSource, so the local edit form must not pretend otherwise."""
+        return self.calendar_source_id is not None
 
     class Meta:
         verbose_name = "calendar event"
@@ -107,6 +135,68 @@ class CalendarEvent(HouseholdBaseModel):
     def is_synced(self) -> bool:
         """True when this event is owned by a node record (not a standalone event)."""
         return bool(self.source_record_type and self.source_record_id)
+
+
+class CalendarSource(HouseholdBaseModel):
+    """A managed origin of calendar entries that is not a hand-made HomeStack event.
+
+    Public holidays, school terms and subscribed ICS feeds are all the same shape of problem:
+    someone else owns the dates, HomeStack mirrors them, and the mirror has to survive being
+    refreshed. Modelling them as one extensible source rather than special cases inside the
+    Calendar page means a new provider is a new row and a new provider class, not another
+    Calendar redesign.
+
+    ``kind`` says how the source is fed; ``provider`` says who feeds it. Both are validated
+    against the registry in apps.scheduling.sources.registry — ``settings_json`` is never free
+    JSON, it is validated per provider, because these values decide what gets fetched.
+    """
+
+    class Kind(models.TextChoices):
+        HOLIDAYS = "holidays", "Public holidays"
+        SCHOOL = "school", "School calendar"
+        SUBSCRIPTION = "subscription", "Subscribed calendar"
+        IMPORT = "import", "Imported calendar"
+
+    class Status(models.TextChoices):
+        IDLE = "idle", "Never synced"
+        OK = "ok", "Synced"
+        ERROR = "error", "Failed"
+
+    name = models.CharField(max_length=120)
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    # Provider slug within the kind, e.g. "au_holidays", "au_school_terms", "ics".
+    provider = models.CharField(max_length=40)
+    is_enabled = models.BooleanField(default=True)
+    colour = models.CharField(max_length=7, blank=True, default="")
+    category = models.CharField(max_length=40, blank=True, default="")
+    # Only meaningful for fetched sources. webcal:// is normalised to https:// on save.
+    url = models.URLField(max_length=500, blank=True, default="")
+    settings_json = models.JSONField(default=dict, blank=True)
+
+    show_on_calendar = models.BooleanField(default=True)
+    show_in_upcoming = models.BooleanField(default=True)
+    # Off by default and deliberately so: subscribing to a season of fixtures must not push a
+    # notification for every one of them.
+    notifications_enabled = models.BooleanField(default=False)
+
+    last_sync_at = models.DateTimeField(null=True, blank=True)
+    last_success_at = models.DateTimeField(null=True, blank=True)
+    sync_status = models.CharField(max_length=10, choices=Status.choices, default=Status.IDLE)
+    sync_error = models.CharField(max_length=500, blank=True, default="")
+    # Monotonic counter bumped at the start of each sync. Events carry the revision they were
+    # last seen in, which is how a disappeared entry is detected without a second query.
+    sync_revision = models.PositiveIntegerField(default=0)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        verbose_name = "calendar source"
+        verbose_name_plural = "calendar sources"
+        ordering = ["kind", "name"]
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class RotatingSchedule(HouseholdBaseModel):

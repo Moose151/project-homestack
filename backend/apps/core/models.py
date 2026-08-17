@@ -25,6 +25,18 @@ class Household(models.Model):
     slug = models.SlugField(max_length=255, unique=True)
     timezone = models.CharField(max_length=64, default="UTC")
     default_locale = models.CharField(max_length=16, default="en-us")
+    # Where the household is, for calendar purposes only (Calendar Sources — docs/38).
+    # Public holidays are jurisdictional: a Queensland household must not be shown a
+    # Victoria-only holiday, and a local show holiday depends on the council area. These are
+    # configuration, never an input to permissions or any security decision.
+    #
+    # Stored as opaque codes rather than free text so a provider can key off them: ISO-3166-1
+    # alpha-2 for country, the jurisdiction's own subdivision code for region ("QLD"), and a
+    # provider-scoped slug for the local area ("brisbane").
+    country = models.CharField(max_length=2, blank=True, default="")
+    region = models.CharField(max_length=16, blank=True, default="")
+    locality = models.CharField(max_length=64, blank=True, default="")
+    postcode = models.CharField(max_length=16, blank=True, default="")
     # Accent colour for household-wide ("whole family") calendar events/tasks.
     family_colour = models.CharField(max_length=20, blank=True, default="#7C6F5A")
     # Household-level Calendar defaults (Core Calendar §15). A user's own saved prefs win;

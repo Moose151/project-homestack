@@ -226,6 +226,7 @@ def _upcoming_widget_content(
         start=start_of_today - timedelta(days=UPCOMING_OVERDUE_GRACE_DAYS),
         end=start_of_today + timedelta(days=UPCOMING_MAX_DAYS),
         sensitive_unlocked=sensitive_unlocked,
+        surface="upcoming",
     )
     relevant = [
         event

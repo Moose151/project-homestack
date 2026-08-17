@@ -212,3 +212,144 @@ class RotatingScheduleExceptionDetailView(APIView):
             request.user, schedule, parsed_date
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CalendarSourceListView(APIView):
+    """Household calendar sources.
+
+    Viewing is ordinary calendar access; adding, changing or removing a household-wide source
+    is a management action, so it resolves `scheduling.manage` rather than being hidden in the
+    UI only. Enforcement lives here, not in the frontend.
+    """
+
+    # No custom action mapping: the default GET->view / POST->create is already the policy we
+    # want, because scheduling.create is seeded to admin and manager only while scheduling.view
+    # is granted to everyone. Inventing a `manage` action would mean a permission code nothing
+    # grants, and every request would 403.
+    permission_classes = [_CalendarPerm]
+
+    def get(self, request: Request) -> Response:
+        from apps.scheduling.models import CalendarSource
+        from apps.scheduling.serializers import CalendarSourceSerializer
+        from apps.scheduling.sources.registry import catalogue
+
+        sources = CalendarSource.objects.all()
+        return Response({
+            "sources": CalendarSourceSerializer(sources, many=True).data,
+            "catalogue": catalogue(),
+        })
+
+    def post(self, request: Request) -> Response:
+        from apps.scheduling.serializers import (
+            CalendarSourceSerializer,
+            CalendarSourceWriteSerializer,
+        )
+        from apps.scheduling.sources.fetching import CalendarFetchError
+        from apps.scheduling.sources.ics import IcsParseError
+
+        serializer = CalendarSourceWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            source = services.create_calendar_source(request.user, **serializer.validated_data)
+        except (CalendarFetchError, IcsParseError) as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(CalendarSourceSerializer(source).data, status=status.HTTP_201_CREATED)
+
+
+class CalendarSourceDetailView(APIView):
+    # PATCH -> scheduling.edit, DELETE -> scheduling.delete; both admin/manager only.
+    permission_classes = [_CalendarPerm]
+
+    def _get(self, source_id: int):
+        from apps.scheduling.models import CalendarSource
+        return CalendarSource.objects.filter(pk=source_id).first()
+
+    def patch(self, request: Request, source_id: int) -> Response:
+        from apps.scheduling.serializers import (
+            CalendarSourceSerializer,
+            CalendarSourceWriteSerializer,
+        )
+        from apps.scheduling.sources.fetching import CalendarFetchError
+
+        source = self._get(source_id)
+        if source is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = CalendarSourceWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            source = services.update_calendar_source(request.user, source, **serializer.validated_data)
+        except CalendarFetchError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(CalendarSourceSerializer(source).data)
+
+    def delete(self, request: Request, source_id: int) -> Response:
+        source = self._get(source_id)
+        if source is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        services.delete_calendar_source(request.user, source)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CalendarSourceSyncView(APIView):
+    """Refresh one source now.
+
+    Deliberately its own endpoint rather than something a Calendar page load triggers: fetching
+    an external URL must never happen during ordinary browsing.
+    """
+
+    permission_classes = [_CalendarPerm]
+    permission_action = "edit"
+
+    def post(self, request: Request, source_id: int) -> Response:
+        from apps.scheduling.models import CalendarSource
+        from apps.scheduling.serializers import CalendarSourceSerializer
+        from apps.scheduling.sources.sync import sync_source
+
+        source = CalendarSource.objects.filter(pk=source_id).first()
+        if source is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        result = sync_source(source)
+        source.refresh_from_db()
+        payload = CalendarSourceSerializer(source).data
+        payload["result"] = result
+        return Response(payload)
+
+
+class CalendarSourcePreviewView(APIView):
+    """Fetch and summarise a feed without saving anything, so the user can confirm first."""
+
+    permission_classes = [_CalendarPerm]
+    permission_action = "create"
+
+    def post(self, request: Request) -> Response:
+        from apps.core.models import get_active_household
+        from apps.scheduling.sources.feeds import normalise_events
+        from apps.scheduling.sources.fetching import CalendarFetchError, fetch_calendar
+        from apps.scheduling.sources.ics import IcsParseError
+        from apps.solace.bill_schedule import household_timezone
+
+        url = (request.data.get("url") or "").strip()
+        text = request.data.get("ics_text") or ""
+        try:
+            if url:
+                text = fetch_calendar(url)
+            if not text:
+                return Response(
+                    {"detail": "Provide a calendar URL or file."}, status=status.HTTP_400_BAD_REQUEST,
+                )
+            entries = normalise_events(text, household_timezone(get_active_household()))
+        except (CalendarFetchError, IcsParseError) as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        now = timezone.now()
+        future = [row for row in entries if row["start_at"] and row["start_at"] >= now]
+        sample = sorted(entries, key=lambda row: row["start_at"])[:5]
+        return Response({
+            "event_count": len(entries),
+            "future_count": len(future),
+            "past_count": len(entries) - len(future),
+            "sample": [
+                {"title": row["summary"], "start_at": row["start_at"], "all_day": row["all_day"]}
+                for row in sample
+            ],
+        })

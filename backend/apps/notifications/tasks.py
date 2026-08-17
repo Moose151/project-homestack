@@ -53,6 +53,11 @@ def _reminder_events():
         start_at__isnull=False,
     ).exclude(
         source_record_type="AtlasReminder", source_record_id__in=disabled_reminder_ids,
+    ).exclude(
+        # Calendar-source entries look like standalone events (no source_node), so without this
+        # a subscribed season would notify the household about every single fixture and every
+        # public holiday. A source stays silent unless it was deliberately switched on.
+        Q(calendar_source__isnull=False) & Q(calendar_source__notifications_enabled=False),
     )
 
 
