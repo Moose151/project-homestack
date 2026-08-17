@@ -24,6 +24,7 @@ export function Tabs<T extends string>({
   className = '',
   mobileSelectLabel,
   variant = 'primary',
+  onCustomise,
 }: {
   tabs: TabDef<T>[]
   active: T
@@ -32,6 +33,8 @@ export function Tabs<T extends string>({
   /** Names the picker that replaces a long tab row on phones. Defaults to "Section". */
   mobileSelectLabel?: string
   variant?: 'primary' | 'secondary'
+  /** When given, the row offers a reorder affordance. Supplied by CustomisableTabs. */
+  onCustomise?: () => void
 }) {
   // Whether a phone gets the picker used to be each page's choice, so Pets swiped a cramped
   // row while Money got a picker — the same control behaving differently per destination.
@@ -56,7 +59,18 @@ export function Tabs<T extends string>({
     <>
       {usePicker && (
         <label className="flex flex-col gap-1.5 sm:hidden">
-          <span className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted">{pickerLabel}</span>
+          <span className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted">{pickerLabel}</span>
+            {onCustomise && (
+              <button
+                type="button"
+                onClick={onCustomise}
+                className="min-h-11 rounded-lg px-2 text-[11px] font-bold text-primary hover:bg-primary-soft"
+              >
+                Reorder tabs
+              </button>
+            )}
+          </span>
           <span className="relative block">
             <select
               value={active}
@@ -71,7 +85,7 @@ export function Tabs<T extends string>({
           </span>
         </label>
       )}
-      <div className={usePicker ? 'hidden sm:block' : ''}>
+      <div className={usePicker ? 'hidden sm:flex sm:items-end sm:gap-2' : onCustomise ? 'flex items-end gap-2' : ''}>
         <div
           className={
             variant === 'primary'
@@ -122,6 +136,18 @@ export function Tabs<T extends string>({
             )
           })}
         </div>
+        {onCustomise && (
+          <button
+            type="button"
+            onClick={onCustomise}
+            title="Reorder tabs"
+            className={`flex min-h-[44px] flex-shrink-0 items-center gap-1 whitespace-nowrap px-2 text-xs font-bold text-muted hover:text-primary ${
+              variant === 'primary' ? 'border-b-2 border-transparent pb-2' : ''
+            }`}
+          >
+            <span aria-hidden>⠿</span> Reorder
+          </button>
+        )}
       </div>
     </>
   )

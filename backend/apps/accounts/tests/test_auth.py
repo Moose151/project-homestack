@@ -248,3 +248,123 @@ class GuideDismissalTests(TestCase):
         self.assertEqual(self.client.get(self.url).json(), [])
         self.client.force_login(self.other)
         self.assertEqual(len(self.client.get(self.url).json()), 1)
+
+
+class UserPreferenceTests(TestCase):
+    """The generic per-user UI preference store (tab order, mobile dock shortcuts).
+
+    The store is deliberately bounded: only registered keys exist, and each value is validated
+    into a normal form. It carries no authority — permission filtering happens where a
+    preference is *applied*, never here.
+    """
+
+    def setUp(self):
+        self.user = _make_user()
+        self.other = _make_user(username="bob", display_name="Bob")
+        self.url = reverse("user-preferences")
+
+    def _patch(self, payload):
+        return self.client.patch(self.url, payload, content_type="application/json")
+
+    def test_defaults_are_returned_when_nothing_is_saved(self):
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.get(self.url).json(), {"tab_order": {}, "mobile_nav": []})
+
+    def test_tab_order_persists_across_sessions(self):
+        self.client.force_login(self.user)
+        self._patch({"tab_order": {"solace": ["bills", "now", "purchases", "plan"]}})
+        self.client.logout()
+        self.client.force_login(self.user)
+        self.assertEqual(
+            self.client.get(self.url).json()["tab_order"]["solace"],
+            ["bills", "now", "purchases", "plan"],
+        )
+
+    def test_preferences_are_isolated_per_user(self):
+        self.client.force_login(self.user)
+        self._patch({"tab_order": {"solace": ["bills", "now"]}})
+        self.client.force_login(self.other)
+        self.assertEqual(self.client.get(self.url).json()["tab_order"], {})
+
+    def test_patching_one_page_does_not_wipe_another(self):
+        self.client.force_login(self.user)
+        self._patch({"tab_order": {"solace": ["bills", "now"]}})
+        self._patch({"tab_order": {"homestead": ["rooms", "overview"]}})
+        saved = self.client.get(self.url).json()["tab_order"]
+        self.assertEqual(saved["solace"], ["bills", "now"])
+        self.assertEqual(saved["homestead"], ["rooms", "overview"])
+
+    def test_empty_page_order_resets_just_that_page(self):
+        self.client.force_login(self.user)
+        self._patch({"tab_order": {"solace": ["bills", "now"], "homestead": ["rooms"]}})
+        self._patch({"tab_order": {"solace": []}})
+        saved = self.client.get(self.url).json()["tab_order"]
+        self.assertNotIn("solace", saved)
+        self.assertEqual(saved["homestead"], ["rooms"])
+
+    def test_delete_resets_everything_for_this_user_only(self):
+        for user in (self.user, self.other):
+            self.client.force_login(user)
+            self._patch({"mobile_nav": ["solace", "atlas"]})
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.delete(self.url).status_code, 200)
+        self.assertEqual(self.client.get(self.url).json()["mobile_nav"], [])
+        self.client.force_login(self.other)
+        self.assertEqual(self.client.get(self.url).json()["mobile_nav"], ["solace", "atlas"])
+
+    def test_delete_can_reset_a_single_key(self):
+        self.client.force_login(self.user)
+        self._patch({"mobile_nav": ["solace"], "tab_order": {"solace": ["bills"]}})
+        self.client.delete(f"{self.url}?key=mobile_nav")
+        saved = self.client.get(self.url).json()
+        self.assertEqual(saved["mobile_nav"], [])
+        self.assertEqual(saved["tab_order"], {"solace": ["bills"]})
+
+    # --- the bounds that keep this from being an open JSON dump ---
+
+    def test_unknown_preference_key_is_rejected(self):
+        self.client.force_login(self.user)
+        self.assertEqual(self._patch({"is_admin": True}).status_code, 400)
+
+    def test_unknown_key_cannot_be_smuggled_in_alongside_a_valid_one(self):
+        self.client.force_login(self.user)
+        response = self._patch({"tab_order": {"solace": ["bills"]}, "superuser": True})
+        self.assertEqual(response.status_code, 400)
+        # ...and the valid half must not have been written either.
+        self.assertEqual(self.client.get(self.url).json()["tab_order"], {})
+
+    def test_malformed_tab_order_shapes_are_rejected(self):
+        self.client.force_login(self.user)
+        for payload in (
+            {"tab_order": ["bills"]},
+            {"tab_order": {"solace": "bills"}},
+            {"tab_order": {"solace": [{"key": "bills"}]}},
+            {"tab_order": {"BAD KEY": ["bills"]}},
+            {"tab_order": {"solace": ["../../etc/passwd"]}},
+        ):
+            self.assertEqual(self._patch(payload).status_code, 400, payload)
+
+    def test_oversized_values_are_rejected(self):
+        self.client.force_login(self.user)
+        self.assertEqual(
+            self._patch({"tab_order": {"solace": [f"tab{n}" for n in range(80)]}}).status_code,
+            400,
+        )
+        self.assertEqual(
+            self._patch({"tab_order": {f"page{n}": ["a"] for n in range(60)}}).status_code,
+            400,
+        )
+
+    def test_mobile_nav_is_capped_at_two_slots(self):
+        self.client.force_login(self.user)
+        self.assertEqual(
+            self._patch({"mobile_nav": ["solace", "atlas", "pets"]}).status_code, 400,
+        )
+
+    def test_duplicate_mobile_nav_entries_are_collapsed(self):
+        self.client.force_login(self.user)
+        self._patch({"mobile_nav": ["solace", "solace"]})
+        self.assertEqual(self.client.get(self.url).json()["mobile_nav"], ["solace"])
+
+    def test_preferences_require_authentication(self):
+        self.assertEqual(self.client.get(self.url).status_code, 403)

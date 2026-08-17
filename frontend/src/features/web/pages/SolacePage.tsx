@@ -13,6 +13,8 @@ import { Button } from '../../../components/Button'
 import { Field, Input, SearchField, Select, fieldClass } from '../../../components/Field'
 import { Modal } from '../../../components/Modal'
 import { Tabs } from '../../../components/Tabs'
+import { CustomisableTabs } from '../../../components/CustomisableTabs'
+import { useCustomisableTabs } from '../../../hooks/useCustomisableTabs'
 import { Badge, type BadgeTone } from '../../../components/Badge'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
@@ -2614,7 +2616,8 @@ export function SolacePage() {
   const [unlocked, setUnlocked] = useState(false)
   const { nodes } = useStacks()
   const requiresPasswordUnlock = nodes.find(node => node.key === 'solace')?.requires_reauthentication ?? true
-  const [tab, setTab] = useUrlTab<Tab>('now', SOLACE_TABS.map(row => row.key))
+  const tabsState = useCustomisableTabs<Tab>('solace', SOLACE_TABS)
+  const { tab, setTab } = tabsState
   const [billsSection, setBillsSection] = useUrlTab<BillsSection>('bills', BILLS_SECTIONS.map(row => row.key), 'section')
   const [planSection, setPlanSection] = useUrlTab<PlanSection>('payplan', PLAN_SECTIONS.map(row => row.key), 'section')
   const [insightsSection, setInsightsSection] = useUrlTab<InsightsSection>('forecast', INSIGHTS_SECTIONS.map(row => row.key), 'section')
@@ -2819,12 +2822,7 @@ export function SolacePage() {
         <Button variant="ghost" onClick={load} loading={loading} className="sm:flex-none">Refresh</Button>
       </div>
       <div className="hidden sm:block">
-        <Tabs
-          tabs={SOLACE_TABS}
-          active={tab}
-          onChange={setTab}
-          mobileSelectLabel="Money section"
-        />
+        <CustomisableTabs state={tabsState} label="Money" mobileSelectLabel="Money section" />
       </div>
       {tab === 'now' && (
         <>

@@ -6,14 +6,16 @@ import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { Modal } from '../../../components/Modal'
 import { Field, Input, SearchField, Textarea, Select } from '../../../components/Field'
-import { Tabs } from '../../../components/Tabs'
+import { type TabDef } from '../../../components/Tabs'
+import { CustomisableTabs } from '../../../components/CustomisableTabs'
+import { useCustomisableTabs } from '../../../hooks/useCustomisableTabs'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
 import { DeleteAction } from '../../..//components/RowActions'
 import { useAuth } from '../../auth/AuthContext'
-import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
+import { useUrlQueryState } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
 import { sourcePath } from '../../../lib/sourceLinks'
 import { EventModal } from './CalendarPage'
@@ -936,7 +938,6 @@ function GroceryTab({ lists, people, defaultAssignee, focusedListId, focusedItem
 }
 
 type Tab = 'agenda' | 'schedule' | 'lists' | 'grocery' | 'shopping' | 'notes' | 'reminders' | 'people'
-const TAB_KEYS: Tab[] = ['agenda', 'schedule', 'lists', 'grocery', 'shopping', 'notes', 'reminders', 'people']
 
 const LIST_TYPES = Object.entries(LIST_TYPE_META)
   .filter(([key]) => key !== 'grocery' && key !== 'shopping')
@@ -944,8 +945,19 @@ const LIST_TYPES = Object.entries(LIST_TYPE_META)
 
 export function AtlasPage() {
   const { user } = useAuth()
-  const [tab, setTab] = useUrlTab<Tab>('agenda', TAB_KEYS)
   const [lists, setLists] = useState<AtlasList[]>([])
+  const atlasTabs: TabDef<Tab>[] = [
+    { key: 'agenda', label: 'agenda' },
+    { key: 'schedule', label: 'appointments & events' },
+    { key: 'lists', label: 'lists', badge: lists.filter(l => l.list_type !== 'grocery' && l.list_type !== 'shopping').length || undefined },
+    { key: 'grocery', label: 'grocery', badge: lists.filter(l => l.list_type === 'grocery').length || undefined },
+    { key: 'shopping', label: 'shopping', badge: lists.filter(l => l.list_type === 'shopping').length || undefined },
+    { key: 'notes', label: 'notes' },
+    { key: 'reminders', label: 'reminders' },
+    { key: 'people', label: 'people & birthdays' },
+  ]
+  const tabsState = useCustomisableTabs<Tab>('atlas', atlasTabs)
+  const { tab, setTab } = tabsState
   const [people, setPeople] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
   const [newTitle, setNewTitle] = useState('')
@@ -989,8 +1001,6 @@ export function AtlasPage() {
   // Grocery and Shopping now have their own dedicated tabs; the generic Lists tab keeps
   // everything else (to-do, checklist, general, wishlist).
   const otherLists = lists.filter(l => l.list_type !== 'grocery' && l.list_type !== 'shopping')
-  const groceryCount = lists.filter(l => l.list_type === 'grocery').length
-  const shoppingCount = lists.filter(l => l.list_type === 'shopping').length
 
   // Debounced Atlas-wide search.
   useEffect(() => {
@@ -1073,21 +1083,7 @@ export function AtlasPage() {
       ) : (
         <>
           {/* Tabs */}
-          <Tabs
-            tabs={[
-              { key: 'agenda', label: 'agenda' },
-              { key: 'schedule', label: 'appointments & events' },
-              { key: 'lists', label: 'lists', badge: otherLists.length || undefined },
-              { key: 'grocery', label: 'grocery', badge: groceryCount || undefined },
-              { key: 'shopping', label: 'shopping', badge: shoppingCount || undefined },
-              { key: 'notes', label: 'notes' },
-              { key: 'reminders', label: 'reminders' },
-              { key: 'people', label: 'people & birthdays' },
-            ]}
-            active={tab}
-            onChange={setTab}
-            className="w-fit"
-          />
+          <CustomisableTabs state={tabsState} label="Lists &amp; Notes" className="w-fit" />
 
           {tab === 'agenda' ? <AgendaTab people={people} lists={lists} defaultAssignee={defaultAssignee} onError={setError} onListsChanged={() => api.getLists().then(setLists).catch(error => setError(errMsg(error)))} /> : tab === 'schedule' ? <AppointmentsEventsTab people={people} defaultAssignee={defaultAssignee} onError={setError} /> : tab === 'lists' ? (
             <div className="flex flex-col gap-4">

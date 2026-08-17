@@ -12,6 +12,8 @@ from django.contrib.auth import update_session_auth_hash
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -142,8 +144,54 @@ class ReauthView(APIView):
         return Response({"detail": "Re-authentication successful."})
 
 
+class UserPreferenceView(APIView):
+    """The caller's own UI preferences (tab order, mobile dock shortcuts).
+
+    Self-service by design: arranging your own interface needs no elevated permission, and the
+    values carry no authority — see apps.accounts.preferences. It is still per-login state, so
+    it needs a login: the project default is AllowAny, which would otherwise reach the queries
+    below with an AnonymousUser.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        return Response(services.get_user_preferences(request.user))
+
+    def patch(self, request: Request) -> Response:
+        from apps.accounts import preferences
+
+        if not isinstance(request.data, dict) or not request.data:
+            raise ValidationError({"detail": "Provide at least one preference to update."})
+        unknown = [key for key in request.data if not preferences.is_supported(key)]
+        if unknown:
+            raise ValidationError({key: "Unknown preference." for key in unknown})
+        for key, value in request.data.items():
+            # Tab order merges per page so a client that only knows its own page cannot wipe
+            # the orderings for every other page.
+            if key == preferences.TAB_ORDER:
+                if not isinstance(value, dict):
+                    raise ValidationError({key: "Expected an object of page orders."})
+                services.merge_tab_order(request.user, value)
+            else:
+                services.set_user_preference(request.user, key, value)
+        return Response(services.get_user_preferences(request.user))
+
+    def delete(self, request: Request) -> Response:
+        from apps.accounts import preferences
+
+        key = request.query_params.get("key")
+        keys = [key] if key else list(preferences.REGISTRY)
+        for entry in keys:
+            services.reset_user_preference(request.user, entry)
+        return Response(services.get_user_preferences(request.user))
+
+
 class GuideDismissalView(APIView):
     """Self-service, versioned guide preferences for the current login."""
+
+    # Same reason as UserPreferenceView: per-login state under an AllowAny default.
+    permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
         rows = request.user.guide_dismissals.all()

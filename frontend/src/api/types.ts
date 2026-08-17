@@ -52,6 +52,17 @@ export interface GuideDismissal {
   guide_version: string
 }
 
+/**
+ * Per-user interface preferences. Presentation hints only — the surfaces that read these
+ * re-derive what the user may actually see and intersect, so a saved key never grants access.
+ */
+export interface UserPreferences {
+  /** page key -> ordered tab keys */
+  tab_order: Record<string, string[]>
+  /** the two configurable mobile dock slots, as stack keys */
+  mobile_nav: string[]
+}
+
 export interface AtlasListItem {
   id: number
   atlas_list_id: number

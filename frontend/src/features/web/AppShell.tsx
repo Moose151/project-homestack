@@ -9,6 +9,7 @@ import { Logo } from '../../components/Logo'
 import { useDarkMode } from '../../hooks/useDarkMode'
 import { useDialogA11y } from '../../components/useDialogA11y'
 import { useStacks } from '../stacks/StacksContext'
+import { usePreferences } from '../preferences/PreferencesContext'
 import { STACKS, softColour } from '../../config/stacks'
 import { APP_VERSION } from '../../config/version'
 import { api } from '../../api/client'
@@ -271,11 +272,11 @@ function MoreSheet({
           <div>
             <div className="mb-2 flex items-center justify-between gap-3 px-1">
               <span>
-                <span className="block text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Pinned</span>
-                <span className="mt-0.5 block text-[11px] text-muted">Your two bottom-bar shortcuts</span>
+                <span className="block text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted/70">Bottom navigation</span>
+                <span className="mt-0.5 block text-[11px] text-muted">Your two shortcut slots · saved to your account</span>
               </span>
               <button onClick={() => setCustomisingNav(value => !value)} className="min-h-11 rounded-lg px-2 text-xs font-bold text-primary hover:bg-primary-soft">
-                {customisingNav ? 'Done' : 'Edit shortcuts'}
+                {customisingNav ? 'Done' : 'Customise navigation'}
               </button>
             </div>
             {customisingNav ? (
@@ -307,9 +308,9 @@ function MoreSheet({
                   )
                 })}
                 <button type="button" onClick={resetMobileKeys} className="min-h-11 w-full rounded-xl px-3 text-xs font-bold text-muted-strong hover:bg-surface hover:text-primary">
-                  Reset to recommended
+                  Reset to defaults
                 </button>
-                <p className="px-1 text-[11px] leading-4 text-muted">Home, Add and More stay fixed. Choosing the other pinned area swaps the two slots, so duplicates are never created.</p>
+                <p className="px-1 text-[11px] leading-4 text-muted">Home, Add and More stay fixed. Choosing the area already in the other slot swaps the two, so duplicates are never created. These shortcuts follow your account to any device.</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2">
@@ -448,24 +449,13 @@ export function AppShell() {
   const [customisingNav, setCustomisingNav] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [quickOpen, setQuickOpen] = useState(false)
-  const mobileNavStorageKey = `hs-mobile-nav-${user?.id ?? 'guest'}`
   const [hiddenGuides, setHiddenGuides] = useState<string[]>([])
-  const [mobileKeys, setMobileKeys] = useState<string[]>(() => {
-    try {
-      // Read the former household-global preference once as a migration seed. After the stack
-      // permissions load, the repair effect below moves it to this user's scoped key.
-      const stored = localStorage.getItem(`hs-mobile-nav-${user?.id ?? 'guest'}`)
-        ?? localStorage.getItem('hs-mobile-nav')
-      const saved = JSON.parse(stored || '[]')
-      return Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string') : []
-    } catch {
-      return []
-    }
-  })
-  const hasCustomizedNav = useRef(
-    localStorage.getItem(`hs-mobile-nav-${user?.id ?? 'guest'}`) !== null
-      || localStorage.getItem('hs-mobile-nav') !== null,
-  )
+  // The dock's two shortcuts are a per-user server preference, so they follow the account onto
+  // a new phone instead of living in one browser. PreferencesProvider migrates any legacy
+  // localStorage value once on load and then removes it.
+  const { preferences, setMobileNav, resetMobileNav } = usePreferences()
+  const mobileKeys = preferences.mobile_nav
+  const hasCustomizedNav = mobileKeys.length > 0
   const { enabledKeys, loading: stacksLoading, error: stacksError, refresh: refreshStacks } = useStacks()
   useScrollRestoration()
 
@@ -498,7 +488,7 @@ export function AppShell() {
   // inaccessible saved choices are repaired from the documented priority, without replacing
   // any still-valid explicit choice.
   const rawSavedKeys = mobileKeys.filter(key => key !== 'hub').slice(0, MOBILE_SHORTCUT_SLOTS)
-  const effectiveMobileKeys = hasCustomizedNav.current
+  const effectiveMobileKeys = hasCustomizedNav
     ? (() => {
       const reserved = new Set(rawSavedKeys.filter(key => availableKeys.has(key)))
       const used = new Set<string>()
@@ -543,38 +533,28 @@ export function AppShell() {
     })
   }
 
-  const persistMobileKeys = (keys: string[]) => {
-    hasCustomizedNav.current = true
-    localStorage.setItem(mobileNavStorageKey, JSON.stringify(keys))
-    setMobileKeys(keys)
-  }
-
   const setMobileSlot = (slot: number, key: string) => {
+    // A node the user cannot reach is never a valid choice, whatever a saved preference says.
     if (key === 'hub' || !availableKeys.has(key) || slot < 0 || slot >= MOBILE_SHORTCUT_SLOTS) return
     const next = [...effectiveMobileKeys]
     const otherSlot = next.indexOf(key)
+    // Picking the node already in the other slot swaps them rather than duplicating it.
     if (otherSlot !== -1 && otherSlot !== slot) next[otherSlot] = next[slot]
     next[slot] = key
-    persistMobileKeys(next)
+    void setMobileNav(next)
   }
 
-  const resetMobileKeys = () => {
-    hasCustomizedNav.current = false
-    localStorage.removeItem(mobileNavStorageKey)
-    // Remove the legacy global setting too, otherwise it would immediately reseed this user.
-    localStorage.removeItem('hs-mobile-nav')
-    setMobileKeys([])
-  }
+  const resetMobileKeys = () => { void resetMobileNav() }
 
+  // Repair a stored choice that has stopped being valid — a node disabled for the household, or
+  // one this account may no longer view — by writing the repaired pair back. Without this the
+  // dock would silently render a gap for a shortcut the account can no longer reach.
   useEffect(() => {
-    if (stacksLoading || !hasCustomizedNav.current) return
-    const migratingLegacyPreference = localStorage.getItem(mobileNavStorageKey) === null
-      && localStorage.getItem('hs-mobile-nav') !== null
-    if (mobileKeysSignature === effectiveMobileKeysSignature && !migratingLegacyPreference) return
-    localStorage.setItem(mobileNavStorageKey, effectiveMobileKeysSignature)
-    if (migratingLegacyPreference) localStorage.removeItem('hs-mobile-nav')
-    if (mobileKeysSignature !== effectiveMobileKeysSignature) setMobileKeys(JSON.parse(effectiveMobileKeysSignature))
-  }, [stacksLoading, mobileNavStorageKey, effectiveMobileKeysSignature, mobileKeysSignature])
+    if (stacksLoading || !hasCustomizedNav) return
+    if (mobileKeysSignature === effectiveMobileKeysSignature) return
+    void setMobileNav(effectiveMobileKeys)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stacksLoading, hasCustomizedNav, effectiveMobileKeysSignature, mobileKeysSignature])
 
   useEffect(() => {
     setMoreOpen(false)

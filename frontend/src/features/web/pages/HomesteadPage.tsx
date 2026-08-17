@@ -12,7 +12,9 @@ import type {
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { Field, Input, SearchField, Textarea, Select, fieldClass } from '../../../components/Field'
-import { Tabs } from '../../../components/Tabs'
+import { Tabs, type TabDef } from '../../../components/Tabs'
+import { CustomisableTabs } from '../../../components/CustomisableTabs'
+import { useCustomisableTabs } from '../../../hooks/useCustomisableTabs'
 import { Badge, type BadgeTone } from '../../../components/Badge'
 import { BarChart, type BarChartPoint } from '../../../components/BarChart'
 import { PageHeader } from '../../../components/PageHeader'
@@ -26,7 +28,7 @@ import { RoomIconSelect } from '../../../components/RoomIconSelect'
 import { SensitiveGate } from '../../../components/SensitiveGate'
 import { useAuth } from '../../auth/AuthContext'
 import { useStacks } from '../../stacks/StacksContext'
-import { useUrlAction, useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
+import { useUrlAction, useUrlQueryState } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
 import { HomeFloorPlan } from '../components/HomeFloorPlan'
 import { MobileListRow, MobileScreenHeader, MobileSection, MobileSummaryCard } from '../../../components/mobile'
@@ -2178,11 +2180,6 @@ function SearchResults({ results }: { results: HomesteadSearchResults }) {
 // ---------------------------------------------------------------------------
 
 type Tab = 'overview' | 'rooms' | 'maintenance' | 'appliances' | 'pool' | 'usage' | 'improvements' | 'contacts' | 'finances'
-// Every tab belongs here — a key left out is silently rewritten to overview when it is linked to.
-const TAB_KEYS: Tab[] = [
-  'overview', 'rooms', 'maintenance', 'appliances', 'pool', 'usage', 'improvements',
-  'contacts', 'finances',
-]
 const TAB_LABELS: Record<Tab, string> = {
   overview: 'Home', rooms: 'Rooms & areas', maintenance: 'Maintenance', appliances: 'Appliances',
   pool: 'Pool & spa', usage: 'Power & water', improvements: 'Improvements', contacts: 'Contacts',
@@ -2192,7 +2189,6 @@ const TAB_LABELS: Record<Tab, string> = {
 export function HomesteadPage() {
   const { user } = useAuth()
   const { enabledKeys, loading: stacksLoading } = useStacks()
-  const [tab, setTab] = useUrlTab<Tab>('overview', TAB_KEYS)
   const [people, setPeople] = useState<Person[]>([])
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useUrlQueryState()
@@ -2237,6 +2233,21 @@ export function HomesteadPage() {
 
   const defaultAssignee = personIdForUser(people, user?.id)
   const canUseMoney = enabledKeys.has('solace')
+  // `finances` is present only for those who may open Money, so a saved tab order naming it
+  // cannot reveal it to anyone else — the customiser only ever sees the tabs built here.
+  const homesteadTabs: TabDef<Tab>[] = [
+    { key: 'overview', label: 'overview' },
+    { key: 'rooms', label: 'rooms' },
+    { key: 'maintenance', label: 'maintenance' },
+    { key: 'appliances', label: 'appliances' },
+    { key: 'pool', label: 'pool & spa' },
+    { key: 'usage', label: 'power & water' },
+    { key: 'improvements', label: 'improvements' },
+    { key: 'contacts', label: 'contacts' },
+    ...(canUseMoney ? [{ key: 'finances' as const, label: 'costs & cover' }] : []),
+  ]
+  const tabsState = useCustomisableTabs<Tab>('homestead', homesteadTabs)
+  const { tab, setTab } = tabsState
 
   useEffect(() => {
     if (!stacksLoading && tab === 'finances' && !canUseMoney) setTab('overview')
@@ -2269,23 +2280,7 @@ export function HomesteadPage() {
               (docs/36 §6.9). The ?tab= query param stays the single source of truth for both,
               so existing deep links (Hub, Solace, Quick Create, source links) are untouched. */}
           <div className="hidden sm:block">
-            <Tabs
-              tabs={[
-                { key: 'overview', label: 'overview' },
-                { key: 'rooms', label: 'rooms' },
-                { key: 'maintenance', label: 'maintenance' },
-                { key: 'appliances', label: 'appliances' },
-                { key: 'pool', label: 'pool & spa' },
-                { key: 'usage', label: 'power & water' },
-                { key: 'improvements', label: 'improvements' },
-                { key: 'contacts', label: 'contacts' },
-                ...(canUseMoney ? [{ key: 'finances' as const, label: 'costs & cover' }] : []),
-              ]}
-              active={tab}
-              onChange={setTab}
-              className="w-full sm:w-fit"
-              mobileSelectLabel="Home section"
-            />
+            <CustomisableTabs state={tabsState} label="Home" className="w-full sm:w-fit" mobileSelectLabel="Home section" />
           </div>
           {tab !== 'overview' && (
             <MobileScreenHeader

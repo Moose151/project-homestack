@@ -23,7 +23,7 @@ import type {
   SolaceCategoryReport, SolaceChecklistItem, SolaceChecklistPreference, SolaceCloseoutResponse,
   SolaceCycleCloseout, SolaceCycleHistoryRow, SolaceHealth, SolaceIncomeAllocation,
   SolaceIncomeAllocationWrite, SolaceNow, SolacePayCyclePlan, SolacePayday, SolacePurchase,
-  SolaceSchedule, SolaceSearchResults, SolaceSettings, UserNotificationSettings, UtilityBill,
+  SolaceSchedule, SolaceSearchResults, SolaceSettings, UserNotificationSettings, UserPreferences, UtilityBill,
   UtilityBillWrite, UtilityType, UtilityUsageResponse, WaterTest,
   WaterTestWrite, WikiCategory, WikiPage
 } from './types'
@@ -422,6 +422,12 @@ export const api = {
     }),
   resetGuideDismissals: (): Promise<{ removed: number }> =>
     _fetch('/auth/guide-dismissals/', { method: 'DELETE' }),
+  getUserPreferences: (): Promise<UserPreferences> => _fetch('/auth/preferences/'),
+  /** Partial update. `tab_order` merges per page, so one page never clobbers the others. */
+  updateUserPreferences: (patch: Partial<UserPreferences>): Promise<UserPreferences> =>
+    _fetch('/auth/preferences/', { method: 'PATCH', body: JSON.stringify(patch) }),
+  resetUserPreferences: (key?: keyof UserPreferences): Promise<UserPreferences> =>
+    _fetch(`/auth/preferences/${key ? `?key=${key}` : ''}`, { method: 'DELETE' }),
   globalSearch: (q: string): Promise<GlobalSearchResponse> =>
     _fetch(`/search/?q=${encodeURIComponent(q)}`),
 

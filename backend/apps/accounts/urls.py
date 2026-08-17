@@ -11,4 +11,5 @@ urlpatterns = [
     path("reauth/", views.ReauthView.as_view(), name="auth-reauth"),
     path("kiosk-users/", views.KioskUsersView.as_view(), name="kiosk-users"),
     path("guide-dismissals/", views.GuideDismissalView.as_view(), name="guide-dismissals"),
+    path("preferences/", views.UserPreferenceView.as_view(), name="user-preferences"),
 ]

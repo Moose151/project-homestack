@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './features/auth/AuthContext'
 import { LoginPage } from './features/auth/LoginPage'
 import { AppShell } from './features/web/AppShell'
 import { StacksProvider, useStacks } from './features/stacks/StacksContext'
+import { PreferencesProvider } from './features/preferences/PreferencesContext'
 
 const HubPage = lazy(() => import('./features/web/pages/HubPage').then(m => ({ default: m.HubPage })))
 const AtlasPage = lazy(() => import('./features/web/pages/AtlasPage').then(m => ({ default: m.AtlasPage })))
@@ -93,7 +94,9 @@ function WebApp() {
 
   return (
     <StacksProvider>
-      <WebRoutes isAdmin={user.role === 'admin'} />
+      <PreferencesProvider userId={user.id}>
+        <WebRoutes isAdmin={user.role === 'admin'} />
+      </PreferencesProvider>
     </StacksProvider>
   )
 }
