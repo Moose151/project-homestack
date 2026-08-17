@@ -75,7 +75,7 @@ const dayAfter = (dateValue: string) => {
  * what do I owe now, what goes out, how is pay divided, how are we tracking, and setup.
  */
 type Tab = 'now' | 'bills' | 'plan' | 'insights' | 'manage'
-type BillsSection = 'bills' | 'schedule'
+type BillsSection = 'upcoming' | 'bills' | 'schedule'
 type PlanSection = 'payplan' | 'buckets' | 'paydays' | 'purchases'
 type InsightsSection = 'forecast' | 'closeout' | 'history' | 'annual'
 
@@ -87,6 +87,7 @@ const SOLACE_TABS = [
   { key: 'manage' as const, label: 'Manage' },
 ]
 const BILLS_SECTIONS = [
+  { key: 'upcoming' as const, label: 'Upcoming' },
   { key: 'bills' as const, label: 'Bills' },
   { key: 'schedule' as const, label: 'Calendar' },
 ]
@@ -112,6 +113,119 @@ const LEGACY_TABS: Record<string, [Tab, string | null]> = {
   forecast: ['insights', 'forecast'], closeout: ['insights', 'closeout'],
   'cycle-history': ['insights', 'history'], 'annual-summary': ['insights', 'annual'],
   manage: ['manage', null],
+}
+
+function UpcomingBillsTab({ onAction, onError, focusedOccurrenceId }: {
+  onAction: (id: number, action: 'paid' | 'unpaid' | 'skip') => Promise<SolaceBillOccurrence>
+  onError: (message: string) => void
+  focusedOccurrenceId: number | null
+}) {
+  const [rows, setRows] = useState<SolaceBillOccurrence[] | null>(null)
+  const [selected, setSelected] = useState<SolaceBillOccurrence | null>(null)
+  const [saving, setSaving] = useState(false)
+  const openedDeepLink = useRef(false)
+
+  const load = useCallback(() => api.getUpcomingSolaceOccurrences()
+    .then(setRows)
+    .catch(error => { onError(errMsg(error)); setRows([]) }), [onError])
+  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    if (!rows || !focusedOccurrenceId || openedDeepLink.current) return
+    const occurrence = rows.find(row => row.id === focusedOccurrenceId)
+    if (occurrence) setSelected(occurrence)
+    openedDeepLink.current = true
+  }, [focusedOccurrenceId, rows])
+
+  const today = dateKey(new Date().toISOString())
+  const tomorrowDate = new Date()
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1)
+  const tomorrow = dateKey(tomorrowDate.toISOString())
+  const weekDate = new Date()
+  weekDate.setDate(weekDate.getDate() + 7)
+  const weekEnd = dateKey(weekDate.toISOString())
+  const groups = [
+    { key: 'overdue', title: 'Overdue unpaid', rows: [] as SolaceBillOccurrence[] },
+    { key: 'today', title: 'Today', rows: [] as SolaceBillOccurrence[] },
+    { key: 'tomorrow', title: 'Tomorrow', rows: [] as SolaceBillOccurrence[] },
+    { key: 'week', title: 'This week', rows: [] as SolaceBillOccurrence[] },
+    { key: 'later', title: 'Later', rows: [] as SolaceBillOccurrence[] },
+  ]
+  for (const row of rows ?? []) {
+    const due = dateKey(row.due_at)
+    const group = due < today ? groups[0]
+      : due === today ? groups[1]
+        : due === tomorrow ? groups[2]
+          : due <= weekEnd ? groups[3] : groups[4]
+    group.rows.push(row)
+  }
+
+  const markPaid = async () => {
+    if (!selected) return
+    setSaving(true)
+    try {
+      await onAction(selected.id, 'paid')
+      setRows(current => current?.filter(row => row.id !== selected.id) ?? current)
+      setSelected(null)
+    } catch (error) {
+      onError(errMsg(error))
+    } finally { setSaving(false) }
+  }
+
+  if (!rows) return <div className="h-48 animate-pulse rounded-2xl bg-sunken" />
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="font-bold text-ink">All upcoming bills</h2>
+        <p className="text-sm text-muted">Every unpaid occurrence in due-date order. Paid bills stay out of the way.</p>
+      </div>
+      {rows.length === 0 ? (
+        <EmptyState icon="✅" title="No unpaid bills coming up" hint="New bill occurrences will appear here automatically." />
+      ) : groups.filter(group => group.rows.length).map(group => (
+        <section key={group.key} className="space-y-2" aria-labelledby={`upcoming-${group.key}`}>
+          <h3 id={`upcoming-${group.key}`} className={`text-xs font-extrabold uppercase tracking-wide ${group.key === 'overdue' ? 'text-danger' : 'text-muted-strong'}`}>{group.title}</h3>
+          <div className="space-y-2">
+            {group.rows.map(row => (
+              <MobileListRow
+                key={row.id}
+                icon={row.is_overdue ? '!' : '💸'}
+                title={row.bill_name}
+                subtitle={`${dateOnly(row.due_at)} · ${cap(row.bill_category)}`}
+                trailing={<span className={row.is_overdue ? 'font-bold text-danger' : 'font-semibold text-ink'}>{money(row.amount)}</span>}
+                onClick={() => setSelected(row)}
+                className={row.is_overdue ? 'border-danger/30 bg-danger-soft/30' : ''}
+              />
+            ))}
+          </div>
+        </section>
+      ))}
+      {selected && (
+        <Modal title={selected.bill_name} onClose={() => setSelected(null)} size="sm" footer={(
+          <>
+            <Button variant="ghost" onClick={() => setSelected(null)}>Close</Button>
+            <Button onClick={markPaid} loading={saving}>Mark paid</Button>
+          </>
+        )}>
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-sunken p-4">
+              <p className="text-2xl font-extrabold text-ink">{money(selected.amount)}</p>
+              <p className={`mt-1 text-sm ${selected.is_overdue ? 'font-bold text-danger' : 'text-muted'}`}>
+                {selected.is_overdue ? 'Overdue · ' : ''}{new Date(selected.due_at).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })}
+              </p>
+              <p className="mt-1 text-xs text-muted">{cap(selected.bill_category)} · unpaid occurrence #{selected.id}</p>
+            </div>
+            {selected.notes && <p className="whitespace-pre-wrap text-sm text-muted-strong">{selected.notes}</p>}
+            <Link
+              to={`/solace?tab=bills&section=bills&bill=${selected.bill_id}&occurrence=${selected.id}`}
+              className="inline-flex min-h-11 items-center text-sm font-bold text-primary hover:underline"
+              onClick={() => setSelected(null)}
+            >
+              Manage this bill →
+            </Link>
+          </div>
+        </Modal>
+      )}
+    </div>
+  )
 }
 
 const BILL_CATS = ['mortgage', 'utilities', 'insurance', 'council', 'debt', 'subscription', 'childcare', 'other']
@@ -2328,9 +2442,7 @@ function MoneyMobileHome({ now, health, onTab, onSection, onAction }: {
             )}
           />
         ))}
-        {nextDue.length > 0 && (
-          <Button variant="ghost" className="w-full" onClick={() => onSection('bills', 'schedule')}>Open payment schedule</Button>
-        )}
+        <Button variant="secondary" className="w-full" onClick={() => onSection('bills', 'upcoming')}>View all upcoming bills</Button>
       </MobileSection>
       <MobileSection title="Money">
         <MobileListRow icon="🧾" title="Bills" subtitle="Bills and payment schedule" onClick={() => onSection('bills', 'bills')} />
@@ -2743,8 +2855,15 @@ export function SolacePage() {
 
       {tab === 'bills' && (
         <div className="flex flex-col gap-4">
-          <MobileScreenHeader className="sm:hidden" title={billsSection === 'schedule' ? 'Payment schedule' : 'Bills'} showBack onBack={() => setTab('now')} />
+          <MobileScreenHeader className="sm:hidden" title={BILLS_SECTIONS.find(row => row.key === billsSection)?.label ?? 'Bills'} showBack onBack={() => setTab('now')} />
           <Tabs tabs={BILLS_SECTIONS} active={billsSection} onChange={setBillsSection} variant="secondary" />
+          {billsSection === 'upcoming' && (
+            <UpcomingBillsTab
+              onAction={updateOccurrence}
+              onError={setError}
+              focusedOccurrenceId={focusedOccurrenceId}
+            />
+          )}
           {billsSection === 'bills' && (
             <BillsTab
               bills={bills}

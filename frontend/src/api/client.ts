@@ -6,7 +6,7 @@ import type {
   BookRating, BookShelfStatus, BooksUser, CalendarEvent, CalendarEventWrite, ClubBookEntry,
   ClubQueueItem, CornerResponse, EducationAssessment, EducationClassSession, EducationCourse, EducationEvent,
   EducationInstitution, FitnessExercise, FitnessProgram, FitnessRecord, FitnessSession,
-  FitnessSessionExercise, FitnessSessionSet, GlobalSearchResponse, HomesteadSearchResults,
+  FitnessSessionExercise, FitnessSessionSet, GlobalSearchResponse, GuideDismissal, HomesteadSearchResults,
   Household, HouseholdCost, HouseholdPushDeviceGroup, HubResponse, HubWidgetConfig, Improvement, InsurancePolicy,
   KioskMeridian, KioskUser, LinkPreview, LinkWatch, MaintenanceTask, MeridianAllowanceRow, MeridianCategory,
   MeridianGoal, MeridianPointsResponse, MeridianReports, MeridianReward, MeridianRewardRequest,
@@ -415,6 +415,13 @@ export const api = {
     _fetch('/auth/me/', { method: 'PATCH', body: JSON.stringify(data) }),
   reauth: (password: string): Promise<void> =>
     _fetch('/auth/reauth/', { method: 'POST', body: JSON.stringify({ password }) }),
+  getGuideDismissals: (): Promise<GuideDismissal[]> => _fetch('/auth/guide-dismissals/'),
+  dismissGuide: (guideIdentifier: string, guideVersion = '1'): Promise<GuideDismissal> =>
+    _fetch('/auth/guide-dismissals/', {
+      method: 'POST', body: JSON.stringify({ guide_identifier: guideIdentifier, guide_version: guideVersion }),
+    }),
+  resetGuideDismissals: (): Promise<{ removed: number }> =>
+    _fetch('/auth/guide-dismissals/', { method: 'DELETE' }),
   globalSearch: (q: string): Promise<GlobalSearchResponse> =>
     _fetch(`/search/?q=${encodeURIComponent(q)}`),
 
@@ -531,8 +538,10 @@ export const api = {
   // --- Atlas reminders ---
   getReminders: (upcoming?: boolean): Promise<AtlasReminder[]> =>
     _fetch(`/atlas/reminders/${upcoming ? '?upcoming=1' : ''}`),
-  createReminder: (data: { title: string; due_at?: string | null; is_all_day?: boolean; body?: string }): Promise<AtlasReminder> =>
+  createReminder: (data: { title: string; due_at?: string | null; is_all_day?: boolean; body?: string; assigned_to_person_ids?: number[]; notifications_enabled?: boolean }): Promise<AtlasReminder> =>
     _fetch('/atlas/reminders/', { method: 'POST', body: JSON.stringify(data) }),
+  updateReminder: (id: number, data: Partial<{ title: string; due_at: string | null; is_all_day: boolean; body: string; assigned_to_person_ids: number[]; notifications_enabled: boolean }>): Promise<AtlasReminder> =>
+    _fetch(`/atlas/reminders/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteReminder: (id: number): Promise<void> => _fetch(`/atlas/reminders/${id}/`, { method: 'DELETE' }),
 
   // --- Calendar ---
@@ -1094,6 +1103,8 @@ export const api = {
     action: 'paid' | 'unpaid' | 'skip',
   ): Promise<SolaceBillOccurrence> =>
     _fetch(`/solace/occurrences/${id}/${action}/`, { method: 'POST' }),
+  getUpcomingSolaceOccurrences: (): Promise<SolaceBillOccurrence[]> =>
+    _fetch('/solace/occurrences/upcoming/'),
   getSolaceBills: (params?: { upcoming?: boolean; unpaid?: boolean }): Promise<SolaceBill[]> => {
     const q = new URLSearchParams()
     if (params?.upcoming) q.set('upcoming', '1')
@@ -1326,8 +1337,10 @@ export const api = {
     _fetch(`/notifications/${unreadOnly ? '?unread=1' : ''}`),
   markNotificationRead: (id: number): Promise<unknown> =>
     _fetch(`/notifications/${id}/read/`, { method: 'POST' }),
-  markAllNotificationsRead: (): Promise<unknown> =>
-    _fetch('/notifications/read-all/', { method: 'POST' }),
+  markAllNotificationsRead: (throughId?: number): Promise<unknown> =>
+    _fetch('/notifications/read-all/', {
+      method: 'POST', body: JSON.stringify(throughId ? { through_id: throughId } : {}),
+    }),
   getNotificationPreferences: (): Promise<NotificationPreference[]> =>
     _fetch('/notifications/preferences/'),
   updateNotificationPreferences: (rows: Partial<NotificationPreference>[]): Promise<NotificationPreference[]> =>

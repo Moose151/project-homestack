@@ -171,6 +171,12 @@ class UpcomingWidgetTests(TestCase):
             None,
         )
 
+    def _widget(self, key):
+        return next(
+            (widget for widget in self.client.get(reverse("hub")).json()["widgets"] if widget["key"] == key),
+            None,
+        )
+
     def test_includes_a_dated_reminder(self):
         create_reminder(self.admin, title="Doctor visit", due_at=_future(48))
         self.assertIn("Doctor visit", [i["title"] for i in self._upcoming()["items"]])
@@ -260,7 +266,8 @@ class UpcomingWidgetTests(TestCase):
     def test_paid_recurring_bill_uses_next_unpaid_occurrence(self):
         from apps.nodes.services import enable_node
         from apps.hub.models import HouseholdHubWidget, HubWidget
-        from apps.hub.services import _solace_widget_content
+        from apps.hub.services import _solace_bills_due_widget
+        from apps.solace.services import create_payday
         from apps.solace.models import BillOccurrence
         from apps.solace.services import create_bill, mark_occurrence_paid
 
@@ -278,12 +285,52 @@ class UpcomingWidgetTests(TestCase):
             due_at=_future(-48),
             recurrence_rule="FREQ=WEEKLY",
         )
+        create_payday(
+            self.admin, title="Pay", expected_amount="1000.00", pay_at=_future(480),
+            recurrence_rule="FREQ=WEEKLY",
+        )
         stale = BillOccurrence.objects.filter(bill=bill, status=BillOccurrence.Status.UPCOMING).order_by("due_at").first()
         self.assertIsNotNone(stale)
         mark_occurrence_paid(self.admin, stale)
-        row = next(item for item in _solace_widget_content("solace_bills_due", self.admin) if item["name"] == "Internet")
+        rows, meta = _solace_bills_due_widget(self.admin)
+        row = next(item for item in rows if item["bill_name"] == "Internet")
         self.assertFalse(row["is_overdue"])
-        self.assertNotEqual(row["next_occurrence_id"], stale.id)
+        self.assertNotEqual(row["id"], stale.id)
+        self.assertEqual(meta["bill_count"], len(rows))
+
+    def test_due_before_payday_widget_uses_occurrences_and_keeps_overdue_unpaid(self):
+        from apps.nodes.services import enable_node
+        from apps.solace.services import create_bill, create_payday, mark_occurrence_unpaid
+
+        enable_node(self.admin, "solace")
+        grant_user_permission(self.admin, "solace.view")
+        create_payday(
+            self.admin, title="Pay", expected_amount="1000.00", pay_at=_future(120),
+            recurrence_rule="FREQ=WEEKLY",
+        )
+        overdue_bill = create_bill(self.admin, name="Overdue", amount="25.00", due_at=_future(-48))
+        overdue_occurrence = overdue_bill.occurrences.order_by("due_at").first()
+        mark_occurrence_unpaid(self.admin, overdue_occurrence)
+        create_bill(self.admin, name="Before pay", amount="40.00", due_at=_future(48))
+        create_bill(self.admin, name="After pay", amount="90.00", due_at=_future(168))
+        _reauth(self.client)
+        widget = self._widget("solace_bills_due")
+        self.assertIsNotNone(widget)
+        self.assertEqual([row["bill_name"] for row in widget["items"]], ["Overdue", "Before pay"])
+        self.assertEqual(widget["meta"]["bill_count"], 2)
+        self.assertEqual(widget["meta"]["total"], "65.00")
+        self.assertEqual(widget["meta"]["overdue_count"], 1)
+
+    def test_due_before_payday_widget_has_configuration_state_without_income(self):
+        from apps.nodes.services import enable_node
+
+        enable_node(self.admin, "solace")
+        grant_user_permission(self.admin, "solace.view")
+        _reauth(self.client)
+        widget = self._widget("solace_bills_due")
+        self.assertIsNotNone(widget)
+        self.assertFalse(widget["meta"]["configured"])
+        self.assertIsNone(widget["meta"]["next_payday"])
 
     def test_meta_offers_horizons(self):
         create_reminder(self.admin, title="Doctor visit", due_at=_future(48))

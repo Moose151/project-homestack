@@ -47,29 +47,35 @@ test('Dashboard separates appointment wording from due-record wording', async ({
 })
 
 test('Dashboard bill links open the selected Money bill', async ({ page }) => {
+  const dueAt = plusDays(3)
   await mockAuthenticatedApi(page, {
     '/api/v1/nodes/': [SOLACE_NODE],
     '/api/v1/hub/': {
       widgets: [{
         key: 'solace_bills_due',
-        name: 'Bills due',
+        name: 'Due before next payday',
         size: 'small',
         supports_kiosk: false,
-        meta: {},
+        meta: {
+          configured: true, next_payday: plusDays(7).slice(0, 10), bill_count: 1,
+          total: '150.00', overdue_count: 0,
+        },
         items: [{
-          id: 7, name: 'Electricity', category: 'utilities', provider: '', amount: '150.00',
-          due_at: plusDays(3), next_due_at: plusDays(3), next_occurrence_id: 70,
-          recurrence_rule: 'FREQ=MONTHLY', end_date: null, is_paid: false, is_overdue: false,
-          is_active: true, is_autopay: false, include_in_set_aside: true, annual_amount: '1800.00',
-          fortnightly_amount: '69.23', notes: '', source_node: null, created_at: plusDays(0), updated_at: plusDays(0),
+          id: 70, bill_id: 7, bill_name: 'Electricity', bill_category: 'utilities',
+          amount: '150.00', due_at: dueAt, status: 'upcoming', paid_at: null, notes: '',
+          is_overdue: false, visibility: 'household', sensitivity: 'normal',
+          created_at: plusDays(0), updated_at: plusDays(0),
         }],
       }],
     },
   })
 
   await page.goto('/hub')
-  await expect(page.getByRole('link', { name: 'Due in 3 days' })).toHaveAttribute(
+  await expect(page.getByRole('link', { name: /Electricity/ })).toHaveAttribute(
     'href',
-    '/solace?tab=bills&bill=7&occurrence=70',
+    '/solace?tab=bills&section=upcoming&bill=7&occurrence=70',
+  )
+  await expect(page.getByRole('link', { name: /View all upcoming bills/ })).toHaveAttribute(
+    'href', '/solace?tab=bills&section=upcoming',
   )
 })

@@ -154,6 +154,13 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False, sensitive_unlocked: bool 
         elif key.startswith("homestead_"):
             content = _homestead_widget_content(key, user)
 
+        elif key == "solace_bills_due":
+            if sensitive_unlocked:
+                content, meta = _solace_bills_due_widget(user)
+            else:
+                content = []
+                meta = {"locked": True, "configured": None}
+
         elif key.startswith("solace_"):
             content = _solace_widget_content(key, user) if sensitive_unlocked else []
 
@@ -410,32 +417,6 @@ def _solace_widget_content(key: str, user) -> list:
     if not resolve_permission(user, "view", "solace"):
         return []
 
-    if key == "solace_bills_due":
-        from datetime import timedelta
-
-        from django.utils import timezone
-
-        from apps.solace.bill_schedule import ensure_bill_occurrences
-        from apps.solace.models import BillOccurrence
-
-        bills = s.list_bills(user, upcoming_only=True, unpaid_only=True, active_only=True)
-        today = timezone.localdate()
-        for bill in bills:
-            ensure_bill_occurrences(bill, today - timedelta(days=30), today + timedelta(days=90))
-            bill._solace_next_occurrence = bill.occurrences.filter(
-                status=BillOccurrence.Status.UPCOMING,
-            ).order_by("due_at").first()
-        bills.sort(
-            key=lambda bill: (
-                getattr(bill, "_solace_next_occurrence", None).due_at
-                if getattr(bill, "_solace_next_occurrence", None)
-                else None
-                or bill.due_at
-                or timezone.now() + timedelta(days=3650)
-            )
-        )
-        return BillSerializer(bills[:8], many=True).data
-
     if key == "solace_subscriptions":
         subscriptions = [
             bill
@@ -450,6 +431,78 @@ def _solace_widget_content(key: str, user) -> list:
         ).data
 
     return []
+
+
+def _solace_bills_due_widget(user) -> tuple[list, dict]:
+    """Exact unpaid bill occurrences through the household's next real payday.
+
+    The pay-cycle engine deliberately has a date-only fallback when no income is configured,
+    because the Money workspace still needs to render. A Dashboard promise labelled "next
+    payday" must be stricter: only an occurrence from an active Payday is a payday.
+    """
+    from datetime import date, timedelta
+    from decimal import Decimal
+
+    from django.utils import timezone
+
+    from apps.solace import selectors as s
+    from apps.solace.bill_schedule import ensure_bill_occurrences, household_timezone
+    from apps.solace.budget_engine import payday_occurrences
+    from apps.solace.models import BillOccurrence
+    from apps.solace.serializers import BillOccurrenceSerializer
+    from apps.permissions.resolver import resolve_permission
+
+    if not resolve_permission(user, "view", "solace"):
+        return [], {"locked": True, "configured": None}
+
+    tz = household_timezone(user.household)
+    today = timezone.localdate(timezone=tz)
+    horizon = today + timedelta(days=370)
+    with timezone.override(tz):
+        payday_dates = [
+            occurrence
+            for payday in s.list_paydays(user, active_only=True)
+            for occurrence in payday_occurrences(payday, today, horizon)
+            if timezone.localdate(occurrence, timezone=tz) >= today
+        ]
+    if not payday_dates:
+        return [], {
+            "locked": False,
+            "configured": False,
+            "next_payday": None,
+            "bill_count": 0,
+            "total": "0.00",
+            "overdue_count": 0,
+        }
+
+    next_payday_at = min(payday_dates)
+    next_payday = timezone.localdate(next_payday_at, timezone=tz)
+    materialise_start = today - timedelta(days=90)
+    for bill in s.list_bills(user, active_only=True):
+        earliest_unpaid = bill.occurrences.filter(
+            status=BillOccurrence.Status.UPCOMING,
+        ).order_by("due_at").values_list("due_at", flat=True).first()
+        bill_start = (
+            min(materialise_start, timezone.localdate(earliest_unpaid, timezone=tz))
+            if earliest_unpaid else materialise_start
+        )
+        ensure_bill_occurrences(bill, bill_start, next_payday)
+
+    due = s.list_bill_occurrences(
+        user, start=date.min, end=next_payday, status=BillOccurrence.Status.UPCOMING,
+    )
+    overdue_count = sum(
+        1 for row in due if timezone.localdate(row.due_at, timezone=tz) < today
+    )
+    total = sum((Decimal(row.amount) for row in due), Decimal("0.00"))
+    return BillOccurrenceSerializer(due, many=True).data, {
+        "locked": False,
+        "configured": True,
+        "next_payday": next_payday.isoformat(),
+        "bill_count": len(due),
+        "total": f"{total:.2f}",
+        "overdue_count": overdue_count,
+    }
 
 
 class HubError(Exception):

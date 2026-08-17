@@ -378,6 +378,28 @@ class SolaceCrudAndCalendarTests(TestCase):
             anchor.replace(microsecond=0),
         )
 
+    def test_upcoming_occurrences_are_unpaid_chronological_and_not_duplicated(self):
+        bill = create_bill(
+            self.admin,
+            name="Weekly bill",
+            amount="12.00",
+            due_at=_future(-48),
+            recurrence_rule="FREQ=WEEKLY",
+        )
+        settled_overdue = bill.occurrences.filter(due_at__lt=timezone.now()).order_by("due_at").first()
+        self.client.post(reverse("solace-occurrence-action", args=[settled_overdue.id, "unpaid"]))
+        url = reverse("solace-upcoming-occurrences")
+        rows = self.client.get(url).json()
+        self.assertGreater(len(rows), 2)
+        self.assertTrue(rows[0]["is_overdue"])
+        self.assertEqual([row["due_at"] for row in rows], sorted(row["due_at"] for row in rows))
+        self.assertEqual(len({row["id"] for row in rows}), len(rows))
+        paid_id = rows[0]["id"]
+        self.client.post(reverse("solace-occurrence-action", args=[paid_id, "paid"]))
+        refreshed = self.client.get(url).json()
+        self.assertNotIn(paid_id, [row["id"] for row in refreshed])
+        self.assertTrue(all(row["status"] == "upcoming" for row in refreshed))
+
     def test_monthly_occurrences_clamp_to_month_end_without_drifting(self):
         bill = create_bill(
             self.admin,

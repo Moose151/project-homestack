@@ -47,6 +47,11 @@ export interface AuthUser {
   colour: string
 }
 
+export interface GuideDismissal {
+  guide_identifier: string
+  guide_version: string
+}
+
 export interface AtlasListItem {
   id: number
   atlas_list_id: number
@@ -243,6 +248,9 @@ export interface AtlasReminder {
   due_at: string | null
   is_all_day: boolean
   recurrence_rule: string
+  assigned_to_person_ids: number[]
+  notifications_enabled: boolean
+  notification_state: 'unscheduled' | 'disabled' | 'scheduled' | 'sent' | 'elapsed'
   calendar_event_id: number | null
   visibility: string
   sensitivity: string
@@ -703,7 +711,7 @@ export interface HubWidget {
   name: string
   size: string
   supports_kiosk: boolean
-  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | PetTreatment[] | PetAppointment[] | MaintenanceTask[] | Appliance[] | Improvement[] | SolaceBill[] | SolacePurchase[] | FitnessSession[] | AppNotification[]
+  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | PetTreatment[] | PetAppointment[] | MaintenanceTask[] | Appliance[] | Improvement[] | SolaceBill[] | SolaceBillOccurrence[] | SolacePurchase[] | FitnessSession[] | AppNotification[]
   meta?: {
     unread_count?: number
     title?: string
@@ -714,6 +722,13 @@ export interface HubWidget {
     horizons?: UpcomingHorizon[]
     default_horizon?: string
     window_days?: number
+    /** Due-before-payday widget summary. */
+    locked?: boolean
+    configured?: boolean | null
+    next_payday?: string | null
+    bill_count?: number
+    total?: string
+    overdue_count?: number
   }
 }
 
