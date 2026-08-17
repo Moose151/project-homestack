@@ -37,7 +37,7 @@ Calendar
 | `provider` | who feeds it: `au_holidays`, `au_school_terms`, `ics` |
 | `name`, `colour`, `category` | presentation |
 | `is_enabled` | off hides its entries everywhere, without deleting them |
-| `url` | fetched sources only; `webcal://` is normalised to `https://` |
+| `url` | fetched sources only; `webcal://` normalised to `https://`. **Never serialised back** — see §6 |
 | `settings_json` | **validated per provider** — never free JSON |
 | `show_on_calendar` / `show_in_upcoming` | independent visibility switches |
 | `notifications_enabled` | **defaults off** |
@@ -60,7 +60,9 @@ because those values decide what the server fetches and which jurisdiction's dat
 | `last_seen_revision` | the sync revision this entry was last seen in |
 | `is_range` | a multi-day banner (school term/break) rather than a timed entry |
 
-`event.is_source_managed` drives the read-only treatment in the UI.
+`event.is_source_managed` drives the read-only treatment in the UI;
+`event.is_externally_managed` (`is_synced or is_source_managed`) is what every **write path**
+checks, in the view *and* the service layer.
 
 ---
 
@@ -86,24 +88,48 @@ behind after moving interstate cannot inject the old state's show day.
 
 ## 4. Holiday and school data
 
-Holiday dates are **declared, not calculated**. Governments gazette them year by year and move
-them when they fall on a weekend, and the rules differ per jurisdiction. So dates ship as data
-with provenance (`apps/scheduling/sources/au_holidays.py`, `DATA_SOURCE_NOTE`, `DATA_YEARS`).
+Every date is an **explicit, dated entry copied from the responsible government's published
+list**. Nothing is derived.
 
-The only computed dates are Easter-anchored (Good Friday, Easter Saturday/Sunday/Monday), which
-genuinely are formula-defined and identical Australia-wide, plus stable "nth weekday of month"
-gazettal rules where a state actually uses one.
+That is deliberate. An earlier version built a "national" list and layered per-state rules on
+top, and it was confidently wrong, because the premise is false: **there is no national public
+holiday list in Australia.** Each state and territory declares its own, and they disagree about
 
-Levels are distinguished and independently switchable: `national`, `regional`, `local`.
+- *which days exist* — Easter Sunday is a public holiday in some jurisdictions, not others;
+- *substitution* — Queensland moves Anzac Day when 25 April is a Sunday but **not** a Saturday;
+- *naming* — Queensland gazettes "the day after Good Friday", not "Easter Saturday";
+- *part-days* — Queensland's Christmas Eve holiday runs 6pm–midnight and is stored as a timed
+  entry, because saying the whole day is a holiday would be untrue.
 
-School terms live in `au_school.py`, keyed by **system** rather than state — Catholic and
-independent schools frequently differ from the state system by a day or more, so pretending one
-set of dates covers a whole state would quietly be wrong. Terms and breaks are single **ranges**;
-generating an event per day would bury eleven weeks of calendar.
+### Verified coverage
+
+Coverage is limited to what has actually been checked against the source, and unsupported
+jurisdictions produce **nothing** rather than borrowing another state's dates.
+
+| Provider | Covers | Verified against | Checked |
+| --- | --- | --- | --- |
+| `au_holidays` | **QLD only**, 2026–2027 | qld.gov.au public-holiday and show-holiday pages | 2026-08-17 |
+| `au_school_terms` | QLD state 2026–2027; NSW public (Eastern **and** Western) 2026 | education.qld.gov.au, education.nsw.gov.au | 2026-08-17 |
+
+Other states and territories are not offered. Enabling one means adding its published dates and
+listing it in `SUPPORTED_REGIONS` / `SCHOOL_SYSTEMS` — never flipping a flag and hoping.
+
+School data is keyed by **system**, not state: Catholic and independent schools routinely differ
+from the state system, and NSW additionally splits into Eastern and Western divisions whose
+students return on different days (2 February and 9 February in 2026). Term boundaries use
+**student** dates — an earlier version used NSW's school-development day (27 January), which
+tells a family their children are at school a week before they are.
+
+Student-free/pupil-free days are **not implemented**. The toggle exists but no provider supplies
+the dates, so it stays off and produces nothing rather than quietly meaning something else.
+
+Terms and breaks are single **ranges**; an event per day would bury eleven weeks of calendar.
+A break is derived from the gap between consecutive terms, and the summer break is only produced
+once the following year's Term 1 is published, so nothing runs off into an invented date.
 
 **Refreshing a future year is a data change in these modules, not a code change.** Re-running a
 year updates its entries rather than appending duplicates, because the UID embeds jurisdiction,
-year and name.
+date and name.
 
 ---
 
@@ -155,10 +181,31 @@ user-supplied URL *from the server* is a real SSRF surface, so
 - a response without `BEGIN:VCALENDAR` is rejected
 - destinations are validated when a subscription is **saved**, not only when fetched
 
-Validation happens at both save and fetch time. **Residual risk:** a DNS-rebinding window
-remains between the final resolution check and the socket connect. Closing it entirely requires
-pinning the connection to the validated IP while preserving TLS SNI and certificate validation;
-that is deliberately not implemented yet and is recorded here rather than left implicit.
+### The connection is pinned to the validated address
+
+Resolving a name, approving the answer, then handing the *hostname* to an HTTP library lets that
+library resolve it again and connect somewhere else — DNS rebinding, against which
+pre-validation is worthless. So the flow is always:
+
+```
+resolve once  ->  validate every answer  ->  connect the socket to one validated address
+```
+
+`_PinnedHTTPConnection` / `_PinnedHTTPSConnection` open the socket on the validated IP while
+leaving the hostname in place for **SNI, certificate verification and the `Host` header**.
+Pinning therefore costs nothing in TLS security: a certificate valid for the hostname is still
+required. Each redirect hop repeats the whole cycle independently.
+
+A regression test flips DNS to a private address after validation and asserts the socket still
+went to the validated public one.
+
+### ICS subscription URLs are secrets
+
+A subscription link routinely carries a per-user token (`...?key=abc123`), which is a bearer
+credential for that person's calendar. The stored URL is therefore **never serialised back**.
+The API exposes only `has_url` and `url_display` (host only — never the path or query, where
+tokens live). A manager replaces a link by sending a new one; nobody needs the old one returned.
+Sync errors are redacted before being stored, since a networking exception may quote the URL.
 
 Feed content is never executed or rendered as trusted HTML.
 
@@ -185,8 +232,12 @@ provider and buys nothing.
 
 - each source is its own filter layer on the Calendar (Month/Week/Day/Agenda), coloured by the
   source; "HomeStack" is the layer for the household's own events
-- source-managed entries are **read-only** in the edit form: they open a detail panel naming the
-  source and linking to its settings, rather than pretending an edit would survive the next sync
+- source-managed entries are **read-only**, and not merely in the UI: `PATCH` and `DELETE` on the
+  events API refuse them at both the view and the service layer. `CalendarEvent.is_externally_managed`
+  is the single question every write path asks — `is_synced` alone missed them, because a
+  source-managed entry leaves `source_record_*` empty
+- a disabled or calendar-hidden source is excluded from **global search** as well as the
+  calendar, so "disabled" means disabled everywhere the household looks
 - `show_in_upcoming` controls Dashboard Upcoming independently of `show_on_calendar`
 - **notifications default off.** Source-managed entries otherwise look like standalone events to
   the notification sweep, which would have announced every fixture in a subscribed season
@@ -217,9 +268,11 @@ Enforced in the API, not by hiding buttons.
 | "points inside the local network" | the URL resolves to a private/loopback/link-local address |
 | "did not return a calendar file" | the URL serves HTML (a login page or a share link, not the ICS) |
 | "too large to import" | over the 5 MB cap |
-| holidays missing for a state | household `region` unset, or the year is outside `DATA_YEARS` |
+| no holidays at all | `region` is not QLD — other states are not supported yet (§4) |
+| holidays missing for a year | outside the verified `DATA_YEARS` (2026–2027) |
 | no local show day | `locality` unset, or it belongs to a different `region` |
-| school dates absent | that system/year is not in `TERMS` yet |
+| school dates absent | that system/year is not in `TERMS` yet (§4 lists what is verified) |
+| NSW dates a week out | the wrong division is selected — Eastern and Western start differently |
 | nothing refreshes | the cron entry is missing; check `last_sync_at`/`sync_error` |
 
 ---

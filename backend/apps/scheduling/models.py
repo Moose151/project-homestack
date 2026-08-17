@@ -123,6 +123,17 @@ class CalendarEvent(HouseholdBaseModel):
         """Owned by a CalendarSource, so the local edit form must not pretend otherwise."""
         return self.calendar_source_id is not None
 
+    @property
+    def is_externally_managed(self) -> bool:
+        """Owned by something other than the Calendar itself — a node record or a source.
+
+        The one question every write path must ask. ``is_synced`` alone is not it: a
+        source-managed entry leaves ``source_record_*`` empty, so checking only that let a
+        subscribed fixture or a public holiday be edited and deleted through the events API,
+        with the next sync silently reinstating it.
+        """
+        return self.is_synced or self.is_source_managed
+
     class Meta:
         verbose_name = "calendar event"
         verbose_name_plural = "calendar events"

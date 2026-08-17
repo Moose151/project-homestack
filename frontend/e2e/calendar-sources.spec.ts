@@ -14,7 +14,8 @@ const CATALOGUE = [
 function source(overrides: Record<string, unknown> = {}) {
   return {
     id: 1, name: 'Australian public holidays', kind: 'holidays', category: 'holiday',
-    type_label: 'Australian public holidays', is_enabled: true, colour: '#C2703D', url: '',
+    type_label: 'Australian public holidays', is_enabled: true, colour: '#C2703D',
+    has_url: false, url_display: '',
     settings_json: { include_national: true, include_regional: true, include_local: true },
     show_on_calendar: true, show_in_upcoming: true, notifications_enabled: false,
     last_sync_at: '2026-08-17T00:00:00Z', last_success_at: '2026-08-17T00:00:00Z',
@@ -160,6 +161,26 @@ test.describe('calendar sources management', () => {
     await page.getByPlaceholder('https://example.com/fixtures.ics').fill('http://127.0.0.1/feed.ics')
     await page.getByRole('button', { name: 'Preview' }).click()
     await expect(page.getByText(/points inside the local network/)).toBeVisible()
+  })
+
+  test('a subscription link is never shown back, only its host', async ({ page }) => {
+    // Subscription links routinely carry a private token, so the API returns host-only
+    // metadata and the UI must not invent a way to display the rest.
+    await mockAuthenticatedApi(page, {
+      '/api/v1/calendar/sources/': {
+        sources: [source({
+          id: 2, name: 'Brisbane Broncos', kind: 'subscription', category: 'subscription',
+          type_label: 'Subscribed calendar', has_url: true, url_display: 'feeds.example.com',
+        })],
+        catalogue: CATALOGUE,
+      },
+    })
+    await page.goto('/calendar/sources')
+    await page.getByRole('button', { name: 'Settings' }).click()
+    await expect(page.getByText('Feed host: feeds.example.com')).toBeVisible()
+    await expect(page.getByText(/private token/)).toBeVisible()
+    // A manager can still replace it without ever being handed the old one.
+    await expect(page.getByLabel('Replace calendar link')).toBeVisible()
   })
 
   test('a member without management rights is told, not shown broken controls', async ({ page }) => {

@@ -276,7 +276,8 @@ export function SettingsPage() {
             <div className="border-t border-line pt-3">
               <div className="text-xs font-semibold text-muted-strong">Location</div>
               <p className="mt-0.5 text-xs text-muted">
-                Decides which public holidays your calendar shows. Nothing here affects who can see what.
+                Decides which public holidays your calendar shows. Automatic holidays are currently
+                available for Queensland only. Nothing here affects who can see what.
               </p>
               <div className="mt-2 grid gap-2 sm:grid-cols-3">
                 <label>
@@ -291,7 +292,9 @@ export function SettingsPage() {
                   <select className={inputCls} value={region} onChange={e => setRegion(e.target.value)} disabled={country !== 'AU'}>
                     <option value="">Not set</option>
                     {['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'].map(code => (
-                      <option key={code} value={code}>{code}</option>
+                      <option key={code} value={code}>
+                        {code}{code === 'QLD' ? '' : ' — holidays not available yet'}
+                      </option>
                     ))}
                   </select>
                 </label>

@@ -83,6 +83,11 @@ def search_events(user, query: str, *, sensitive_unlocked: bool = False) -> list
             | Q(description__icontains=query)
             | Q(location__icontains=query)
         )
+    # A disabled source is hidden everywhere the household ordinarily looks — including global
+    # search. Turning a calendar off and still finding its entries through the search box would
+    # make "disabled" mean nothing.
+    qs = qs.exclude(calendar_source__isnull=False, calendar_source__is_enabled=False)
+    qs = qs.exclude(calendar_source__isnull=False, calendar_source__show_on_calendar=False)
     if user is not None:
         qs = apply_visibility(qs, user)
     if not sensitive_unlocked:

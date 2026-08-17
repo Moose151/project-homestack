@@ -26,6 +26,13 @@ from apps.scheduling.serializers import (
 _CalendarPerm = HomeStackPermission.for_resource("scheduling")
 
 
+def _externally_managed_detail(event, verb: str) -> str:
+    """Say *which* owner refused the write, so the client can point somewhere useful."""
+    if event.is_source_managed:
+        return f"Calendar-source entries can only be {verb} through their calendar source."
+    return f"Synced events can only be {verb} via their source record."
+
+
 def _parse_dt(value: str | None):
     """Parse an ISO datetime or date query param into an aware datetime (or None)."""
     if not value:
@@ -86,9 +93,9 @@ class CalendarEventDetailView(APIView):
 
     def patch(self, request: Request, event_id: int) -> Response:
         event = self._get_event(request, event_id)
-        if event.is_synced:
+        if event.is_externally_managed:
             return Response(
-                {"detail": "Synced events can only be updated via their source record."},
+                {"detail": _externally_managed_detail(event, "updated")},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         serializer = CalendarEventWriteSerializer(data=request.data, partial=True)
@@ -98,9 +105,9 @@ class CalendarEventDetailView(APIView):
 
     def delete(self, request: Request, event_id: int) -> Response:
         event = self._get_event(request, event_id)
-        if event.is_synced:
+        if event.is_externally_managed:
             return Response(
-                {"detail": "Synced events can only be deleted via their source record."},
+                {"detail": _externally_managed_detail(event, "deleted")},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         services.delete_event(request.user, event)

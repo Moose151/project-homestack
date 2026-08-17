@@ -32,8 +32,10 @@ def create_event(acting_user: User, **data) -> CalendarEvent:
 def update_event(acting_user: User, event: CalendarEvent, **data) -> CalendarEvent:
     people = pop_assignees(data)
     hidden_users = data.pop("hidden_from_users", None)
-    if event.is_synced:
-        raise ValueError("Synced events cannot be updated via the API.")
+    # Covers node-synced records *and* CalendarSource-managed entries: both are owned
+    # elsewhere, and a local edit would be discarded by the next sync.
+    if event.is_externally_managed:
+        raise ValueError("Externally managed events cannot be updated via the API.")
     allowed = {
         "title", "description", "start_at", "end_at", "is_all_day",
         "timezone", "recurrence_rule",
@@ -51,8 +53,8 @@ def update_event(acting_user: User, event: CalendarEvent, **data) -> CalendarEve
 
 
 def delete_event(acting_user: User, event: CalendarEvent) -> None:
-    if event.is_synced:
-        raise ValueError("Synced events cannot be deleted via the API.")
+    if event.is_externally_managed:
+        raise ValueError("Externally managed events cannot be deleted via the API.")
     event.updated_by = acting_user
     event.save(update_fields=["updated_by", "updated_at"])
     event.soft_delete()

@@ -26,6 +26,21 @@ from apps.scheduling.models import CalendarEvent, CalendarSource
 MAX_EVENTS_PER_SOURCE = 2000
 
 
+def _redact(message: str, url: str) -> str:
+    """Remove a source's own URL from a message before it is stored or returned."""
+    if not url:
+        return message
+    cleaned = message.replace(url, "[calendar URL]")
+    from urllib.parse import urlsplit
+    parts = urlsplit(url)
+    # Also drop a bare path/query echo, which is where subscription tokens live.
+    if parts.path and len(parts.path) > 1:
+        cleaned = cleaned.replace(parts.path, "[path]")
+    if parts.query:
+        cleaned = cleaned.replace(parts.query, "[query]")
+    return cleaned
+
+
 class SourceSyncError(Exception):
     """A sync that failed. The message is safe to show the household."""
 
@@ -46,10 +61,15 @@ def _payload(entry: dict, household_zone) -> dict:
     Providers may express timing either as dates (holidays, terms) or as resolved datetimes
     (parsed feeds); both are accepted so a provider does not have to know the storage shape.
     """
-    start = entry.get("start_at") or _as_datetime(entry.get("start_date"), household_zone)
+    # Both paths go through _as_datetime: a provider may hand back an already-aware datetime
+    # (parsed feeds do), a naive one (a part-day holiday declared in local time), or a plain
+    # date. Only routing the date path through normalisation let naive datetimes reach the ORM.
+    start = _as_datetime(entry.get("start_at") or entry.get("start_date"), household_zone)
     end = entry.get("end_at")
     if end is None and entry.get("end_date") is not None:
         end = _as_datetime(entry["end_date"], household_zone, end_of_day=True)
+    else:
+        end = _as_datetime(end, household_zone)
     return {
         "title": (entry.get("summary") or "(untitled)")[:255],
         "description": entry.get("description", "")[:5000],
@@ -160,12 +180,16 @@ def sync_source(source: CalendarSource, *, household=None) -> dict:
         entries = provider_for(source)(source, household=household)
         result = apply_events(source, entries, household_zone=zone)
     except Exception as exc:  # noqa: BLE001 — deliberately contained, see docstring
+        # The stored message is shown in the UI and kept indefinitely, and an unexpected
+        # exception from a networking library may well quote the URL it was given — which for a
+        # tokenised subscription is a bearer credential. Redact it before it is persisted.
+        message = _redact(str(exc), source.url)[:500]
         CalendarSource.all_objects.filter(pk=source.pk).update(
             last_sync_at=now,
             sync_status=CalendarSource.Status.ERROR,
-            sync_error=str(exc)[:500],
+            sync_error=message,
         )
-        return {"error": str(exc)}
+        return {"error": message}
 
     CalendarSource.all_objects.filter(pk=source.pk).update(
         last_sync_at=now,

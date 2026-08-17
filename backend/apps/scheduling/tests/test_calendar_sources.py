@@ -104,17 +104,17 @@ class CalendarFetchSsrfTests(TestCase):
 
     def test_internal_service_names_are_refused(self):
         """The container names an attacker would actually try on this deployment."""
-        from apps.scheduling.sources.fetching import _check_host
+        from apps.scheduling.sources.fetching import resolve_public_address
 
         for host in ("homestack-backend", "homestack-postgres", "nginx-proxy-manager"):
             with patch("apps.scheduling.sources.fetching.socket.getaddrinfo") as resolver:
                 resolver.return_value = [(2, 1, 6, "", ("172.18.0.3", 80))]
                 with self.assertRaises(CalendarFetchError, msg=host):
-                    _check_host(f"http://{host}/feed.ics")
+                    resolve_public_address(host, 80)
 
     def test_a_host_resolving_to_any_private_address_is_refused(self):
         """One public answer does not make a mixed-answer name safe."""
-        from apps.scheduling.sources.fetching import _check_host
+        from apps.scheduling.sources.fetching import resolve_public_address
 
         with patch("apps.scheduling.sources.fetching.socket.getaddrinfo") as resolver:
             resolver.return_value = [
@@ -122,76 +122,230 @@ class CalendarFetchSsrfTests(TestCase):
                 (2, 1, 6, "", ("127.0.0.1", 443)),
             ]
             with self.assertRaises(CalendarFetchError):
-                _check_host("https://sneaky.example.com/feed.ics")
+                resolve_public_address("sneaky.example.com", 443)
 
-    def test_redirect_to_a_private_address_is_refused(self):
-        """Validating only the URL the user typed is not enough."""
+    def test_resolution_returns_the_address_the_socket_must_use(self):
+        from apps.scheduling.sources.fetching import resolve_public_address
+
+        with patch("apps.scheduling.sources.fetching.socket.getaddrinfo") as resolver:
+            resolver.return_value = [(2, 1, 6, "", ("93.184.216.34", 443))]
+            self.assertEqual(resolve_public_address("example.com", 443), "93.184.216.34")
+
+    def test_connection_is_pinned_to_the_validated_address_not_re_resolved(self):
+        """The DNS-rebinding regression test.
+
+        DNS answers with a public address while the URL is being validated, then with a private
+        one on every later lookup. If anything resolved the *hostname* again to open the socket,
+        the connection would land on 127.0.0.1. The connection must instead be constructed
+        against the address that was validated.
+        """
         from apps.scheduling.sources import fetching
 
-        calls = []
+        answers = [
+            [(2, 1, 6, "", ("93.184.216.34", 443))],   # first lookup: public, passes validation
+            [(2, 1, 6, "", ("127.0.0.1", 443))],       # every later lookup: rebound to loopback
+        ]
 
-        def fake_check(url):
-            calls.append(url)
-            if "169.254.169.254" in url:
-                raise CalendarFetchError("blocked")
+        def flipping_resolver(*args, **kwargs):
+            return answers.pop(0) if len(answers) > 1 else answers[0]
 
-        class _Redirect(Exception):
-            pass
+        with patch.object(fetching.socket, "getaddrinfo", side_effect=flipping_resolver), \
+             patch.object(fetching, "_PinnedHTTPSConnection", _RecordingConnection):
+            _RecordingConnection.reset(body=_CALENDAR_BODY)
+            text = fetching.fetch_calendar("https://rebind.example.com/feed.ics")
 
-        with patch.object(fetching, "_check_host", side_effect=fake_check):
-            import urllib.error
-            error = urllib.error.HTTPError(
-                "https://example.com/feed.ics", 302, "Found",
-                {"Location": "http://169.254.169.254/latest/meta-data/"}, None,
-            )
-            with patch.object(fetching.urllib.request, "build_opener") as opener:
-                opener.return_value.open.side_effect = error
-                with self.assertRaises(CalendarFetchError):
-                    fetching.fetch_calendar("https://example.com/feed.ics")
-        self.assertIn("169.254.169.254", "".join(calls))
+        self.assertIn("BEGIN:VCALENDAR", text)
+        # The one thing that matters: the connection was built for the validated address, and
+        # never for the address a second lookup would have handed back.
+        self.assertEqual(_RecordingConnection.pinned, ["93.184.216.34"])
+        self.assertNotIn("127.0.0.1", _RecordingConnection.pinned)
+        # Resolution happened exactly once for this hop.
+        self.assertEqual(len(answers), 1)
+
+    def test_connect_opens_the_socket_on_the_pinned_address_only(self):
+        """connect() itself must use the pinned address, never self.host."""
+        from apps.scheduling.sources import fetching
+
+        connection = fetching._PinnedHTTPSConnection(
+            "example.com", 443, pinned_ip="93.184.216.34", timeout=5,
+        )
+        opened = []
+
+        class _Ctx:
+            def wrap_socket(self, sock, server_hostname=None):
+                opened.append(("sni", server_hostname))
+                return sock
+
+        connection._context = _Ctx()
+
+        def fake_create_connection(address, timeout=None):
+            opened.append(("socket", address))
+            return object()
+
+        with patch.object(fetching.socket, "create_connection", side_effect=fake_create_connection):
+            connection.connect()
+
+        self.assertIn(("socket", ("93.184.216.34", 443)), opened)
+        # ...while TLS still verifies the hostname, so pinning costs nothing in TLS security.
+        self.assertIn(("sni", "example.com"), opened)
+        # And http.client derives Host: from .host, which is still the hostname.
+        self.assertEqual(connection.host, "example.com")
+
+    def test_redirect_to_a_private_address_is_refused(self):
+        """Validating only the URL the user typed is not enough.
+
+        `_open` runs for real here, so the redirect target is genuinely resolved and validated.
+        """
+        from apps.scheduling.sources import fetching
+
+        with patch.object(fetching, "_PinnedHTTPSConnection", _RecordingConnection), \
+             patch.object(fetching, "_PinnedHTTPConnection", _RecordingConnection), \
+             patch.object(fetching.socket, "getaddrinfo",
+                          return_value=[(2, 1, 6, "", ("93.184.216.34", 443))]):
+            _RecordingConnection.reset(status=302, location="http://169.254.169.254/latest/meta-data/")
+            with self.assertRaises(CalendarFetchError) as caught:
+                fetching.fetch_calendar("https://example.com/feed.ics")
+        self.assertIn("local network", str(caught.exception))
+
+    def test_redirect_to_an_internal_container_name_is_refused(self):
+        from apps.scheduling.sources import fetching
+
+        hops = {"n": 0}
+
+        def resolver(host, port, **kwargs):
+            hops["n"] += 1
+            # The first hop is a genuine public host; the redirect target is internal.
+            if hops["n"] == 1:
+                return [(2, 1, 6, "", ("93.184.216.34", 443))]
+            return [(2, 1, 6, "", ("172.18.0.3", 80))]
+
+        with patch.object(fetching, "_PinnedHTTPSConnection", _RecordingConnection), \
+             patch.object(fetching, "_PinnedHTTPConnection", _RecordingConnection), \
+             patch.object(fetching.socket, "getaddrinfo", side_effect=resolver):
+            _RecordingConnection.reset(status=302, location="http://homestack-postgres/feed.ics")
+            with self.assertRaises(CalendarFetchError) as caught:
+                fetching.fetch_calendar("https://example.com/feed.ics")
+        self.assertIn("local network", str(caught.exception))
 
     def test_oversized_response_is_refused(self):
         from apps.scheduling.sources import fetching
 
         class _Response:
-            headers = {}
+            status = 200
+
+            def getheader(self, name, default=None):
+                return default
 
             def read(self, size):
                 return b"x" * size
 
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args):
-                return False
-
-        with patch.object(fetching, "_check_host", return_value=None), \
-             patch.object(fetching.urllib.request, "build_opener") as opener:
-            opener.return_value.open.return_value = _Response()
+        with patch.object(fetching, "_open", return_value=(_Conn(), _Response())):
             with self.assertRaises(CalendarFetchError) as caught:
                 fetching.fetch_calendar("https://example.com/feed.ics", max_bytes=1024)
         self.assertIn("too large", str(caught.exception))
+
+    def test_declared_oversized_content_length_is_refused_before_reading(self):
+        from apps.scheduling.sources import fetching
+
+        class _Response:
+            status = 200
+
+            def getheader(self, name, default=None):
+                return "99999999" if name == "Content-Length" else default
+
+            def read(self, size):  # pragma: no cover - must not be reached
+                raise AssertionError("body should not be read when the length is already too big")
+
+        with patch.object(fetching, "_open", return_value=(_Conn(), _Response())):
+            with self.assertRaises(CalendarFetchError):
+                fetching.fetch_calendar("https://example.com/feed.ics", max_bytes=1024)
 
     def test_non_calendar_response_is_refused(self):
         from apps.scheduling.sources import fetching
 
         class _Response:
-            headers = {}
+            status = 200
+
+            def getheader(self, name, default=None):
+                return default
 
             def read(self, size):
                 return b"<html><script>alert(1)</script></html>"
 
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args):
-                return False
-
-        with patch.object(fetching, "_check_host", return_value=None), \
-             patch.object(fetching.urllib.request, "build_opener") as opener:
-            opener.return_value.open.return_value = _Response()
+        with patch.object(fetching, "_open", return_value=(_Conn(), _Response())):
             with self.assertRaises(CalendarFetchError):
                 fetching.fetch_calendar("https://example.com/not-a-calendar")
+
+    def test_too_many_redirects_is_refused(self):
+        from apps.scheduling.sources import fetching
+
+        class _Redirect:
+            status = 302
+
+            def getheader(self, name, default=None):
+                return "https://example.com/again.ics" if name == "Location" else default
+
+        with patch.object(fetching, "_open", return_value=(_Conn(), _Redirect())):
+            with self.assertRaises(CalendarFetchError) as caught:
+                fetching.fetch_calendar("https://example.com/feed.ics")
+        self.assertIn("redirected too many times", str(caught.exception))
+
+
+_CALENDAR_BODY = (
+    b"BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a@x\r\nDTSTART:20260821T195000Z\r\n"
+    b"SUMMARY:Match\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+)
+
+
+class _Conn:
+    """Stand-in for a pinned connection in tests that patch `_open` directly."""
+
+    def close(self):
+        pass
+
+
+class _RecordingConnection:
+    """A pinned-connection stand-in that records the address it was constructed for.
+
+    Substituted for the real connection classes so `_open` — including resolution and
+    validation — runs for real, while nothing touches the network.
+    """
+
+    pinned: list[str] = []
+    _status = 200
+    _location = None
+    _body = _CALENDAR_BODY
+
+    @classmethod
+    def reset(cls, *, status=200, location=None, body=_CALENDAR_BODY):
+        cls.pinned = []
+        cls._status, cls._location, cls._body = status, location, body
+
+    def __init__(self, host, port, *, pinned_ip, timeout, context=None):
+        self.host, self.port, self._pinned_ip = host, port, pinned_ip
+        type(self).pinned.append(pinned_ip)
+
+    def request(self, method, target, headers=None):
+        self.headers = headers or {}
+
+    def getresponse(self):
+        outer = type(self)
+
+        class _Response:
+            status = outer._status
+
+            def getheader(self, name, default=None):
+                if name == "Location":
+                    return outer._location
+                return default
+
+            def read(self, size):
+                return outer._body
+
+        return _Response()
+
+    def close(self):
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -366,61 +520,119 @@ class IcsSyncTests(TestCase):
 # ---------------------------------------------------------------------------
 
 class AustralianHolidayTests(TestCase):
-    def test_national_holidays_apply_everywhere(self):
-        names = [h.name for h in au_holidays.holidays_for(year=2026, state="QLD")]
-        for expected in ("New Year's Day", "Australia Day", "Good Friday", "ANZAC Day",
-                         "Christmas Day", "Boxing Day"):
-            self.assertIn(expected, names)
+    """Dates come from the jurisdiction that declares them, never from a derived rule."""
 
-    def test_state_holiday_does_not_leak_into_another_state(self):
-        qld = [h.name for h in au_holidays.holidays_for(year=2026, state="QLD")]
-        vic = [h.name for h in au_holidays.holidays_for(year=2026, state="VIC")]
-        self.assertIn("Melbourne Cup Day", vic)
-        self.assertNotIn("Melbourne Cup Day", qld)
-        self.assertIn("Canberra Day", [h.name for h in au_holidays.holidays_for(year=2026, state="ACT")])
-        self.assertNotIn("Canberra Day", qld)
+    def _names(self, year, **kwargs):
+        return [h.name for h in au_holidays.holidays_for(year=year, state="QLD", **kwargs)]
 
-    def test_queensland_labour_day_is_the_first_monday_in_may(self):
-        labour = next(
-            h for h in au_holidays.holidays_for(year=2026, state="QLD") if h.name == "Labour Day"
-        )
-        self.assertEqual(labour.day, date(2026, 5, 4))
-        self.assertEqual(labour.day.weekday(), 0)
+    def test_queensland_2026_matches_the_published_list(self):
+        expected = {
+            (date(2026, 1, 1), "New Year's Day"),
+            (date(2026, 1, 26), "Australia Day"),
+            (date(2026, 4, 3), "Good Friday"),
+            (date(2026, 4, 4), "The day after Good Friday"),
+            (date(2026, 4, 5), "Easter Sunday"),
+            (date(2026, 4, 6), "Easter Monday"),
+            (date(2026, 4, 25), "Anzac Day"),
+            (date(2026, 5, 4), "Labour Day"),
+            (date(2026, 10, 5), "King's Birthday"),
+            (date(2026, 12, 24), "Christmas Eve (from 6pm)"),
+            (date(2026, 12, 25), "Christmas Day"),
+            (date(2026, 12, 26), "Boxing Day"),
+            (date(2026, 12, 28), "Boxing Day (additional)"),
+        }
+        actual = {(h.day, h.name) for h in au_holidays.holidays_for(year=2026, state="QLD")}
+        self.assertEqual(actual, expected)
+
+    def test_queensland_2027_matches_the_published_list(self):
+        actual = {(h.day, h.name) for h in au_holidays.holidays_for(year=2027, state="QLD")}
+        self.assertIn((date(2027, 3, 26), "Good Friday"), actual)
+        self.assertIn((date(2027, 3, 28), "Easter Sunday"), actual)
+        self.assertIn((date(2027, 5, 3), "Labour Day"), actual)
+        self.assertIn((date(2027, 10, 4), "King's Birthday"), actual)
+
+    def test_anzac_day_substitution_follows_the_jurisdiction_not_a_weekend_rule(self):
+        """25 April 2026 is a Saturday (no Queensland substitute); 2027 is a Sunday (one is)."""
+        days_2026 = {h.day for h in au_holidays.holidays_for(year=2026, state="QLD")
+                     if h.name == "Anzac Day"}
+        self.assertEqual(days_2026, {date(2026, 4, 25)})
+
+        days_2027 = {h.day for h in au_holidays.holidays_for(year=2027, state="QLD")
+                     if h.name == "Anzac Day"}
+        self.assertEqual(days_2027, {date(2027, 4, 26)})
+
+    def test_christmas_and_boxing_day_substitutes_are_published_not_computed(self):
+        names_2026 = self._names(2026)
+        self.assertIn("Boxing Day (additional)", names_2026)
+        self.assertNotIn("Christmas Day (additional)", names_2026)
+
+        names_2027 = self._names(2027)
+        self.assertIn("Christmas Day (additional)", names_2027)
+        self.assertIn("Boxing Day (additional)", names_2027)
+
+    def test_christmas_eve_is_a_part_day_holiday(self):
+        eve = next(h for h in au_holidays.holidays_for(year=2026, state="QLD")
+                   if h.day == date(2026, 12, 24))
+        self.assertTrue(eve.is_part_day)
+        self.assertEqual(eve.starts_at.hour, 18)
+
+    def test_official_naming_is_used(self):
+        """Queensland gazettes "the day after Good Friday", not "Easter Saturday"."""
+        names = self._names(2026)
+        self.assertIn("The day after Good Friday", names)
+        self.assertNotIn("Easter Saturday", names)
+
+    def test_only_verified_jurisdictions_are_supported(self):
+        self.assertEqual(au_holidays.SUPPORTED_REGIONS, ("QLD",))
+        self.assertTrue(au_holidays.is_supported_region("qld"))
+        self.assertFalse(au_holidays.is_supported_region("VIC"))
+        for region in ("VIC", "NSW", "WA", "SA", "TAS", "NT", "ACT"):
+            self.assertEqual(
+                au_holidays.holidays_for(year=2026, state=region), [],
+                f"{region} must not silently borrow another jurisdiction's holidays",
+            )
+
+    def test_unpublished_years_produce_nothing(self):
+        self.assertEqual(au_holidays.holidays_for(year=2030, state="QLD"), [])
 
     def test_local_show_holiday_follows_the_configured_locality(self):
         brisbane = [h.name for h in au_holidays.holidays_for(
             year=2026, state="QLD", locality="brisbane")]
-        cairns = [h.name for h in au_holidays.holidays_for(
-            year=2026, state="QLD", locality="cairns")]
-        self.assertIn("Brisbane Show Day (Ekka)", brisbane)
-        self.assertNotIn("Brisbane Show Day (Ekka)", cairns)
-        self.assertIn("Cairns Show Day", cairns)
+        townsville = [h.name for h in au_holidays.holidays_for(
+            year=2026, state="QLD", locality="townsville")]
+        self.assertIn("Royal Queensland Show (Ekka)", brisbane)
+        self.assertNotIn("Royal Queensland Show (Ekka)", townsville)
+        self.assertIn("Townsville Annual Show", townsville)
+
+    def test_show_holiday_dates_match_the_published_show_list(self):
+        expected = {
+            "brisbane": date(2026, 8, 12),
+            "gold_coast": date(2026, 8, 28),
+            "toowoomba": date(2026, 3, 27),
+            "cairns": date(2026, 7, 17),
+            "townsville": date(2026, 7, 6),
+        }
+        for locality, day in expected.items():
+            shows = [h for h in au_holidays.holidays_for(
+                year=2026, state="QLD", locality=locality) if h.scope == au_holidays.LOCAL]
+            self.assertEqual([h.day for h in shows], [day], locality)
 
     def test_a_locality_from_another_state_is_ignored(self):
-        """A stale locality left behind after moving interstate must not inject its show day."""
         names = [h.name for h in au_holidays.holidays_for(
             year=2026, state="VIC", locality="brisbane")]
-        self.assertNotIn("Brisbane Show Day (Ekka)", names)
+        self.assertNotIn("Royal Queensland Show (Ekka)", names)
 
     def test_levels_can_be_switched_off_independently(self):
-        national_only = au_holidays.holidays_for(
-            year=2026, state="QLD", locality="brisbane",
-            include_regional=False, include_local=False,
+        without_local = au_holidays.holidays_for(
+            year=2026, state="QLD", locality="brisbane", include_local=False,
         )
-        names = [h.name for h in national_only]
-        self.assertIn("Australia Day", names)
-        self.assertNotIn("Labour Day", names)
-        self.assertNotIn("Brisbane Show Day (Ekka)", names)
+        self.assertNotIn("Royal Queensland Show (Ekka)", [h.name for h in without_local])
+        self.assertIn("Australia Day", [h.name for h in without_local])
 
-    def test_weekend_holidays_gain_an_observed_day(self):
-        # 2027-01-01 is a Friday; 2026-01-01 is a Thursday. Use a year where it lands on a weekend.
-        names = [(h.name, h.day) for h in au_holidays.holidays_for(year=2028, state="QLD")]
-        new_year = [entry for entry in names if entry[0].startswith("New Year's Day")]
-        self.assertTrue(any("observed" in name for name, _ in new_year))
-
-    def test_easter_is_computed_correctly(self):
-        self.assertEqual(au_holidays.easter_sunday(2026), date(2026, 4, 5))
-        self.assertEqual(au_holidays.easter_sunday(2025), date(2025, 4, 20))
+        without_state = au_holidays.holidays_for(
+            year=2026, state="QLD", locality="brisbane", include_regional=False,
+        )
+        self.assertEqual([h.name for h in without_state], ["Royal Queensland Show (Ekka)"])
 
 
 class SchoolCalendarTests(TestCase):
@@ -428,30 +640,78 @@ class SchoolCalendarTests(TestCase):
         self.admin = _make_user()
         self.household = get_active_household()
 
-    def _source(self, **settings):
-        base = {"system": "qld_state", "show_terms": True, "show_holidays": True}
+    def _source(self, system="qld_state", **settings):
+        base = {"system": system, "show_terms": True, "show_holidays": True}
         base.update(settings)
         return CalendarSource.objects.create(
             household=self.household, created_by=self.admin, updated_by=self.admin,
-            name="QLD State Schools", kind="school", provider="au_school_terms",
+            name=au_school.system_label(system), kind="school", provider="au_school_terms",
             settings_json=base,
         )
+
+    def test_queensland_2026_matches_the_published_term_dates(self):
+        self.assertEqual(
+            [(t.number, t.start, t.end) for t in au_school.terms_for("qld_state", 2026)],
+            [
+                (1, date(2026, 1, 27), date(2026, 4, 2)),
+                (2, date(2026, 4, 20), date(2026, 6, 26)),
+                (3, date(2026, 7, 13), date(2026, 9, 18)),
+                (4, date(2026, 10, 6), date(2026, 12, 11)),
+            ],
+        )
+
+    def test_queensland_2027_is_published(self):
+        """2027 is already official, so the calendar must not stop at December 2026."""
+        self.assertEqual(
+            [(t.number, t.start, t.end) for t in au_school.terms_for("qld_state", 2027)],
+            [
+                (1, date(2027, 1, 27), date(2027, 3, 25)),
+                (2, date(2027, 4, 12), date(2027, 6, 25)),
+                (3, date(2027, 7, 12), date(2027, 9, 17)),
+                (4, date(2027, 10, 5), date(2027, 12, 10)),
+            ],
+        )
+
+    def test_nsw_divisions_have_different_student_start_dates(self):
+        """Eastern students return 2 Feb 2026, Western 9 Feb — a real, published difference."""
+        eastern = au_school.terms_for("nsw_state_eastern", 2026)[0]
+        western = au_school.terms_for("nsw_state_western", 2026)[0]
+        self.assertEqual(eastern.start, date(2026, 2, 2))
+        self.assertEqual(western.start, date(2026, 2, 9))
+        self.assertEqual(eastern.end, western.end)
+
+    def test_nsw_term_one_does_not_use_the_school_development_day(self):
+        """Development days run 27-30 January 2026; students are not at school then."""
+        eastern = au_school.terms_for("nsw_state_eastern", 2026)[0]
+        self.assertNotEqual(eastern.start, date(2026, 1, 27))
+        self.assertGreater(eastern.start, date(2026, 1, 30))
+
+    def test_both_nsw_divisions_are_offered_as_separate_systems(self):
+        self.assertIn("nsw_state_eastern", au_school.SCHOOL_SYSTEMS)
+        self.assertIn("nsw_state_western", au_school.SCHOOL_SYSTEMS)
+        self.assertIn("Eastern", au_school.system_label("nsw_state_eastern"))
+        self.assertIn("Western", au_school.system_label("nsw_state_western"))
+
+    def test_unverified_systems_are_not_offered(self):
+        self.assertNotIn("vic_state", au_school.SCHOOL_SYSTEMS)
+        self.assertEqual(au_school.terms_for("vic_state", 2026), [])
 
     def test_terms_are_ranges_not_one_event_per_day(self):
         entries = au_school.build_events(self._source(), household=self.household, years=(2026,))
         terms = [row for row in entries if row["summary"].startswith("Term")]
         self.assertEqual(len(terms), 4)
         self.assertTrue(all(row["is_range"] for row in terms))
-        term3 = next(row for row in terms if row["summary"] == "Term 3")
-        self.assertEqual(term3["start_date"], date(2026, 7, 13))
-        self.assertEqual(term3["end_date"], date(2026, 9, 18))
 
     def test_holidays_fill_the_gaps_between_terms(self):
         entries = au_school.build_events(self._source(), household=self.household, years=(2026,))
         breaks = [row for row in entries if row["summary"] == "School holidays"]
-        self.assertTrue(breaks)
         september = next(row for row in breaks if row["start_date"] == date(2026, 9, 19))
         self.assertEqual(september["end_date"], date(2026, 10, 5))
+
+    def test_the_summer_break_is_only_produced_when_the_next_year_is_published(self):
+        entries = au_school.build_events(self._source(), household=self.household, years=(2027,))
+        breaks = [row for row in entries if row["summary"] == "School holidays"]
+        self.assertTrue(all(row["end_date"].year == 2027 for row in breaks))
 
     def test_terms_and_holidays_toggle_independently(self):
         no_terms = au_school.build_events(
@@ -463,6 +723,12 @@ class SchoolCalendarTests(TestCase):
             self._source(show_holidays=False), household=self.household, years=(2026,))
         self.assertFalse([r for r in no_holidays if r["summary"] == "School holidays"])
 
+    def test_student_free_days_produce_nothing_until_data_exists(self):
+        """The toggle must not imply data we do not have."""
+        entries = au_school.build_events(
+            self._source(show_student_free=True), household=self.household, years=(2026,))
+        self.assertFalse([r for r in entries if r["summary"] == "Student-free day"])
+
     def test_resync_does_not_duplicate_terms(self):
         source = self._source()
         for _ in range(3):
@@ -472,12 +738,6 @@ class SchoolCalendarTests(TestCase):
             CalendarEvent.objects.filter(calendar_source=source, title="Term 3").count(), 1,
         )
 
-    def test_different_systems_have_different_dates(self):
-        qld = au_school.terms_for("qld_state", 2026)[0]
-        nsw = au_school.terms_for("nsw_state", 2026)[0]
-        # Systems differ at the boundaries, which is exactly why a school system is chosen
-        # rather than inferred from the state alone.
-        self.assertNotEqual(qld.start, nsw.start)
 
 
 class HolidaySourceSyncTests(TestCase):
@@ -728,3 +988,218 @@ class SourceNotificationTests(TestCase):
         self.assertEqual(wording.entry_kind(event), wording.EVENT)
         self.assertEqual(wording.tomorrow_title(event), "Tomorrow")
         self.assertNotIn("Due", wording.today_title(event, BRISBANE))
+
+
+class SourceManagedEventWriteTests(TestCase):
+    """A source-managed entry must not be editable through the ordinary events API.
+
+    `is_synced` alone did not cover these: a CalendarSource entry leaves `source_record_*`
+    empty, so every holiday, school range, subscribed fixture and imported event passed the
+    guard and could be PATCHed or DELETEd — with the next sync quietly reinstating it.
+    """
+
+    def setUp(self):
+        self.admin = _make_user()
+        self.household = get_active_household()
+        self.client.force_login(self.admin)
+
+    def _source(self, kind="subscription", provider="ics", **extra):
+        return CalendarSource.objects.create(
+            household=self.household, created_by=self.admin, updated_by=self.admin,
+            name=f"{kind} source", kind=kind, provider=provider, **extra,
+        )
+
+    def _event_for(self, source):
+        future = (timezone.now() + timedelta(days=10)).strftime("%Y%m%dT%H%M%SZ")
+        apply_events(
+            source,
+            normalise_events(_ics(_vevent("x@x", future, summary="Managed entry")), BRISBANE),
+            household_zone=BRISBANE,
+        )
+        return CalendarEvent.objects.get(calendar_source=source)
+
+    def test_every_source_kind_refuses_patch_and_delete(self):
+        for kind, provider in (
+            ("subscription", "ics"),
+            ("import", "ics"),
+            ("holidays", "au_holidays"),
+            ("school", "au_school_terms"),
+        ):
+            source = self._source(kind=kind, provider=provider)
+            event = self._event_for(source)
+            url = reverse("calendar-event-detail", args=[event.id])
+
+            patched = self.client.patch(
+                url, {"title": "Hijacked"}, content_type="application/json",
+            )
+            self.assertEqual(patched.status_code, 400, f"{kind}: PATCH should be refused")
+            deleted = self.client.delete(url)
+            self.assertEqual(deleted.status_code, 400, f"{kind}: DELETE should be refused")
+
+            event.refresh_from_db()
+            self.assertEqual(event.title, "Managed entry")
+            self.assertIsNone(event.deleted_at)
+
+    def test_the_refusal_says_where_to_change_it(self):
+        source = self._source()
+        event = self._event_for(source)
+        response = self.client.patch(
+            reverse("calendar-event-detail", args=[event.id]),
+            {"title": "Hijacked"}, content_type="application/json",
+        )
+        self.assertIn("calendar source", response.json()["detail"].lower())
+
+    def test_the_service_layer_refuses_too_not_only_the_view(self):
+        from apps.scheduling.services import delete_event, update_event
+
+        source = self._source()
+        event = self._event_for(source)
+        with self.assertRaises(ValueError):
+            update_event(self.admin, event, title="Hijacked")
+        with self.assertRaises(ValueError):
+            delete_event(self.admin, event)
+
+    def test_hand_made_events_are_still_editable(self):
+        event = create_event(self.admin, title="Family dinner", start_at=timezone.now() + timedelta(days=1))
+        url = reverse("calendar-event-detail", args=[event.id])
+        self.assertEqual(
+            self.client.patch(url, {"title": "Dinner"}, content_type="application/json").status_code,
+            200,
+        )
+        self.assertEqual(self.client.delete(url).status_code, 204)
+
+
+class SubscriptionUrlSecrecyTests(TestCase):
+    """A tokenised ICS link is a bearer credential and must never come back over the API."""
+
+    SECRET_URL = "https://feeds.example.com/team/fixtures.ics?key=SUPERSECRETTOKEN123"
+
+    def setUp(self):
+        self.admin = _make_user()
+        self.client.force_login(self.admin)
+        self.source = CalendarSource.objects.create(
+            household=get_active_household(), created_by=self.admin, updated_by=self.admin,
+            name="Broncos", kind="subscription", provider="ics", url=self.SECRET_URL,
+        )
+
+    def test_list_response_contains_no_part_of_the_url(self):
+        body = self.client.get(reverse("calendar-source-list")).content.decode()
+        self.assertNotIn("SUPERSECRETTOKEN123", body)
+        self.assertNotIn("key=", body)
+        self.assertNotIn("/team/fixtures.ics", body)
+        self.assertNotIn(self.SECRET_URL, body)
+
+    def test_only_safe_metadata_is_exposed(self):
+        row = self.client.get(reverse("calendar-source-list")).json()["sources"][0]
+        self.assertNotIn("url", row)
+        self.assertTrue(row["has_url"])
+        self.assertEqual(row["url_display"], "feeds.example.com")
+
+    def test_update_response_also_withholds_the_url(self):
+        body = self.client.patch(
+            reverse("calendar-source-detail", args=[self.source.id]),
+            {"name": "Broncos fixtures"}, content_type="application/json",
+        ).content.decode()
+        self.assertNotIn("SUPERSECRETTOKEN123", body)
+
+    def test_a_manager_can_replace_the_url_without_being_given_the_old_one(self):
+        replacement = "https://feeds.example.com/team/new.ics?key=NEWTOKEN"
+        # Stub only the DNS step so the real validation path still runs.
+        with patch("apps.scheduling.sources.fetching.resolve_public_address",
+                   return_value="93.184.216.34"):
+            response = self.client.patch(
+                reverse("calendar-source-detail", args=[self.source.id]),
+                {"url": replacement}, content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.source.refresh_from_db()
+        self.assertEqual(self.source.url, replacement)
+        self.assertNotIn("NEWTOKEN", response.content.decode())
+
+    def test_sync_errors_do_not_echo_the_url(self):
+        from apps.scheduling.sources.sync import sync_source
+
+        # An unexpected library error that quotes the URL it was handed.
+        with patch("apps.scheduling.sources.feeds.fetch_calendar",
+                   side_effect=RuntimeError(f"failed opening {self.SECRET_URL}")):
+            result = sync_source(self.source)
+        self.source.refresh_from_db()
+        self.assertNotIn("SUPERSECRETTOKEN123", self.source.sync_error)
+        self.assertNotIn("SUPERSECRETTOKEN123", result["error"])
+        self.assertNotIn("SUPERSECRETTOKEN123", self.client.get(reverse("calendar-source-list")).content.decode())
+
+
+class DisabledSourceSearchTests(TestCase):
+    """Disabling a source must hide its entries from search too, not just the calendar."""
+
+    def setUp(self):
+        self.admin = _make_user()
+        self.source = CalendarSource.objects.create(
+            household=get_active_household(), created_by=self.admin, updated_by=self.admin,
+            name="Broncos", kind="subscription", provider="ics", url="https://example.com/f.ics",
+        )
+        future = (timezone.now() + timedelta(days=6)).strftime("%Y%m%dT%H%M%SZ")
+        apply_events(
+            self.source,
+            normalise_events(_ics(_vevent("m@x", future, summary="Broncos vs Cowboys")), BRISBANE),
+            household_zone=BRISBANE,
+        )
+
+    def _search(self, term="Broncos"):
+        from apps.scheduling.selectors import search_events
+        return [event.title for event in search_events(self.admin, term)]
+
+    def test_enabled_source_is_searchable(self):
+        self.assertIn("Broncos vs Cowboys", self._search())
+
+    def test_disabled_source_is_not_searchable(self):
+        self.source.is_enabled = False
+        self.source.save()
+        self.assertNotIn("Broncos vs Cowboys", self._search())
+
+    def test_source_hidden_from_the_calendar_is_not_searchable(self):
+        self.source.show_on_calendar = False
+        self.source.save()
+        self.assertNotIn("Broncos vs Cowboys", self._search())
+
+    def test_hand_made_events_remain_searchable(self):
+        create_event(self.admin, title="Broncos party", start_at=timezone.now() + timedelta(days=2))
+        self.source.is_enabled = False
+        self.source.save()
+        self.assertIn("Broncos party", self._search())
+
+
+class PartDayHolidayTests(TestCase):
+    """A part-day holiday must be stored as a timed, timezone-aware entry."""
+
+    def setUp(self):
+        self.admin = _make_user()
+        household = get_active_household()
+        household.country, household.region = "AU", "QLD"
+        household.timezone = "Australia/Brisbane"
+        household.save()
+        self.household = household
+        self.source = CalendarSource.objects.create(
+            household=household, created_by=self.admin, updated_by=self.admin,
+            name="Queensland public holidays", kind="holidays", provider="au_holidays",
+        )
+
+    def test_christmas_eve_is_timed_not_all_day(self):
+        sync_source(self.source, household=self.household)
+        eve = CalendarEvent.objects.get(title="Christmas Eve (from 6pm)",
+                                        start_at__year=2026)
+        self.assertFalse(eve.is_all_day)
+        self.assertEqual(eve.start_at.astimezone(BRISBANE).hour, 18)
+
+    def test_stored_times_are_timezone_aware(self):
+        """A naive datetime reaching the ORM is a real bug, not a warning to live with."""
+        sync_source(self.source, household=self.household)
+        for event in CalendarEvent.objects.filter(calendar_source=self.source):
+            self.assertIsNotNone(event.start_at.tzinfo, event.title)
+            if event.end_at:
+                self.assertIsNotNone(event.end_at.tzinfo, event.title)
+
+    def test_full_day_holidays_remain_all_day(self):
+        sync_source(self.source, household=self.household)
+        christmas = CalendarEvent.objects.get(title="Christmas Day", start_at__year=2026)
+        self.assertTrue(christmas.is_all_day)

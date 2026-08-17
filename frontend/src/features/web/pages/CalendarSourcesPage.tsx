@@ -25,10 +25,12 @@ const GROUPS: Array<{ key: string; label: string; kinds: CalendarSource['kind'][
   { key: 'imported', label: 'Imported', kinds: ['import'] },
 ]
 
+// Only systems with verified published term dates are offered. Adding one is a data change in
+// apps/scheduling/sources/au_school.py plus an entry here — never a guess.
 const SCHOOL_SYSTEMS = [
   { value: 'qld_state', label: 'Queensland State Schools' },
-  { value: 'nsw_state', label: 'NSW Public Schools' },
-  { value: 'vic_state', label: 'Victorian Government Schools' },
+  { value: 'nsw_state_eastern', label: 'NSW Public Schools (Eastern division)' },
+  { value: 'nsw_state_western', label: 'NSW Public Schools (Western division)' },
 ]
 
 function syncLabel(source: CalendarSource) {
@@ -182,6 +184,7 @@ function SourceRow({ source, canManage, onChange, onRemove, onError }: {
                 ))}
                 <p className="text-xs text-muted">
                   Which holidays apply comes from your household location in Settings.
+                  Queensland is supported; other states are not available yet.
                 </p>
               </div>
             )}
@@ -205,8 +208,20 @@ function SourceRow({ source, canManage, onChange, onRemove, onError }: {
                 announce every fixture.
               </p>
             </div>
-            {source.url && (
-              <p className="break-all text-xs text-muted">Feed: {source.url}</p>
+            {source.has_url && (
+              <div className="border-t border-line pt-3">
+                <p className="text-xs text-muted">Feed host: {source.url_display || 'unknown'}</p>
+                <p className="mt-1 text-xs text-muted">
+                  The full link is not shown — subscription links often contain a private token.
+                  Paste a new link to replace it.
+                </p>
+                <Input
+                  aria-label="Replace calendar link"
+                  placeholder="https://example.com/fixtures.ics"
+                  onBlur={event => event.target.value.trim() && patch({ url: event.target.value.trim() })}
+                  className="mt-2"
+                />
+              </div>
             )}
           </div>
         </Modal>
@@ -309,7 +324,7 @@ function AddSourceModal({ catalogue, onClose, onAdded, onError }: {
               </Select>
             </Field>
             {selected?.kind === 'school' && (
-              <Field label="Education system" hint="Catholic and independent schools often differ by a day or more.">
+              <Field label="Education system" hint="Choose the division your school follows. Catholic and independent schools often differ by a day or more.">
                 <Select aria-label="Education system" value={system} onChange={event => setSystem(event.target.value)}>
                   {SCHOOL_SYSTEMS.map(entry => (
                     <option key={entry.value} value={entry.value}>{entry.label}</option>
@@ -320,7 +335,7 @@ function AddSourceModal({ catalogue, onClose, onAdded, onError }: {
             {selected?.kind === 'holidays' && (
               <p className="rounded-xl bg-sunken p-3 text-xs text-muted">
                 Which holidays apply is decided by your household location in Settings — country,
-                state and local area.
+                state and local area. Queensland is supported; other states are not available yet.
               </p>
             )}
           </>

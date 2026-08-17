@@ -183,18 +183,26 @@ class CalendarSourceSerializer(serializers.ModelSerializer):
     type_label = serializers.SerializerMethodField()
     can_sync = serializers.SerializerMethodField()
     event_count = serializers.SerializerMethodField()
+    # The stored URL is deliberately never serialised. Subscription links routinely embed a
+    # per-user token in the path or query ("...?key=abc123"), which is a bearer credential for
+    # that person's calendar: anyone who reads it can fetch the feed forever, and it would
+    # otherwise sit in an API response, browser memory and any HAR the household ever shares.
+    # Managers replace a URL by sending a new one; nobody needs the old secret back.
+    has_url = serializers.SerializerMethodField()
+    url_display = serializers.SerializerMethodField()
 
     class Meta:
         model = CalendarSource
         fields = [
             "id", "name", "kind", "category", "type_label", "is_enabled", "colour",
-            "url", "settings_json", "show_on_calendar", "show_in_upcoming",
+            "has_url", "url_display", "settings_json", "show_on_calendar", "show_in_upcoming",
             "notifications_enabled", "last_sync_at", "last_success_at", "sync_status",
             "sync_error", "can_sync", "event_count", "created_at", "updated_at",
         ]
         read_only_fields = [
-            "id", "kind", "type_label", "last_sync_at", "last_success_at", "sync_status",
-            "sync_error", "can_sync", "event_count", "created_at", "updated_at",
+            "id", "kind", "type_label", "has_url", "url_display", "last_sync_at",
+            "last_success_at", "sync_status", "sync_error", "can_sync", "event_count",
+            "created_at", "updated_at",
         ]
 
     def get_type_label(self, obj) -> str:
@@ -208,6 +216,21 @@ class CalendarSourceSerializer(serializers.ModelSerializer):
 
     def get_event_count(self, obj) -> int:
         return obj.events.count()
+
+    def get_has_url(self, obj) -> bool:
+        return bool(obj.url)
+
+    def get_url_display(self, obj) -> str:
+        """Host only — enough to recognise the feed, useless as a credential.
+
+        The path and query are where tokens live, so neither is returned, not even truncated:
+        a "masked" prefix of a secret is still a leak of part of the secret.
+        """
+        if not obj.url:
+            return ""
+        from urllib.parse import urlsplit
+        host = urlsplit(obj.url).hostname or ""
+        return host
 
 
 class CalendarSourceWriteSerializer(serializers.Serializer):

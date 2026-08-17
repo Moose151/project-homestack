@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.39.0**
+> **Current version: 0.39.1**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,31 @@
 ---
 
 ## 0.39 — Calendars beyond HomeStack, and an interface you arrange
+
+### 0.39.1 — 2026-08-17 — Calendar Sources correctness and hardening
+- Calendars fetched from the internet now connect to the exact address HomeStack checked. The
+  previous version verified a link's address and then reconnected by name, which allowed a
+  hostile server to answer safely during the check and point somewhere inside the home network a
+  moment later. Certificate and hostname verification are unchanged.
+- Entries that come from a holiday, school or subscribed calendar can no longer be edited or
+  deleted as if they were your own. They were already read-only on screen, but the underlying
+  API accepted the change and the next refresh silently undid it.
+- Subscription links are now treated as secrets. Many carry a private token that grants access
+  to that calendar, so the full link is never sent back to the browser or written into an error
+  message — only the site it comes from is shown. Replacing a link still works normally.
+- Disabling a calendar now also removes its entries from search, not just the calendar view.
+- **Public holidays are now Queensland only, and every date has been checked against the
+  Queensland Government's published lists for 2026 and 2027.** The previous version applied one
+  invented "national" list to every state, which produced holidays that do not exist in some
+  places and missed substitute days in others. Rather than ship dates we could not verify for
+  the remaining states, those are no longer offered — they will return as their published dates
+  are checked in. Christmas Eve now correctly appears as an evening part-day holiday, and local
+  show holidays match the published show list (Townsville's 2026 show day was wrong).
+- **School terms now use student return dates, and NSW is split into its Eastern and Western
+  divisions**, which start a week apart. The previous version used a staff development day as
+  the NSW term start, which would have sent families to school a week early. Queensland 2027 is
+  included. Victoria has been withdrawn until its dates are verified, and student-free days stay
+  off because no verified data exists for them yet.
 
 ### 0.39.0 — 2026-08-17 — Calendar Sources, tab ordering and navigation customisation
 - **Fixed a production bug**: the Dashboard's "Due before next payday" card stayed locked

@@ -310,7 +310,10 @@ export interface CalendarSource {
   type_label: string
   is_enabled: boolean
   colour: string
-  url: string
+  /** The stored feed URL is never returned: a tokenised subscription link is a bearer secret. */
+  has_url: boolean
+  /** Host only, enough to recognise the feed. Never the path or query, where tokens live. */
+  url_display: string
   settings_json: Record<string, unknown>
   show_on_calendar: boolean
   show_in_upcoming: boolean
