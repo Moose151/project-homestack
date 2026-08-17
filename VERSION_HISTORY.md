@@ -1,11 +1,49 @@
 # HomeStack — Version History
 
-> **Current version: 0.37.4**
+> **Current version: 0.38.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
 >
 > **Rule:** bump the version and add a row here with every push to `main`.
+
+---
+
+## 0.38 — Reminders, bills and notification clarity
+
+### 0.38.0 — 2026-08-17 — Schedulable reminders, payday bills and notification semantics
+- Reminders are now genuinely schedulable. A reminder carries recipients and a notifications
+  toggle, and the shared hourly scheduler delivers one notification at the reminder's own
+  scheduled time (in addition to the existing 24-hour and morning-of leads), idempotently and in
+  the household timezone. Editing a reminder reschedules it, deleting it or turning notifications
+  off prevents future delivery, and a reminder whose time slipped past by more than one sweep is
+  not resurrected. Notifications deep-link to the reminder itself rather than a calendar day.
+- Appointments and events are no longer labelled as if they were bills. Notification wording is
+  derived from what the entry actually is, in one shared formatter that in-app notifications, the
+  notification bell and the Web Push payload all share: tasks, bills and deadlines keep
+  "Due today"/"Due tomorrow"; appointments and events read "Today"/"Tomorrow"/"Starts at 3:30 PM";
+  reminders read "Reminder"/"Reminder tomorrow". An event can no longer say "Due" or "Overdue".
+- Calendar's create action now offers Event, Appointment or Reminder. Choosing Reminder saves a
+  real Atlas reminder through the shared reminder API — it does not masquerade as a calendar
+  event — and a reminder shown on the calendar opens that reminder rather than a title search.
+- The Dashboard has a "Due before next payday" widget built from actual unpaid bill occurrences
+  through the household's next real payday, with the payday date, bill count, total and a
+  separate count of already-overdue unpaid bills. It states plainly when no payday is configured
+  and stays locked until Money is unlocked.
+- Money gained a "View all upcoming bills" path: an occurrence-first chronological list grouped
+  into Overdue / Today / Tomorrow / This week / Later, with no horizontal table scrolling on a
+  phone. The full Bills management view is unchanged and still available.
+- Time entry now uses a reusable visual time picker with hour/minute selection on pointer
+  devices, while touch devices keep the native control. Values are still sent to the backend in
+  the existing 24-hour representation, and the display follows the locale's 12/24-hour convention.
+- Opening the notification panel marks the notifications that existed at that moment as read, in
+  one bulk request bounded by a high-water notification id, so anything arriving afterwards stays
+  unread. The badge updates immediately and reconciles with the backend if persistence fails.
+- Dismissed page guides are now remembered per user on the server rather than in browser storage,
+  so a dismissal survives refresh, logout/login and moving between devices. Guides are versioned,
+  so a substantially rewritten guide can be shown again. Existing local dismissals migrate once.
+- Home → Rooms opens on the room list on every device, with the floor plan as a deliberate
+  secondary view rather than the default landing screen.
 
 ---
 
