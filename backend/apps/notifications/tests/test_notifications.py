@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import User
-from apps.atlas.services import create_atlas_list, create_list_item
+from apps.atlas.services import create_atlas_list, create_list_item, create_reminder
 from apps.books.services import create_personal_entry, update_personal_entry
 from apps.core.models import get_active_household
 from apps.hub.models import HouseholdHubWidget, HubWidget
@@ -113,6 +113,22 @@ class NotificationApiTests(TestCase):
         resp = self.client.post(reverse("notification-read", args=[note.id]))
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(selectors.unread_count(self.user), 0)
+
+    def test_bulk_read_through_snapshot_does_not_mark_a_later_notification(self):
+        first = services.create_notification(self.user, title="First", message="m")
+        later = services.create_notification(self.user, title="Arrived later", message="m")
+        self._login()
+        resp = self.client.post(
+            reverse("notification-read-all"),
+            {"through_id": first.id},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        first.refresh_from_db()
+        later.refresh_from_db()
+        self.assertTrue(first.is_read)
+        self.assertFalse(later.is_read)
+        self.assertEqual(selectors.unread_count(self.user), 1)
 
     def test_only_see_own_notifications(self):
         other = _make_user("other", role=User.Role.USER)
@@ -750,7 +766,7 @@ class ScheduledReminderTests(TestCase):
         self.assertEqual(result["24h"], 1)
         for user in (self.parent, self.other):
             notes = Notification.objects.filter(
-                recipient_user=user, source_node="scheduling", title="Coming up tomorrow",
+                recipient_user=user, source_node="scheduling", title="Tomorrow",
             )
             self.assertEqual(notes.count(), 1)
             self.assertEqual(notes.first().message, "Dentist")
@@ -761,7 +777,7 @@ class ScheduledReminderTests(TestCase):
         run_due_reminders()
         run_due_reminders()
         self.assertEqual(
-            Notification.objects.filter(source_node="scheduling", title="Coming up tomorrow").count(), 2,
+            Notification.objects.filter(source_node="scheduling", title="Tomorrow").count(), 2,
         )
 
     def test_event_outside_24h_window_is_not_reminded(self):
@@ -776,10 +792,106 @@ class ScheduledReminderTests(TestCase):
         create_list_item(self.parent, atlas_list, title="Take out bins", due_at=due)
         run_due_reminders()
         notes = Notification.objects.filter(
-            recipient_user=self.other, source_node="atlas", title="Coming up tomorrow",
+            recipient_user=self.other, source_node="atlas", title="Due tomorrow",
         )
         self.assertEqual(notes.count(), 1)
         self.assertEqual(notes.first().message, "Take out bins")
+
+    def test_scheduled_reminder_notifies_only_its_selected_recipient(self):
+        recipient = _make_person("Other", linked_user=self.other)
+        due = timezone.now() + timedelta(hours=24)
+        create_reminder(
+            self.parent,
+            title="Take medicine",
+            due_at=due,
+            assigned_to_people=[recipient],
+            notifications_enabled=True,
+        )
+        run_due_reminders()
+        self.assertTrue(Notification.objects.filter(
+            recipient_user=self.other, source_node="atlas", message="Take medicine",
+        ).exists())
+        self.assertFalse(Notification.objects.filter(
+            recipient_user=self.parent, source_node="atlas", message="Take medicine",
+        ).exists())
+
+    def test_disabled_scheduled_reminder_sends_nothing(self):
+        due = timezone.now() + timedelta(hours=24)
+        create_reminder(
+            self.parent,
+            title="Silent reminder",
+            due_at=due,
+            notifications_enabled=False,
+        )
+        result = run_due_reminders()
+        self.assertEqual(result["24h"], 0)
+        self.assertFalse(Notification.objects.filter(message="Silent reminder").exists())
+
+    def test_appointment_is_never_worded_as_due_or_overdue(self):
+        """An appointment happens, it is not "due" — docs/32 §8.
+
+        This is the regression the owner reported: a Brewoomba appointment announced as
+        "Due today". Bills and tasks own that wording; events and appointments never do.
+        """
+        today = timezone.now().date()
+        due_at = timezone.make_aware(datetime.combine(today, time(15, 0)))
+        create_event(self.parent, title="Brewoomba", start_at=due_at, event_kind="appointment")
+        run_due_reminders(now=timezone.make_aware(datetime.combine(today, time(8, 0))))
+        tomorrow_at = timezone.now() + timedelta(hours=24)
+        create_event(self.parent, title="Hairdresser", start_at=tomorrow_at, event_kind="appointment")
+        run_due_reminders()
+
+        titles = set(
+            Notification.objects.filter(source_node="scheduling").values_list("title", flat=True)
+        )
+        self.assertTrue(titles)
+        for title in titles:
+            self.assertNotIn("Due", title)
+            self.assertNotIn("Overdue", title)
+        self.assertIn("Starts at 3:00 PM", titles)
+        self.assertIn("Tomorrow", titles)
+
+    def test_reminder_uses_reminder_wording_not_due_wording(self):
+        due = timezone.now() + timedelta(hours=24)
+        create_reminder(self.parent, title="Water the plants", due_at=due)
+        run_due_reminders()
+        self.assertTrue(Notification.objects.filter(
+            source_node="atlas", title="Reminder tomorrow", message="Water the plants",
+        ).exists())
+
+    # Pinned away from the 08:00 default morning_time so the morning-of lead cannot also fire
+    # and make these counts depend on the wall-clock hour the suite happens to run at.
+    def _midday(self):
+        return timezone.make_aware(datetime.combine(timezone.now().date(), time(13, 0)))
+
+    def test_reminder_notifies_at_its_scheduled_time(self):
+        now = self._midday()
+        create_reminder(self.parent, title="Take medicine", due_at=now - timedelta(minutes=5))
+        result = run_due_reminders(now=now)
+        self.assertEqual(result["due_at"], 1)
+        titles = set(Notification.objects.filter(
+            source_node="atlas", message="Take medicine",
+        ).values_list("title", flat=True))
+        self.assertEqual(titles, {"Reminder"})
+
+    def test_scheduled_time_delivery_is_idempotent(self):
+        now = self._midday()
+        create_reminder(self.parent, title="Take medicine", due_at=now - timedelta(minutes=5))
+        run_due_reminders(now=now)
+        run_due_reminders(now=now)
+        self.assertEqual(
+            Notification.objects.filter(
+                source_node="atlas", message="Take medicine", title="Reminder",
+            ).count(),
+            2,  # one per household member, not one per sweep
+        )
+
+    def test_long_past_reminder_is_not_resurrected(self):
+        now = self._midday()
+        create_reminder(self.parent, title="Ancient", due_at=now - timedelta(days=3))
+        result = run_due_reminders(now=now)
+        self.assertEqual(result["due_at"], 0)
+        self.assertFalse(Notification.objects.filter(message="Ancient").exists())
 
     def test_mine_only_preference_skips_unassigned_events(self):
         services.set_preference(
@@ -790,7 +902,7 @@ class ScheduledReminderTests(TestCase):
         run_due_reminders()
         self.assertEqual(
             Notification.objects.filter(
-                recipient_user=self.other, source_node="scheduling", title="Coming up tomorrow",
+                recipient_user=self.other, source_node="scheduling", title="Tomorrow",
             ).count(),
             0,
         )
@@ -805,7 +917,7 @@ class ScheduledReminderTests(TestCase):
         run_due_reminders()
         self.assertEqual(
             Notification.objects.filter(
-                recipient_user=self.other, source_node="scheduling", title="Coming up tomorrow",
+                recipient_user=self.other, source_node="scheduling", title="Tomorrow",
             ).count(),
             1,
         )
@@ -819,7 +931,7 @@ class ScheduledReminderTests(TestCase):
         run_due_reminders()
         self.assertEqual(
             Notification.objects.filter(
-                recipient_user=self.other, source_node="scheduling", title="Coming up tomorrow",
+                recipient_user=self.other, source_node="scheduling", title="Tomorrow",
             ).count(),
             0,
         )
@@ -832,7 +944,7 @@ class ScheduledReminderTests(TestCase):
         result = run_due_reminders(now=morning_now)
         self.assertEqual(result["morning_of"], 2)
         notes = Notification.objects.filter(
-            recipient_user=self.other, source_node="scheduling", title="Due today",
+            recipient_user=self.other, source_node="scheduling", title="Starts at 3:00 PM",
         )
         self.assertEqual(notes.count(), 1)
 
@@ -844,12 +956,12 @@ class ScheduledReminderTests(TestCase):
         eight_am = timezone.make_aware(datetime.combine(today, time(8, 0)))
         run_due_reminders(now=eight_am)
         self.assertEqual(
-            Notification.objects.filter(recipient_user=self.other, source_node="scheduling", title="Due today").count(), 0,
+            Notification.objects.filter(recipient_user=self.other, source_node="scheduling", title="Starts at 3:00 PM").count(), 0,
         )
         nine_am = timezone.make_aware(datetime.combine(today, time(9, 0)))
         run_due_reminders(now=nine_am)
         self.assertEqual(
-            Notification.objects.filter(recipient_user=self.other, source_node="scheduling", title="Due today").count(), 1,
+            Notification.objects.filter(recipient_user=self.other, source_node="scheduling", title="Starts at 3:00 PM").count(), 1,
         )
 
     def test_morning_of_is_idempotent_per_user(self):
@@ -860,7 +972,7 @@ class ScheduledReminderTests(TestCase):
         run_due_reminders(now=morning_now)
         run_due_reminders(now=morning_now)
         self.assertEqual(
-            Notification.objects.filter(recipient_user=self.other, source_node="scheduling", title="Due today").count(), 1,
+            Notification.objects.filter(recipient_user=self.other, source_node="scheduling", title="Starts at 3:00 PM").count(), 1,
         )
 
 

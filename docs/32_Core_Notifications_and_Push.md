@@ -298,17 +298,45 @@ Current `run_due_reminders` scope is limited to:
 Other domains that have their own reminder behaviour are not swept automatically, which avoids
 unrequested duplicates.
 
+### Wording is derived from the entry, never hardcoded
+
+A bill, task or deadline is *due*, so it can read "Due today" and it can be "Overdue". An
+appointment or event is not due — it simply happens — and a reminder reads as a reminder.
+`apps/notifications/wording.py` is the single formatter for these titles, so the in-app list, the
+notification bell and the Web Push payload (which all render `Notification.title`) cannot drift
+apart. Classification is by `event_kind == "task"`, or `source_record_type == "AtlasReminder"`,
+falling back to event/appointment.
+
+| Entry | 24-hour lead | Morning-of lead | At its scheduled time |
+| --- | --- | --- | --- |
+| Task / bill / deadline | Due tomorrow | Due today | Due now |
+| Appointment / event | Tomorrow | Starts at 3:30 PM (or "Today" if all-day) | Starting now |
+| Reminder | Reminder tomorrow | Reminder today | Reminder |
+
+An event or appointment must never be labelled "Due" or "Overdue".
+
 ### 24-hour reminder
 
 The hourly job looks for relevant events in a 23–25 hour window and sends a single idempotent
-"Coming up tomorrow" notification to eligible visible recipients.
+notification to eligible visible recipients, worded per the table above.
 
 ### Morning-of reminder
 
-For events due on the household-local current day, each eligible User receives a "Due today"
-notification when the hourly run reaches that User's configured `morning_time` hour.
+For events due on the household-local current day, each eligible User receives a notification
+when the hourly run reaches that User's configured `morning_time` hour.
 
-`mine_only` is applied to the appropriate categories when deciding recipients.
+### Scheduled-time reminder
+
+Atlas reminders — and only Atlas reminders — also fire at the moment they are set for: the owner
+picked an exact time expecting to hear about it *then*. Sweeping every appointment here would
+notify people at the instant a meeting starts, which nobody asked for. All-day reminders are
+excluded (the morning-of lead already covers them), delivery is idempotent via
+`NotificationReminderLog`, and the lookback matches the hourly cadence so a reminder whose time
+slipped past by more than one sweep is not resurrected. `notifications_enabled=False` on the
+reminder suppresses every lead, and these notifications deep-link to the reminder itself.
+
+`mine_only` is applied to the appropriate categories when deciding recipients. A reminder with
+explicit recipients notifies only those people.
 
 ## 10. Hub countdown digest
 

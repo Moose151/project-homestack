@@ -209,6 +209,14 @@ class AtlasReminder(CalendarSyncMixin, HouseholdBaseModel):
     due_at = models.DateTimeField(null=True, blank=True)
     is_all_day = models.BooleanField(default=False)  # due on a date, no specific time
     recurrence_rule = models.CharField(max_length=512, blank=True, default="")
+    assigned_to_people = models.ManyToManyField(
+        "people.Person", blank=True, related_name="assigned_reminders",
+        help_text="Who should receive this reminder. Empty means the whole household.",
+    )
+    notifications_enabled = models.BooleanField(
+        default=True,
+        help_text="Allow the shared notification scheduler to notify recipients for this reminder.",
+    )
     calendar_event_id = models.PositiveBigIntegerField(null=True, blank=True)
     visibility = models.CharField(
         max_length=20, choices=Visibility.choices, default=Visibility.HOUSEHOLD
@@ -238,6 +246,7 @@ class AtlasReminder(CalendarSyncMixin, HouseholdBaseModel):
             "is_all_day": self.is_all_day,
             "description": self.body,
             "recurrence_rule": self.recurrence_rule,
+            "assigned_to_person_ids": list(self.assigned_to_people.values_list("id", flat=True)),
             "visibility": self.visibility,
             "sensitivity": self.sensitivity,
         }

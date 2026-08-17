@@ -87,7 +87,12 @@ export function EventModal({
   const base = event ? new Date(event.start_at) : (defaultDate ?? new Date())
   const [f, setF] = useState({
     title: event?.title ?? '',
+    // 'reminder' is offered only when creating: it saves an Atlas reminder through the shared
+    // reminder API rather than a calendar event, so it is a choice of *what to create*, not a
+    // calendar event_kind. Existing entries keep their own kind.
     event_kind: event?.event_kind === 'appointment' ? 'appointment' : 'event',
+    body: '',
+    notifications_enabled: true,
     start_at: base.toISOString(),
     end_at: event?.end_at ?? '',
     is_all_day: event?.is_all_day ?? false,
@@ -105,10 +110,26 @@ export function EventModal({
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: unknown) => setF(prev => ({ ...prev, [k]: v }))
 
+  const isReminder = !event && f.event_kind === 'reminder'
+
   const save = async () => {
     if (!f.title.trim()) return
     setSaving(true)
     try {
+      if (isReminder) {
+        // The real reminder record — same model and API the Atlas reminders tab uses, so it
+        // schedules notifications and syncs itself back onto the calendar.
+        await api.createReminder({
+          title: f.title.trim(),
+          body: f.body.trim(),
+          due_at: new Date(f.start_at).toISOString(),
+          is_all_day: f.is_all_day,
+          assigned_to_person_ids: f.assigned_to_person_ids,
+          notifications_enabled: f.notifications_enabled,
+        })
+        onSaved()
+        return
+      }
       const payload: CalendarEventWrite = {
         title: f.title.trim(),
         event_kind: f.event_kind as 'event' | 'appointment',
@@ -137,7 +158,7 @@ export function EventModal({
     try { await api.deleteEvent(event.id); onSaved() } catch (e) { onError(errMsg(e)) }
   }
 
-  const title = event ? (synced ? 'Event' : 'Edit event') : 'New event'
+  const title = event ? (synced ? 'Event' : 'Edit event') : isReminder ? 'New reminder' : 'New event'
 
   if (synced) {
     const href = sourcePath(event!)
@@ -181,13 +202,14 @@ export function EventModal({
     >
       <div className="flex flex-col gap-3">
         <Field label="Type">
-          <Select value={f.event_kind} onChange={e => set('event_kind', e.target.value)}>
+          <Select aria-label="Type" value={f.event_kind} onChange={e => set('event_kind', e.target.value)}>
             <option value="event">Event</option>
             <option value="appointment">Appointment</option>
+            {!event && <option value="reminder">Reminder</option>}
           </Select>
         </Field>
         <Input placeholder="Title" value={f.title} onChange={e => set('title', e.target.value)} data-autofocus />
-        <Field label="Start">
+        <Field label={isReminder ? 'Remind me at' : 'Start'}>
           <DateTimeField
             value={f.start_at}
             allDay={f.is_all_day}
@@ -195,7 +217,29 @@ export function EventModal({
           />
         </Field>
 
-        {!showMore ? (
+        {isReminder ? (
+          <div className="flex flex-col gap-3">
+            <Field label="Notes (optional)">
+              <Input placeholder="Anything worth remembering" value={f.body} onChange={e => set('body', e.target.value)} />
+            </Field>
+            <Field label="Remind">
+              <AssigneeSelect people={people}
+                value={f.assigned_to_person_ids || null}
+                onChange={v => set('assigned_to_person_ids', v ?? 0)} />
+            </Field>
+            <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={f.notifications_enabled}
+                onChange={e => set('notifications_enabled', e.target.checked)}
+              />
+              Send a notification when it is time
+            </label>
+            <p className="text-xs text-muted">
+              Saved as a reminder in Atlas. It appears on the calendar and can be edited there.
+            </p>
+          </div>
+        ) : !showMore ? (
           <button
             type="button"
             onClick={() => setShowMore(true)}

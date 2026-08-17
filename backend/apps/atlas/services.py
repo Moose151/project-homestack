@@ -289,22 +289,26 @@ def dismiss_list_suggestion(acting_user: User, suggestion: AtlasListSuggestion) 
 # ---------------------------------------------------------------------------
 
 def create_reminder(acting_user: User, **data) -> AtlasReminder:
+    people = pop_assignees(data)
     household = get_active_household()
     reminder = AtlasReminder(
         household=household, created_by=acting_user, updated_by=acting_user, **data
     )
     reminder.save()
+    apply_assignees(reminder, people)
     sync_event_for(reminder)
     return reminder
 
 
 def update_reminder(acting_user: User, reminder: AtlasReminder, **data) -> AtlasReminder:
-    allowed = {"title", "body", "due_at", "is_all_day", "recurrence_rule", "visibility", "sensitivity"}
+    people = pop_assignees(data)
+    allowed = {"title", "body", "due_at", "is_all_day", "recurrence_rule", "visibility", "sensitivity", "notifications_enabled"}
     for key, val in data.items():
         if key in allowed:
             setattr(reminder, key, val)
     reminder.updated_by = acting_user
     reminder.save()
+    apply_assignees(reminder, people)
     sync_event_for(reminder)
     return reminder
 

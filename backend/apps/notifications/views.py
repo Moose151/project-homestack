@@ -58,7 +58,15 @@ class NotificationReadAllView(APIView):
     permission_action = "view"
 
     def post(self, request: Request) -> Response:
-        count = services.mark_all_read(request.user)
+        through_id = request.data.get("through_id")
+        if through_id is not None:
+            try:
+                through_id = int(through_id)
+            except (TypeError, ValueError) as exc:
+                raise ValidationError({"through_id": "Use a notification id."}) from exc
+            if through_id < 1:
+                raise ValidationError({"through_id": "Use a positive notification id."})
+        count = services.mark_all_read(request.user, through_id=through_id)
         return Response({"marked_read": count}, status=status.HTTP_200_OK)
 
 

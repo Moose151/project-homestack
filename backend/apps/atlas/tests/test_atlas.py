@@ -428,6 +428,19 @@ class ReminderCalendarSyncTests(TestCase):
         self.assertNotEqual(r1.calendar_event_id, r2.calendar_event_id)
         self.assertEqual(CalendarEvent.objects.filter(source_record_type="AtlasReminder").count(), 2)
 
+    def test_reminder_recipients_sync_to_calendar_event(self):
+        person = Person.objects.create(
+            household=get_active_household(), display_name="Alex", profile_type="adult",
+        )
+        reminder = create_reminder(
+            self.admin,
+            title="Call the school",
+            due_at=_future(24),
+            assigned_to_people=[person],
+        )
+        event = CalendarEvent.objects.get(pk=reminder.calendar_event_id)
+        self.assertEqual(list(event.assigned_to_people.values_list("id", flat=True)), [person.id])
+
 
 # ---------------------------------------------------------------------------
 # Reminder API tests
@@ -452,6 +465,26 @@ class ReminderAPITests(TestCase):
         self.assertEqual(resp.status_code, 201)
         self.assertEqual(resp.json()["title"], "Pick up kids")
         self.assertIsNotNone(resp.json()["calendar_event_id"])
+        self.assertEqual(resp.json()["notification_state"], "scheduled")
+
+    def test_create_reminder_with_notes_recipient_and_notifications(self):
+        person = Person.objects.create(
+            household=get_active_household(), display_name="Alex", profile_type="adult",
+        )
+        resp = self.client.post(
+            self.list_url,
+            {
+                "title": "Medicine",
+                "body": "Take with food",
+                "due_at": _future(2).isoformat(),
+                "assigned_to_person_ids": [person.id],
+                "notifications_enabled": True,
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.json())
+        self.assertEqual(resp.json()["body"], "Take with food")
+        self.assertEqual(resp.json()["assigned_to_person_ids"], [person.id])
 
     def test_list_reminders(self):
         create_reminder(self.admin, title="R1")
