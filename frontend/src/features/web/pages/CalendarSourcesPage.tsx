@@ -15,6 +15,7 @@ import { PageHeader } from '../../../components/PageHeader'
 import { InlineAlert, PageSkeleton } from '../../../components/PageState'
 import { MobileScreenHeader } from '../../../components/mobile'
 import { useAuth } from '../../auth/AuthContext'
+import { useStacks } from '../../stacks/StacksContext'
 
 const errMsg = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong.'
 
@@ -45,9 +46,11 @@ function syncLabel(source: CalendarSource) {
   return `Synced ${new Date(source.last_success_at).toLocaleDateString()}`
 }
 
-function SourceRow({ source, canManage, onChange, onRemove, onError }: {
+function SourceRow({ source, canManage, regionLabel, onChange, onRemove, onError }: {
   source: CalendarSource
   canManage: boolean
+  /** The household's configured jurisdiction, so the holiday switch names it. */
+  regionLabel: string
   onChange: (next: CalendarSource) => void
   onRemove: (id: number) => void
   onError: (message: string) => void
@@ -166,9 +169,11 @@ function SourceRow({ source, canManage, onChange, onRemove, onError }: {
             )}
             {source.kind === 'holidays' && (
               <div className="flex flex-col gap-2">
+                {/* No "national" switch: Australia has no separate national holiday list, so it
+                    could only ever be a no-op. The regional label names the household's own
+                    jurisdiction rather than saying "state / territory" at someone. */}
                 {([
-                  ['include_national', 'National public holidays'],
-                  ['include_regional', 'State / territory holidays'],
+                  ['include_regional', `${regionLabel} public holidays`],
                   ['include_local', 'Local & show holidays'],
                 ] as const).map(([key, label]) => (
                   <label key={key} className="flex min-h-11 items-center gap-2 text-sm text-ink">
@@ -396,11 +401,13 @@ function AddSourceModal({ catalogue, onClose, onAdded, onError }: {
 
 export function CalendarSourcesPage() {
   const { user } = useAuth()
+  const { household } = useStacks()
   const canManage = user?.role === 'admin' || user?.role === 'manager'
   const [sources, setSources] = useState<CalendarSource[] | null>(null)
   const [catalogue, setCatalogue] = useState<CalendarSourceCatalogueEntry[]>([])
   const [error, setError] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
+  const regionLabel = household?.region || 'State & territory'
 
   const load = useCallback(() => api.getCalendarSources()
     .then(data => { setSources(data.sources); setCatalogue(data.catalogue) })
@@ -440,6 +447,7 @@ export function CalendarSourcesPage() {
                 key={source.id}
                 source={source}
                 canManage={canManage}
+                regionLabel={regionLabel}
                 onChange={replace}
                 onRemove={id => setSources(current => current?.filter(row => row.id !== id) ?? current)}
                 onError={setError}

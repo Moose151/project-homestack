@@ -6,7 +6,7 @@ do with HomeStack.
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
@@ -504,7 +504,7 @@ class IcsSyncTests(TestCase):
         good = CalendarSource.objects.create(
             household=get_active_household(), created_by=self.admin, updated_by=self.admin,
             name="Holidays", kind="holidays", provider="au_holidays",
-            settings_json={"include_national": True},
+            settings_json={"include_regional": True},
         )
         with patch("apps.scheduling.sources.feeds.fetch_calendar",
                    side_effect=CalendarFetchError("down")):
@@ -702,16 +702,81 @@ class SchoolCalendarTests(TestCase):
         self.assertEqual(len(terms), 4)
         self.assertTrue(all(row["is_range"] for row in terms))
 
-    def test_holidays_fill_the_gaps_between_terms(self):
-        entries = au_school.build_events(self._source(), household=self.household, years=(2026,))
-        breaks = [row for row in entries if row["summary"] == "School holidays"]
-        september = next(row for row in breaks if row["start_date"] == date(2026, 9, 19))
-        self.assertEqual(september["end_date"], date(2026, 10, 5))
+    def test_queensland_holidays_match_the_published_vacation_ranges(self):
+        self.assertEqual(
+            [(v.start, v.end) for v in au_school.holidays_for("qld_state", 2026)],
+            [
+                (date(2026, 4, 3), date(2026, 4, 19)),
+                (date(2026, 6, 27), date(2026, 7, 12)),
+                (date(2026, 9, 19), date(2026, 10, 5)),
+                (date(2026, 12, 12), date(2027, 1, 26)),
+            ],
+        )
 
-    def test_the_summer_break_is_only_produced_when_the_next_year_is_published(self):
-        entries = au_school.build_events(self._source(), household=self.household, years=(2027,))
-        breaks = [row for row in entries if row["summary"] == "School holidays"]
-        self.assertTrue(all(row["end_date"].year == 2027 for row in breaks))
+    def test_nsw_autumn_break_is_the_published_range_not_the_term_gap(self):
+        """The regression this correction exists for.
+
+        NSW Eastern 2026: Term 1 ends 2 April, students return 22 April, but the *published*
+        autumn vacation is 7-17 April — development days on 20-21 April sit inside the gap.
+        Deriving the break from the gap produced 3-21 April and told a family the holidays ran
+        two and a half weeks longer than they do.
+        """
+        autumn = next(v for v in au_school.holidays_for("nsw_state_eastern", 2026)
+                      if v.start.month == 4)
+        self.assertEqual((autumn.start, autumn.end), (date(2026, 4, 7), date(2026, 4, 17)))
+
+        term1, term2 = au_school.terms_for("nsw_state_eastern", 2026)[:2]
+        gap_start = term1.end + timedelta(days=1)
+        gap_end = term2.start - timedelta(days=1)
+        self.assertEqual((gap_start, gap_end), (date(2026, 4, 3), date(2026, 4, 21)))
+        # The published range must not be the gap.
+        self.assertNotEqual((autumn.start, autumn.end), (gap_start, gap_end))
+
+    def test_development_days_are_not_labelled_as_school_holidays(self):
+        """20-21 April 2026 are staff days: neither school holidays nor term time."""
+        entries = au_school.build_events(
+            self._source(system="nsw_state_eastern"), household=self.household, years=(2026,),
+        )
+        breaks = [row for row in entries if "holidays" in row["summary"].lower()]
+        for day in (date(2026, 4, 18), date(2026, 4, 20), date(2026, 4, 21)):
+            covering = [row for row in breaks if row["start_date"] <= day <= row["end_date"]]
+            self.assertEqual(covering, [], f"{day} must not be inside a school-holiday range")
+        # ...while a day genuinely inside the published vacation is covered.
+        inside = date(2026, 4, 10)
+        self.assertTrue([row for row in breaks if row["start_date"] <= inside <= row["end_date"]])
+
+    def test_nsw_summer_break_differs_by_division(self):
+        """Published even though NSW 2027 term dates are not shipped."""
+        eastern = au_school.holidays_for("nsw_state_eastern", 2026)[-1]
+        western = au_school.holidays_for("nsw_state_western", 2026)[-1]
+        self.assertEqual((eastern.start, eastern.end), (date(2026, 12, 18), date(2027, 1, 27)))
+        self.assertEqual((western.start, western.end), (date(2026, 12, 18), date(2027, 2, 3)))
+
+    def test_nsw_divisions_share_every_other_vacation(self):
+        eastern = [(v.start, v.end) for v in au_school.holidays_for("nsw_state_eastern", 2026)[:3]]
+        western = [(v.start, v.end) for v in au_school.holidays_for("nsw_state_western", 2026)[:3]]
+        self.assertEqual(eastern, western)
+
+    def test_holidays_are_never_inferred_from_term_gaps(self):
+        """Every emitted range must exist in the published table, for every shipped system."""
+        for system in au_school.SCHOOL_SYSTEMS:
+            for year in (2026, 2027):
+                published = {(v.start, v.end) for v in au_school.holidays_for(system, year)}
+                entries = au_school.build_events(
+                    self._source(system=system), household=self.household, years=(year,),
+                )
+                emitted = {
+                    (row["start_date"], row["end_date"])
+                    for row in entries if "holidays" in row["summary"].lower()
+                }
+                self.assertEqual(emitted, published, f"{system} {year}")
+
+    def test_a_year_with_holidays_but_no_terms_still_produces_them(self):
+        # NSW ships 2026 vacations (including the summer range into 2027) but no 2027 terms.
+        entries = au_school.build_events(
+            self._source(system="nsw_state_eastern"), household=self.household, years=(2027,),
+        )
+        self.assertEqual(entries, [])
 
     def test_terms_and_holidays_toggle_independently(self):
         no_terms = au_school.build_events(
@@ -754,7 +819,7 @@ class HolidaySourceSyncTests(TestCase):
         self.household = household
 
     def _source(self, **settings):
-        base = {"include_national": True, "include_regional": True, "include_local": True}
+        base = {"include_regional": True, "include_local": True}
         base.update(settings)
         return CalendarSource.objects.create(
             household=self.household, created_by=self.admin, updated_by=self.admin,
@@ -1169,6 +1234,59 @@ class DisabledSourceSearchTests(TestCase):
         self.assertIn("Broncos party", self._search())
 
 
+class HolidaySettingsTests(TestCase):
+    """The national switch never did anything, so it is gone rather than left to mislead."""
+
+    def setUp(self):
+        self.admin = _make_user()
+        self.client.force_login(self.admin)
+
+    def test_validated_settings_no_longer_carry_a_national_switch(self):
+        from apps.scheduling.sources import registry
+
+        cleaned = registry.validate_settings("holidays", "au_holidays", {})
+        self.assertEqual(set(cleaned), {"include_regional", "include_local"})
+
+    def test_a_saved_settings_object_carrying_the_old_key_still_works(self):
+        """Backwards compatibility: an existing source must not need a migration."""
+        from apps.scheduling.sources import registry
+
+        cleaned = registry.validate_settings(
+            "holidays", "au_holidays",
+            {"include_national": True, "include_regional": False, "include_local": True},
+        )
+        self.assertNotIn("include_national", cleaned)
+        self.assertFalse(cleaned["include_regional"])
+        self.assertTrue(cleaned["include_local"])
+
+    def test_creating_a_source_with_the_old_key_is_accepted_and_dropped(self):
+        response = self.client.post(
+            reverse("calendar-source-list"),
+            {
+                "kind": "holidays", "provider": "au_holidays",
+                "settings_json": {"include_national": True, "include_local": False},
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201, response.json())
+        self.assertNotIn("include_national", response.json()["settings_json"])
+        self.assertFalse(response.json()["settings_json"]["include_local"])
+
+    def test_an_existing_source_with_the_old_key_still_syncs(self):
+        household = get_active_household()
+        household.region, household.timezone = "QLD", "Australia/Brisbane"
+        household.save()
+        source = CalendarSource.objects.create(
+            household=household, created_by=self.admin, updated_by=self.admin,
+            name="Queensland public holidays", kind="holidays", provider="au_holidays",
+            settings_json={"include_national": True},
+        )
+        sync_source(source, household=household)
+        source.refresh_from_db()
+        self.assertEqual(source.sync_status, CalendarSource.Status.OK)
+        self.assertTrue(CalendarEvent.objects.filter(calendar_source=source).exists())
+
+
 class PartDayHolidayTests(TestCase):
     """A part-day holiday must be stored as a timed, timezone-aware entry."""
 
@@ -1190,6 +1308,28 @@ class PartDayHolidayTests(TestCase):
                                         start_at__year=2026)
         self.assertFalse(eve.is_all_day)
         self.assertEqual(eve.start_at.astimezone(BRISBANE).hour, 18)
+
+    def test_christmas_eve_runs_to_midnight_on_the_25th(self):
+        """Queensland publishes "6pm to midnight". Midnight is 00:00 on the 25th, not 23:59."""
+        sync_source(self.source, household=self.household)
+        eve = CalendarEvent.objects.get(title="Christmas Eve (from 6pm)", start_at__year=2026)
+        local_start = eve.start_at.astimezone(BRISBANE)
+        local_end = eve.end_at.astimezone(BRISBANE)
+
+        self.assertEqual((local_start.date(), local_start.hour, local_start.minute),
+                         (date(2026, 12, 24), 18, 0))
+        self.assertEqual((local_end.date(), local_end.hour, local_end.minute),
+                         (date(2026, 12, 25), 0, 0))
+        # Exactly six hours, which is what "6pm to midnight" means.
+        self.assertEqual((eve.end_at - eve.start_at).total_seconds(), 6 * 3600)
+
+    def test_the_part_day_interval_is_the_same_in_every_shipped_year(self):
+        for year in (2026, 2027):
+            eve = next(h for h in au_holidays.holidays_for(year=year, state="QLD")
+                       if h.is_part_day)
+            self.assertEqual(eve.starts_at.hour, 18)
+            self.assertEqual(eve.ends_at, time(0, 0))
+            self.assertTrue(eve.ends_next_day)
 
     def test_stored_times_are_timezone_aware(self):
         """A naive datetime reaching the ORM is a real bug, not a warning to live with."""

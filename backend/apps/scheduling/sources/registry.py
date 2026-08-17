@@ -26,9 +26,13 @@ def _validate_holidays(settings: dict) -> dict:
 
     The jurisdiction itself comes from the household's configured location, not from settings —
     a source must not be able to claim a different state than the household is in.
+
+    ``include_national`` is deliberately absent. It never had any effect (Australia has no
+    separate national holiday list — see au_holidays) and a switch that does nothing is worse
+    than no switch. A saved settings object still carrying it is accepted and the key is simply
+    dropped, so an existing source keeps working without a migration.
     """
     return {
-        "include_national": _bool(settings.get("include_national"), True),
         "include_regional": _bool(settings.get("include_regional"), True),
         "include_local": _bool(settings.get("include_local"), True),
     }

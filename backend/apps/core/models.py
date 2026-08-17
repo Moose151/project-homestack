@@ -33,10 +33,15 @@ class Household(models.Model):
     # Stored as opaque codes rather than free text so a provider can key off them: ISO-3166-1
     # alpha-2 for country, the jurisdiction's own subdivision code for region ("QLD"), and a
     # provider-scoped slug for the local area ("brisbane").
-    country = models.CharField(max_length=2, blank=True, default="")
-    region = models.CharField(max_length=16, blank=True, default="")
-    locality = models.CharField(max_length=64, blank=True, default="")
-    postcode = models.CharField(max_length=16, blank=True, default="")
+    #
+    # db_default as well as default: a historical model built from an older migration state
+    # (apps/solace/tests/test_subscription_migration.py does exactly this) does not know these
+    # columns exist, so an insert that omits them must still satisfy NOT NULL. A Python-side
+    # default alone cannot do that — the database needs its own.
+    country = models.CharField(max_length=2, blank=True, default="", db_default="")
+    region = models.CharField(max_length=16, blank=True, default="", db_default="")
+    locality = models.CharField(max_length=64, blank=True, default="", db_default="")
+    postcode = models.CharField(max_length=16, blank=True, default="", db_default="")
     # Accent colour for household-wide ("whole family") calendar events/tasks.
     family_colour = models.CharField(max_length=20, blank=True, default="#7C6F5A")
     # Household-level Calendar defaults (Core Calendar §15). A user's own saved prefs win;

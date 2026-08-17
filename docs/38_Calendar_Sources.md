@@ -98,8 +98,14 @@ holiday list in Australia.** Each state and territory declares its own, and they
 - *which days exist* — Easter Sunday is a public holiday in some jurisdictions, not others;
 - *substitution* — Queensland moves Anzac Day when 25 April is a Sunday but **not** a Saturday;
 - *naming* — Queensland gazettes "the day after Good Friday", not "Easter Saturday";
-- *part-days* — Queensland's Christmas Eve holiday runs 6pm–midnight and is stored as a timed
-  entry, because saying the whole day is a holiday would be untrue.
+- *part-days* — Queensland's Christmas Eve holiday runs 6pm to midnight and is stored as a
+  timed entry (`24 Dec 18:00` → `25 Dec 00:00`), because saying the whole day is a holiday would
+  be untrue, and 23:59 is not the published interval either.
+
+There is deliberately **no "national holidays" switch**. It could only ever be a no-op, and a
+control that does nothing is worse than no control. The levels are the jurisdiction's own
+holidays and local/show holidays. A settings object saved before its removal is still accepted;
+the key is simply dropped, so no migration is needed.
 
 ### Verified coverage
 
@@ -124,8 +130,17 @@ Student-free/pupil-free days are **not implemented**. The toggle exists but no p
 the dates, so it stays off and produces nothing rather than quietly meaning something else.
 
 Terms and breaks are single **ranges**; an event per day would bury eleven weeks of calendar.
-A break is derived from the gap between consecutive terms, and the summer break is only produced
-once the following year's Term 1 is published, so nothing runs off into an invented date.
+
+**Vacations are published data, not term gaps.** They are stored in `SCHOOL_HOLIDAYS`, parallel
+to `TERMS`, and neither is inferred from the other. Deriving a break from the gap between terms
+is wrong wherever staff days sit inside it: NSW's 2026 autumn vacation is 7–17 April, while the
+gap between Term 1 (ends 2 April) and Term 2 (students return 22 April) is 3–21 April — the
+development days on 20–21 April are neither term time nor school holidays. The derived version
+would have overstated that break by two and a half weeks.
+
+NSW's summer vacation ranges into 2027 are shipped even though NSW 2027 *term* dates are not,
+because the ranges themselves are published and a summer break truncated at 31 December would be
+worse than useless.
 
 **Refreshing a future year is a data change in these modules, not a code change.** Re-running a
 year updates its entries rather than appending duplicates, because the UID embeds jurisdiction,
@@ -273,6 +288,7 @@ Enforced in the API, not by hiding buttons.
 | no local show day | `locality` unset, or it belongs to a different `region` |
 | school dates absent | that system/year is not in `TERMS` yet (§4 lists what is verified) |
 | NSW dates a week out | the wrong division is selected — Eastern and Western start differently |
+| a school break looks too long | should not happen: breaks come from `SCHOOL_HOLIDAYS`, never from term gaps |
 | nothing refreshes | the cron entry is missing; check `last_sync_at`/`sync_error` |
 
 ---

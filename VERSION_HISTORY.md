@@ -35,6 +35,16 @@
   the NSW term start, which would have sent families to school a week early. Queensland 2027 is
   included. Victoria has been withdrawn until its dates are verified, and student-free days stay
   off because no verified data exists for them yet.
+- **School holidays now come from each department's published vacation dates** rather than being
+  worked out from the gap between terms. The calculated version was wrong wherever staff days
+  fall between terms — it would have shown the NSW autumn 2026 break as two and a half weeks
+  longer than it is. NSW summer holidays into 2027 are included for both divisions.
+- Removed the "National public holidays" switch, which had no effect: Australia has no separate
+  national holiday list, so those days already appear in each state's own list.
+- Queensland's Christmas Eve part-day holiday now ends at midnight exactly, matching the
+  published 6pm-to-midnight interval.
+- Household location fields now carry a database default, so an installation upgrading through
+  older migration states cannot hit a not-null error.
 
 ### 0.39.0 — 2026-08-17 — Calendar Sources, tab ordering and navigation customisation
 - **Fixed a production bug**: the Dashboard's "Due before next payday" card stayed locked

@@ -45,17 +45,21 @@ class Holiday:
     day: date
     scope: str
     jurisdiction: str
-    # Queensland's Christmas Eve holiday runs 6pm–midnight. Representing it as all-day would
-    # tell the household the whole day is a holiday, which is simply untrue.
+    # Queensland's Christmas Eve holiday runs 6pm to midnight. Representing it as all-day would
+    # tell the household the whole day is a holiday, which is simply untrue — and ending it at
+    # 23:59 would not be the published interval either. Midnight belongs to the *next* day, so
+    # the end is carried explicitly rather than clamped backwards.
     starts_at: time | None = None
     ends_at: time | None = None
+    ends_next_day: bool = False
 
     @property
     def is_part_day(self) -> bool:
         return self.starts_at is not None
 
 
-_PART_EVENING = (time(18, 0), time(23, 59))
+# 6pm on the day, through to midnight — which is 00:00 on the following day.
+_PART_EVENING = (time(18, 0), time(0, 0), True)
 
 # --- Queensland -----------------------------------------------------------------------------
 # State-wide holidays. Substitute days appear as their own entries exactly as gazetted, rather
@@ -136,13 +140,13 @@ def is_supported_region(region: str) -> bool:
 
 
 def holidays_for(*, year: int, state: str = "", locality: str = "",
-                 include_national: bool = True, include_regional: bool = True,
-                 include_local: bool = True) -> list[Holiday]:
+                 include_regional: bool = True, include_local: bool = True) -> list[Holiday]:
     """Every published holiday that applies to one jurisdiction in one year.
 
-    ``include_national`` is accepted for API compatibility but selects nothing on its own: in
-    Australia there is no separate national list to include — the days people think of as
-    national (Christmas, Anzac Day) are declared by each state, and are already in its list.
+    There is no "national" level to include. The days people think of as national — Christmas,
+    Anzac Day — are declared by each state and are already in its list, so a national switch
+    could only ever be a no-op. It used to exist and is gone; see the registry for how a saved
+    settings object carrying it is handled.
     """
     region = (state or "").upper()
     locality = (locality or "").lower()
@@ -179,7 +183,6 @@ def build_events(source, *, household, years: tuple[int, ...] = ()) -> list[dict
             year=year,
             state=state,
             locality=locality,
-            include_national=settings.get("include_national", True),
             include_regional=settings.get("include_regional", True),
             include_local=settings.get("include_local", True),
         ):
@@ -196,8 +199,10 @@ def build_events(source, *, household, years: tuple[int, ...] = ()) -> list[dict
             }
             if holiday.is_part_day:
                 # A part-day holiday is a timed entry, because it genuinely is one.
+                from datetime import timedelta
+                end_day = holiday.day + timedelta(days=1) if holiday.ends_next_day else holiday.day
                 entry["start_at"] = datetime.combine(holiday.day, holiday.starts_at)
-                entry["end_at"] = datetime.combine(holiday.day, holiday.ends_at)
+                entry["end_at"] = datetime.combine(end_day, holiday.ends_at)
                 entry["all_day"] = False
             else:
                 entry["start_date"] = holiday.day

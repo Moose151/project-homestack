@@ -1,6 +1,6 @@
 {
   "current_version": "0.39.1",
-  "source_sha256": "11a535db695bb5b36a1cf1690e3278b97aa19c35ee01fccf61f3e926fb8c0670",
+  "source_sha256": "82971a518aa9ca77b48bfbee99a1774637b0971f90aa7f9a82161b4ea3047c97",
   "releases": [
     {
       "version": "0.39.1",
@@ -12,7 +12,11 @@
         "Subscription links are now treated as secrets. Many carry a private token that grants access to that calendar, so the full link is never sent back to the browser or written into an error message — only the site it comes from is shown. Replacing a link still works normally.",
         "Disabling a calendar now also removes its entries from search, not just the calendar view.",
         "**Public holidays are now Queensland only, and every date has been checked against the Queensland Government's published lists for 2026 and 2027.** The previous version applied one invented \"national\" list to every state, which produced holidays that do not exist in some places and missed substitute days in others. Rather than ship dates we could not verify for the remaining states, those are no longer offered — they will return as their published dates are checked in. Christmas Eve now correctly appears as an evening part-day holiday, and local show holidays match the published show list (Townsville's 2026 show day was wrong).",
-        "**School terms now use student return dates, and NSW is split into its Eastern and Western divisions**, which start a week apart. The previous version used a staff development day as the NSW term start, which would have sent families to school a week early. Queensland 2027 is included. Victoria has been withdrawn until its dates are verified, and student-free days stay off because no verified data exists for them yet."
+        "**School terms now use student return dates, and NSW is split into its Eastern and Western divisions**, which start a week apart. The previous version used a staff development day as the NSW term start, which would have sent families to school a week early. Queensland 2027 is included. Victoria has been withdrawn until its dates are verified, and student-free days stay off because no verified data exists for them yet.",
+        "**School holidays now come from each department's published vacation dates** rather than being worked out from the gap between terms. The calculated version was wrong wherever staff days fall between terms — it would have shown the NSW autumn 2026 break as two and a half weeks longer than it is. NSW summer holidays into 2027 are included for both divisions.",
+        "Removed the \"National public holidays\" switch, which had no effect: Australia has no separate national holiday list, so those days already appear in each state's own list.",
+        "Queensland's Christmas Eve part-day holiday now ends at midnight exactly, matching the published 6pm-to-midnight interval.",
+        "Household location fields now carry a database default, so an installation upgrading through older migration states cannot hit a not-null error."
       ]
     },
     {
