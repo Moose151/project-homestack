@@ -4,6 +4,7 @@ import type { HubWidgetConfig } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { Field, Input } from '../../../components/Field'
+import { TimePicker } from '../../../components/TimePicker'
 import { STACK_BY_KEY } from '../../../config/stacks'
 
 const SIZES = [
@@ -292,7 +293,7 @@ export function HubConfig({ isAdmin, onChanged }: { isAdmin: boolean; onChanged:
                 <Input type="date" value={countdownDate} onChange={event => setCountdownDate(event.target.value)} />
               </Field>
               <Field label="Target time" hint="Defaults to noon.">
-                <Input type="time" value={countdownTime} onChange={event => setCountdownTime(event.target.value)} />
+                <TimePicker value={countdownTime} onChange={setCountdownTime} ariaLabel="Target time" />
               </Field>
               <Button
                 size="sm"

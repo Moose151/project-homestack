@@ -15,6 +15,7 @@ import { DeleteAction, EditAction, RowActions } from '../../../components/RowAct
 import { ColourPicker } from '../../../components/ColourPicker'
 import { Tabs } from '../../../components/Tabs'
 import { confirmDialog } from '../../../components/Dialogs'
+import { TimePicker } from '../../../components/TimePicker'
 
 const errMsg = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong.'
 const money = (value: string | null, currency = 'AUD') => value == null ? '—' : Number(value).toLocaleString(undefined, { style: 'currency', currency })
@@ -171,7 +172,7 @@ function ItineraryForm({ trip, existing, onCancel, onSaved, onError }: {
         {days.map(day => <option key={day.date} value={day.date}>{day.label}</option>)}
       </Select>
     </Field>
-    <Field label="Time (optional)"><Input type="time" value={f.scheduled_time} onChange={e => set('scheduled_time', e.target.value)} disabled={!f.scheduled_date} /></Field>
+    <Field label="Time (optional)"><TimePicker value={f.scheduled_time} onChange={value => set('scheduled_time', value)} disabled={!f.scheduled_date} ariaLabel="Itinerary time" /></Field>
     <Field label="Location"><Input value={f.location} onChange={e => set('location', e.target.value)} /></Field>
     <Field label="Notes" className="sm:col-span-2"><Textarea value={f.notes} onChange={e => set('notes', e.target.value)} rows={2} /></Field>
   </form></Modal>
