@@ -627,7 +627,7 @@ function SolaceBillsWidget({ items, meta }: { items: SolaceBillOccurrence[]; met
   if (meta?.locked) {
     return (
       <div className="space-y-3">
-        <p className="text-sm text-muted">Open Money once to unlock your protected payday and bill summary.</p>
+        <p className="text-sm text-muted">Unlock Money to view your payday and bill summary.</p>
         <Link to="/solace" className="inline-flex min-h-11 items-center text-sm font-bold text-primary hover:underline">Open Money →</Link>
       </div>
     )

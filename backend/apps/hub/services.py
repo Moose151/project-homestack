@@ -35,15 +35,32 @@ UPCOMING_DUE_RECORD_TYPES = frozenset({
 })
 
 
-def get_hub_widgets(user, *, kiosk_mode: bool = False, sensitive_unlocked: bool = False) -> list[dict]:
+def get_hub_widgets(
+    user,
+    *,
+    kiosk_mode: bool = False,
+    sensitive_unlocked: bool = False,
+    solace_unlocked: bool | None = None,
+) -> list[dict]:
     """Return assembled hub widget content for the authenticated user.
 
     kiosk_mode=True restricts to widgets where supports_kiosk=True.
+
+    ``sensitive_unlocked`` is the *session* answer — has this reader re-authenticated — and
+    gates the cross-node sensitivity filter on Upcoming, which hides financial, health,
+    document and private entries alike. ``solace_unlocked`` is the *per-node* answer for Money
+    specifically (see apps.nodes.access.node_requires_reauth) and gates only Money's own
+    widgets and pay-cycle figures. They are separate because a household that switched Money's
+    re-authentication prompt off has said nothing at all about Health or private documents;
+    collapsing them into one flag would leak the rest. Defaults to the session answer so any
+    caller that has not been taught the distinction keeps the stricter behaviour.
 
     A widget with nothing to show is dropped from the response rather than rendered as an
     empty card, so the Hub only carries things that actually need attention. Ambient
     widgets opt out of that with ``HubWidget.always_visible``.
     """
+    if solace_unlocked is None:
+        solace_unlocked = sensitive_unlocked
     from apps.atlas.selectors import list_open_items, list_reminders
     from apps.atlas.serializers import AtlasListItemSerializer, AtlasReminderSerializer
 
@@ -136,7 +153,7 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False, sensitive_unlocked: bool 
 
         elif key == "upcoming":
             content, meta = _upcoming_widget_content(
-                user, sensitive_unlocked=sensitive_unlocked
+                user, sensitive_unlocked=sensitive_unlocked, solace_unlocked=solace_unlocked,
             )
 
         elif key.startswith("meridian_"):
@@ -155,14 +172,14 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False, sensitive_unlocked: bool 
             content = _homestead_widget_content(key, user)
 
         elif key == "solace_bills_due":
-            if sensitive_unlocked:
+            if solace_unlocked:
                 content, meta = _solace_bills_due_widget(user)
             else:
                 content = []
                 meta = {"locked": True, "configured": None}
 
         elif key.startswith("solace_"):
-            content = _solace_widget_content(key, user) if sensitive_unlocked else []
+            content = _solace_widget_content(key, user) if solace_unlocked else []
 
         elif key.startswith("fitness_"):
             content = _fitness_widget_content(key, user)
@@ -185,7 +202,9 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False, sensitive_unlocked: bool 
     return widgets
 
 
-def _upcoming_widget_content(user, *, sensitive_unlocked: bool) -> tuple[list, dict]:
+def _upcoming_widget_content(
+    user, *, sensitive_unlocked: bool, solace_unlocked: bool | None = None,
+) -> tuple[list, dict]:
     """One card for everything dated, instead of a permanent card per node.
 
     The Calendar already owns every dated household record (D7) — nodes sync into it via
@@ -216,14 +235,19 @@ def _upcoming_widget_content(user, *, sensitive_unlocked: bool) -> tuple[list, d
     ]
 
     meta = {
-        "horizons": _upcoming_horizons(user, today, sensitive_unlocked=sensitive_unlocked),
+        # The "this pay cycle" horizon is Money's own figure, so it follows Money's lock, not
+        # the cross-node sensitivity filter above.
+        "horizons": _upcoming_horizons(
+            user, today,
+            solace_unlocked=sensitive_unlocked if solace_unlocked is None else solace_unlocked,
+        ),
         "default_horizon": "week",
         "window_days": UPCOMING_MAX_DAYS,
     }
     return CalendarEventSerializer(relevant, many=True).data, meta
 
 
-def _upcoming_horizons(user, today, *, sensitive_unlocked: bool) -> list[dict]:
+def _upcoming_horizons(user, today, *, solace_unlocked: bool) -> list[dict]:
     """Selectable ranges for the Upcoming widget, narrowest first.
 
     Labels state the actual window rather than "this week"/"this month" so a Friday reader
@@ -232,7 +256,7 @@ def _upcoming_horizons(user, today, *, sensitive_unlocked: bool) -> list[dict]:
     horizons = [
         {"key": "week", "label": "Next 7 days", "until": (today + timedelta(days=7)).isoformat()},
     ]
-    cycle_end = _pay_cycle_end(user) if sensitive_unlocked else None
+    cycle_end = _pay_cycle_end(user) if solace_unlocked else None
     if cycle_end and cycle_end > today:
         horizons.append(
             {"key": "cycle", "label": "This pay cycle", "until": cycle_end.isoformat()}

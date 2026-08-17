@@ -348,6 +348,24 @@ class UpcomingWidgetTests(TestCase):
         titles = [i["title"] for i in (self._upcoming() or {"items": []})["items"]]
         self.assertNotIn("Electricity", titles)
 
+    def test_kiosk_hub_locks_money_even_when_the_household_lock_is_off(self):
+        from apps.nodes.models import HouseholdNode
+        from apps.nodes.services import enable_node
+        from apps.solace.services import create_bill
+
+        enable_node(self.admin, "solace")
+        grant_user_permission(self.admin, "solace.view")
+        HouseholdNode.objects.filter(node__key="solace").update(requires_reauthentication=False)
+        create_bill(self.admin, name="Electricity", amount="120.00", due_at=_future(48))
+
+        widget = next(
+            (w for w in self.client.get(reverse("kiosk-hub")).json()["widgets"]
+             if w["key"] == "solace_bills_due"),
+            None,
+        )
+        # A kiosk is a shared screen: the node lock being off does not make it a private one.
+        self.assertTrue(widget is None or widget["meta"].get("locked"))
+
     def test_kiosk_hub_returns_kiosk_safe_widgets_only(self):
         resp = self.client.get(reverse("kiosk-hub"))
         for widget in resp.json()["widgets"]:
@@ -368,6 +386,106 @@ class UpcomingWidgetTests(TestCase):
     def test_notifications_summary_is_not_kiosk_safe(self):
         keys = [w["key"] for w in self.client.get(reverse("kiosk-hub")).json()["widgets"]]
         self.assertNotIn("notifications_summary", keys)
+
+
+class DashboardMoneyLockTests(TestCase):
+    """The Dashboard's Money widget must follow Money's own lock, not the session alone.
+
+    Production bug: HubView derived the widget's state purely from ``is_reauthed``, so a
+    household that had switched Money's re-authentication prompt off saw a permanently locked
+    "Due before next payday" card. Opening Money could never clear it, because nothing was
+    asking whether Money was locked in the first place.
+
+    The obvious fix — treating the whole Dashboard as unlocked when Money's lock is off — would
+    have been a security regression: the same flag hides financial, *health*, document and
+    private entries from Upcoming. Both halves are covered here.
+    """
+
+    def setUp(self):
+        self.admin = _make_user("admin", User.Role.ADMIN)
+        _login(self.client, "admin")
+        from apps.nodes.services import enable_node
+        enable_node(self.admin, "solace")
+        grant_user_permission(self.admin, "solace.view")
+        from apps.solace.services import create_bill
+        create_bill(self.admin, name="Electricity", amount="120.00", due_at=_future(48))
+
+    def _set_money_lock(self, required: bool):
+        from apps.nodes.models import HouseholdNode
+        HouseholdNode.objects.filter(node__key="solace").update(
+            requires_reauthentication=required,
+        )
+
+    def _money_widget(self):
+        return next(
+            (w for w in self.client.get(reverse("hub")).json()["widgets"]
+             if w["key"] == "solace_bills_due"),
+            None,
+        )
+
+    def _upcoming_titles(self):
+        widget = next(
+            (w for w in self.client.get(reverse("hub")).json()["widgets"] if w["key"] == "upcoming"),
+            None,
+        )
+        return [item["title"] for item in (widget or {"items": []})["items"]]
+
+    def test_lock_off_without_reauth_shows_the_money_widget(self):
+        self._set_money_lock(False)
+        widget = self._money_widget()
+        self.assertIsNotNone(widget)
+        self.assertFalse(widget["meta"]["locked"])
+
+    def test_lock_on_without_reauth_keeps_the_money_widget_locked(self):
+        self._set_money_lock(True)
+        widget = self._money_widget()
+        self.assertIsNotNone(widget)
+        self.assertTrue(widget["meta"]["locked"])
+
+    def test_lock_on_with_reauth_shows_the_money_widget(self):
+        self._set_money_lock(True)
+        _reauth(self.client)
+        widget = self._money_widget()
+        self.assertIsNotNone(widget)
+        self.assertFalse(widget["meta"]["locked"])
+
+    def test_money_lock_off_does_not_expose_health_entries(self):
+        """The security half of the fix.
+
+        Money's lock being off must unlock Money and nothing else — a health appointment is
+        still protected by the session-level sensitivity filter.
+        """
+        from apps.scheduling.services import create_event
+
+        self._set_money_lock(False)
+        create_event(
+            self.admin, title="Cardiology appointment", start_at=_future(48),
+            sensitivity="health",
+        )
+        titles = self._upcoming_titles()
+        self.assertNotIn("Cardiology appointment", titles)
+        # ...while Money itself is genuinely open.
+        self.assertFalse(self._money_widget()["meta"]["locked"])
+
+    def test_money_lock_off_does_not_expose_private_or_document_entries(self):
+        from apps.scheduling.services import create_event
+
+        self._set_money_lock(False)
+        create_event(self.admin, title="Passport renewal", start_at=_future(48), sensitivity="document")
+        create_event(self.admin, title="Therapy", start_at=_future(50), sensitivity="private")
+        titles = self._upcoming_titles()
+        self.assertNotIn("Passport renewal", titles)
+        self.assertNotIn("Therapy", titles)
+
+    def test_reauth_still_reveals_sensitive_entries(self):
+        from apps.scheduling.services import create_event
+
+        self._set_money_lock(False)
+        create_event(
+            self.admin, title="Cardiology appointment", start_at=_future(48), sensitivity="health",
+        )
+        _reauth(self.client)
+        self.assertIn("Cardiology appointment", self._upcoming_titles())
 
 
 class KioskUsersTests(TestCase):
