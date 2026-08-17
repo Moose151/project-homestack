@@ -18,6 +18,7 @@ from rest_framework.views import APIView
 
 from apps.accounts import services
 from apps.accounts.serializers import (
+    GuideDismissalSerializer,
     PasswordLoginSerializer,
     PinLoginSerializer,
     ReauthSerializer,
@@ -139,3 +140,27 @@ class ReauthView(APIView):
         if not ok:
             return Response({"detail": "Invalid password."}, status=status.HTTP_401_UNAUTHORIZED)
         return Response({"detail": "Re-authentication successful."})
+
+
+class GuideDismissalView(APIView):
+    """Self-service, versioned guide preferences for the current login."""
+
+    def get(self, request: Request) -> Response:
+        rows = request.user.guide_dismissals.all()
+        return Response([
+            {"guide_identifier": row.guide_identifier, "guide_version": row.guide_version}
+            for row in rows
+        ])
+
+    def post(self, request: Request) -> Response:
+        serializer = GuideDismissalSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        row = services.dismiss_guide(request.user, **serializer.validated_data)
+        return Response(
+            {"guide_identifier": row.guide_identifier, "guide_version": row.guide_version},
+            status=status.HTTP_201_CREATED,
+        )
+
+    def delete(self, request: Request) -> Response:
+        count = services.reset_guide_dismissals(request.user)
+        return Response({"removed": count})

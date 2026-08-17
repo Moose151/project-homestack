@@ -201,3 +201,50 @@ class ReauthTests(TestCase):
         request.session[REAUTH_SESSION_KEY] = True
 
         self.assertFalse(is_reauthed(request))
+
+
+class GuideDismissalTests(TestCase):
+    def setUp(self):
+        self.user = _make_user()
+        self.other = _make_user(username="bob", display_name="Bob")
+        self.url = reverse("guide-dismissals")
+
+    def test_dismissal_survives_a_new_login_session(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            self.url,
+            {"guide_identifier": "homestead", "guide_version": "1"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.client.logout()
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.get(self.url).json(), [
+            {"guide_identifier": "homestead", "guide_version": "1"},
+        ])
+
+    def test_dismissals_are_per_user_and_per_guide_version(self):
+        self.client.force_login(self.user)
+        for version in ("1", "2"):
+            self.client.post(
+                self.url,
+                {"guide_identifier": "atlas", "guide_version": version},
+                content_type="application/json",
+            )
+        self.assertEqual(len(self.client.get(self.url).json()), 2)
+        self.client.force_login(self.other)
+        self.assertEqual(self.client.get(self.url).json(), [])
+
+    def test_reset_removes_only_the_current_users_dismissals(self):
+        for user in (self.user, self.other):
+            self.client.force_login(user)
+            self.client.post(
+                self.url,
+                {"guide_identifier": "hub", "guide_version": "1"},
+                content_type="application/json",
+            )
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.delete(self.url).status_code, 200)
+        self.assertEqual(self.client.get(self.url).json(), [])
+        self.client.force_login(self.other)
+        self.assertEqual(len(self.client.get(self.url).json()), 1)

@@ -304,9 +304,9 @@ function RoomsTab({ onError, canEdit }: { onError: (m: string) => void; canEdit:
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
   const [saving, setSaving] = useState(false)
-  // docs/36 §6.9: phone defaults to the room list/tile view, with the floor plan as a
-  // deliberate full-screen spatial mode the user opts into — not the default everyday view.
-  const [roomView, setRoomView] = useState<'plan' | 'list'>(() => (isPhoneViewport() ? 'list' : 'plan'))
+  // The room directory is the everyday landing view on every device. The floor plan remains a
+  // deliberate spatial view rather than replacing the list on wider screens.
+  const [roomView, setRoomView] = useState<'plan' | 'list'>('list')
   const [form, setForm] = useState({
     name: '', area_type: 'interior' as RoomAreaType, description: '', icon: '',
   })
@@ -389,7 +389,7 @@ function RoomsTab({ onError, canEdit }: { onError: (m: string) => void; canEdit:
         </Button>
       ) : (
         <Tabs
-          tabs={[{ key: 'plan' as const, label: 'Floor plan' }, { key: 'list' as const, label: 'Room list', badge: data.rooms.length }]}
+          tabs={[{ key: 'list' as const, label: 'Room list', badge: data.rooms.length }, { key: 'plan' as const, label: 'Floor plan' }]}
           active={roomView}
           onChange={setRoomView}
           variant="secondary"

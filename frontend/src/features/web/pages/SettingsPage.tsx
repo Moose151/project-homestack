@@ -267,8 +267,9 @@ export function SettingsPage() {
           <button
             type="button"
             onClick={() => {
-              localStorage.removeItem(`hs-hidden-guides-${user?.id ?? 'guest'}`)
-              window.dispatchEvent(new CustomEvent('homestack-guide-preferences'))
+              api.resetGuideDismissals()
+                .then(() => window.dispatchEvent(new CustomEvent('homestack-guide-preferences')))
+                .catch(error => setError(errMsg(error)))
             }}
             className="text-xs font-bold text-primary hover:underline"
           >

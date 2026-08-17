@@ -116,3 +116,27 @@ def reauth_user(request: HttpRequest, password: str) -> bool:
         return False
     grant_reauth(request)
     return True
+
+
+def dismiss_guide(user: User, *, guide_identifier: str, guide_version: str = "1"):
+    from apps.accounts.models import GuideDismissal
+
+    dismissal, _ = GuideDismissal.objects.update_or_create(
+        user=user,
+        guide_identifier=guide_identifier,
+        guide_version=guide_version,
+        defaults={
+            "household": user.household,
+            "created_by": user,
+            "updated_by": user,
+            "deleted_at": None,
+        },
+    )
+    return dismissal
+
+
+def reset_guide_dismissals(user: User) -> int:
+    from apps.accounts.models import GuideDismissal
+
+    count, _ = GuideDismissal.objects.filter(user=user).delete()
+    return count

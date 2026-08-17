@@ -34,6 +34,8 @@ interface NavItem {
   colour: string
 }
 
+const GUIDE_VERSION = '1'
+
 const NAV_GROUPS: Array<{ key: NavItem['group']; label: string }> = [
   { key: 'start', label: 'Start here' },
   { key: 'organise', label: 'Plan & organise' },
@@ -446,14 +448,8 @@ export function AppShell() {
   const [customisingNav, setCustomisingNav] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [quickOpen, setQuickOpen] = useState(false)
-  const guideStorageKey = `hs-hidden-guides-${user?.id ?? 'guest'}`
   const mobileNavStorageKey = `hs-mobile-nav-${user?.id ?? 'guest'}`
-  const [hiddenGuides, setHiddenGuides] = useState<string[]>(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(`hs-hidden-guides-${user?.id ?? 'guest'}`) || '[]')
-      return Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string') : []
-    } catch { return [] }
-  })
+  const [hiddenGuides, setHiddenGuides] = useState<string[]>([])
   const [mobileKeys, setMobileKeys] = useState<string[]>(() => {
     try {
       // Read the former household-global preference once as a migration seed. After the stack
@@ -541,10 +537,9 @@ export function AppShell() {
     : null
 
   const hideContextualGuide = (key: string) => {
-    setHiddenGuides(previous => {
-      const next = Array.from(new Set([...previous, key]))
-      localStorage.setItem(guideStorageKey, JSON.stringify(next))
-      return next
+    setHiddenGuides(previous => Array.from(new Set([...previous, key])))
+    api.dismissGuide(key, GUIDE_VERSION).catch(() => {
+      setHiddenGuides(previous => previous.filter(identifier => identifier !== key))
     })
   }
 
@@ -586,15 +581,31 @@ export function AppShell() {
   }, [location.pathname, location.search])
 
   useEffect(() => {
-    const reload = () => {
+    if (!user) { setHiddenGuides([]); return }
+    const legacyKey = `hs-hidden-guides-${user.id}`
+    const reload = async () => {
       try {
-        const saved = JSON.parse(localStorage.getItem(guideStorageKey) || '[]')
-        setHiddenGuides(Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string') : [])
-      } catch { setHiddenGuides([]) }
+        const rows = await api.getGuideDismissals()
+        const serverKeys = rows
+          .filter(row => row.guide_version === GUIDE_VERSION)
+          .map(row => row.guide_identifier)
+        let legacyKeys: string[] = []
+        try {
+          const saved = JSON.parse(localStorage.getItem(legacyKey) || '[]')
+          legacyKeys = Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string') : []
+        } catch { legacyKeys = [] }
+        const missing = legacyKeys.filter(key => !serverKeys.includes(key))
+        if (missing.length) await Promise.all(missing.map(key => api.dismissGuide(key, GUIDE_VERSION)))
+        localStorage.removeItem(legacyKey)
+        setHiddenGuides(Array.from(new Set([...serverKeys, ...missing])))
+      } catch {
+        setHiddenGuides([])
+      }
     }
+    void reload()
     window.addEventListener('homestack-guide-preferences', reload)
     return () => window.removeEventListener('homestack-guide-preferences', reload)
-  }, [guideStorageKey])
+  }, [user])
 
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {

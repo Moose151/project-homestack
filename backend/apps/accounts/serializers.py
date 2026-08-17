@@ -24,6 +24,11 @@ class ReauthSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
 
+class GuideDismissalSerializer(serializers.Serializer):
+    guide_identifier = serializers.RegexField(r"^[a-z0-9][a-z0-9_.-]*$", max_length=100)
+    guide_version = serializers.CharField(max_length=50, default="1")
+
+
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User

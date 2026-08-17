@@ -133,3 +133,23 @@ class User(AbstractBaseUser, HouseholdBaseModel):
 
     def has_module_perms(self, app_label) -> bool:  # noqa: ANN001
         return self.is_active and self.role == self.Role.ADMIN
+
+
+class GuideDismissal(HouseholdBaseModel):
+    """A versioned page-guide dismissal belonging to one login."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="guide_dismissals")
+    guide_identifier = models.CharField(max_length=100)
+    guide_version = models.CharField(max_length=50, default="1")
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        ordering = ["guide_identifier", "guide_version"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "guide_identifier", "guide_version"],
+                name="unique_user_guide_version_dismissal",
+            )
+        ]
