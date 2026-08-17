@@ -114,6 +114,9 @@ Important newer/current specs:
 - `33_Node_Books.md` — shipped Books domain.
 - `34_Recommended_Next_Steps.md` — practical production-readiness/reliability plan.
 - `35_Production_Serving_and_Deployment.md` — how production is served, deployed and rolled back.
+- `36_Mobile_UX_Strategy_and_Implementation_Plan.md` — the phone experience contract.
+- `38_Calendar_Sources.md` — managed calendar sources: holiday/school providers, ICS
+  subscriptions and imports, sync semantics, the SSRF network boundary and the refresh cron.
 
 `VERSION_HISTORY.md` is the release chronology. Do not duplicate that history here.
 
@@ -423,6 +426,26 @@ curl -I https://homestack.moosesoftwares.com/api/v1/health/
 ```
 
 Before risky migrations/data changes, take or verify a backup according to `docs/restore.md`.
+
+---
+
+## 8b. Calendar Sources deployment requirement
+
+Subscribed and automatic calendars refresh from a cron entry, never from a page load. After
+deploying 0.39.0, add:
+
+```bash
+17 */3 * * * docker exec homestack-backend python manage.py calendar_sync_sources
+```
+
+Without it, subscribed calendars are only refreshed when someone presses **Sync now**. The
+command is idempotent and contains per-source failures, so a missed or overlapping run is safe.
+
+Calendar Sources reaches the public internet from the backend container — the first HomeStack
+feature that does. `docs/38_Calendar_Sources.md` §6 documents the SSRF boundary and its one
+known residual risk (a DNS-rebinding window between validation and connect).
+
+Household location (Settings → Household → Location) must be set for public holidays to appear.
 
 ---
 

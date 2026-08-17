@@ -1,11 +1,50 @@
 # HomeStack — Version History
 
-> **Current version: 0.38.0**
+> **Current version: 0.39.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
 >
 > **Rule:** bump the version and add a row here with every push to `main`.
+
+---
+
+## 0.39 — Calendars beyond HomeStack, and an interface you arrange
+
+### 0.39.0 — 2026-08-17 — Calendar Sources, tab ordering and navigation customisation
+- **Fixed a production bug**: the Dashboard's "Due before next payday" card stayed locked
+  forever for households that had switched Money's re-authentication prompt off. The Dashboard
+  asked only whether the session had re-authenticated, never whether Money was locked at all, so
+  opening Money could not clear it. The Dashboard now asks the per-node question for Money while
+  keeping the session-level question for everything else — turning Money's prompt off must not,
+  and does not, expose health, document or private entries on Upcoming.
+- Calendar now supports managed sources alongside your own events: automatic public holidays,
+  school terms and holidays, subscribed ICS/webcal calendars, and one-time .ics imports. Each
+  source has its own colour, its own filter layer on the calendar, and independent switches for
+  the calendar and for Dashboard Upcoming.
+- Australian public holidays follow the household's configured location — country, state and
+  local area, set in Settings. National, state and local/show holidays are distinguished and can
+  be switched on independently, so a Queensland household never sees a Victoria-only holiday.
+  Dates ship as published data with provenance rather than being guessed by an algorithm.
+- School terms and holidays are available per education system rather than per state, because
+  Catholic and independent schools often differ from the state system. Terms and breaks appear as
+  single ranges, not one entry per day.
+- Subscribed calendars stay up to date on a schedule and can be refreshed on demand. An entry is
+  matched by its identifier from the feed, so a fixture that moves, is renamed or changes venue
+  updates in place instead of duplicating; a cancelled one disappears. Entries that vanish from a
+  feed are removed only when they are still in the future, so history is never quietly erased.
+- Calendars fetched from the internet are treated as untrusted: only ordinary public web
+  addresses are allowed, redirects are re-checked at every step, and responses are capped in size
+  and time. A link pointing anywhere inside the home network is refused.
+- Subscribed calendars never send notifications unless you deliberately turn them on, and
+  holidays and fixtures are worded as events — never "due" or "overdue".
+- Tabs can now be reordered on every substantial tabbed page. The tab you put first becomes the
+  one that page opens on, while explicit links from the Dashboard, search and notifications still
+  go exactly where they point. Ordering is saved to your account, so it follows you between
+  devices, and reordering works with a finger, a mouse or a keyboard.
+- The two customisable shortcuts in the phone's bottom bar are now saved to your account instead
+  of one browser, so they follow you to a new phone. A shortcut for an area that later becomes
+  unavailable is replaced automatically rather than leaving a gap.
 
 ---
 

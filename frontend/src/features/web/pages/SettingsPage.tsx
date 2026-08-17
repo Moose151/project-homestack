@@ -148,11 +148,28 @@ export function SettingsPage() {
   // Household general
   const [householdName, setHouseholdName] = useState('')
   const [timezone, setTimezone] = useState('UTC')
+  // Household location drives which public holidays a Calendar Source produces. Configuration
+  // only — nothing here affects permissions.
+  const [country, setCountry] = useState('')
+  const [region, setRegion] = useState('')
+  const [locality, setLocality] = useState('')
   const [savingHousehold, setSavingHousehold] = useState(false)
   useEffect(() => {
-    if (household) { setHouseholdName(household.name); setTimezone(household.timezone || 'UTC') }
+    if (household) {
+      setHouseholdName(household.name)
+      setTimezone(household.timezone || 'UTC')
+      setCountry(household.country || '')
+      setRegion(household.region || '')
+      setLocality(household.locality || '')
+    }
   }, [household])
-  const householdDirty = !!household && (householdName !== household.name || timezone !== (household.timezone || 'UTC'))
+  const householdDirty = !!household && (
+    householdName !== household.name
+    || timezone !== (household.timezone || 'UTC')
+    || country !== (household.country || '')
+    || region !== (household.region || '')
+    || locality !== (household.locality || '')
+  )
 
   // Family colour
   const [familyColour, setFamilyColour] = useState('#7C6F5A')
@@ -182,7 +199,9 @@ export function SettingsPage() {
   const saveHousehold = async () => {
     setSavingHousehold(true); setError(null)
     try {
-      await api.updateHousehold({ name: householdName.trim() || household?.name, timezone })
+      await api.updateHousehold({
+        name: householdName.trim() || household?.name, timezone, country, region, locality,
+      })
       await refresh()
     } catch (e) { setError(errMsg(e)) } finally { setSavingHousehold(false) }
   }
@@ -253,6 +272,41 @@ export function SettingsPage() {
               <div className="text-xs text-muted-strong mb-1">Timezone</div>
               <input className={inputCls} list="tz-options" value={timezone} onChange={e => setTimezone(e.target.value)} placeholder="e.g. Australia/Sydney" />
               <datalist id="tz-options">{COMMON_TIMEZONES.map(tz => <option key={tz} value={tz} />)}</datalist>
+            </div>
+            <div className="border-t border-line pt-3">
+              <div className="text-xs font-semibold text-muted-strong">Location</div>
+              <p className="mt-0.5 text-xs text-muted">
+                Decides which public holidays your calendar shows. Nothing here affects who can see what.
+              </p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                <label>
+                  <span className="mb-1 block text-xs text-muted-strong">Country</span>
+                  <select className={inputCls} value={country} onChange={e => setCountry(e.target.value)}>
+                    <option value="">Not set</option>
+                    <option value="AU">Australia</option>
+                  </select>
+                </label>
+                <label>
+                  <span className="mb-1 block text-xs text-muted-strong">State / territory</span>
+                  <select className={inputCls} value={region} onChange={e => setRegion(e.target.value)} disabled={country !== 'AU'}>
+                    <option value="">Not set</option>
+                    {['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'].map(code => (
+                      <option key={code} value={code}>{code}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span className="mb-1 block text-xs text-muted-strong">Local area</span>
+                  <select className={inputCls} value={locality} onChange={e => setLocality(e.target.value)} disabled={region !== 'QLD'}>
+                    <option value="">Not set</option>
+                    <option value="brisbane">Brisbane</option>
+                    <option value="gold_coast">Gold Coast</option>
+                    <option value="toowoomba">Toowoomba</option>
+                    <option value="cairns">Cairns</option>
+                    <option value="townsville">Townsville</option>
+                  </select>
+                </label>
+              </div>
             </div>
             <Button onClick={saveHousehold} loading={savingHousehold} disabled={!householdDirty}>Save</Button>
           </div>

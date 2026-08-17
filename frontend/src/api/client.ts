@@ -3,7 +3,8 @@ import type {
   AssessmentNote, AtlasList, AtlasListItem, AtlasListSuggestion, AtlasNote, AtlasReminder, AtlasSearchResults,
   Backup, ClassRepeat,
   Attachment, AttachmentSensitivity, AttachmentVisibility, AuthUser, Badge, Book, BookClub, BookLinkPreview,
-  BookRating, BookShelfStatus, BooksUser, CalendarEvent, CalendarEventWrite, ClubBookEntry,
+  BookRating, BookShelfStatus, BooksUser, CalendarEvent, CalendarEventWrite, CalendarSource,
+  CalendarSourceCatalogueEntry, CalendarSourcePreview, ClubBookEntry,
   ClubQueueItem, CornerResponse, EducationAssessment, EducationClassSession, EducationCourse, EducationEvent,
   EducationInstitution, FitnessExercise, FitnessProgram, FitnessRecord, FitnessSession,
   FitnessSessionExercise, FitnessSessionSet, GlobalSearchResponse, GuideDismissal, HomesteadSearchResults,
@@ -550,6 +551,28 @@ export const api = {
     _fetch(`/atlas/reminders/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteReminder: (id: number): Promise<void> => _fetch(`/atlas/reminders/${id}/`, { method: 'DELETE' }),
 
+  // --- Calendar sources ---
+  getCalendarSources: (): Promise<{ sources: CalendarSource[]; catalogue: CalendarSourceCatalogueEntry[] }> =>
+    _fetch('/calendar/sources/'),
+  createCalendarSource: (data: Partial<{
+    kind: string; provider: string; name: string; url: string; colour: string; category: string
+    settings_json: Record<string, unknown>; show_on_calendar: boolean; show_in_upcoming: boolean
+    notifications_enabled: boolean; is_enabled: boolean; ics_text: string
+  }>): Promise<CalendarSource> =>
+    _fetch('/calendar/sources/', { method: 'POST', body: JSON.stringify(data) }),
+  updateCalendarSource: (id: number, data: Partial<{
+    name: string; colour: string; is_enabled: boolean; url: string
+    settings_json: Record<string, unknown>; show_on_calendar: boolean; show_in_upcoming: boolean
+    notifications_enabled: boolean
+  }>): Promise<CalendarSource> =>
+    _fetch(`/calendar/sources/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteCalendarSource: (id: number): Promise<void> =>
+    _fetch(`/calendar/sources/${id}/`, { method: 'DELETE' }),
+  syncCalendarSource: (id: number): Promise<CalendarSource & { result: Record<string, unknown> }> =>
+    _fetch(`/calendar/sources/${id}/sync/`, { method: 'POST' }),
+  previewCalendarSource: (data: { url?: string; ics_text?: string }): Promise<CalendarSourcePreview> =>
+    _fetch('/calendar/sources/preview/', { method: 'POST', body: JSON.stringify(data) }),
+
   // --- Calendar ---
   getEvents: (params?: { start?: string; end?: string; node?: string; person?: number; upcoming?: boolean; agenda?: boolean }): Promise<CalendarEvent[]> => {
     const q = new URLSearchParams()
@@ -865,7 +888,7 @@ export const api = {
 
   // --- Household ---
   getHousehold: (): Promise<Household> => cachedGet('/household/', 30_000),
-  updateHousehold: (data: Partial<{ name: string; family_colour: string; timezone: string; calendar_default_view: string; calendar_week_start: number; calendar_time_format: string }>): Promise<Household> =>
+  updateHousehold: (data: Partial<{ name: string; family_colour: string; timezone: string; country: string; region: string; locality: string; postcode: string; calendar_default_view: string; calendar_week_start: number; calendar_time_format: string }>): Promise<Household> =>
     _fetch<Household>('/household/', { method: 'PATCH', body: JSON.stringify(data) })
       .then(value => { clearSharedCache('/household/'); return value }),
 

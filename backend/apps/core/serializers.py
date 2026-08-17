@@ -5,6 +5,9 @@ from apps.core.models import Household
 from apps.people.models import Person
 
 
+# Where the household is, for Calendar Sources' jurisdiction lookup (docs/38). Configuration
+# only — never an input to permissions.
+_LOCATION_FIELDS = ("country", "region", "locality", "postcode")
 _CALENDAR_FIELDS = ["calendar_default_view", "calendar_week_start", "calendar_time_format"]
 
 
@@ -13,7 +16,7 @@ class HouseholdSerializer(serializers.ModelSerializer):
         model = Household
         fields = [
             "id", "name", "slug", "timezone", "default_locale", "family_colour",
-            *_CALENDAR_FIELDS, "created_at", "updated_at",
+            *_LOCATION_FIELDS, *_CALENDAR_FIELDS, "created_at", "updated_at",
         ]
         read_only_fields = fields
 
@@ -21,7 +24,10 @@ class HouseholdSerializer(serializers.ModelSerializer):
 class HouseholdWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Household
-        fields = ["name", "timezone", "default_locale", "family_colour", *_CALENDAR_FIELDS]
+        fields = [
+            "name", "timezone", "default_locale", "family_colour",
+            *_LOCATION_FIELDS, *_CALENDAR_FIELDS,
+        ]
 
 
 class AssigneeSerializerMixin(serializers.Serializer):

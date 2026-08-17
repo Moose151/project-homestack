@@ -290,8 +290,55 @@ export interface CalendarEvent {
   visibility: string
   sensitivity: string
   is_synced: boolean
+  /** Owned by a CalendarSource: read-only locally, since the next sync would overwrite edits. */
+  is_source_managed: boolean
+  calendar_source_id: number | null
+  calendar_source_name: string
+  calendar_source_category: string
+  is_range: boolean
   created_at: string
   updated_at: string
+}
+
+/** A managed origin of calendar entries (holidays, school terms, subscribed/imported feeds). */
+export interface CalendarSource {
+  id: number
+  name: string
+  kind: 'holidays' | 'school' | 'subscription' | 'import'
+  category: string
+  /** Human-readable type, from the backend registry — never an internal module name. */
+  type_label: string
+  is_enabled: boolean
+  colour: string
+  url: string
+  settings_json: Record<string, unknown>
+  show_on_calendar: boolean
+  show_in_upcoming: boolean
+  notifications_enabled: boolean
+  last_sync_at: string | null
+  last_success_at: string | null
+  sync_status: 'idle' | 'ok' | 'error'
+  sync_error: string
+  can_sync: boolean
+  event_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CalendarSourceCatalogueEntry {
+  kind: CalendarSource['kind']
+  provider: string
+  label: string
+  needs_url: boolean
+  category: string
+  colour: string
+}
+
+export interface CalendarSourcePreview {
+  event_count: number
+  future_count: number
+  past_count: number
+  sample: Array<{ title: string; start_at: string; all_day: boolean }>
 }
 
 export interface CalendarEventWrite {
@@ -2031,6 +2078,11 @@ export interface Household {
   name: string
   slug: string
   timezone: string
+  /** Calendar Sources jurisdiction. Configuration only — never used for permissions. */
+  country: string
+  region: string
+  locality: string
+  postcode: string
   default_locale: string
   family_colour: string
   calendar_default_view: 'month' | 'week' | 'day' | 'agenda'
