@@ -236,7 +236,7 @@ export function EventModal({
               Send a notification when it is time
             </label>
             <p className="text-xs text-muted">
-              Saved as a reminder in Atlas. It appears on the calendar and can be edited there.
+              Saved in Lists &amp; Notes and shown on your calendar. Open the reminder to edit it.
             </p>
           </div>
         ) : !showMore ? (
