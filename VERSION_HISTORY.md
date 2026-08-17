@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.39.1**
+> **Current version: 0.39.2**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,19 @@
 ---
 
 ## 0.39 — Calendars beyond HomeStack, and an interface you arrange
+
+### 0.39.2 — 2026-08-18 — Household location saves, and the Calendar toolbar reflows
+- **Fixed: the household location would not save.** Choosing a country, state and local area in
+  Settings and pressing Save appeared to work but reverted to "Not set". The request was
+  accepted and answered successfully while the values were quietly dropped before reaching the
+  database, so automatic public holidays could never be configured. The location now persists
+  and survives a reload, a fresh session and a server restart.
+- **Fixed: the Calendar toolbar collapsed at half-screen widths.** With the sidebar open on a
+  window around half a large monitor, the date, arrows, Today, Filter and the
+  Month/Week/Day/Agenda buttons were squeezed onto one row — the date could shrink to a few
+  pixels in Day view. The toolbar now measures the space it actually has and drops the view
+  buttons onto a second line when the first is full, instead of compressing everything. Wide
+  windows keep the single row exactly as before, and the phone layout is unchanged.
 
 ### 0.39.1 — 2026-08-17 — Calendar Sources correctness and hardening
 - Calendars fetched from the internet now connect to the exact address HomeStack checked. The

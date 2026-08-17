@@ -1036,26 +1036,36 @@ export function CalendarPage() {
         <PageHeader title="Calendar" icon="📅" actions={calendarActions} />
       </div>
 
-      {/* Period navigation stays generous; mobile uses one compact view picker. */}
-      <div className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-2.5 shadow-soft sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-1">
+      {/* Period navigation stays generous; mobile uses one compact view picker.
+          The desktop row wraps on the toolbar's own width rather than the viewport's. A `sm:`
+          breakpoint only knows the browser is wide — it cannot see that the sidebar has taken
+          ~256px, so at split-screen widths the single row was still applied and the controls
+          crushed each other (the period label collapsed to a few characters). Each group
+          instead declares a flex-basis it needs to stay comfortable; when both cannot fit, the
+          second group wraps onto its own line. At genuinely wide widths they share one row
+          exactly as before. */}
+      <div
+        data-calendar-toolbar
+        className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-2.5 shadow-soft sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3"
+      >
+        <div className="flex min-w-0 items-center gap-1 sm:flex-1 sm:basis-80">
           {/* Agenda always shows "today + 60 days" regardless of anchor, so Previous/Next/Today
               would look interactive but silently do nothing — hidden here rather than wired up
               to fake paging (docs/36 review). */}
           {view !== 'agenda' && (
             <>
               <button onClick={() => step(-1)} className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl text-xl text-muted-strong hover:bg-sunken" aria-label="Previous period">‹</button>
-              <span className="min-w-0 flex-1 truncate px-1 text-center text-sm font-extrabold text-ink sm:ml-1 sm:text-left">{periodLabel()}</span>
+              <span data-calendar-period-label className="min-w-0 flex-1 truncate px-1 text-center text-sm font-extrabold text-ink sm:ml-1 sm:text-left">{periodLabel()}</span>
               <button onClick={() => step(1)} className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl text-xl text-muted-strong hover:bg-sunken" aria-label="Next period">›</button>
               <button onClick={goToday} className="h-11 flex-shrink-0 rounded-xl px-2.5 text-xs font-bold text-primary hover:bg-primary-soft sm:px-3 sm:text-sm">Today</button>
             </>
           )}
           {view === 'agenda' && (
-            <span className="min-w-0 flex-1 truncate px-1 text-center text-sm font-extrabold text-ink sm:ml-1 sm:text-left">{periodLabel()}</span>
+            <span data-calendar-period-label className="min-w-0 flex-1 truncate px-1 text-center text-sm font-extrabold text-ink sm:ml-1 sm:text-left">{periodLabel()}</span>
           )}
         </div>
 
-        <div className="flex w-full items-center gap-2 sm:w-auto">
+        <div className="flex w-full items-center gap-2 sm:w-auto sm:flex-1 sm:basis-[21rem] sm:justify-end">
           <label className="relative min-w-0 flex-1 sm:hidden">
             <span className="sr-only">Calendar view</span>
             <select
@@ -1259,7 +1269,7 @@ export function CalendarPage() {
             </div>
             <p className="mt-2 px-1 text-[11px] text-muted">Tap a date for its details · swipe sideways to change month · <strong>S</strong> marks a changed rotation day.</p>
           </div>
-          <div className="hidden rounded-2xl border border-line overflow-hidden sm:block">
+          <div data-calendar-grid className="hidden rounded-2xl border border-line overflow-hidden sm:block">
             <div className="grid grid-cols-7 bg-sunken">
               {weekdayNames.map(d => <div key={d} className="px-2 py-1.5 text-xs font-semibold text-muted text-center">{d}</div>)}
             </div>

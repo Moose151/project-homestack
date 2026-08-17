@@ -1,7 +1,16 @@
 {
-  "current_version": "0.39.1",
-  "source_sha256": "82971a518aa9ca77b48bfbee99a1774637b0971f90aa7f9a82161b4ea3047c97",
+  "current_version": "0.39.2",
+  "source_sha256": "1b6fa78dd47546ab3a7760ffa4ee4dad5adbfb503d5fc1177f03b4998fcc4e6b",
   "releases": [
+    {
+      "version": "0.39.2",
+      "date": "2026-08-18",
+      "title": "Household location saves, and the Calendar toolbar reflows",
+      "changes": [
+        "**Fixed: the household location would not save.** Choosing a country, state and local area in Settings and pressing Save appeared to work but reverted to \"Not set\". The request was accepted and answered successfully while the values were quietly dropped before reaching the database, so automatic public holidays could never be configured. The location now persists and survives a reload, a fresh session and a server restart.",
+        "**Fixed: the Calendar toolbar collapsed at half-screen widths.** With the sidebar open on a window around half a large monitor, the date, arrows, Today, Filter and the Month/Week/Day/Agenda buttons were squeezed onto one row — the date could shrink to a few pixels in Day view. The toolbar now measures the space it actually has and drops the view buttons onto a second line when the first is full, instead of compressing everything. Wide windows keep the single row exactly as before, and the phone layout is unchanged."
+      ]
+    },
     {
       "version": "0.39.1",
       "date": "2026-08-17",
