@@ -268,7 +268,10 @@ class UserPreferenceTests(TestCase):
 
     def test_defaults_are_returned_when_nothing_is_saved(self):
         self.client.force_login(self.user)
-        self.assertEqual(self.client.get(self.url).json(), {"tab_order": {}, "mobile_nav": []})
+        self.assertEqual(
+            self.client.get(self.url).json(),
+            {"tab_order": {}, "mobile_nav": [], "sidebar_collapsed": False},
+        )
 
     def test_tab_order_persists_across_sessions(self):
         self.client.force_login(self.user)
@@ -365,6 +368,32 @@ class UserPreferenceTests(TestCase):
         self.client.force_login(self.user)
         self._patch({"mobile_nav": ["solace", "solace"]})
         self.assertEqual(self.client.get(self.url).json()["mobile_nav"], ["solace"])
+
+    def test_sidebar_collapse_persists_per_user(self):
+        """Desktop sidebar state lives here so it follows the person, not the browser."""
+        self.client.force_login(self.user)
+        self._patch({"sidebar_collapsed": True})
+        self.client.logout()
+        self.client.force_login(self.user)
+        self.assertTrue(self.client.get(self.url).json()["sidebar_collapsed"])
+
+    def test_sidebar_collapse_is_isolated_between_users(self):
+        self.client.force_login(self.user)
+        self._patch({"sidebar_collapsed": True})
+        self.client.force_login(self.other)
+        self.assertFalse(self.client.get(self.url).json()["sidebar_collapsed"])
+
+    def test_sidebar_collapse_can_be_switched_back_off(self):
+        self.client.force_login(self.user)
+        self._patch({"sidebar_collapsed": True})
+        self._patch({"sidebar_collapsed": False})
+        self.assertFalse(self.client.get(self.url).json()["sidebar_collapsed"])
+
+    def test_a_non_boolean_sidebar_value_falls_back_to_expanded(self):
+        """A presentation flag must never become a way to store arbitrary content."""
+        self.client.force_login(self.user)
+        self._patch({"sidebar_collapsed": "yes please"})
+        self.assertFalse(self.client.get(self.url).json()["sidebar_collapsed"])
 
     def test_preferences_require_authentication(self):
         self.assertEqual(self.client.get(self.url).status_code, 403)

@@ -1,11 +1,39 @@
 # HomeStack — Version History
 
-> **Current version: 0.39.2**
+> **Current version: 0.40.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
 >
 > **Rule:** bump the version and add a row here with every push to `main`.
+
+---
+
+## 0.40 — Getting where you are going, faster
+
+### 0.40.0 — 2026-08-18 — Quick Launch, Log run, and a collapsible sidebar
+- **Quick Launch** — your own shortcuts to the places you actually go. A shortcut can point
+  deeper than a section: one particular list, one particular room, your upcoming bills, or the
+  Log run form. Add them in Settings → Quick Launch, name them what you like, and put them in
+  the order you want. They are yours alone and follow you between devices.
+- A shortcut is a faster route, never extra access. Opening one goes through exactly the same
+  checks as normal navigation, so a Money shortcut still asks for your password — and then takes
+  you to the screen you actually asked for rather than dropping you at the front door. If
+  something a shortcut points at is deleted, turned off, or no longer yours to see, the shortcut
+  says so plainly and offers to remove itself.
+- Shortcuts are separate from the two shortcut slots in the phone's bottom bar. Those stay as
+  they are: broad navigation. Quick Launch is for the specific things you open all the time.
+- **Log run** — recording a run now takes seconds. Enter distance, time and when, and it is
+  saved. Average pace is worked out for you as you type. A logged run is an ordinary workout as
+  far as HomeStack is concerned: it appears in your history, counts towards your personal bests,
+  and follows the same privacy rules. There is one training history, not two, and its summary
+  reads as a run — "5.00 km · 28:14 · 5:39 /km" — rather than showing reps and tonnage.
+- **The desktop sidebar can now be collapsed** into a compact icon rail, giving the page back
+  around 200 pixels. Useful when HomeStack shares the screen with something else, and especially
+  for the Calendar. Everything stays reachable — icons keep their names on hover and for screen
+  readers, the current section is still highlighted, and Kiosk and your account are still there.
+  Your choice is remembered against your account. Phones are unaffected and keep their bottom
+  navigation.
 
 ---
 

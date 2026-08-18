@@ -117,6 +117,8 @@ Important newer/current specs:
 - `36_Mobile_UX_Strategy_and_Implementation_Plan.md` — the phone experience contract.
 - `38_Calendar_Sources.md` — managed calendar sources: holiday/school providers, ICS
   subscriptions and imports, sync semantics, the SSRF network boundary and the refresh cron.
+- `39_Core_Quick_Launch.md` — per-user shortcuts, the target registry, the `/launch/<uuid>`
+  contract, the security model, and why this is distinct from the mobile bottom nav.
 
 `VERSION_HISTORY.md` is the release chronology. Do not duplicate that history here.
 

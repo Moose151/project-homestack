@@ -15,7 +15,7 @@ import type {
   MeridianWishlistItem, MeridianWishlistRequest, NodeInfo, NotificationList, NotificationPreference,
   Person, PushDevice,
   PersonBadge, PersonalBookEntry, Pet, PetAppointment, PetTreatment, Pool, PoolStatus,
-  PoolWrite, Property, RoomArea, RoomAreaType, RoomDetailResponse, RoomItemPriority,
+  PoolWrite, Property, QuickLaunchResolution, QuickLaunchShortcut, QuickLaunchTarget, RoomArea, RoomAreaType, RoomDetailResponse, RoomItemPriority,
   RoomItemStatus, RoomItemType, RoomListResponse, RoomPlanItem, RoomPlanMode, RoomPlanProduct,
   RotatingSchedule, RotatingScheduleOccurrence, RotatingScheduleWrite, ServiceProvider,
   SolaceAnnualSummary, SolaceBalanceForecast, SolaceBalanceSnapshot, SolaceBill,
@@ -550,6 +550,26 @@ export const api = {
   updateReminder: (id: number, data: Partial<{ title: string; due_at: string | null; is_all_day: boolean; body: string; assigned_to_person_ids: number[]; notifications_enabled: boolean }>): Promise<AtlasReminder> =>
     _fetch(`/atlas/reminders/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteReminder: (id: number): Promise<void> => _fetch(`/atlas/reminders/${id}/`, { method: 'DELETE' }),
+
+  // --- Quick Launch ---
+  getQuickLaunchShortcuts: (): Promise<QuickLaunchShortcut[]> => _fetch('/quick-launch/shortcuts/'),
+  getQuickLaunchTargets: (): Promise<{ targets: QuickLaunchTarget[] }> =>
+    _fetch('/quick-launch/targets/'),
+  createQuickLaunchShortcut: (data: {
+    target_key: string; target_object_id?: number | null; custom_label?: string
+    launch_mode?: 'normal' | 'focused'
+  }): Promise<QuickLaunchShortcut> =>
+    _fetch('/quick-launch/shortcuts/', { method: 'POST', body: JSON.stringify(data) }),
+  updateQuickLaunchShortcut: (
+    id: string, data: Partial<{ custom_label: string; launch_mode: 'normal' | 'focused' }>,
+  ): Promise<QuickLaunchShortcut> =>
+    _fetch(`/quick-launch/shortcuts/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteQuickLaunchShortcut: (id: string): Promise<void> =>
+    _fetch(`/quick-launch/shortcuts/${id}/`, { method: 'DELETE' }),
+  reorderQuickLaunchShortcuts: (ids: string[]): Promise<QuickLaunchShortcut[]> =>
+    _fetch('/quick-launch/shortcuts/reorder/', { method: 'PATCH', body: JSON.stringify({ ids }) }),
+  resolveQuickLaunchShortcut: (id: string): Promise<QuickLaunchResolution> =>
+    _fetch(`/quick-launch/shortcuts/${id}/resolve/`),
 
   // --- Calendar sources ---
   getCalendarSources: (): Promise<{ sources: CalendarSource[]; catalogue: CalendarSourceCatalogueEntry[] }> =>
@@ -1297,6 +1317,12 @@ export const api = {
     if (status) params.set('status', status)
     return _fetch(`/fitness/sessions/${params.size ? `?${params}` : ''}`)
   },
+  /** Record a completed run in one request. It lands as an ordinary finished session. */
+  logFitnessRun: (data: {
+    person_id: number; distance: string; duration_seconds: number
+    started_at?: string; notes?: string; visibility?: 'private' | 'household'
+  }): Promise<FitnessSession> =>
+    _fetch('/fitness/sessions/log-run/', { method: 'POST', body: JSON.stringify(data) }),
   startFitnessSession: (data: { person_id: number; workout_id?: number; name?: string; visibility?: 'private' | 'household' }): Promise<FitnessSession> =>
     _fetch('/fitness/sessions/start/', { method: 'POST', body: JSON.stringify(data) }),
   addFitnessSessionExercise: (sessionId: number, data: { exercise_id: number; target_sets: number; notes?: string }): Promise<FitnessSessionExercise> =>

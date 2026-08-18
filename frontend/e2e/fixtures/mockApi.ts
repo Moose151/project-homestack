@@ -62,6 +62,13 @@ const ALL_NODE_KEYS = [
 
 const FIXTURE_NODES = ALL_NODE_KEYS.map(key => fixtureNode(key, ENABLED_NODE_KEYS.includes(key)))
 
+/** Node list with extra keys switched on, for suites that need a node the default set omits. */
+export function nodesWith(...extraKeys: string[]) {
+  return ALL_NODE_KEYS.map(key =>
+    fixtureNode(key, ENABLED_NODE_KEYS.includes(key) || extraKeys.includes(key)),
+  )
+}
+
 // Endpoints known-good shapes are provided for; every other /api/v1/** request gets a generic
 // empty 200 so unmocked pages render an empty state instead of hanging or crashing.
 const FIXTURES: Record<string, unknown> = {
@@ -75,6 +82,9 @@ const FIXTURES: Record<string, unknown> = {
   // would send the shell down its "preferences failed to load" path on every test.
   '/api/v1/auth/preferences/': { tab_order: {}, mobile_nav: [] },
   '/api/v1/auth/guide-dismissals/': [],
+  // Quick Launch: an empty personal set and no catalogue unless a suite supplies one.
+  '/api/v1/quick-launch/shortcuts/': [],
+  '/api/v1/quick-launch/targets/': { targets: [] },
 }
 
 export async function mockAuthenticatedApi(page: Page, overrides: Record<string, unknown> = {}) {

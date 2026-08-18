@@ -19,6 +19,7 @@ from rest_framework import serializers
 
 TAB_ORDER = "tab_order"
 MOBILE_NAV = "mobile_nav"
+SIDEBAR_COLLAPSED = "sidebar_collapsed"
 
 # Conservative caps. These are ordering hints for a household app, not a data store: the
 # largest real page has well under 20 tabs, and the dock has exactly two slots.
@@ -66,6 +67,17 @@ def _validate_tab_order(value) -> dict[str, list[str]]:
     return out
 
 
+def _validate_sidebar_collapsed(value) -> bool:
+    """Whether this person keeps the desktop sidebar collapsed.
+
+    Lives here rather than in localStorage for the same reason the dock shortcuts do: it is how
+    one *person* likes their interface arranged, and it should follow them to another machine
+    rather than being relearned per browser. It is a presentation flag only — collapsing the
+    sidebar changes no permission and hides no destination.
+    """
+    return bool(value) if isinstance(value, bool) else False
+
+
 def _validate_mobile_nav(value) -> list[str]:
     """The two configurable bottom-dock slots, as node keys.
 
@@ -79,6 +91,7 @@ def _validate_mobile_nav(value) -> list[str]:
 REGISTRY = {
     TAB_ORDER: (_validate_tab_order, dict),
     MOBILE_NAV: (_validate_mobile_nav, list),
+    SIDEBAR_COLLAPSED: (_validate_sidebar_collapsed, bool),
 }
 
 

@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from apps.fitness.models import (
@@ -145,6 +147,23 @@ class StartSessionSerializer(serializers.Serializer):
     workout_id = serializers.IntegerField(required=False, allow_null=True)
     name = serializers.CharField(max_length=160, required=False, allow_blank=True)
     visibility = serializers.ChoiceField(choices=WorkoutSession._meta.get_field("visibility").choices, default="household")
+
+
+class LogRunSerializer(serializers.Serializer):
+    """Input for the quick run form.
+
+    Pace is not accepted: it is distance over duration, and storing a third number that could
+    disagree with the other two would only create a way for them to drift.
+    """
+
+    person_id = serializers.IntegerField()
+    distance = serializers.DecimalField(max_digits=9, decimal_places=3, min_value=Decimal("0.001"))
+    duration_seconds = serializers.IntegerField(min_value=1, max_value=24 * 3600)
+    started_at = serializers.DateTimeField(required=False, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+    visibility = serializers.ChoiceField(
+        choices=WorkoutSession._meta.get_field("visibility").choices, default="household",
+    )
 
 
 class AddSessionExerciseSerializer(serializers.Serializer):

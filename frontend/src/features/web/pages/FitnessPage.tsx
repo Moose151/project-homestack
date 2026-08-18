@@ -12,6 +12,8 @@ import { Card } from '../../../components/Card'
 import { Field, fieldClass, SearchField } from '../../../components/Field'
 import { PageHeader } from '../../../components/PageHeader'
 import { InlineAlert } from '../../../components/PageState'
+import { useUrlAction } from '../../../hooks/useUrlTab'
+import { Modal } from '../../../components/Modal'
 import { CustomisableTabs } from '../../../components/CustomisableTabs'
 import { useCustomisableTabs } from '../../../hooks/useCustomisableTabs'
 import { confirmDialog } from '../../../components/Dialogs'
@@ -323,8 +325,150 @@ function ExerciseLibrary({ exercises, reload }: { exercises: FitnessExercise[]; 
   )
 }
 
+
+/**
+ * A run's own numbers, or null when the session is not a run.
+ *
+ * Detected from the exercise's stable classification (running + distance/time), never from its
+ * display name — an exercise renamed "Morning jog" is still a run.
+ */
+function runSummary(session: FitnessSession): { distance: string; unit: string; duration: string; pace: string } | null {
+  const entries = session.exercises.filter(entry => entry.status === 'active')
+  if (entries.length !== 1) return null
+  const entry = entries[0]
+  if (entry.exercise.exercise_type !== 'running' || entry.exercise.measurement !== 'distance_time') return null
+  const sets = entry.sets.filter(set => set.is_completed && Number(set.distance) > 0)
+  if (sets.length !== 1) return null
+  const distance = Number(sets[0].distance)
+  const seconds = sets[0].duration_seconds || 0
+  if (!distance || !seconds) return null
+  // Pace is derived, never stored: a third number that could disagree with the other two.
+  const perUnit = seconds / distance
+  const pace = `${Math.floor(perUnit / 60)}:${String(Math.round(perUnit % 60)).padStart(2, '0')}`
+  return {
+    distance: distance.toFixed(2),
+    unit: entry.exercise.distance_unit || 'km',
+    duration: formatDuration(seconds),
+    pace: `${pace} /${entry.exercise.distance_unit || 'km'}`,
+  }
+}
+
+/**
+ * Log a completed run in one step.
+ *
+ * Deliberately not a shortcut around the session model: this posts to the Fitness log-run
+ * endpoint, which builds an ordinary completed session. The run therefore earns personal
+ * records, appears in history and follows visibility exactly like any other training.
+ */
+function LogRunModal({ people, defaultPersonId, onClose, onSaved, onError }: {
+  people: Person[]
+  defaultPersonId: string
+  onClose: () => void
+  onSaved: () => void
+  onError: (message: string) => void
+}) {
+  const [personId, setPersonId] = useState(defaultPersonId)
+  const [distance, setDistance] = useState('')
+  const [minutes, setMinutes] = useState('')
+  const [seconds, setSeconds] = useState('')
+  const [when, setWhen] = useState(() => {
+    const now = new Date()
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
+    return now.toISOString().slice(0, 16)
+  })
+  const [notes, setNotes] = useState('')
+  const [visibility, setVisibility] = useState<'household' | 'private'>('household')
+  const [saving, setSaving] = useState(false)
+
+  const totalSeconds = (Number(minutes) || 0) * 60 + (Number(seconds) || 0)
+  const distanceValue = Number(distance)
+  const valid = distanceValue > 0 && totalSeconds > 0
+  // Shown live so the number the user is about to save is never a surprise.
+  const pace = valid
+    ? (() => {
+      const perUnit = totalSeconds / distanceValue
+      return `${Math.floor(perUnit / 60)}:${String(Math.round(perUnit % 60)).padStart(2, '0')} /km`
+    })()
+    : '—'
+
+  const save = async () => {
+    if (!valid) return
+    setSaving(true)
+    try {
+      await api.logFitnessRun({
+        person_id: Number(personId),
+        distance: distanceValue.toFixed(3),
+        duration_seconds: totalSeconds,
+        started_at: new Date(when).toISOString(),
+        notes: notes.trim(),
+        visibility,
+      })
+      onSaved()
+      onClose()
+    } catch (error) { onError(errorText(error)) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Modal
+      title="Log run"
+      onClose={onClose}
+      size="full"
+      footer={(
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={save} loading={saving} disabled={!valid}>Save run</Button>
+        </>
+      )}
+    >
+      <div className="flex flex-col gap-3">
+        <Field label="Who ran?">
+          <select aria-label="Who ran?" className={input} value={personId} onChange={e => setPersonId(e.target.value)}>
+            {people.map(person => <option key={person.id} value={person.id}>{personName(person)}</option>)}
+          </select>
+        </Field>
+        <Field label="When">
+          <input aria-label="When" type="datetime-local" className={input} value={when} onChange={e => setWhen(e.target.value)} />
+        </Field>
+        <Field label="Distance (km)">
+          <input
+            aria-label="Distance"
+            type="number" inputMode="decimal" step="0.01" min="0"
+            className={input} value={distance} onChange={e => setDistance(e.target.value)}
+            placeholder="5.00"
+          />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Minutes">
+            <input aria-label="Minutes" type="number" inputMode="numeric" min="0" className={input} value={minutes} onChange={e => setMinutes(e.target.value)} placeholder="28" />
+          </Field>
+          <Field label="Seconds">
+            <input aria-label="Seconds" type="number" inputMode="numeric" min="0" max="59" className={input} value={seconds} onChange={e => setSeconds(e.target.value)} placeholder="14" />
+          </Field>
+        </div>
+        <div className="rounded-xl bg-sunken p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Average pace</p>
+          <p className="text-lg font-extrabold text-ink" data-run-pace>{pace}</p>
+        </div>
+        <Field label="Notes (optional)">
+          <input aria-label="Notes" className={input} value={notes} onChange={e => setNotes(e.target.value)} placeholder="How did it feel?" />
+        </Field>
+        <Field label="Visibility">
+          <select aria-label="Visibility" className={input} value={visibility} onChange={e => setVisibility(e.target.value as 'household' | 'private')}>
+            <option value="household">Household</option>
+            <option value="private">Only me</option>
+          </select>
+        </Field>
+      </div>
+    </Modal>
+  )
+}
+
 export function FitnessPage() {
   const { user } = useAuth()
+  const [loggingRun, setLoggingRun] = useState(false)
+  // Quick Launch's "Log run" action target opens this form; it never saves by itself.
+  useUrlAction('run', () => setLoggingRun(true))
   const tabsState = useCustomisableTabs<Tab>('fitness', TABS)
   const { tab, setTab } = tabsState
   const [searchParams] = useSearchParams()
@@ -367,9 +511,24 @@ export function FitnessPage() {
   // drop the page header and tab row rather than surrounding it with unrelated navigation.
   const inLiveSession = tab === 'today' && Boolean(active)
   return <div className="space-y-4">{!inLiveSession && <PageHeader title="Fitness" subtitle="Programs, live workouts and household personal bests" icon="🏋️" />}{error && <InlineAlert tone="danger">{error}</InlineAlert>}{!inLiveSession && <CustomisableTabs state={tabsState} label="Fitness" mobileSelectLabel="Fitness section" />}
+    {tab === 'today' && !active && (
+      <Card title="Just been for a run?">
+        <p className="mb-3 text-sm text-muted">Log it in a few seconds — it counts towards your history and personal bests.</p>
+        <Button onClick={() => setLoggingRun(true)}>🏃 Log run</Button>
+      </Card>
+    )}
     {tab === 'today' && (active ? <LiveSession session={active} sessions={sessions} exercises={exercises} reload={reloadActive} onDone={async () => { await load(); setTab('history') }} /> : <div className="space-y-3"><Card title="Start a workout"><Field label="Who is training?"><select aria-label="Who is training?" className={input} value={startPerson} onChange={e => setStartPerson(e.target.value)}>{people.map(person => <option key={person.id} value={person.id}>{personName(person)}</option>)}</select></Field></Card>{programs.filter(program => !startPerson || program.assignments.some(a => a.person_id === Number(startPerson))).map(program => <Card key={program.id} title={program.name}><p className="mb-3 text-sm text-muted">{program.description || `${program.workouts.length} workout days`}</p><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{program.workouts.map(workout => <button key={workout.id} onClick={async () => { await api.startFitnessSession({ person_id: Number(startPerson), workout_id: workout.id }); await load() }} className="min-h-16 rounded-xl bg-primary px-4 py-3 text-left font-bold text-white"><span className="block">Start {workout.name}</span><span className="text-xs font-normal opacity-80">{workout.exercises.length} exercises</span></button>)}</div></Card>)}<Button variant="secondary" onClick={async () => { await api.startFitnessSession({ person_id: Number(startPerson), name: 'Open workout' }); await load() }}>Start an empty workout</Button></div>)}
     {tab === 'programs' && (building ? <ProgramBuilder people={people} exercises={exercises} onSaved={load} onCancel={() => setBuilding(false)} /> : <div className="space-y-3"><Button onClick={() => setBuilding(true)}>+ New program</Button>{programs.map(program => <div key={program.id} id={`fitness-program-${program.id}`} className={selectedProgramId === program.id ? 'rounded-2xl ring-2 ring-primary ring-offset-2 ring-offset-paper' : ''}><Card title={program.name}><p className="text-sm text-muted">{program.description || 'No description'}</p><p className="mt-2 text-xs font-semibold text-primary">{program.workouts.length} days · {program.assignments.map(a => a.person_name).join(', ') || 'Not assigned'}</p><div className="mt-3 space-y-2">{program.workouts.map(workout => <div key={workout.id} className="rounded-xl bg-sunken p-3"><p className="font-bold text-ink">{workout.name}</p><p className="text-xs text-muted">{workout.exercises.map(row => `${row.exercise.name} × ${row.target_sets}`).join(' · ') || 'No exercises'}</p></div>)}</div></Card></div>)}</div>)}
-    {tab === 'history' && <div className="space-y-3">{sessions.filter(session => session.status !== 'active').map(session => <div key={session.id} id={`fitness-session-${session.id}`} className={selectedSessionId === session.id ? 'rounded-2xl ring-2 ring-primary ring-offset-2 ring-offset-paper' : ''}><Card><details open={selectedSessionId === session.id}><summary className="cursor-pointer list-none"><div className="flex justify-between gap-3"><div><p className="font-bold text-ink">{session.person_name} · {session.name}</p><p className="text-xs text-muted">{new Date(session.started_at).toLocaleString()} · {formatDuration(session.duration_seconds)} · {session.total_reps} reps · {Number(session.total_volume).toLocaleString()} kg volume</p></div><span className="text-sm font-bold text-primary">{session.personal_records.length ? `🏆 ${session.personal_records.length}` : 'Details ▾'}</span></div></summary><div className="mt-3 space-y-2 border-t border-line pt-3">{session.exercises.filter(entry => entry.status === 'active').map(entry => <div key={entry.id} className="rounded-xl bg-sunken p-3"><p className="font-bold text-ink">{entry.exercise.name}</p><p className="mt-1 text-xs text-muted">{entry.sets.filter(set => set.is_completed).map(set => set.weight && set.reps ? `${Number(set.weight)} ${entry.exercise.weight_unit} × ${set.reps}` : set.reps ? `${set.reps} reps` : Number(set.distance) ? `${Number(set.distance)} ${entry.exercise.distance_unit}${set.duration_seconds ? ` in ${formatDuration(set.duration_seconds)}` : ''}` : set.duration_seconds ? formatDuration(set.duration_seconds) : '').filter(Boolean).join(' · ') || 'No completed sets'}</p></div>)}</div></details></Card></div>)}</div>}
+    {loggingRun && (
+      <LogRunModal
+        people={people}
+        defaultPersonId={startPerson || String(people[0]?.id ?? '')}
+        onClose={() => setLoggingRun(false)}
+        onSaved={async () => { await load(); setTab('history') }}
+        onError={setError}
+      />
+    )}
+    {tab === 'history' && <div className="space-y-3">{sessions.filter(session => session.status !== 'active').map(session => <div key={session.id} id={`fitness-session-${session.id}`} className={selectedSessionId === session.id ? 'rounded-2xl ring-2 ring-primary ring-offset-2 ring-offset-paper' : ''}><Card><details open={selectedSessionId === session.id}><summary className="cursor-pointer list-none"><div className="flex justify-between gap-3"><div><p className="font-bold text-ink">{session.person_name} · {session.name}</p><p className="text-xs text-muted" data-session-summary>{(() => { const run = runSummary(session); return run ? `${new Date(session.started_at).toLocaleString()} · ${run.distance} ${run.unit} · ${run.duration} · ${run.pace}` : `${new Date(session.started_at).toLocaleString()} · ${formatDuration(session.duration_seconds)} · ${session.total_reps} reps · ${Number(session.total_volume).toLocaleString()} kg volume` })()}</p></div><span className="text-sm font-bold text-primary">{session.personal_records.length ? `🏆 ${session.personal_records.length}` : 'Details ▾'}</span></div></summary><div className="mt-3 space-y-2 border-t border-line pt-3">{session.exercises.filter(entry => entry.status === 'active').map(entry => <div key={entry.id} className="rounded-xl bg-sunken p-3"><p className="font-bold text-ink">{entry.exercise.name}</p><p className="mt-1 text-xs text-muted">{entry.sets.filter(set => set.is_completed).map(set => set.weight && set.reps ? `${Number(set.weight)} ${entry.exercise.weight_unit} × ${set.reps}` : set.reps ? `${set.reps} reps` : Number(set.distance) ? `${Number(set.distance)} ${entry.exercise.distance_unit}${set.duration_seconds ? ` in ${formatDuration(set.duration_seconds)}` : ''}` : set.duration_seconds ? formatDuration(set.duration_seconds) : '').filter(Boolean).join(' · ') || 'No completed sets'}</p></div>)}</div></details></Card></div>)}</div>}
     {tab === 'records' && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{records.map(record => <Card key={record.id}><p className="text-xs font-bold uppercase tracking-wide text-muted">{record.person_name}</p><p className="mt-1 font-black text-ink">{record.exercise_name}</p><p className="mt-2 text-xl font-black text-primary">{recordLabel(record)}</p><p className="text-xs text-muted">{record.kind.replaceAll('_', ' ')} · {new Date(record.achieved_at).toLocaleDateString()}</p></Card>)}</div>}
     {tab === 'exercises' && <ExerciseLibrary exercises={exercises} reload={load} />}
   </div>
