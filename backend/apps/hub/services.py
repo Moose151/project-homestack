@@ -35,15 +35,32 @@ UPCOMING_DUE_RECORD_TYPES = frozenset({
 })
 
 
-def get_hub_widgets(user, *, kiosk_mode: bool = False, sensitive_unlocked: bool = False) -> list[dict]:
+def get_hub_widgets(
+    user,
+    *,
+    kiosk_mode: bool = False,
+    sensitive_unlocked: bool = False,
+    solace_unlocked: bool | None = None,
+) -> list[dict]:
     """Return assembled hub widget content for the authenticated user.
 
     kiosk_mode=True restricts to widgets where supports_kiosk=True.
+
+    ``sensitive_unlocked`` is the *session* answer — has this reader re-authenticated — and
+    gates the cross-node sensitivity filter on Upcoming, which hides financial, health,
+    document and private entries alike. ``solace_unlocked`` is the *per-node* answer for Money
+    specifically (see apps.nodes.access.node_requires_reauth) and gates only Money's own
+    widgets and pay-cycle figures. They are separate because a household that switched Money's
+    re-authentication prompt off has said nothing at all about Health or private documents;
+    collapsing them into one flag would leak the rest. Defaults to the session answer so any
+    caller that has not been taught the distinction keeps the stricter behaviour.
 
     A widget with nothing to show is dropped from the response rather than rendered as an
     empty card, so the Hub only carries things that actually need attention. Ambient
     widgets opt out of that with ``HubWidget.always_visible``.
     """
+    if solace_unlocked is None:
+        solace_unlocked = sensitive_unlocked
     from apps.atlas.selectors import list_open_items, list_reminders
     from apps.atlas.serializers import AtlasListItemSerializer, AtlasReminderSerializer
 
@@ -136,7 +153,7 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False, sensitive_unlocked: bool 
 
         elif key == "upcoming":
             content, meta = _upcoming_widget_content(
-                user, sensitive_unlocked=sensitive_unlocked
+                user, sensitive_unlocked=sensitive_unlocked, solace_unlocked=solace_unlocked,
             )
 
         elif key.startswith("meridian_"):
@@ -154,8 +171,15 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False, sensitive_unlocked: bool 
         elif key.startswith("homestead_"):
             content = _homestead_widget_content(key, user)
 
+        elif key == "solace_bills_due":
+            if solace_unlocked:
+                content, meta = _solace_bills_due_widget(user)
+            else:
+                content = []
+                meta = {"locked": True, "configured": None}
+
         elif key.startswith("solace_"):
-            content = _solace_widget_content(key, user) if sensitive_unlocked else []
+            content = _solace_widget_content(key, user) if solace_unlocked else []
 
         elif key.startswith("fitness_"):
             content = _fitness_widget_content(key, user)
@@ -178,7 +202,9 @@ def get_hub_widgets(user, *, kiosk_mode: bool = False, sensitive_unlocked: bool 
     return widgets
 
 
-def _upcoming_widget_content(user, *, sensitive_unlocked: bool) -> tuple[list, dict]:
+def _upcoming_widget_content(
+    user, *, sensitive_unlocked: bool, solace_unlocked: bool | None = None,
+) -> tuple[list, dict]:
     """One card for everything dated, instead of a permanent card per node.
 
     The Calendar already owns every dated household record (D7) — nodes sync into it via
@@ -200,6 +226,7 @@ def _upcoming_widget_content(user, *, sensitive_unlocked: bool) -> tuple[list, d
         start=start_of_today - timedelta(days=UPCOMING_OVERDUE_GRACE_DAYS),
         end=start_of_today + timedelta(days=UPCOMING_MAX_DAYS),
         sensitive_unlocked=sensitive_unlocked,
+        surface="upcoming",
     )
     relevant = [
         event
@@ -209,14 +236,19 @@ def _upcoming_widget_content(user, *, sensitive_unlocked: bool) -> tuple[list, d
     ]
 
     meta = {
-        "horizons": _upcoming_horizons(user, today, sensitive_unlocked=sensitive_unlocked),
+        # The "this pay cycle" horizon is Money's own figure, so it follows Money's lock, not
+        # the cross-node sensitivity filter above.
+        "horizons": _upcoming_horizons(
+            user, today,
+            solace_unlocked=sensitive_unlocked if solace_unlocked is None else solace_unlocked,
+        ),
         "default_horizon": "week",
         "window_days": UPCOMING_MAX_DAYS,
     }
     return CalendarEventSerializer(relevant, many=True).data, meta
 
 
-def _upcoming_horizons(user, today, *, sensitive_unlocked: bool) -> list[dict]:
+def _upcoming_horizons(user, today, *, solace_unlocked: bool) -> list[dict]:
     """Selectable ranges for the Upcoming widget, narrowest first.
 
     Labels state the actual window rather than "this week"/"this month" so a Friday reader
@@ -225,7 +257,7 @@ def _upcoming_horizons(user, today, *, sensitive_unlocked: bool) -> list[dict]:
     horizons = [
         {"key": "week", "label": "Next 7 days", "until": (today + timedelta(days=7)).isoformat()},
     ]
-    cycle_end = _pay_cycle_end(user) if sensitive_unlocked else None
+    cycle_end = _pay_cycle_end(user) if solace_unlocked else None
     if cycle_end and cycle_end > today:
         horizons.append(
             {"key": "cycle", "label": "This pay cycle", "until": cycle_end.isoformat()}
@@ -410,32 +442,6 @@ def _solace_widget_content(key: str, user) -> list:
     if not resolve_permission(user, "view", "solace"):
         return []
 
-    if key == "solace_bills_due":
-        from datetime import timedelta
-
-        from django.utils import timezone
-
-        from apps.solace.bill_schedule import ensure_bill_occurrences
-        from apps.solace.models import BillOccurrence
-
-        bills = s.list_bills(user, upcoming_only=True, unpaid_only=True, active_only=True)
-        today = timezone.localdate()
-        for bill in bills:
-            ensure_bill_occurrences(bill, today - timedelta(days=30), today + timedelta(days=90))
-            bill._solace_next_occurrence = bill.occurrences.filter(
-                status=BillOccurrence.Status.UPCOMING,
-            ).order_by("due_at").first()
-        bills.sort(
-            key=lambda bill: (
-                getattr(bill, "_solace_next_occurrence", None).due_at
-                if getattr(bill, "_solace_next_occurrence", None)
-                else None
-                or bill.due_at
-                or timezone.now() + timedelta(days=3650)
-            )
-        )
-        return BillSerializer(bills[:8], many=True).data
-
     if key == "solace_subscriptions":
         subscriptions = [
             bill
@@ -450,6 +456,78 @@ def _solace_widget_content(key: str, user) -> list:
         ).data
 
     return []
+
+
+def _solace_bills_due_widget(user) -> tuple[list, dict]:
+    """Exact unpaid bill occurrences through the household's next real payday.
+
+    The pay-cycle engine deliberately has a date-only fallback when no income is configured,
+    because the Money workspace still needs to render. A Dashboard promise labelled "next
+    payday" must be stricter: only an occurrence from an active Payday is a payday.
+    """
+    from datetime import date, timedelta
+    from decimal import Decimal
+
+    from django.utils import timezone
+
+    from apps.solace import selectors as s
+    from apps.solace.bill_schedule import ensure_bill_occurrences, household_timezone
+    from apps.solace.budget_engine import payday_occurrences
+    from apps.solace.models import BillOccurrence
+    from apps.solace.serializers import BillOccurrenceSerializer
+    from apps.permissions.resolver import resolve_permission
+
+    if not resolve_permission(user, "view", "solace"):
+        return [], {"locked": True, "configured": None}
+
+    tz = household_timezone(user.household)
+    today = timezone.localdate(timezone=tz)
+    horizon = today + timedelta(days=370)
+    with timezone.override(tz):
+        payday_dates = [
+            occurrence
+            for payday in s.list_paydays(user, active_only=True)
+            for occurrence in payday_occurrences(payday, today, horizon)
+            if timezone.localdate(occurrence, timezone=tz) >= today
+        ]
+    if not payday_dates:
+        return [], {
+            "locked": False,
+            "configured": False,
+            "next_payday": None,
+            "bill_count": 0,
+            "total": "0.00",
+            "overdue_count": 0,
+        }
+
+    next_payday_at = min(payday_dates)
+    next_payday = timezone.localdate(next_payday_at, timezone=tz)
+    materialise_start = today - timedelta(days=90)
+    for bill in s.list_bills(user, active_only=True):
+        earliest_unpaid = bill.occurrences.filter(
+            status=BillOccurrence.Status.UPCOMING,
+        ).order_by("due_at").values_list("due_at", flat=True).first()
+        bill_start = (
+            min(materialise_start, timezone.localdate(earliest_unpaid, timezone=tz))
+            if earliest_unpaid else materialise_start
+        )
+        ensure_bill_occurrences(bill, bill_start, next_payday)
+
+    due = s.list_bill_occurrences(
+        user, start=date.min, end=next_payday, status=BillOccurrence.Status.UPCOMING,
+    )
+    overdue_count = sum(
+        1 for row in due if timezone.localdate(row.due_at, timezone=tz) < today
+    )
+    total = sum((Decimal(row.amount) for row in due), Decimal("0.00"))
+    return BillOccurrenceSerializer(due, many=True).data, {
+        "locked": False,
+        "configured": True,
+        "next_payday": next_payday.isoformat(),
+        "bill_count": len(due),
+        "total": f"{total:.2f}",
+        "overdue_count": overdue_count,
+    }
 
 
 class HubError(Exception):

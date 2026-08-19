@@ -5,7 +5,9 @@ import type { Pet, PetSpecies, PetTreatment, PetAppointment, TreatmentType } fro
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { Input, SearchField, Textarea, Select, Field } from '../../../components/Field'
-import { Tabs, type TabDef } from '../../../components/Tabs'
+import { type TabDef } from '../../../components/Tabs'
+import { CustomisableTabs } from '../../../components/CustomisableTabs'
+import { useCustomisableTabs } from '../../../hooks/useCustomisableTabs'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
 import { DeleteAction, EditAction, RowActions } from '../../../components/RowActions'
@@ -13,7 +15,7 @@ import { DateTimeField } from '../../../components/DateTimeField'
 import { Modal } from '../../../components/Modal'
 import { MobileListRow } from '../../../components/mobile'
 import { useAuth } from '../../auth/AuthContext'
-import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
+import { useUrlQueryState } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
@@ -607,7 +609,8 @@ const TABS: TabDef<Tab>[] = [
 
 export function PetsPage() {
   const { user } = useAuth()
-  const [tab, setTab] = useUrlTab<Tab>('pets', TABS.map(item => item.key))
+  const tabsState = useCustomisableTabs<Tab>('pets', TABS)
+  const { tab } = tabsState
   const [searchParams] = useSearchParams()
   const focusedPetId = Number(searchParams.get('pet') || 0)
   const focusedTreatmentId = Number(searchParams.get('treatment') || 0)
@@ -704,7 +707,7 @@ export function PetsPage() {
         )
       ) : (
         <>
-          <Tabs tabs={TABS} active={tab} onChange={setTab} />
+          <CustomisableTabs state={tabsState} label="Pets" />
           {tab === 'pets' && <PetsTab pets={pets} reload={load} isAdmin={isAdmin} onError={setError} open={addingPet} setOpen={setAddingPet} focusedPetId={focusedPetId || undefined} />}
           {tab === 'reminders' && <RemindersTab onError={setError} focusedTreatmentId={focusedTreatmentId || undefined} />}
           {tab === 'appointments' && <AppointmentsTab onError={setError} focusedAppointmentId={focusedAppointmentId || undefined} />}

@@ -47,6 +47,22 @@ export interface AuthUser {
   colour: string
 }
 
+export interface GuideDismissal {
+  guide_identifier: string
+  guide_version: string
+}
+
+/**
+ * Per-user interface preferences. Presentation hints only — the surfaces that read these
+ * re-derive what the user may actually see and intersect, so a saved key never grants access.
+ */
+export interface UserPreferences {
+  /** page key -> ordered tab keys */
+  tab_order: Record<string, string[]>
+  /** the two configurable mobile dock slots, as stack keys */
+  mobile_nav: string[]
+}
+
 export interface AtlasListItem {
   id: number
   atlas_list_id: number
@@ -243,6 +259,9 @@ export interface AtlasReminder {
   due_at: string | null
   is_all_day: boolean
   recurrence_rule: string
+  assigned_to_person_ids: number[]
+  notifications_enabled: boolean
+  notification_state: 'unscheduled' | 'disabled' | 'scheduled' | 'sent' | 'elapsed'
   calendar_event_id: number | null
   visibility: string
   sensitivity: string
@@ -271,8 +290,58 @@ export interface CalendarEvent {
   visibility: string
   sensitivity: string
   is_synced: boolean
+  /** Owned by a CalendarSource: read-only locally, since the next sync would overwrite edits. */
+  is_source_managed: boolean
+  calendar_source_id: number | null
+  calendar_source_name: string
+  calendar_source_category: string
+  is_range: boolean
   created_at: string
   updated_at: string
+}
+
+/** A managed origin of calendar entries (holidays, school terms, subscribed/imported feeds). */
+export interface CalendarSource {
+  id: number
+  name: string
+  kind: 'holidays' | 'school' | 'subscription' | 'import'
+  category: string
+  /** Human-readable type, from the backend registry — never an internal module name. */
+  type_label: string
+  is_enabled: boolean
+  colour: string
+  /** The stored feed URL is never returned: a tokenised subscription link is a bearer secret. */
+  has_url: boolean
+  /** Host only, enough to recognise the feed. Never the path or query, where tokens live. */
+  url_display: string
+  settings_json: Record<string, unknown>
+  show_on_calendar: boolean
+  show_in_upcoming: boolean
+  notifications_enabled: boolean
+  last_sync_at: string | null
+  last_success_at: string | null
+  sync_status: 'idle' | 'ok' | 'error'
+  sync_error: string
+  can_sync: boolean
+  event_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CalendarSourceCatalogueEntry {
+  kind: CalendarSource['kind']
+  provider: string
+  label: string
+  needs_url: boolean
+  category: string
+  colour: string
+}
+
+export interface CalendarSourcePreview {
+  event_count: number
+  future_count: number
+  past_count: number
+  sample: Array<{ title: string; start_at: string; all_day: boolean }>
 }
 
 export interface CalendarEventWrite {
@@ -703,7 +772,7 @@ export interface HubWidget {
   name: string
   size: string
   supports_kiosk: boolean
-  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | PetTreatment[] | PetAppointment[] | MaintenanceTask[] | Appliance[] | Improvement[] | SolaceBill[] | SolacePurchase[] | FitnessSession[] | AppNotification[]
+  items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | PetTreatment[] | PetAppointment[] | MaintenanceTask[] | Appliance[] | Improvement[] | SolaceBill[] | SolaceBillOccurrence[] | SolacePurchase[] | FitnessSession[] | AppNotification[]
   meta?: {
     unread_count?: number
     title?: string
@@ -714,6 +783,13 @@ export interface HubWidget {
     horizons?: UpcomingHorizon[]
     default_horizon?: string
     window_days?: number
+    /** Due-before-payday widget summary. */
+    locked?: boolean
+    configured?: boolean | null
+    next_payday?: string | null
+    bill_count?: number
+    total?: string
+    overdue_count?: number
   }
 }
 
@@ -2005,6 +2081,11 @@ export interface Household {
   name: string
   slug: string
   timezone: string
+  /** Calendar Sources jurisdiction. Configuration only — never used for permissions. */
+  country: string
+  region: string
+  locality: string
+  postcode: string
   default_locale: string
   family_colour: string
   calendar_default_view: 'month' | 'week' | 'day' | 'agenda'

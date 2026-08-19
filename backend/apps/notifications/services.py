@@ -128,8 +128,12 @@ def mark_read(notification: Notification) -> Notification:
     return notification
 
 
-def mark_all_read(user) -> int:
-    return Notification.objects.filter(recipient_user=user, is_read=False).update(is_read=True)
+def mark_all_read(user, *, through_id: int | None = None) -> int:
+    """Mark the caller's current snapshot read without consuming later notifications."""
+    qs = Notification.objects.filter(recipient_user=user, is_read=False)
+    if through_id is not None:
+        qs = qs.filter(id__lte=through_id)
+    return qs.update(is_read=True)
 
 
 def set_preference(

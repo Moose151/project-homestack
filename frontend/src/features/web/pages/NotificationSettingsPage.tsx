@@ -8,6 +8,7 @@ import { PageHeader } from '../../../components/PageHeader'
 import { confirmDialog } from '../../../components/Dialogs'
 import { MobileScreenHeader, MobileSection, MobileSettingsRow } from '../../../components/mobile'
 import { deviceDetail, lastSeenLabel } from './pushDeviceFormat'
+import { TimePicker } from '../../../components/TimePicker'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -308,29 +309,26 @@ export function NotificationSettingsPage() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div>
             <div className="text-xs text-muted-strong mb-1">Starts</div>
-            <input
-              type="time"
+            <TimePicker
               value={settings?.quiet_start?.slice(0, 5) ?? ''}
-              onChange={e => setSettings(s => s ? { ...s, quiet_start: e.target.value || null } : s)}
-              className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink"
+              onChange={value => setSettings(s => s ? { ...s, quiet_start: value || null } : s)}
+              ariaLabel="Quiet hours start"
             />
           </div>
           <div>
             <div className="text-xs text-muted-strong mb-1">Ends</div>
-            <input
-              type="time"
+            <TimePicker
               value={settings?.quiet_end?.slice(0, 5) ?? ''}
-              onChange={e => setSettings(s => s ? { ...s, quiet_end: e.target.value || null } : s)}
-              className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink"
+              onChange={value => setSettings(s => s ? { ...s, quiet_end: value || null } : s)}
+              ariaLabel="Quiet hours end"
             />
           </div>
           <div>
             <div className="text-xs text-muted-strong mb-1">Morning digest time</div>
-            <input
-              type="time"
+            <TimePicker
               value={settings?.morning_time?.slice(0, 5) ?? '08:00'}
-              onChange={e => setSettings(s => s ? { ...s, morning_time: e.target.value } : s)}
-              className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink"
+              onChange={value => setSettings(s => s ? { ...s, morning_time: value || '08:00' } : s)}
+              ariaLabel="Morning digest time"
             />
           </div>
         </div>

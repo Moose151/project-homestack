@@ -18,6 +18,8 @@ def list_events(
     upcoming_only: bool = False,
     sensitive_unlocked: bool = False,
     agenda_only: bool = False,
+    surface: str = "calendar",
+    source_ids: list[int] | None = None,
 ) -> list[CalendarEvent]:
     """Events the user may see, optionally windowed and filtered (D10).
 
@@ -39,6 +41,19 @@ def list_events(
         qs = qs.filter(assigned_to_people__id=person).distinct()
     if agenda_only:
         qs = qs.exclude(event_kind__in=[CalendarEvent.EventKind.BIRTHDAY, CalendarEvent.EventKind.HOLIDAY])
+    # Calendar-source entries follow their source's switches. A disabled source hides its
+    # entries everywhere without deleting them, and the two visibility toggles are independent
+    # so a school-term banner can stay on the calendar while staying out of Upcoming.
+    qs = qs.exclude(calendar_source__isnull=False, calendar_source__is_enabled=False)
+    if surface == "upcoming":
+        qs = qs.exclude(calendar_source__isnull=False, calendar_source__show_in_upcoming=False)
+    else:
+        qs = qs.exclude(calendar_source__isnull=False, calendar_source__show_on_calendar=False)
+    if source_ids is not None:
+        # Explicit filter: "HomeStack only" is the empty-source case, so it is expressed as a
+        # null match rather than an impossible id.
+        from django.db.models import Q as _Q
+        qs = qs.filter(_Q(calendar_source_id__in=source_ids) | _Q(calendar_source__isnull=True))
     if user is not None:
         qs = apply_visibility(qs, user)
     if not sensitive_unlocked:
@@ -68,6 +83,11 @@ def search_events(user, query: str, *, sensitive_unlocked: bool = False) -> list
             | Q(description__icontains=query)
             | Q(location__icontains=query)
         )
+    # A disabled source is hidden everywhere the household ordinarily looks — including global
+    # search. Turning a calendar off and still finding its entries through the search box would
+    # make "disabled" mean nothing.
+    qs = qs.exclude(calendar_source__isnull=False, calendar_source__is_enabled=False)
+    qs = qs.exclude(calendar_source__isnull=False, calendar_source__show_on_calendar=False)
     if user is not None:
         qs = apply_visibility(qs, user)
     if not sensitive_unlocked:

@@ -28,6 +28,7 @@ from apps.notifications.models import (
     NotificationPreference,
     NotificationReminderLog,
 )
+from apps.notifications import wording
 from apps.notifications.services import create_notification, get_or_create_settings
 from apps.permissions.visibility import apply_visibility
 
@@ -41,11 +42,22 @@ def _household_timezone(household) -> ZoneInfo:
 
 
 def _reminder_events():
+    from apps.atlas.models import AtlasReminder
     from apps.scheduling.models import CalendarEvent
 
+    disabled_reminder_ids = AtlasReminder.objects.filter(
+        notifications_enabled=False,
+    ).values_list("id", flat=True)
     return CalendarEvent.objects.filter(
         Q(source_node__isnull=True) | Q(source_node__key="atlas"),
         start_at__isnull=False,
+    ).exclude(
+        source_record_type="AtlasReminder", source_record_id__in=disabled_reminder_ids,
+    ).exclude(
+        # Calendar-source entries look like standalone events (no source_node), so without this
+        # a subscribed season would notify the household about every single fixture and every
+        # public holiday. A source stays silent unless it was deliberately switched on.
+        Q(calendar_source__isnull=False) & Q(calendar_source__notifications_enabled=False),
     )
 
 
@@ -82,20 +94,28 @@ def _recipients_for(event, category: str) -> list[User]:
             continue
         pref = NotificationPreference.objects.filter(user=user, category=category).first()
         mine_only = pref.mine_only if pref else False
+        if event.source_record_type == "AtlasReminder" and assignee_ids and user.id not in assignee_ids:
+            continue
         if mine_only and user.id not in assignee_ids:
             continue
         recipients.append(user)
     return recipients
 
 
+def _action_url(event, tz) -> str:
+    if event.source_record_type == "AtlasReminder" and event.source_record_id:
+        return f"/atlas?tab=reminders&reminder={event.source_record_id}"
+    return f"/calendar?date={event.start_at.astimezone(tz).date().isoformat()}"
+
+
 def run_due_reminders(*, now=None) -> dict[str, int]:
     now = now or timezone.now()
     household = get_active_household()
     if household is None:
-        return {"24h": 0, "morning_of": 0}
+        return {"24h": 0, "morning_of": 0, "due_at": 0}
     tz = _household_timezone(household)
     local_now = now.astimezone(tz)
-    sent_24h = sent_morning = 0
+    sent_24h = sent_morning = sent_due = 0
 
     window_start = now + timedelta(hours=23)
     window_end = now + timedelta(hours=25)
@@ -105,12 +125,35 @@ def run_due_reminders(*, now=None) -> dict[str, int]:
             continue
         for user in _recipients_for(event, category):
             create_notification(
-                user, title="Coming up tomorrow", message=event.title,
+                user, title=wording.tomorrow_title(event), message=event.title,
                 source_node=source_node, category=category,
-                action_url=f"/calendar?date={event.start_at.astimezone(tz).date().isoformat()}",
+                action_url=_action_url(event, tz),
             )
         _log_sent(source_node=source_node, record_id=event.id, lead_kind="24h")
         sent_24h += 1
+
+    # Reminders are the one entry kind the owner sets an exact time on expecting to hear about
+    # it *then*, so they also fire at the scheduled moment itself. Scoped to Atlas reminders on
+    # purpose: sweeping every appointment here would notify people at the instant a meeting
+    # starts, which nobody asked for. All-day reminders have no meaningful time — the morning-of
+    # lead already covers them. The window matches the hourly cron, so a reminder whose time has
+    # already slipped past by more than one sweep is not resurrected.
+    due_window_start = now - timedelta(hours=1)
+    for event in _reminder_events().filter(
+        source_record_type="AtlasReminder", is_all_day=False,
+        start_at__gt=due_window_start, start_at__lte=now,
+    ):
+        category, source_node = _category_and_source(event)
+        if _already_sent(source_node=source_node, record_id=event.id, lead_kind="due_at"):
+            continue
+        for user in _recipients_for(event, category):
+            create_notification(
+                user, title=wording.due_now_title(event), message=event.title,
+                source_node=source_node, category=category,
+                action_url=_action_url(event, tz),
+            )
+        _log_sent(source_node=source_node, record_id=event.id, lead_kind="due_at")
+        sent_due += 1
 
     today = local_now.date()
     day_start = datetime.combine(today, time_cls.min, tzinfo=tz)
@@ -127,16 +170,16 @@ def run_due_reminders(*, now=None) -> dict[str, int]:
             ):
                 continue
             create_notification(
-                user, title="Due today", message=event.title,
+                user, title=wording.today_title(event, tz), message=event.title,
                 source_node=source_node, category=category,
-                action_url=f"/calendar?date={today.isoformat()}",
+                action_url=_action_url(event, tz),
             )
             _log_sent(
                 source_node=source_node, record_id=event.id, lead_kind="morning_of", recipient_user=user,
             )
             sent_morning += 1
 
-    return {"24h": sent_24h, "morning_of": sent_morning}
+    return {"24h": sent_24h, "morning_of": sent_morning, "due_at": sent_due}
 
 
 def _format_countdown(remaining: timedelta) -> str:

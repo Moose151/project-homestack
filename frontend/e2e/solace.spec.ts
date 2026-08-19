@@ -143,6 +143,41 @@ test('phone Money home can mark an upcoming bill paid without opening the schedu
   await expectNoHorizontalOverflow(page)
 })
 
+test('phone Money home opens the chronological unpaid occurrence list', async ({ page }) => {
+  const atDay = (offset: number) => {
+    const value = new Date()
+    value.setHours(12, 0, 0, 0)
+    value.setDate(value.getDate() + offset)
+    return value.toISOString()
+  }
+  const occurrence = (id: number, name: string, offset: number) => ({
+    id, bill_id: id, bill_name: name, bill_category: 'utilities', due_at: atDay(offset),
+    amount: `${id}.00`, status: 'upcoming', paid_at: null, notes: '', is_overdue: offset < 0,
+    visibility: 'household', sensitivity: 'normal', created_at: atDay(-10), updated_at: atDay(-10),
+  })
+  await mockAuthenticatedApi(page, {
+    '/api/v1/nodes/': [SOLACE_ENABLED_NODE],
+    '/api/v1/solace/bootstrap/': bootstrapFixture([billFixture()]),
+    '/api/v1/solace/now/': nowFixture(),
+    '/api/v1/solace/occurrences/upcoming/': [
+      occurrence(1, 'Overdue power', -2),
+      occurrence(2, 'Water today', 0),
+      occurrence(3, 'Internet later', 12),
+    ],
+  })
+
+  await page.goto('/solace')
+  await page.getByRole('button', { name: 'View all upcoming bills' }).click()
+  await expect(page).toHaveURL(/tab=bills&section=upcoming/)
+  await expect(page.getByRole('heading', { name: 'Overdue unpaid' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Today' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Later' })).toBeVisible()
+  await expect(page.getByText('Overdue power')).toBeVisible()
+  await expect(page.getByText('Water today')).toBeVisible()
+  await expect(page.getByText('Internet later')).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+})
+
 test('Edit bill opens as a full-height sheet', async ({ page }) => {
   await mockAuthenticatedApi(page, {
     '/api/v1/nodes/': [SOLACE_ENABLED_NODE],

@@ -1,27 +1,63 @@
 {
-  "current_version": "0.37.6",
-  "source_sha256": "768b0ef42cc9b9dad0feabfd3a7d3ac55d0033d3333b56a060e8c6e021773b44",
+  "current_version": "0.39.2",
+  "source_sha256": "1b6fa78dd47546ab3a7760ffa4ee4dad5adbfb503d5fc1177f03b4998fcc4e6b",
   "releases": [
     {
-      "version": "0.37.6",
-      "date": "2026-08-14",
-      "title": "Track deployed production SHA independently",
+      "version": "0.39.2",
+      "date": "2026-08-18",
+      "title": "Household location saves, and the Calendar toolbar reflows",
       "changes": [
-        "Fixed `scripts/deploy-production.sh` so deployment no-op and rollback decisions use the last successfully deployed SHA recorded in `.git/homestack-deployed-sha`, not the current Git checkout.",
-        "Added first-time marker bootstrap support, dry-run target reporting from locally cached `origin/main`, and final marker recording only after backend/frontend promotion and all validation succeed.",
-        "Expanded the deployment-script tests to cover successful marker recording, failed deployments leaving the marker unchanged, retries when Git is already at the target, migration retries, older deployed markers and genuine deployed-target no-ops.",
-        "Documented the marker model, safe bootstrap procedure, dry-run cache behavior and the need for routine migrations to remain backwards-compatible until the new backend is promoted."
+        "**Fixed: the household location would not save.** Choosing a country, state and local area in Settings and pressing Save appeared to work but reverted to \"Not set\". The request was accepted and answered successfully while the values were quietly dropped before reaching the database, so automatic public holidays could never be configured. The location now persists and survives a reload, a fresh session and a server restart.",
+        "**Fixed: the Calendar toolbar collapsed at half-screen widths.** With the sidebar open on a window around half a large monitor, the date, arrows, Today, Filter and the Month/Week/Day/Agenda buttons were squeezed onto one row — the date could shrink to a few pixels in Day view. The toolbar now measures the space it actually has and drops the view buttons onto a second line when the first is full, instead of compressing everything. Wide windows keep the single row exactly as before, and the phone layout is unchanged."
       ]
     },
     {
-      "version": "0.37.5",
-      "date": "2026-08-14",
-      "title": "Prepare one-command production deployment",
+      "version": "0.39.1",
+      "date": "2026-08-17",
+      "title": "Calendar Sources correctness and hardening",
       "changes": [
-        "Added `scripts/deploy-production.sh`, a conservative production deployment command that gates on a clean `main`, reachable `origin`, valid Compose config, healthy starting containers, complete recent backup, hardened Docker topology and absence of host bindings for PostgreSQL, backend and frontend before building or recreating anything.",
-        "The script builds backend/frontend images before promotion, handles migrations only with the explicit `--migrate` flag, recreates backend and frontend independently, tests and reloads Nginx Proxy Manager after each application-container promotion, validates HTTPS/API health and prints a rollback SHA plus concise completion summary.",
-        "Added a mocked shell test harness for the critical safety gates, including dirty/wrong-branch rejection, missing proxy network, stale/incomplete backups, unhealthy starting stack, migration flag behaviour, health timeout, `nginx -t` failure, sensitive host-port publication, dry-run non-mutation and completion summary coverage.",
-        "Updated production deployment, handover and roadmap documentation to describe the supported script flow, dry runs, backup requirement, explicit migration handling and manual rollback procedure while preserving the hardened NPM/proxy/private-network topology."
+        "Calendars fetched from the internet now connect to the exact address HomeStack checked. The previous version verified a link's address and then reconnected by name, which allowed a hostile server to answer safely during the check and point somewhere inside the home network a moment later. Certificate and hostname verification are unchanged.",
+        "Entries that come from a holiday, school or subscribed calendar can no longer be edited or deleted as if they were your own. They were already read-only on screen, but the underlying API accepted the change and the next refresh silently undid it.",
+        "Subscription links are now treated as secrets. Many carry a private token that grants access to that calendar, so the full link is never sent back to the browser or written into an error message — only the site it comes from is shown. Replacing a link still works normally.",
+        "Disabling a calendar now also removes its entries from search, not just the calendar view.",
+        "**Public holidays are now Queensland only, and every date has been checked against the Queensland Government's published lists for 2026 and 2027.** The previous version applied one invented \"national\" list to every state, which produced holidays that do not exist in some places and missed substitute days in others. Rather than ship dates we could not verify for the remaining states, those are no longer offered — they will return as their published dates are checked in. Christmas Eve now correctly appears as an evening part-day holiday, and local show holidays match the published show list (Townsville's 2026 show day was wrong).",
+        "**School terms now use student return dates, and NSW is split into its Eastern and Western divisions**, which start a week apart. The previous version used a staff development day as the NSW term start, which would have sent families to school a week early. Queensland 2027 is included. Victoria has been withdrawn until its dates are verified, and student-free days stay off because no verified data exists for them yet.",
+        "**School holidays now come from each department's published vacation dates** rather than being worked out from the gap between terms. The calculated version was wrong wherever staff days fall between terms — it would have shown the NSW autumn 2026 break as two and a half weeks longer than it is. NSW summer holidays into 2027 are included for both divisions.",
+        "Removed the \"National public holidays\" switch, which had no effect: Australia has no separate national holiday list, so those days already appear in each state's own list.",
+        "Queensland's Christmas Eve part-day holiday now ends at midnight exactly, matching the published 6pm-to-midnight interval.",
+        "Household location fields now carry a database default, so an installation upgrading through older migration states cannot hit a not-null error."
+      ]
+    },
+    {
+      "version": "0.39.0",
+      "date": "2026-08-17",
+      "title": "Calendar Sources, tab ordering and navigation customisation",
+      "changes": [
+        "**Fixed a production bug**: the Dashboard's \"Due before next payday\" card stayed locked forever for households that had switched Money's re-authentication prompt off. The Dashboard asked only whether the session had re-authenticated, never whether Money was locked at all, so opening Money could not clear it. The Dashboard now asks the per-node question for Money while keeping the session-level question for everything else — turning Money's prompt off must not, and does not, expose health, document or private entries on Upcoming.",
+        "Calendar now supports managed sources alongside your own events: automatic public holidays, school terms and holidays, subscribed ICS/webcal calendars, and one-time .ics imports. Each source has its own colour, its own filter layer on the calendar, and independent switches for the calendar and for Dashboard Upcoming.",
+        "Australian public holidays follow the household's configured location — country, state and local area, set in Settings. National, state and local/show holidays are distinguished and can be switched on independently, so a Queensland household never sees a Victoria-only holiday. Dates ship as published data with provenance rather than being guessed by an algorithm.",
+        "School terms and holidays are available per education system rather than per state, because Catholic and independent schools often differ from the state system. Terms and breaks appear as single ranges, not one entry per day.",
+        "Subscribed calendars stay up to date on a schedule and can be refreshed on demand. An entry is matched by its identifier from the feed, so a fixture that moves, is renamed or changes venue updates in place instead of duplicating; a cancelled one disappears. Entries that vanish from a feed are removed only when they are still in the future, so history is never quietly erased.",
+        "Calendars fetched from the internet are treated as untrusted: only ordinary public web addresses are allowed, redirects are re-checked at every step, and responses are capped in size and time. A link pointing anywhere inside the home network is refused.",
+        "Subscribed calendars never send notifications unless you deliberately turn them on, and holidays and fixtures are worded as events — never \"due\" or \"overdue\".",
+        "Tabs can now be reordered on every substantial tabbed page. The tab you put first becomes the one that page opens on, while explicit links from the Dashboard, search and notifications still go exactly where they point. Ordering is saved to your account, so it follows you between devices, and reordering works with a finger, a mouse or a keyboard.",
+        "The two customisable shortcuts in the phone's bottom bar are now saved to your account instead of one browser, so they follow you to a new phone. A shortcut for an area that later becomes unavailable is replaced automatically rather than leaving a gap."
+      ]
+    },
+    {
+      "version": "0.38.0",
+      "date": "2026-08-17",
+      "title": "Schedulable reminders, payday bills and notification semantics",
+      "changes": [
+        "Reminders are now genuinely schedulable. A reminder carries recipients and a notifications toggle, and the shared hourly scheduler delivers one notification at the reminder's own scheduled time (in addition to the existing 24-hour and morning-of leads), idempotently and in the household timezone. Editing a reminder reschedules it, deleting it or turning notifications off prevents future delivery, and a reminder whose time slipped past by more than one sweep is not resurrected. Notifications deep-link to the reminder itself rather than a calendar day.",
+        "Appointments and events are no longer labelled as if they were bills. Notification wording is derived from what the entry actually is, in one shared formatter that in-app notifications, the notification bell and the Web Push payload all share: tasks, bills and deadlines keep \"Due today\"/\"Due tomorrow\"; appointments and events read \"Today\"/\"Tomorrow\"/\"Starts at 3:30 PM\"; reminders read \"Reminder\"/\"Reminder tomorrow\". An event can no longer say \"Due\" or \"Overdue\".",
+        "Calendar's create action now offers Event, Appointment or Reminder. Choosing Reminder saves a real Atlas reminder through the shared reminder API — it does not masquerade as a calendar event — and a reminder shown on the calendar opens that reminder rather than a title search.",
+        "The Dashboard has a \"Due before next payday\" widget built from actual unpaid bill occurrences through the household's next real payday, with the payday date, bill count, total and a separate count of already-overdue unpaid bills. It states plainly when no payday is configured and stays locked until Money is unlocked.",
+        "Money gained a \"View all upcoming bills\" path: an occurrence-first chronological list grouped into Overdue / Today / Tomorrow / This week / Later, with no horizontal table scrolling on a phone. The full Bills management view is unchanged and still available.",
+        "Time entry now uses a reusable visual time picker with hour/minute selection on pointer devices, while touch devices keep the native control. Values are still sent to the backend in the existing 24-hour representation, and the display follows the locale's 12/24-hour convention.",
+        "Opening the notification panel marks the notifications that existed at that moment as read, in one bulk request bounded by a high-water notification id, so anything arriving afterwards stays unread. The badge updates immediately and reconciles with the backend if persistence fails.",
+        "Dismissed page guides are now remembered per user on the server rather than in browser storage, so a dismissal survives refresh, logout/login and moving between devices. Guides are versioned, so a substantially rewritten guide can be shown again. Existing local dismissals migrate once.",
+        "Home → Rooms opens on the room list on every device, with the floor plan as a deliberate secondary view rather than the default landing screen."
       ]
     },
     {

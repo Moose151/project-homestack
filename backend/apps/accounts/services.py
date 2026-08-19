@@ -116,3 +116,99 @@ def reauth_user(request: HttpRequest, password: str) -> bool:
         return False
     grant_reauth(request)
     return True
+
+
+def dismiss_guide(user: User, *, guide_identifier: str, guide_version: str = "1"):
+    from apps.accounts.models import GuideDismissal
+
+    dismissal, _ = GuideDismissal.objects.update_or_create(
+        user=user,
+        guide_identifier=guide_identifier,
+        guide_version=guide_version,
+        defaults={
+            "household": user.household,
+            "created_by": user,
+            "updated_by": user,
+            "deleted_at": None,
+        },
+    )
+    return dismissal
+
+
+def reset_guide_dismissals(user: User) -> int:
+    from apps.accounts.models import GuideDismissal
+
+    count, _ = GuideDismissal.objects.filter(user=user).delete()
+    return count
+
+
+def get_user_preferences(user: User) -> dict:
+    """Every supported preference for this user, with defaults filled in for unset keys."""
+    from apps.accounts import preferences
+    from apps.accounts.models import UserPreference
+
+    stored = {
+        row.key: row.value
+        for row in UserPreference.objects.filter(user=user)
+        if preferences.is_supported(row.key)
+    }
+    return {
+        key: stored.get(key, preferences.default_for(key))
+        for key in preferences.REGISTRY
+    }
+
+
+def set_user_preference(user: User, key: str, value):
+    """Validate and store one preference, returning the normalised value.
+
+    Storing an empty value removes the row instead, so "reset" and "save nothing" converge on
+    one state rather than leaving an empty record that reads as a deliberate choice.
+    """
+    from apps.accounts import preferences
+    from apps.accounts.models import UserPreference
+
+    normalised = preferences.validate(key, value)
+    if not normalised:
+        UserPreference.objects.filter(user=user, key=key).delete()
+        return preferences.default_for(key)
+    UserPreference.objects.update_or_create(
+        user=user,
+        key=key,
+        defaults={
+            "value": normalised,
+            "household": user.household,
+            "created_by": user,
+            "updated_by": user,
+            "deleted_at": None,
+        },
+    )
+    return normalised
+
+
+def merge_tab_order(user: User, pages: dict) -> dict:
+    """Merge per-page tab orders into the stored map.
+
+    Merging rather than replacing means a client that only knows about the page it is on
+    cannot wipe the user's ordering for every other page. A page mapped to null or an empty
+    list is removed, which is how a single page resets to default.
+    """
+    from apps.accounts import preferences
+
+    incoming = preferences.validate(preferences.TAB_ORDER, pages)
+    current = dict(get_user_preferences(user)[preferences.TAB_ORDER])
+    for page, tabs in pages.items():
+        if not tabs:
+            current.pop(page, None)
+    current.update(incoming)
+    return set_user_preference(user, preferences.TAB_ORDER, current)
+
+
+def reset_user_preference(user: User, key: str):
+    from apps.accounts import preferences
+    from apps.accounts.models import UserPreference
+
+    if not preferences.is_supported(key):
+        from rest_framework import serializers as drf_serializers
+        raise drf_serializers.ValidationError({key: "Unknown preference."})
+    UserPreference.objects.filter(user=user, key=key).delete()
+    return preferences.default_for(key)

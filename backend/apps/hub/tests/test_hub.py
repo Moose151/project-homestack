@@ -171,6 +171,12 @@ class UpcomingWidgetTests(TestCase):
             None,
         )
 
+    def _widget(self, key):
+        return next(
+            (widget for widget in self.client.get(reverse("hub")).json()["widgets"] if widget["key"] == key),
+            None,
+        )
+
     def test_includes_a_dated_reminder(self):
         create_reminder(self.admin, title="Doctor visit", due_at=_future(48))
         self.assertIn("Doctor visit", [i["title"] for i in self._upcoming()["items"]])
@@ -260,7 +266,8 @@ class UpcomingWidgetTests(TestCase):
     def test_paid_recurring_bill_uses_next_unpaid_occurrence(self):
         from apps.nodes.services import enable_node
         from apps.hub.models import HouseholdHubWidget, HubWidget
-        from apps.hub.services import _solace_widget_content
+        from apps.hub.services import _solace_bills_due_widget
+        from apps.solace.services import create_payday
         from apps.solace.models import BillOccurrence
         from apps.solace.services import create_bill, mark_occurrence_paid
 
@@ -278,12 +285,52 @@ class UpcomingWidgetTests(TestCase):
             due_at=_future(-48),
             recurrence_rule="FREQ=WEEKLY",
         )
+        create_payday(
+            self.admin, title="Pay", expected_amount="1000.00", pay_at=_future(480),
+            recurrence_rule="FREQ=WEEKLY",
+        )
         stale = BillOccurrence.objects.filter(bill=bill, status=BillOccurrence.Status.UPCOMING).order_by("due_at").first()
         self.assertIsNotNone(stale)
         mark_occurrence_paid(self.admin, stale)
-        row = next(item for item in _solace_widget_content("solace_bills_due", self.admin) if item["name"] == "Internet")
+        rows, meta = _solace_bills_due_widget(self.admin)
+        row = next(item for item in rows if item["bill_name"] == "Internet")
         self.assertFalse(row["is_overdue"])
-        self.assertNotEqual(row["next_occurrence_id"], stale.id)
+        self.assertNotEqual(row["id"], stale.id)
+        self.assertEqual(meta["bill_count"], len(rows))
+
+    def test_due_before_payday_widget_uses_occurrences_and_keeps_overdue_unpaid(self):
+        from apps.nodes.services import enable_node
+        from apps.solace.services import create_bill, create_payday, mark_occurrence_unpaid
+
+        enable_node(self.admin, "solace")
+        grant_user_permission(self.admin, "solace.view")
+        create_payday(
+            self.admin, title="Pay", expected_amount="1000.00", pay_at=_future(120),
+            recurrence_rule="FREQ=WEEKLY",
+        )
+        overdue_bill = create_bill(self.admin, name="Overdue", amount="25.00", due_at=_future(-48))
+        overdue_occurrence = overdue_bill.occurrences.order_by("due_at").first()
+        mark_occurrence_unpaid(self.admin, overdue_occurrence)
+        create_bill(self.admin, name="Before pay", amount="40.00", due_at=_future(48))
+        create_bill(self.admin, name="After pay", amount="90.00", due_at=_future(168))
+        _reauth(self.client)
+        widget = self._widget("solace_bills_due")
+        self.assertIsNotNone(widget)
+        self.assertEqual([row["bill_name"] for row in widget["items"]], ["Overdue", "Before pay"])
+        self.assertEqual(widget["meta"]["bill_count"], 2)
+        self.assertEqual(widget["meta"]["total"], "65.00")
+        self.assertEqual(widget["meta"]["overdue_count"], 1)
+
+    def test_due_before_payday_widget_has_configuration_state_without_income(self):
+        from apps.nodes.services import enable_node
+
+        enable_node(self.admin, "solace")
+        grant_user_permission(self.admin, "solace.view")
+        _reauth(self.client)
+        widget = self._widget("solace_bills_due")
+        self.assertIsNotNone(widget)
+        self.assertFalse(widget["meta"]["configured"])
+        self.assertIsNone(widget["meta"]["next_payday"])
 
     def test_meta_offers_horizons(self):
         create_reminder(self.admin, title="Doctor visit", due_at=_future(48))
@@ -300,6 +347,24 @@ class UpcomingWidgetTests(TestCase):
         create_bill(self.admin, name="Electricity", amount="120.00", due_at=_future(48))
         titles = [i["title"] for i in (self._upcoming() or {"items": []})["items"]]
         self.assertNotIn("Electricity", titles)
+
+    def test_kiosk_hub_locks_money_even_when_the_household_lock_is_off(self):
+        from apps.nodes.models import HouseholdNode
+        from apps.nodes.services import enable_node
+        from apps.solace.services import create_bill
+
+        enable_node(self.admin, "solace")
+        grant_user_permission(self.admin, "solace.view")
+        HouseholdNode.objects.filter(node__key="solace").update(requires_reauthentication=False)
+        create_bill(self.admin, name="Electricity", amount="120.00", due_at=_future(48))
+
+        widget = next(
+            (w for w in self.client.get(reverse("kiosk-hub")).json()["widgets"]
+             if w["key"] == "solace_bills_due"),
+            None,
+        )
+        # A kiosk is a shared screen: the node lock being off does not make it a private one.
+        self.assertTrue(widget is None or widget["meta"].get("locked"))
 
     def test_kiosk_hub_returns_kiosk_safe_widgets_only(self):
         resp = self.client.get(reverse("kiosk-hub"))
@@ -321,6 +386,106 @@ class UpcomingWidgetTests(TestCase):
     def test_notifications_summary_is_not_kiosk_safe(self):
         keys = [w["key"] for w in self.client.get(reverse("kiosk-hub")).json()["widgets"]]
         self.assertNotIn("notifications_summary", keys)
+
+
+class DashboardMoneyLockTests(TestCase):
+    """The Dashboard's Money widget must follow Money's own lock, not the session alone.
+
+    Production bug: HubView derived the widget's state purely from ``is_reauthed``, so a
+    household that had switched Money's re-authentication prompt off saw a permanently locked
+    "Due before next payday" card. Opening Money could never clear it, because nothing was
+    asking whether Money was locked in the first place.
+
+    The obvious fix — treating the whole Dashboard as unlocked when Money's lock is off — would
+    have been a security regression: the same flag hides financial, *health*, document and
+    private entries from Upcoming. Both halves are covered here.
+    """
+
+    def setUp(self):
+        self.admin = _make_user("admin", User.Role.ADMIN)
+        _login(self.client, "admin")
+        from apps.nodes.services import enable_node
+        enable_node(self.admin, "solace")
+        grant_user_permission(self.admin, "solace.view")
+        from apps.solace.services import create_bill
+        create_bill(self.admin, name="Electricity", amount="120.00", due_at=_future(48))
+
+    def _set_money_lock(self, required: bool):
+        from apps.nodes.models import HouseholdNode
+        HouseholdNode.objects.filter(node__key="solace").update(
+            requires_reauthentication=required,
+        )
+
+    def _money_widget(self):
+        return next(
+            (w for w in self.client.get(reverse("hub")).json()["widgets"]
+             if w["key"] == "solace_bills_due"),
+            None,
+        )
+
+    def _upcoming_titles(self):
+        widget = next(
+            (w for w in self.client.get(reverse("hub")).json()["widgets"] if w["key"] == "upcoming"),
+            None,
+        )
+        return [item["title"] for item in (widget or {"items": []})["items"]]
+
+    def test_lock_off_without_reauth_shows_the_money_widget(self):
+        self._set_money_lock(False)
+        widget = self._money_widget()
+        self.assertIsNotNone(widget)
+        self.assertFalse(widget["meta"]["locked"])
+
+    def test_lock_on_without_reauth_keeps_the_money_widget_locked(self):
+        self._set_money_lock(True)
+        widget = self._money_widget()
+        self.assertIsNotNone(widget)
+        self.assertTrue(widget["meta"]["locked"])
+
+    def test_lock_on_with_reauth_shows_the_money_widget(self):
+        self._set_money_lock(True)
+        _reauth(self.client)
+        widget = self._money_widget()
+        self.assertIsNotNone(widget)
+        self.assertFalse(widget["meta"]["locked"])
+
+    def test_money_lock_off_does_not_expose_health_entries(self):
+        """The security half of the fix.
+
+        Money's lock being off must unlock Money and nothing else — a health appointment is
+        still protected by the session-level sensitivity filter.
+        """
+        from apps.scheduling.services import create_event
+
+        self._set_money_lock(False)
+        create_event(
+            self.admin, title="Cardiology appointment", start_at=_future(48),
+            sensitivity="health",
+        )
+        titles = self._upcoming_titles()
+        self.assertNotIn("Cardiology appointment", titles)
+        # ...while Money itself is genuinely open.
+        self.assertFalse(self._money_widget()["meta"]["locked"])
+
+    def test_money_lock_off_does_not_expose_private_or_document_entries(self):
+        from apps.scheduling.services import create_event
+
+        self._set_money_lock(False)
+        create_event(self.admin, title="Passport renewal", start_at=_future(48), sensitivity="document")
+        create_event(self.admin, title="Therapy", start_at=_future(50), sensitivity="private")
+        titles = self._upcoming_titles()
+        self.assertNotIn("Passport renewal", titles)
+        self.assertNotIn("Therapy", titles)
+
+    def test_reauth_still_reveals_sensitive_entries(self):
+        from apps.scheduling.services import create_event
+
+        self._set_money_lock(False)
+        create_event(
+            self.admin, title="Cardiology appointment", start_at=_future(48), sensitivity="health",
+        )
+        _reauth(self.client)
+        self.assertIn("Cardiology appointment", self._upcoming_titles())
 
 
 class KioskUsersTests(TestCase):

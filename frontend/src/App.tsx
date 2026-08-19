@@ -4,11 +4,13 @@ import { AuthProvider, useAuth } from './features/auth/AuthContext'
 import { LoginPage } from './features/auth/LoginPage'
 import { AppShell } from './features/web/AppShell'
 import { StacksProvider, useStacks } from './features/stacks/StacksContext'
+import { PreferencesProvider } from './features/preferences/PreferencesContext'
 
 const HubPage = lazy(() => import('./features/web/pages/HubPage').then(m => ({ default: m.HubPage })))
 const AtlasPage = lazy(() => import('./features/web/pages/AtlasPage').then(m => ({ default: m.AtlasPage })))
 const MeridianPage = lazy(() => import('./features/web/pages/MeridianPage').then(m => ({ default: m.MeridianPage })))
 const CalendarPage = lazy(() => import('./features/web/pages/CalendarPage').then(m => ({ default: m.CalendarPage })))
+const CalendarSourcesPage = lazy(() => import('./features/web/pages/CalendarSourcesPage').then(m => ({ default: m.CalendarSourcesPage })))
 const EducationPage = lazy(() => import('./features/web/pages/EducationPage').then(m => ({ default: m.EducationPage })))
 const BooksPage = lazy(() => import('./features/web/pages/BooksPage').then(m => ({ default: m.BooksPage })))
 const HomeWikiPage = lazy(() => import('./features/web/pages/HomeWikiPage').then(m => ({ default: m.HomeWikiPage })))
@@ -53,6 +55,9 @@ function WebRoutes({ isAdmin }: { isAdmin: boolean }) {
         <Route path="/" element={<Navigate to="/hub" replace />} />
         <Route path="/hub" element={<Deferred><HubPage /></Deferred>} />
         <Route path="/calendar" element={<Deferred><CalendarPage /></Deferred>} />
+        {/* A settings subpage rather than a Calendar tab: managing sources is an occasional
+            administrative job, and making it a primary tab would put it in everyone's way. */}
+        <Route path="/calendar/sources" element={<Deferred><CalendarSourcesPage /></Deferred>} />
         <Route path="/corners" element={<Deferred><CornerPage /></Deferred>} />
         <Route path="/corners/:personId" element={<Deferred><CornerPage /></Deferred>} />
         <Route path="/atlas" element={<NodeRoute nodeKey="atlas"><Deferred><AtlasPage /></Deferred></NodeRoute>} />
@@ -93,7 +98,9 @@ function WebApp() {
 
   return (
     <StacksProvider>
-      <WebRoutes isAdmin={user.role === 'admin'} />
+      <PreferencesProvider userId={user.id}>
+        <WebRoutes isAdmin={user.role === 'admin'} />
+      </PreferencesProvider>
     </StacksProvider>
   )
 }

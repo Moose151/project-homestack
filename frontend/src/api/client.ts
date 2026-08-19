@@ -3,10 +3,11 @@ import type {
   AssessmentNote, AtlasList, AtlasListItem, AtlasListSuggestion, AtlasNote, AtlasReminder, AtlasSearchResults,
   Backup, ClassRepeat,
   Attachment, AttachmentSensitivity, AttachmentVisibility, AuthUser, Badge, Book, BookClub, BookLinkPreview,
-  BookRating, BookShelfStatus, BooksUser, CalendarEvent, CalendarEventWrite, ClubBookEntry,
+  BookRating, BookShelfStatus, BooksUser, CalendarEvent, CalendarEventWrite, CalendarSource,
+  CalendarSourceCatalogueEntry, CalendarSourcePreview, ClubBookEntry,
   ClubQueueItem, CornerResponse, EducationAssessment, EducationClassSession, EducationCourse, EducationEvent,
   EducationInstitution, FitnessExercise, FitnessProgram, FitnessRecord, FitnessSession,
-  FitnessSessionExercise, FitnessSessionSet, GlobalSearchResponse, HomesteadSearchResults,
+  FitnessSessionExercise, FitnessSessionSet, GlobalSearchResponse, GuideDismissal, HomesteadSearchResults,
   Household, HouseholdCost, HouseholdPushDeviceGroup, HubResponse, HubWidgetConfig, Improvement, InsurancePolicy,
   KioskMeridian, KioskUser, LinkPreview, LinkWatch, MaintenanceTask, MeridianAllowanceRow, MeridianCategory,
   MeridianGoal, MeridianPointsResponse, MeridianReports, MeridianReward, MeridianRewardRequest,
@@ -23,7 +24,7 @@ import type {
   SolaceCategoryReport, SolaceChecklistItem, SolaceChecklistPreference, SolaceCloseoutResponse,
   SolaceCycleCloseout, SolaceCycleHistoryRow, SolaceHealth, SolaceIncomeAllocation,
   SolaceIncomeAllocationWrite, SolaceNow, SolacePayCyclePlan, SolacePayday, SolacePurchase,
-  SolaceSchedule, SolaceSearchResults, SolaceSettings, UserNotificationSettings, UtilityBill,
+  SolaceSchedule, SolaceSearchResults, SolaceSettings, UserNotificationSettings, UserPreferences, UtilityBill,
   UtilityBillWrite, UtilityType, UtilityUsageResponse, WaterTest,
   WaterTestWrite, WikiCategory, WikiPage
 } from './types'
@@ -415,6 +416,19 @@ export const api = {
     _fetch('/auth/me/', { method: 'PATCH', body: JSON.stringify(data) }),
   reauth: (password: string): Promise<void> =>
     _fetch('/auth/reauth/', { method: 'POST', body: JSON.stringify({ password }) }),
+  getGuideDismissals: (): Promise<GuideDismissal[]> => _fetch('/auth/guide-dismissals/'),
+  dismissGuide: (guideIdentifier: string, guideVersion = '1'): Promise<GuideDismissal> =>
+    _fetch('/auth/guide-dismissals/', {
+      method: 'POST', body: JSON.stringify({ guide_identifier: guideIdentifier, guide_version: guideVersion }),
+    }),
+  resetGuideDismissals: (): Promise<{ removed: number }> =>
+    _fetch('/auth/guide-dismissals/', { method: 'DELETE' }),
+  getUserPreferences: (): Promise<UserPreferences> => _fetch('/auth/preferences/'),
+  /** Partial update. `tab_order` merges per page, so one page never clobbers the others. */
+  updateUserPreferences: (patch: Partial<UserPreferences>): Promise<UserPreferences> =>
+    _fetch('/auth/preferences/', { method: 'PATCH', body: JSON.stringify(patch) }),
+  resetUserPreferences: (key?: keyof UserPreferences): Promise<UserPreferences> =>
+    _fetch(`/auth/preferences/${key ? `?key=${key}` : ''}`, { method: 'DELETE' }),
   globalSearch: (q: string): Promise<GlobalSearchResponse> =>
     _fetch(`/search/?q=${encodeURIComponent(q)}`),
 
@@ -531,9 +545,33 @@ export const api = {
   // --- Atlas reminders ---
   getReminders: (upcoming?: boolean): Promise<AtlasReminder[]> =>
     _fetch(`/atlas/reminders/${upcoming ? '?upcoming=1' : ''}`),
-  createReminder: (data: { title: string; due_at?: string | null; is_all_day?: boolean; body?: string }): Promise<AtlasReminder> =>
+  createReminder: (data: { title: string; due_at?: string | null; is_all_day?: boolean; body?: string; assigned_to_person_ids?: number[]; notifications_enabled?: boolean }): Promise<AtlasReminder> =>
     _fetch('/atlas/reminders/', { method: 'POST', body: JSON.stringify(data) }),
+  updateReminder: (id: number, data: Partial<{ title: string; due_at: string | null; is_all_day: boolean; body: string; assigned_to_person_ids: number[]; notifications_enabled: boolean }>): Promise<AtlasReminder> =>
+    _fetch(`/atlas/reminders/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteReminder: (id: number): Promise<void> => _fetch(`/atlas/reminders/${id}/`, { method: 'DELETE' }),
+
+  // --- Calendar sources ---
+  getCalendarSources: (): Promise<{ sources: CalendarSource[]; catalogue: CalendarSourceCatalogueEntry[] }> =>
+    _fetch('/calendar/sources/'),
+  createCalendarSource: (data: Partial<{
+    kind: string; provider: string; name: string; url: string; colour: string; category: string
+    settings_json: Record<string, unknown>; show_on_calendar: boolean; show_in_upcoming: boolean
+    notifications_enabled: boolean; is_enabled: boolean; ics_text: string
+  }>): Promise<CalendarSource> =>
+    _fetch('/calendar/sources/', { method: 'POST', body: JSON.stringify(data) }),
+  updateCalendarSource: (id: number, data: Partial<{
+    name: string; colour: string; is_enabled: boolean; url: string
+    settings_json: Record<string, unknown>; show_on_calendar: boolean; show_in_upcoming: boolean
+    notifications_enabled: boolean
+  }>): Promise<CalendarSource> =>
+    _fetch(`/calendar/sources/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteCalendarSource: (id: number): Promise<void> =>
+    _fetch(`/calendar/sources/${id}/`, { method: 'DELETE' }),
+  syncCalendarSource: (id: number): Promise<CalendarSource & { result: Record<string, unknown> }> =>
+    _fetch(`/calendar/sources/${id}/sync/`, { method: 'POST' }),
+  previewCalendarSource: (data: { url?: string; ics_text?: string }): Promise<CalendarSourcePreview> =>
+    _fetch('/calendar/sources/preview/', { method: 'POST', body: JSON.stringify(data) }),
 
   // --- Calendar ---
   getEvents: (params?: { start?: string; end?: string; node?: string; person?: number; upcoming?: boolean; agenda?: boolean }): Promise<CalendarEvent[]> => {
@@ -850,7 +888,7 @@ export const api = {
 
   // --- Household ---
   getHousehold: (): Promise<Household> => cachedGet('/household/', 30_000),
-  updateHousehold: (data: Partial<{ name: string; family_colour: string; timezone: string; calendar_default_view: string; calendar_week_start: number; calendar_time_format: string }>): Promise<Household> =>
+  updateHousehold: (data: Partial<{ name: string; family_colour: string; timezone: string; country: string; region: string; locality: string; postcode: string; calendar_default_view: string; calendar_week_start: number; calendar_time_format: string }>): Promise<Household> =>
     _fetch<Household>('/household/', { method: 'PATCH', body: JSON.stringify(data) })
       .then(value => { clearSharedCache('/household/'); return value }),
 
@@ -1094,6 +1132,8 @@ export const api = {
     action: 'paid' | 'unpaid' | 'skip',
   ): Promise<SolaceBillOccurrence> =>
     _fetch(`/solace/occurrences/${id}/${action}/`, { method: 'POST' }),
+  getUpcomingSolaceOccurrences: (): Promise<SolaceBillOccurrence[]> =>
+    _fetch('/solace/occurrences/upcoming/'),
   getSolaceBills: (params?: { upcoming?: boolean; unpaid?: boolean }): Promise<SolaceBill[]> => {
     const q = new URLSearchParams()
     if (params?.upcoming) q.set('upcoming', '1')
@@ -1326,8 +1366,10 @@ export const api = {
     _fetch(`/notifications/${unreadOnly ? '?unread=1' : ''}`),
   markNotificationRead: (id: number): Promise<unknown> =>
     _fetch(`/notifications/${id}/read/`, { method: 'POST' }),
-  markAllNotificationsRead: (): Promise<unknown> =>
-    _fetch('/notifications/read-all/', { method: 'POST' }),
+  markAllNotificationsRead: (throughId?: number): Promise<unknown> =>
+    _fetch('/notifications/read-all/', {
+      method: 'POST', body: JSON.stringify(throughId ? { through_id: throughId } : {}),
+    }),
   getNotificationPreferences: (): Promise<NotificationPreference[]> =>
     _fetch('/notifications/preferences/'),
   updateNotificationPreferences: (rows: Partial<NotificationPreference>[]): Promise<NotificationPreference[]> =>

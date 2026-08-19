@@ -616,6 +616,42 @@ class BillOccurrenceActionView(SolaceAccessMixin, APIView):
         return Response(BillOccurrenceSerializer(handler(request.user, occurrence)).data)
 
 
+class UpcomingBillOccurrenceListView(SolaceAccessMixin, APIView):
+    """A chronological, occurrence-first unpaid bill list for compact clients."""
+
+    def get(self, request: Request) -> Response:
+        from datetime import date
+
+        from apps.solace.bill_schedule import ensure_bill_occurrences, household_timezone
+        from apps.solace.models import BillOccurrence
+
+        tz = household_timezone(request.user.household)
+        today = timezone.localdate(timezone=tz)
+        end = today + timedelta(days=365)
+        active_bills = selectors.list_bills(request.user, active_only=True)
+        for bill in active_bills:
+            earliest_unpaid = bill.occurrences.filter(
+                status=BillOccurrence.Status.UPCOMING,
+            ).order_by("due_at").values_list("due_at", flat=True).first()
+            start = (
+                min(today - timedelta(days=365), timezone.localdate(earliest_unpaid, timezone=tz))
+                if earliest_unpaid else today - timedelta(days=365)
+            )
+            ensure_bill_occurrences(bill, start, end)
+
+        active_ids = {bill.id for bill in active_bills}
+        occurrences = [
+            row for row in selectors.list_bill_occurrences(
+                request.user,
+                start=date.min,
+                end=date.max,
+                status=BillOccurrence.Status.UPCOMING,
+            )
+            if row.bill_id in active_ids
+        ]
+        return Response(BillOccurrenceSerializer(occurrences, many=True).data)
+
+
 class BillListView(SolaceAccessMixin, APIView):
     def get(self, request: Request) -> Response:
         bills = selectors.list_bills(

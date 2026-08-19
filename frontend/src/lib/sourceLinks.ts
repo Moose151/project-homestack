@@ -27,6 +27,7 @@ export function sourcePath(ref: SourceRef): string | null {
     case 'atlas':
       if (ref.source_record_type === 'AtlasListItem' && ref.source_record_id) return `/atlas?tab=lists&item=${ref.source_record_id}`
       if (ref.source_record_type === 'AtlasList' && ref.source_record_id) return `/atlas?tab=lists&list=${ref.source_record_id}`
+      if (ref.source_record_type === 'AtlasReminder' && ref.source_record_id) return `/atlas?tab=reminders&reminder=${ref.source_record_id}`
       return `/atlas?tab=reminders&q=${query}`
     case 'pets':
       if (ref.source_record_id) {

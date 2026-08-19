@@ -120,20 +120,37 @@ class AtlasListSuggestionSerializer(serializers.ModelSerializer):
         return value
 
 
-class AtlasReminderSerializer(serializers.ModelSerializer):
+class AtlasReminderSerializer(AssigneeSerializerMixin, serializers.ModelSerializer):
+    notification_state = serializers.SerializerMethodField()
+
     class Meta:
         model = AtlasReminder
         fields = [
             "id", "title", "body", "due_at", "is_all_day", "recurrence_rule",
+            "assigned_to_person_ids", "notifications_enabled", "notification_state",
             "calendar_event_id", "visibility", "sensitivity",
             "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "calendar_event_id", "created_at", "updated_at"]
+        read_only_fields = ["id", "calendar_event_id", "notification_state", "created_at", "updated_at"]
 
     def validate_title(self, value: str) -> str:
         if not value.strip():
             raise serializers.ValidationError("Title may not be blank.")
         return value
+
+    def get_notification_state(self, obj) -> str:
+        if not obj.due_at:
+            return "unscheduled"
+        if not obj.notifications_enabled:
+            return "disabled"
+        if obj.calendar_event_id:
+            from apps.notifications.models import NotificationReminderLog
+            if NotificationReminderLog.objects.filter(
+                source_node="atlas", record_type="CalendarEvent", record_id=obj.calendar_event_id,
+            ).exists():
+                return "sent"
+        from django.utils import timezone
+        return "elapsed" if obj.due_at < timezone.now() else "scheduled"
 
 
 class AtlasContactSerializer(serializers.ModelSerializer):

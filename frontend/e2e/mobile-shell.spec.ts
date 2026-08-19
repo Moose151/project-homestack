@@ -77,33 +77,63 @@ test.describe('phone layout', () => {
   })
 
   test('shortcut editor exposes two slots, swaps duplicates, resets, and persists per user', async ({ page }) => {
+    // Shortcuts are a per-user *server* preference as of 0.39.0, so this asserts what is sent
+    // to the account rather than what lands in one browser's localStorage.
+    let saved: string[] | null = null
+    await page.route('**/api/v1/auth/preferences/**', async route => {
+      const method = route.request().method()
+      if (method === 'PATCH') {
+        saved = (route.request().postDataJSON() as { mobile_nav: string[] }).mobile_nav
+      } else if (method === 'DELETE') {
+        saved = []
+      }
+      await route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ tab_order: {}, mobile_nav: saved ?? [] }),
+      })
+    })
+    await page.reload()
+
     const nav = page.getByRole('navigation', { name: 'Main navigation' })
     await nav.getByRole('button', { name: 'More navigation and profile options' }).click()
     const launcher = page.getByRole('dialog', { name: 'All HomeStack' })
-    await launcher.getByRole('button', { name: 'Edit shortcuts' }).click()
+    await launcher.getByRole('button', { name: 'Customise navigation' }).click()
     const slot1 = launcher.getByRole('combobox', { name: 'Choose shortcut for Slot 1' })
     const slot2 = launcher.getByRole('combobox', { name: 'Choose shortcut for Slot 2' })
     await expect(slot1).toHaveValue('calendar')
     await expect(slot2).toHaveValue('atlas')
 
+    // Picking the node already in the other slot swaps them; it never duplicates.
     await slot1.selectOption('atlas')
+    await expect.poll(() => saved).toEqual(['atlas', 'calendar'])
     await expect(slot1).toHaveValue('atlas')
     await expect(slot2).toHaveValue('calendar')
-    await expect.poll(() => page.evaluate(() => localStorage.getItem('hs-mobile-nav-1'))).toBe('["atlas","calendar"]')
 
-    await launcher.getByRole('button', { name: 'Reset to recommended' }).click()
+    await launcher.getByRole('button', { name: 'Reset to defaults' }).click()
+    await expect.poll(() => saved).toEqual([])
     await expect(slot1).toHaveValue('calendar')
     await expect(slot2).toHaveValue('atlas')
-    await expect.poll(() => page.evaluate(() => localStorage.getItem('hs-mobile-nav-1'))).toBeNull()
   })
 
   test('a disabled saved shortcut is repaired without moving the still-valid slot', async ({ page }) => {
-    await page.evaluate(() => localStorage.setItem('hs-mobile-nav-1', JSON.stringify(['calendar', 'fitness'])))
+    // 'fitness' is in the catalogue but not enabled for the fixture household.
+    let saved: string[] = ['calendar', 'fitness']
+    await page.route('**/api/v1/auth/preferences/**', async route => {
+      if (route.request().method() === 'PATCH') {
+        saved = (route.request().postDataJSON() as { mobile_nav: string[] }).mobile_nav
+      }
+      await route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ tab_order: {}, mobile_nav: saved }),
+      })
+    })
     await page.reload()
+
     const nav = page.getByRole('navigation', { name: 'Main navigation' })
     await expect(nav.locator('[data-nav-key="calendar"]')).toBeVisible()
     await expect(nav.locator('[data-nav-key="atlas"]')).toBeVisible()
-    await expect.poll(() => page.evaluate(() => localStorage.getItem('hs-mobile-nav-1'))).toBe('["calendar","atlas"]')
+    // The unreachable choice is repaired and written back, leaving the valid slot in place.
+    await expect.poll(() => saved).toEqual(['calendar', 'atlas'])
   })
 
   test('top bar Search and Create are not shown — they live in the bottom nav / More sheet', async ({ page }) => {
@@ -204,7 +234,7 @@ test.describe('phone layout', () => {
     await nav.getByRole('button', { name: /More navigation|open all destinations/ }).click()
     await expectMinTouchTarget(page.getByRole('button', { name: 'Close' }))
     await expectMinTouchTarget(page.getByRole('button', { name: 'Edit', exact: true }))
-    await expectMinTouchTarget(page.getByRole('button', { name: 'Edit shortcuts' }))
+    await expectMinTouchTarget(page.getByRole('button', { name: 'Customise navigation' }))
   })
 
   test('a nested route shows Back instead of the destination icon', async ({ page }) => {

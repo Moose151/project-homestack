@@ -71,6 +71,10 @@ const FIXTURES: Record<string, unknown> = {
   '/api/v1/hub/': { widgets: [] },
   '/api/v1/notifications/': { unread_count: 0, results: [] },
   '/api/v1/atlas/lists/': [],
+  // Per-user UI preferences. Needs a real shape: the generic [] fallback is not an object and
+  // would send the shell down its "preferences failed to load" path on every test.
+  '/api/v1/auth/preferences/': { tab_order: {}, mobile_nav: [] },
+  '/api/v1/auth/guide-dismissals/': [],
 }
 
 export async function mockAuthenticatedApi(page: Page, overrides: Record<string, unknown> = {}) {

@@ -6,11 +6,13 @@ import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { Input, SearchField, Textarea, Select, Field } from '../../../components/Field'
 import { Modal } from '../../../components/Modal'
-import { Tabs, type TabDef } from '../../../components/Tabs'
+import { type TabDef } from '../../../components/Tabs'
+import { CustomisableTabs } from '../../../components/CustomisableTabs'
+import { useCustomisableTabs } from '../../../hooks/useCustomisableTabs'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
 import { useAuth } from '../../auth/AuthContext'
-import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
+import { useUrlQueryState } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
 import { ColourPicker } from '../../../components/ColourPicker'
 
@@ -413,7 +415,8 @@ const TABS: TabDef<Tab>[] = [
 export function HomeWikiPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin' || user?.role === 'manager'
-  const [tab, setTab] = useUrlTab<Tab>('pages', TABS.map(item => item.key))
+  const tabsState = useCustomisableTabs<Tab>('home_wiki', TABS)
+  const { tab } = tabsState
   const [categories, setCategories] = useState<WikiCategory[]>([])
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useUrlQueryState()
@@ -476,7 +479,7 @@ export function HomeWikiPage() {
         )
       ) : (
         <>
-          <Tabs tabs={TABS} active={tab} onChange={setTab} />
+          <CustomisableTabs state={tabsState} label="Home Guide" />
           {tab === 'pages' && <PagesTab categories={visibleCategories} isAdmin={user?.role === 'admin'} onError={setError} openedPageId={openedPageId} onOpenPage={openPage} onClosePage={closePage} />}
           {tab === 'categories' && <CategoriesTab categories={categories} onChange={setCategories} isAdmin={isAdmin} onError={setError} />}
         </>

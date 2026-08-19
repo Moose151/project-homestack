@@ -33,7 +33,27 @@ export function NotificationBell() {
   const markRead = async (n: AppNotification) => {
     if (!n.is_read) { await api.markNotificationRead(n.id).catch(() => {}); load() }
   }
-  const markAll = async () => { await api.markAllNotificationsRead().catch(() => {}); load() }
+  const markSnapshotRead = async (snapshot = items) => {
+    const throughId = snapshot.reduce((maximum, note) => Math.max(maximum, note.id), 0)
+    const snapshotUnread = snapshot.filter(note => !note.is_read && note.id <= throughId).length
+    if (!throughId || !snapshotUnread) return
+    setItems(current => current.map(note => note.id <= throughId ? { ...note, is_read: true } : note))
+    setUnread(current => Math.max(0, current - snapshotUnread))
+    try {
+      await api.markAllNotificationsRead(throughId)
+    } catch {
+      // Optimism keeps the badge responsive, but backend truth wins when persistence fails.
+      load()
+    }
+  }
+  const toggle = () => {
+    setOpen(current => {
+      const next = !current
+      if (next) void markSnapshotRead(items)
+      return next
+    })
+  }
+  const markAll = async () => { await markSnapshotRead(items) }
   const openItem = async (notification: AppNotification) => {
     await markRead(notification)
     if (notification.action_url) {
@@ -44,7 +64,7 @@ export function NotificationBell() {
 
   return (
     <div className="relative" ref={ref}>
-      <button onClick={() => setOpen(o => !o)}
+      <button onClick={toggle}
         className="relative w-11 h-11 grid place-items-center rounded-xl hover:bg-sunken text-muted-strong"
         aria-label="Notifications">
         <span className="text-lg">🔔</span>

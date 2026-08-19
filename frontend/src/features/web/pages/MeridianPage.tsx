@@ -10,12 +10,13 @@ import { LeaderboardTab, SettingsTab } from './meridian/ReportsSettingsTabs'
 import { OverviewTab } from './meridian/OverviewTab'
 import { PageHeader } from '../../../components/PageHeader'
 import { Tabs, type TabDef } from '../../../components/Tabs'
-import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
+import { CustomisableTabs } from '../../../components/CustomisableTabs'
+import { useCustomisableTabs } from '../../../hooks/useCustomisableTabs'
+import { useUrlQueryState } from '../../../hooks/useUrlTab'
 import { SearchField } from '../../../components/Field'
 import { MobileListRow, MobileScreenHeader, MobileSection } from '../../../components/mobile'
 
 type Tab = 'overview' | 'tasks' | 'routines' | 'shop' | 'goals' | 'wishlist' | 'leaderboard' | 'settings'
-const TAB_KEYS: Tab[] = ['overview', 'tasks', 'routines', 'shop', 'goals', 'wishlist', 'leaderboard', 'settings']
 
 // docs/36 §6.4: phone gets "Tasks / Rewards / My progress / More" instead of navigating the flat
 // eight-tab picker. Tasks folds in Routines and My progress folds in Goals/Wishlist/Leaderboard —
@@ -32,7 +33,15 @@ const GROUP_TITLE: Record<Group, string> = { tasks: 'Tasks', rewards: 'Rewards',
 export function MeridianPage() {
   const { user } = useAuth()
   const canManage = user?.role === 'admin' || user?.role === 'manager'
-  const [tab, setTab] = useUrlTab<Tab>('overview', TAB_KEYS)
+  const tabKeys: Tab[] = ['overview', 'tasks', 'routines', 'shop', 'goals', 'wishlist', 'leaderboard']
+  // Manage is a tab only for those who may manage. It is left out of the list entirely rather
+  // than merely hidden, so a saved tab order naming it can never bring it back for anyone else.
+  if (canManage) tabKeys.push('settings')
+  // "Manage" everywhere a node has a setup tab, so the same job is not called two things in
+  // two destinations. The key stays `settings` so existing links keep working.
+  const tabs: TabDef<Tab>[] = tabKeys.map(t => ({ key: t, label: t === 'settings' ? 'manage' : t }))
+  const tabsState = useCustomisableTabs<Tab>('meridian', tabs)
+  const { tab, setTab } = tabsState
   const [searchParams] = useSearchParams()
   const focusedTaskId = Number(searchParams.get('task') || 0)
   const focusedWishId = Number(searchParams.get('wish') || 0)
@@ -46,11 +55,6 @@ export function MeridianPage() {
     if (tab === 'settings' && !canManage) setTab('overview')
   }, [canManage, setTab, tab])
 
-  const tabKeys: Tab[] = ['overview', 'tasks', 'routines', 'shop', 'goals', 'wishlist', 'leaderboard']
-  if (canManage) tabKeys.push('settings')
-  // "Manage" everywhere a node has a setup tab, so the same job is not called two things in
-  // two destinations. The key stays `settings` so existing links keep working.
-  const tabs: TabDef<Tab>[] = tabKeys.map(t => ({ key: t, label: t === 'settings' ? 'manage' : t }))
   const group = GROUP_FOR_TAB[tab]
 
   return (
@@ -65,7 +69,7 @@ export function MeridianPage() {
       <SearchField value={query} onChange={event => setQuery(event.target.value)} onClear={() => setQuery('')} placeholder="Search tasks and rewards…" />
 
       <div className="hidden sm:block">
-        <Tabs tabs={tabs} active={tab} onChange={setTab} className="w-fit" />
+        <CustomisableTabs state={tabsState} label="Tasks" className="w-fit" />
       </div>
 
       {tab === 'overview' ? (

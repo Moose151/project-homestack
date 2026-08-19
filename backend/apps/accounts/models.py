@@ -133,3 +133,53 @@ class User(AbstractBaseUser, HouseholdBaseModel):
 
     def has_module_perms(self, app_label) -> bool:  # noqa: ANN001
         return self.is_active and self.role == self.Role.ADMIN
+
+
+class UserPreference(HouseholdBaseModel):
+    """One whitelisted UI preference belonging to one login.
+
+    Deliberately generic: tab order and mobile-nav shortcuts are both "how this person likes
+    their interface arranged", and giving each its own column (``solace_tab_order``,
+    ``mobile_nav_slot_1``, ...) would mean a migration every time a page gains a tab.
+
+    Equally deliberately not an open JSON dump. ``key`` must appear in the registry in
+    apps.accounts.preferences, and the value is validated against that key's own schema before
+    it is stored, so a client cannot invent preferences or smuggle unbounded data in here.
+
+    These values are presentation hints only. Nothing in this table grants access: the surfaces
+    that read it re-derive what the user may actually see and intersect the saved order with
+    that, so a stale key for a tab the user can no longer open stays invisible.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="ui_preferences")
+    key = models.CharField(max_length=64)
+    value = models.JSONField(default=dict, blank=True)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        ordering = ["key"]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "key"], name="unique_user_preference_key")
+        ]
+
+
+class GuideDismissal(HouseholdBaseModel):
+    """A versioned page-guide dismissal belonging to one login."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="guide_dismissals")
+    guide_identifier = models.CharField(max_length=100)
+    guide_version = models.CharField(max_length=50, default="1")
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        ordering = ["guide_identifier", "guide_version"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "guide_identifier", "guide_version"],
+                name="unique_user_guide_version_dismissal",
+            )
+        ]

@@ -22,6 +22,7 @@ import type {
   Improvement,
   AppNotification,
   SolaceBill,
+  SolaceBillOccurrence,
   SolacePurchase,
   UpcomingHorizon,
   FitnessSession,
@@ -622,26 +623,61 @@ function NotificationsSummaryWidget({ items, unread }: { items: AppNotification[
   )
 }
 
-function SolaceBillsWidget({ items }: { items: SolaceBill[] }) {
-  if (!items.length) return <p className="text-sm text-muted">No unpaid bills due</p>
+function SolaceBillsWidget({ items, meta }: { items: SolaceBillOccurrence[]; meta?: HubWidget['meta'] }) {
+  if (meta?.locked) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-muted">Unlock Money to view your payday and bill summary.</p>
+        <Link to="/solace" className="inline-flex min-h-11 items-center text-sm font-bold text-primary hover:underline">Open Money →</Link>
+      </div>
+    )
+  }
+  if (meta?.configured === false) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-muted">Add an active income date so HomeStack can determine the next payday.</p>
+        <Link to="/solace?tab=plan&section=paydays" className="inline-flex min-h-11 items-center text-sm font-bold text-primary hover:underline">Configure income →</Link>
+      </div>
+    )
+  }
+  const payday = meta?.next_payday
+    ? new Date(`${meta.next_payday}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
+    : 'Not available'
   return (
-    <ul className="space-y-2.5">
-      {items.slice(0, 6).map(bill => {
-        const params = new URLSearchParams({ tab: 'bills', bill: String(bill.id) })
-        if (bill.next_occurrence_id) params.set('occurrence', String(bill.next_occurrence_id))
-        return (
-          <li key={bill.id} className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-ink">{bill.name}</p>
-              <p className="text-xs text-muted">{moneyLabel(bill.amount)}</p>
-            </div>
-            <Link to={`/solace?${params.toString()}`} className="shrink-0 text-xs text-primary hover:underline">
-              {formatDue(bill.next_due_at || bill.due_at)}
-            </Link>
-          </li>
-        )
-      })}
-    </ul>
+    <div className="space-y-3">
+      <div className="rounded-xl bg-sunken px-3 py-2.5">
+        <p className="text-xs font-semibold text-muted">Next payday: <span className="text-ink">{payday}</span></p>
+        <div className="mt-1 flex items-end justify-between gap-3">
+          <p className="text-sm font-bold text-ink">{meta?.bill_count ?? items.length} bill{(meta?.bill_count ?? items.length) === 1 ? '' : 's'}</p>
+          <p className="text-lg font-extrabold text-ink">{moneyLabel(meta?.total ?? 0)}</p>
+        </div>
+        {!!meta?.overdue_count && <p className="mt-1 text-xs font-bold text-danger">{meta.overdue_count} overdue</p>}
+      </div>
+      {items.length === 0 ? (
+        <p className="text-sm text-muted">Nothing unpaid is due before payday.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {items.slice(0, 4).map(occurrence => {
+            const params = new URLSearchParams({
+              tab: 'bills', section: 'upcoming', bill: String(occurrence.bill_id),
+              occurrence: String(occurrence.id),
+            })
+            return (
+              <li key={occurrence.id}>
+                <Link to={`/solace?${params.toString()}`} className="flex min-h-11 items-center justify-between gap-3 rounded-xl px-2 hover:bg-sunken">
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-ink">{occurrence.bill_name}</span>
+                    <span className={`block text-xs ${occurrence.is_overdue ? 'font-bold text-danger' : 'text-muted'}`}>{formatDue(occurrence.due_at)}</span>
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold text-ink">{moneyLabel(occurrence.amount)}</span>
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      <Link to="/solace?tab=bills&section=upcoming" className="inline-flex min-h-11 w-full items-center justify-center rounded-xl text-sm font-bold text-primary hover:bg-primary-soft">View all upcoming bills →</Link>
+    </div>
   )
 }
 
@@ -865,7 +901,7 @@ function renderWidget(w: HubWidget, onChanged: () => void) {
     case 'homestead_improvements':
       return <HomesteadImprovementsWidget items={w.items as Improvement[]} />
     case 'solace_bills_due':
-      return <SolaceBillsWidget items={w.items as SolaceBill[]} />
+      return <SolaceBillsWidget items={w.items as SolaceBillOccurrence[]} meta={w.meta} />
     case 'solace_subscriptions':
       return <SolaceSubscriptionsWidget items={w.items as SolaceBill[]} />
     case 'solace_planned_purchases':

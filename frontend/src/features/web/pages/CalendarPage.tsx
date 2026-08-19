@@ -29,6 +29,13 @@ import { isPhoneViewport } from '../../../lib/viewport'
 type View = 'month' | 'week' | 'day' | 'agenda'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
+
+/** Which filter layer an event belongs to. Calendar sources are layers in their own right,
+ *  rather than disappearing into the household's own "HomeStack" bucket. */
+function layerKey(event: CalendarEvent) {
+  if (event.calendar_source_id) return `src:${event.calendar_source_id}`
+  return event.source_node || '__direct__'
+}
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
 const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x }
 const addMonths = (d: Date, n: number) => {
@@ -83,11 +90,18 @@ export function EventModal({
   onSaved: () => void
   onError: (m: string) => void
 }) {
-  const synced = !!event?.is_synced
+  // A source-managed entry is read-only locally: the next sync would overwrite any edit, so it
+  // gets the same detail panel as a node-synced event rather than pretending to be editable.
+  const synced = !!event?.is_synced || !!event?.is_source_managed
   const base = event ? new Date(event.start_at) : (defaultDate ?? new Date())
   const [f, setF] = useState({
     title: event?.title ?? '',
+    // 'reminder' is offered only when creating: it saves an Atlas reminder through the shared
+    // reminder API rather than a calendar event, so it is a choice of *what to create*, not a
+    // calendar event_kind. Existing entries keep their own kind.
     event_kind: event?.event_kind === 'appointment' ? 'appointment' : 'event',
+    body: '',
+    notifications_enabled: true,
     start_at: base.toISOString(),
     end_at: event?.end_at ?? '',
     is_all_day: event?.is_all_day ?? false,
@@ -105,10 +119,26 @@ export function EventModal({
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: unknown) => setF(prev => ({ ...prev, [k]: v }))
 
+  const isReminder = !event && f.event_kind === 'reminder'
+
   const save = async () => {
     if (!f.title.trim()) return
     setSaving(true)
     try {
+      if (isReminder) {
+        // The real reminder record — same model and API the Atlas reminders tab uses, so it
+        // schedules notifications and syncs itself back onto the calendar.
+        await api.createReminder({
+          title: f.title.trim(),
+          body: f.body.trim(),
+          due_at: new Date(f.start_at).toISOString(),
+          is_all_day: f.is_all_day,
+          assigned_to_person_ids: f.assigned_to_person_ids,
+          notifications_enabled: f.notifications_enabled,
+        })
+        onSaved()
+        return
+      }
       const payload: CalendarEventWrite = {
         title: f.title.trim(),
         event_kind: f.event_kind as 'event' | 'appointment',
@@ -137,7 +167,7 @@ export function EventModal({
     try { await api.deleteEvent(event.id); onSaved() } catch (e) { onError(errMsg(e)) }
   }
 
-  const title = event ? (synced ? 'Event' : 'Edit event') : 'New event'
+  const title = event ? (synced ? 'Event' : 'Edit event') : isReminder ? 'New reminder' : 'New event'
 
   if (synced) {
     const href = sourcePath(event!)
@@ -147,10 +177,22 @@ export function EventModal({
           <p className="font-medium text-ink">{event!.title}</p>
           <p className="text-muted">{new Date(event!.start_at).toLocaleString()}</p>
           {event!.location && <p className="text-muted">📍 {event!.location}</p>}
+          {event!.description && <p className="whitespace-pre-wrap text-muted">{event!.description}</p>}
           <p className="mt-1 text-xs text-muted">
-            This event comes from <span className="font-medium capitalize">{event!.source_node}</span> and is edited there, not on the calendar.
+            {event!.is_source_managed
+              ? <>This entry comes from <span className="font-medium">{event!.calendar_source_name}</span> and is kept up to date automatically.</>
+              : <>This event comes from <span className="font-medium capitalize">{event!.source_node}</span> and is edited there, not on the calendar.</>}
           </p>
-          {href && (
+          {event!.is_source_managed && (
+            <Link
+              to="/calendar/sources"
+              onClick={onClose}
+              className="mt-2 flex min-h-11 items-center justify-between rounded-xl bg-primary-soft px-3 py-2 text-sm font-semibold text-primary"
+            >
+              Calendar source settings <span aria-hidden>→</span>
+            </Link>
+          )}
+          {!event!.is_source_managed && href && (
             <Link
               to={href}
               onClick={onClose}
@@ -181,13 +223,14 @@ export function EventModal({
     >
       <div className="flex flex-col gap-3">
         <Field label="Type">
-          <Select value={f.event_kind} onChange={e => set('event_kind', e.target.value)}>
+          <Select aria-label="Type" value={f.event_kind} onChange={e => set('event_kind', e.target.value)}>
             <option value="event">Event</option>
             <option value="appointment">Appointment</option>
+            {!event && <option value="reminder">Reminder</option>}
           </Select>
         </Field>
         <Input placeholder="Title" value={f.title} onChange={e => set('title', e.target.value)} data-autofocus />
-        <Field label="Start">
+        <Field label={isReminder ? 'Remind me at' : 'Start'}>
           <DateTimeField
             value={f.start_at}
             allDay={f.is_all_day}
@@ -195,7 +238,29 @@ export function EventModal({
           />
         </Field>
 
-        {!showMore ? (
+        {isReminder ? (
+          <div className="flex flex-col gap-3">
+            <Field label="Notes (optional)">
+              <Input placeholder="Anything worth remembering" value={f.body} onChange={e => set('body', e.target.value)} />
+            </Field>
+            <Field label="Remind">
+              <AssigneeSelect people={people}
+                value={f.assigned_to_person_ids || null}
+                onChange={v => set('assigned_to_person_ids', v ?? 0)} />
+            </Field>
+            <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={f.notifications_enabled}
+                onChange={e => set('notifications_enabled', e.target.checked)}
+              />
+              Send a notification when it is time
+            </label>
+            <p className="text-xs text-muted">
+              Saved in Lists &amp; Notes and shown on your calendar. Open the reminder to edit it.
+            </p>
+          </div>
+        ) : !showMore ? (
           <button
             type="button"
             onClick={() => setShowMore(true)}
@@ -773,6 +838,9 @@ export function CalendarPage() {
           source_record_id: birthday.contact_id || birthday.person_id, assigned_to_person_ids: birthday.person_id ? [birthday.person_id] : [],
           colour: '#C46A4A', location: '', provider: '', contact: '', visibility: 'household',
           sensitivity: 'normal', is_synced: true, created_at: '', updated_at: '',
+          // Birthdays are derived locally from contacts, not mirrored from a calendar source.
+          is_source_managed: false, calendar_source_id: null, calendar_source_name: '',
+          calendar_source_category: '', is_range: false,
         }))
         setEvents([...nextEvents, ...birthdayEvents])
         setRotatingSchedules(nextSchedules)
@@ -795,7 +863,7 @@ export function CalendarPage() {
   // Layer/visibility filters (Core Calendar §15): hide chosen source layers, or show only mine.
   const visibleEvents = useMemo(
     () => events.filter(e => {
-      if (hiddenSources.has(e.source_node || '__direct__')) return false
+      if (hiddenSources.has(layerKey(e))) return false
       if (myOnly && defaultAssignee.length > 0 && !defaultAssignee.some(id => e.assigned_to_person_ids.includes(id))) return false
       return true
     }),
@@ -842,13 +910,27 @@ export function CalendarPage() {
   }, [visibleRotations])
   const dayRotations = (date: Date) => rotationsByDay.get(dateKey(date)) ?? []
 
-  // Source layers present in the fetched window (node sources + "direct" for user-created events).
+  // Source layers present in the fetched window: node sources, each subscribed/automatic
+  // calendar source in its own right, and "direct" for the household's own events.
   const layersPresent = useMemo(() => {
     const set = new Set<string>()
-    for (const e of events) set.add(e.source_node || '__direct__')
+    for (const e of events) set.add(layerKey(e))
     if (rotations.length > 0) set.add('__rotation__')
     return [...set]
   }, [events, rotations])
+
+  // Label/colour for a layer chip. A calendar source names itself; a node keeps its own name.
+  const layerMeta = useMemo(() => {
+    const meta = new Map<string, { label: string; colour?: string }>()
+    for (const e of events) {
+      const key = layerKey(e)
+      if (meta.has(key)) continue
+      if (e.calendar_source_id) meta.set(key, { label: e.calendar_source_name, colour: e.colour })
+      else if (e.source_node) meta.set(key, { label: e.source_node, colour: sourceColour(e.source_node) })
+      else meta.set(key, { label: 'HomeStack' })
+    }
+    return meta
+  }, [events])
 
   const step = (dir: -1 | 1) => {
     if (view === 'month') {
@@ -954,26 +1036,36 @@ export function CalendarPage() {
         <PageHeader title="Calendar" icon="📅" actions={calendarActions} />
       </div>
 
-      {/* Period navigation stays generous; mobile uses one compact view picker. */}
-      <div className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-2.5 shadow-soft sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-1">
+      {/* Period navigation stays generous; mobile uses one compact view picker.
+          The desktop row wraps on the toolbar's own width rather than the viewport's. A `sm:`
+          breakpoint only knows the browser is wide — it cannot see that the sidebar has taken
+          ~256px, so at split-screen widths the single row was still applied and the controls
+          crushed each other (the period label collapsed to a few characters). Each group
+          instead declares a flex-basis it needs to stay comfortable; when both cannot fit, the
+          second group wraps onto its own line. At genuinely wide widths they share one row
+          exactly as before. */}
+      <div
+        data-calendar-toolbar
+        className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-2.5 shadow-soft sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3"
+      >
+        <div className="flex min-w-0 items-center gap-1 sm:flex-1 sm:basis-80">
           {/* Agenda always shows "today + 60 days" regardless of anchor, so Previous/Next/Today
               would look interactive but silently do nothing — hidden here rather than wired up
               to fake paging (docs/36 review). */}
           {view !== 'agenda' && (
             <>
               <button onClick={() => step(-1)} className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl text-xl text-muted-strong hover:bg-sunken" aria-label="Previous period">‹</button>
-              <span className="min-w-0 flex-1 truncate px-1 text-center text-sm font-extrabold text-ink sm:ml-1 sm:text-left">{periodLabel()}</span>
+              <span data-calendar-period-label className="min-w-0 flex-1 truncate px-1 text-center text-sm font-extrabold text-ink sm:ml-1 sm:text-left">{periodLabel()}</span>
               <button onClick={() => step(1)} className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl text-xl text-muted-strong hover:bg-sunken" aria-label="Next period">›</button>
               <button onClick={goToday} className="h-11 flex-shrink-0 rounded-xl px-2.5 text-xs font-bold text-primary hover:bg-primary-soft sm:px-3 sm:text-sm">Today</button>
             </>
           )}
           {view === 'agenda' && (
-            <span className="min-w-0 flex-1 truncate px-1 text-center text-sm font-extrabold text-ink sm:ml-1 sm:text-left">{periodLabel()}</span>
+            <span data-calendar-period-label className="min-w-0 flex-1 truncate px-1 text-center text-sm font-extrabold text-ink sm:ml-1 sm:text-left">{periodLabel()}</span>
           )}
         </div>
 
-        <div className="flex w-full items-center gap-2 sm:w-auto">
+        <div className="flex w-full items-center gap-2 sm:w-auto sm:flex-1 sm:basis-[21rem] sm:justify-end">
           <label className="relative min-w-0 flex-1 sm:hidden">
             <span className="sr-only">Calendar view</span>
             <select
@@ -1024,9 +1116,13 @@ export function CalendarPage() {
                     <span className="text-xs font-semibold uppercase tracking-wide text-muted-strong">Layers</span>
                     <div className="flex flex-wrap gap-1.5">
                       {layersPresent.map(src => {
-                        const label = src === '__direct__' ? 'Direct' : src === '__rotation__' ? 'Rotations' : src
+                        const label = src === '__direct__' ? 'HomeStack'
+                          : src === '__rotation__' ? 'Rotations'
+                            : layerMeta.get(src)?.label || src
                         const on = !hiddenSources.has(src)
-                        const colour = src === '__rotation__' ? rotatingSchedules[0]?.primary_colour : src !== '__direct__' ? sourceColour(src) : undefined
+                        const colour = src === '__rotation__'
+                          ? rotatingSchedules[0]?.primary_colour
+                          : layerMeta.get(src)?.colour
                         return (
                           <button key={src} onClick={() => toggleSource(src)} className={chipCls(on)} title={on ? `Hide ${label}` : `Show ${label}`}>
                             <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colour || DEFAULT_COLOUR }} />
@@ -1037,6 +1133,15 @@ export function CalendarPage() {
                     </div>
                   </div>
                 )}
+
+                <div className="border-t border-line pt-3">
+                  <Link
+                    to="/calendar/sources"
+                    className="flex min-h-11 items-center justify-between rounded-lg px-2.5 text-xs font-bold text-primary hover:bg-primary-soft"
+                  >
+                    Calendar sources <span aria-hidden>→</span>
+                  </Link>
+                </div>
 
                 <div className="flex flex-wrap gap-1.5 border-t border-line pt-3">
                   <button onClick={() => setWeekStart(w => (w === 1 ? 0 : 1))} className="px-2.5 py-1.5 rounded-lg border border-line text-xs text-muted hover:text-ink">
@@ -1164,7 +1269,7 @@ export function CalendarPage() {
             </div>
             <p className="mt-2 px-1 text-[11px] text-muted">Tap a date for its details · swipe sideways to change month · <strong>S</strong> marks a changed rotation day.</p>
           </div>
-          <div className="hidden rounded-2xl border border-line overflow-hidden sm:block">
+          <div data-calendar-grid className="hidden rounded-2xl border border-line overflow-hidden sm:block">
             <div className="grid grid-cols-7 bg-sunken">
               {weekdayNames.map(d => <div key={d} className="px-2 py-1.5 text-xs font-semibold text-muted text-center">{d}</div>)}
             </div>

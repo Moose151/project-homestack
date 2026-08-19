@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { TimePicker } from './TimePicker'
 
 interface Props {
   value: string | null // ISO datetime, or null when unset
@@ -58,12 +59,11 @@ export function DateTimeField({
           aria-label="Date"
         />
         {!allDay && (
-          <input
-            type="time"
-            className={`${inputCls} w-32`}
+          <TimePicker
+            className="w-36"
             value={time}
-            onChange={e => emit(date, e.target.value, allDay)}
-            aria-label="Time"
+            onChange={nextTime => emit(date, nextTime, allDay)}
+            ariaLabel="Time"
           />
         )}
       </div>

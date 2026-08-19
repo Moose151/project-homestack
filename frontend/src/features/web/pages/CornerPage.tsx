@@ -8,9 +8,10 @@ import { Card } from '../../../components/Card'
 import { EmptyState } from '../../../components/EmptyState'
 import { Field, Input, Select } from '../../../components/Field'
 import { InlineAlert, PageSkeleton } from '../../../components/PageState'
-import { Tabs } from '../../../components/Tabs'
+import { Tabs, type TabDef } from '../../../components/Tabs'
 import { useAuth } from '../../auth/AuthContext'
-import { useUrlTab } from '../../../hooks/useUrlTab'
+import { CustomisableTabs } from '../../../components/CustomisableTabs'
+import { useCustomisableTabs } from '../../../hooks/useCustomisableTabs'
 import { MobileListRow } from '../../../components/mobile'
 
 const TABS = ['overview', 'activity', 'assigned', 'lists'] as const
@@ -205,7 +206,7 @@ export function CornerPage() {
   const { personId } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
-  const [tab, setTab] = useUrlTab<CornerTab>('overview', TABS)
+
   const [people, setPeople] = useState<Person[]>([])
   const [peopleLoaded, setPeopleLoaded] = useState(false)
   const [corner, setCorner] = useState<CornerResponse | null>(null)
@@ -217,6 +218,16 @@ export function CornerPage() {
   const [newListVisibility, setNewListVisibility] = useState<'household' | 'private'>('household')
   const [listSection, setListSection] = useState<ListSection>('personal')
   const selectedId = Number(personId) || null
+  // Built here rather than at the render site: the tab row only renders once a corner has
+  // loaded, but the hook has to run on every render like any other.
+  const cornerTabs: TabDef<CornerTab>[] = [
+    { key: 'overview', label: 'Overview' },
+    { key: 'activity', label: 'Activity', badge: corner?.summary.activity_count },
+    { key: 'assigned', label: 'Assigned', badge: corner?.summary.assignment_count },
+    { key: 'lists', label: 'Lists & wishes', badge: corner?.summary.collection_count },
+  ]
+  const tabsState = useCustomisableTabs<CornerTab>('corner', cornerTabs)
+  const { tab, setTab } = tabsState
 
   useEffect(() => {
     api.getPeople().then(rows => {
@@ -294,12 +305,7 @@ export function CornerPage() {
         </div>
       </section>
 
-      <Tabs active={tab} onChange={setTab} tabs={[
-        { key: 'overview', label: 'Overview' },
-        { key: 'activity', label: 'Activity', badge: corner.summary.activity_count },
-        { key: 'assigned', label: 'Assigned', badge: corner.summary.assignment_count },
-        { key: 'lists', label: 'Lists & wishes', badge: corner.summary.collection_count },
-      ]} mobileSelectLabel="Corner section" />
+      <CustomisableTabs state={tabsState} label="Corners" mobileSelectLabel="Corner section" />
 
       {tab === 'overview' && (
         <div className="grid gap-4 lg:grid-cols-3">

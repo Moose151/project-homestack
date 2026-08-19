@@ -12,14 +12,16 @@ import type { Person } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { Input, SearchField, Textarea, Select } from '../../../components/Field'
-import { Tabs, type TabDef } from '../../../components/Tabs'
+import { type TabDef } from '../../../components/Tabs'
+import { CustomisableTabs } from '../../../components/CustomisableTabs'
+import { useCustomisableTabs } from '../../../hooks/useCustomisableTabs'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
 import { DeleteAction } from '../../../components/RowActions'
 import { useAuth } from '../../auth/AuthContext'
-import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
+import { useUrlQueryState } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
 import { Modal } from '../../../components/Modal'
 import { MobileListRow, MobileScreenHeader, MobileSection } from '../../../components/mobile'
@@ -1472,7 +1474,8 @@ function InstitutionsTab({ institutions, onChange, onError }: {
 
 export function EducationPage() {
   const { user } = useAuth()
-  const [tab, setTab] = useUrlTab<Tab>('overview', TABS.map(item => item.key))
+  const tabsState = useCustomisableTabs<Tab>('education', TABS)
+  const { tab, setTab } = tabsState
   const [searchParams] = useSearchParams()
   const focusedAssessmentId = Number(searchParams.get('assessment') || 0)
   const [courses, setCourses] = useState<EducationCourse[]>([])
@@ -1522,7 +1525,7 @@ export function EducationPage() {
       ) : (
         <>
           <div className="hidden sm:block">
-            <Tabs tabs={TABS} active={tab} onChange={setTab} mobileSelectLabel="Education section" />
+            <CustomisableTabs state={tabsState} label="Education" mobileSelectLabel="Education section" />
           </div>
           {tab !== 'overview' && (
             <MobileScreenHeader

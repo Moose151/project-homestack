@@ -6,14 +6,16 @@ import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { Modal } from '../../../components/Modal'
 import { Field, Input, SearchField, Textarea, Select } from '../../../components/Field'
-import { Tabs } from '../../../components/Tabs'
+import { type TabDef } from '../../../components/Tabs'
+import { CustomisableTabs } from '../../../components/CustomisableTabs'
+import { useCustomisableTabs } from '../../../hooks/useCustomisableTabs'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
 import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
 import { DeleteAction } from '../../..//components/RowActions'
 import { useAuth } from '../../auth/AuthContext'
-import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
+import { useUrlQueryState } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
 import { sourcePath } from '../../../lib/sourceLinks'
 import { EventModal } from './CalendarPage'
@@ -434,12 +436,21 @@ function NotesTab({ onError }: { onError: (m: string) => void }) {
 // Reminders tab
 // ---------------------------------------------------------------------------
 
-function RemindersTab({ onError }: { onError: (m: string) => void }) {
+function RemindersTab({ people, defaultAssignee, focusedReminderId, onError }: {
+  people: Person[]
+  defaultAssignee: number[]
+  focusedReminderId: number
+  onError: (m: string) => void
+}) {
   const [reminders, setReminders] = useState<AtlasReminder[]>([])
   const [loading, setLoading] = useState(true)
   const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
   const [dueAt, setDueAt] = useState<string | null>(null)
-  const [dueAllDay, setDueAllDay] = useState(true)
+  const [dueAllDay, setDueAllDay] = useState(false)
+  const [assignees, setAssignees] = useState<number[]>(defaultAssignee)
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true)
+  const [editingId, setEditingId] = useState<number | null>(null)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -447,14 +458,45 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
     api.getReminders().then(setReminders).catch(e => onError(errMsg(e))).finally(() => setLoading(false))
   }, [onError])
 
+  useEffect(() => {
+    if (!focusedReminderId || !reminders.length) return
+    const reminder = reminders.find(row => row.id === focusedReminderId)
+    if (reminder) {
+      setEditingId(reminder.id); setTitle(reminder.title); setBody(reminder.body)
+      setDueAt(reminder.due_at); setDueAllDay(reminder.is_all_day)
+      setAssignees(reminder.assigned_to_person_ids); setNotificationsEnabled(reminder.notifications_enabled)
+      setOpen(true)
+    }
+  }, [focusedReminderId, reminders])
+
+  const resetForm = () => {
+    setEditingId(null); setTitle(''); setBody(''); setDueAt(null); setDueAllDay(false)
+    setAssignees(defaultAssignee); setNotificationsEnabled(true)
+  }
+
+  const edit = (reminder: AtlasReminder) => {
+    setEditingId(reminder.id); setTitle(reminder.title); setBody(reminder.body)
+    setDueAt(reminder.due_at); setDueAllDay(reminder.is_all_day)
+    setAssignees(reminder.assigned_to_person_ids); setNotificationsEnabled(reminder.notifications_enabled)
+    setOpen(true)
+  }
+
   const create = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
     setSaving(true)
     try {
-      const r = await api.createReminder({ title: title.trim(), due_at: dueAt, is_all_day: dueAllDay })
-      setReminders(prev => [...prev, r])
-      setTitle(''); setDueAt(null); setDueAllDay(true); setOpen(false)
+      const payload = {
+        title: title.trim(), body: body.trim(), due_at: dueAt, is_all_day: dueAllDay,
+        assigned_to_person_ids: assignees, notifications_enabled: notificationsEnabled,
+      }
+      const reminder = editingId
+        ? await api.updateReminder(editingId, payload)
+        : await api.createReminder(payload)
+      setReminders(prev => editingId
+        ? prev.map(row => row.id === reminder.id ? reminder : row)
+        : [...prev, reminder])
+      resetForm(); setOpen(false)
     } catch (e) {
       onError(errMsg(e))
     } finally {
@@ -483,26 +525,7 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {open ? (
-        <Card title="New reminder">
-          <form onSubmit={create} className="flex flex-col gap-3">
-            <Input
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="Reminder title"
-              autoFocus
-            />
-            <DateTimeField value={dueAt} allDay={dueAllDay}
-              onChange={({ value, allDay }) => { setDueAt(value); setDueAllDay(allDay) }} />
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button type="submit" size="sm" loading={saving} disabled={!title.trim()}>Save</Button>
-            </div>
-          </form>
-        </Card>
-      ) : (
-        <Button size="sm" onClick={() => setOpen(true)} className="self-start">+ New reminder</Button>
-      )}
+      <Button size="sm" onClick={() => { resetForm(); setOpen(true) }} className="self-start">+ New reminder</Button>
 
       {reminders.length === 0 ? (
         <EmptyState icon="⏰" title="No reminders yet" hint="Dated reminders also show on your Hub and Calendar." />
@@ -523,16 +546,55 @@ function RemindersTab({ onError }: { onError: (m: string) => void }) {
                         <Link to={calendarDayHref(r.due_at)} className="ml-2 text-primary hover:underline">Open day</Link>
                       </p>
                     )}
+                    <p className="mt-1 text-xs text-muted">
+                      {r.assigned_to_person_ids.length
+                        ? `For ${r.assigned_to_person_ids.map(id => people.find(person => person.id === id)?.preferred_name || people.find(person => person.id === id)?.display_name).filter(Boolean).join(', ')}`
+                        : 'For the whole family'}
+                      {' · '}{r.notification_state === 'scheduled' ? 'Notification scheduled'
+                        : r.notification_state === 'sent' ? 'Notification sent'
+                          : r.notification_state === 'disabled' ? 'Notifications off'
+                            : r.notification_state === 'elapsed' ? 'Reminder time passed'
+                              : 'Choose a date and time to schedule'}
+                    </p>
                   </div>
                   {due && (
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${due.tone}`}>{due.text}</span>
                   )}
+                  <Button size="sm" variant="ghost" onClick={() => edit(r)}>Edit</Button>
                   <DeleteAction onClick={() => remove(r.id)} label={r.title} />
                 </div>
               </Card>
             )
           })}
         </div>
+      )}
+      {open && (
+        <Modal
+          title={editingId ? 'Edit reminder' : 'New reminder'}
+          onClose={() => { setOpen(false); resetForm() }}
+          size="full"
+          footer={(
+            <>
+              <Button variant="ghost" onClick={() => { setOpen(false); resetForm() }}>Cancel</Button>
+              <Button type="submit" form="atlas-reminder-form" loading={saving} disabled={!title.trim()}>{editingId ? 'Save reminder' : 'Schedule reminder'}</Button>
+            </>
+          )}
+        >
+          <form id="atlas-reminder-form" onSubmit={create} className="flex flex-col gap-4">
+            <Field label="Title"><Input value={title} onChange={e => setTitle(e.target.value)} placeholder="What should HomeStack remind you about?" data-autofocus /></Field>
+            <Field label="Notes"><Textarea rows={3} value={body} onChange={e => setBody(e.target.value)} placeholder="Optional details" /></Field>
+            <Field label="Date and time" hint="Timed reminders use your household timezone. All-day reminders arrive at your configured morning time.">
+              <DateTimeField value={dueAt} allDay={dueAllDay} onChange={({ value, allDay }) => { setDueAt(value); setDueAllDay(allDay) }} />
+            </Field>
+            <Field label="Who is this for?" hint="Assigned people receive the scheduled notification. Empty means the whole household.">
+              <AssigneeSelect people={people} value={assignees} onChange={setAssignees} />
+            </Field>
+            <label className="flex items-start gap-3 rounded-2xl border border-line bg-sunken/40 p-3 text-sm text-muted-strong">
+              <input type="checkbox" className="mt-1" checked={notificationsEnabled} onChange={event => setNotificationsEnabled(event.target.checked)} />
+              <span><strong className="block text-ink">Send notifications</strong>Uses HomeStack's existing 24-hour-before and morning-of notification schedule.</span>
+            </label>
+          </form>
+        </Modal>
       )}
     </div>
   )
@@ -876,7 +938,6 @@ function GroceryTab({ lists, people, defaultAssignee, focusedListId, focusedItem
 }
 
 type Tab = 'agenda' | 'schedule' | 'lists' | 'grocery' | 'shopping' | 'notes' | 'reminders' | 'people'
-const TAB_KEYS: Tab[] = ['agenda', 'schedule', 'lists', 'grocery', 'shopping', 'notes', 'reminders', 'people']
 
 const LIST_TYPES = Object.entries(LIST_TYPE_META)
   .filter(([key]) => key !== 'grocery' && key !== 'shopping')
@@ -884,8 +945,19 @@ const LIST_TYPES = Object.entries(LIST_TYPE_META)
 
 export function AtlasPage() {
   const { user } = useAuth()
-  const [tab, setTab] = useUrlTab<Tab>('agenda', TAB_KEYS)
   const [lists, setLists] = useState<AtlasList[]>([])
+  const atlasTabs: TabDef<Tab>[] = [
+    { key: 'agenda', label: 'agenda' },
+    { key: 'schedule', label: 'appointments & events' },
+    { key: 'lists', label: 'lists', badge: lists.filter(l => l.list_type !== 'grocery' && l.list_type !== 'shopping').length || undefined },
+    { key: 'grocery', label: 'grocery', badge: lists.filter(l => l.list_type === 'grocery').length || undefined },
+    { key: 'shopping', label: 'shopping', badge: lists.filter(l => l.list_type === 'shopping').length || undefined },
+    { key: 'notes', label: 'notes' },
+    { key: 'reminders', label: 'reminders' },
+    { key: 'people', label: 'people & birthdays' },
+  ]
+  const tabsState = useCustomisableTabs<Tab>('atlas', atlasTabs)
+  const { tab, setTab } = tabsState
   const [people, setPeople] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
   const [newTitle, setNewTitle] = useState('')
@@ -904,6 +976,7 @@ export function AtlasPage() {
   const [searchParams] = useSearchParams()
   const focusedListId = Number(searchParams.get('list') || 0)
   const focusedItemId = Number(searchParams.get('item') || 0)
+  const focusedReminderId = Number(searchParams.get('reminder') || 0)
   const effectiveFocusedListId = focusedListId || lists.find(list => list.items?.some(item => item.id === focusedItemId))?.id || 0
 
   useEffect(() => {
@@ -928,8 +1001,6 @@ export function AtlasPage() {
   // Grocery and Shopping now have their own dedicated tabs; the generic Lists tab keeps
   // everything else (to-do, checklist, general, wishlist).
   const otherLists = lists.filter(l => l.list_type !== 'grocery' && l.list_type !== 'shopping')
-  const groceryCount = lists.filter(l => l.list_type === 'grocery').length
-  const shoppingCount = lists.filter(l => l.list_type === 'shopping').length
 
   // Debounced Atlas-wide search.
   useEffect(() => {
@@ -1012,21 +1083,7 @@ export function AtlasPage() {
       ) : (
         <>
           {/* Tabs */}
-          <Tabs
-            tabs={[
-              { key: 'agenda', label: 'agenda' },
-              { key: 'schedule', label: 'appointments & events' },
-              { key: 'lists', label: 'lists', badge: otherLists.length || undefined },
-              { key: 'grocery', label: 'grocery', badge: groceryCount || undefined },
-              { key: 'shopping', label: 'shopping', badge: shoppingCount || undefined },
-              { key: 'notes', label: 'notes' },
-              { key: 'reminders', label: 'reminders' },
-              { key: 'people', label: 'people & birthdays' },
-            ]}
-            active={tab}
-            onChange={setTab}
-            className="w-fit"
-          />
+          <CustomisableTabs state={tabsState} label="Lists &amp; Notes" className="w-fit" />
 
           {tab === 'agenda' ? <AgendaTab people={people} lists={lists} defaultAssignee={defaultAssignee} onError={setError} onListsChanged={() => api.getLists().then(setLists).catch(error => setError(errMsg(error)))} /> : tab === 'schedule' ? <AppointmentsEventsTab people={people} defaultAssignee={defaultAssignee} onError={setError} /> : tab === 'lists' ? (
             <div className="flex flex-col gap-4">
@@ -1099,7 +1156,13 @@ export function AtlasPage() {
           ) : tab === 'notes' ? (
             <NotesTab key={`notes-${captureTick}`} onError={setError} />
           ) : tab === 'reminders' ? (
-            <RemindersTab key={`reminders-${captureTick}`} onError={setError} />
+            <RemindersTab
+              key={`reminders-${captureTick}`}
+              people={people}
+              defaultAssignee={defaultAssignee}
+              focusedReminderId={focusedReminderId}
+              onError={setError}
+            />
           ) : (
             <PeopleBirthdaysTab people={people} onError={setError} />
           )}
