@@ -72,10 +72,30 @@ not High/Medium/Low priority), a note, and notification offsets.
 
 **Notification offsets**: a dated To-do can select multiple offsets from a curated menu — at
 time, 15/30 minutes before, 1/2 hours before, 1/2 days before, 1 week before. Selections are
-idempotent, reschedule automatically when the due date/time changes, and stop firing the moment
-the To-do is completed or deleted (nothing is pre-scheduled; each scheduler run recomputes from
-the item's current `due_at`/`notify_offsets`). This reuses the existing shared notification
-infrastructure (`apps.notifications`) — see §11.
+idempotent, reschedule when the due date/time changes, and stop firing the moment the To-do is
+completed or deleted (nothing is pre-scheduled; each scheduler run recomputes from the item's
+current `due_at`/`notify_offsets`). This reuses the existing shared notification infrastructure
+(`apps.notifications`) — see §11.
+
+*Rescheduling and the delivery ledger (v0.40.1).* `run_due_todo_offsets` records each delivery
+in `NotificationReminderLog` keyed on `(source_node="atlas", record_type="AtlasListItem",
+record_id, lead_kind="offset:<minutes>")`. That key is what makes repeated scheduler runs safe
+for one occurrence — but on its own it is wrong across a reschedule: the marker from the old due
+date would suppress the same lead for every later one, so a To-do moved to tomorrow would never
+be announced again.
+
+`update_list_item` therefore compares a small schedule signature (`due_at` plus the offsets as a
+sorted set) before and after the write, and publishes `atlas.todo_schedule_changed` only when it
+actually differs. `apps.notifications.handlers` subscribes and **soft-deletes** just that item's
+`offset:` ledger rows. Three properties this is built to keep:
+
+- the dependency points the right way — Atlas says "this schedule moved" and knows nothing about
+  a ledger, matching how `atlas.list_item_created` already works (D4);
+- duplicate protection is not weakened: invalidation happens only on a genuine schedule change,
+  so retitling a To-do, or running the scheduler repeatedly, changes nothing;
+- delivery history is preserved. The rows are soft-deleted, not removed, and `_already_sent`
+  reads through the soft-delete-aware manager, so what was sent stays auditable while stopping
+  short of blocking the new occurrence.
 
 **Today view**: a lightweight aggregation of overdue and due-today To-dos across the Household
 list and every personal list. It is not a project planner; the Dashboard's "Upcoming" widget
@@ -86,8 +106,30 @@ are restorable.
 
 ### Legacy: AtlasReminder
 
-The pre-D19 `AtlasReminder` model still exists in the schema, but **nothing in the product
-creates, reads or schedules one**. It is archival data only.
+The pre-D19 `AtlasReminder` model still exists in the schema, but **no write path anywhere can
+create or modify one**. It is archival data.
+
+Precisely what that means, since v0.40.0 claimed it before it was fully true:
+
+| Route | v0.40.0 | v0.40.1 |
+| --- | --- | --- |
+| `GET /atlas/reminders/`, `GET /atlas/reminders/<id>/` | 200 | 200 — kept so historical rows stay readable for support |
+| `POST /atlas/reminders/` | **created a live reminder** | 410 Gone, naming `todos/quick-create/` |
+| `PATCH`/`DELETE /atlas/reminders/<id>/` | mutated the row | 410 Gone |
+
+0.40.0 retired reminders from the *interface* but left the write routes mounted, so any client
+could still create one and reintroduce the parallel model. 410 rather than 404/405 because the
+capability existed, was removed deliberately, and has a named successor.
+
+An old POST body is deliberately **not** forwarded to the to-do endpoint. The shapes are close
+but not equivalent — `body` vs `notes`, and a boolean `notifications_enabled` vs a list of
+offsets whose correct translation depends on `is_all_day` — so reinterpreting one as the other
+would be guessing at the caller's intent.
+
+`create_reminder`/`update_reminder`/`delete_reminder` remain in `atlas/services.py` with no view
+attached. They are how the test suite still exercises the `CalendarSyncMixin` contract for the
+rows that exist in migrated households; there is no other entry point left. They must not be
+wired back to a route.
 
 Both surfaces that used to create reminders now create To-dos through
 `POST /atlas/todos/quick-create/`, which routes the capture to the right list server-side (one

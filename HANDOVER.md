@@ -164,10 +164,11 @@ Major shipped areas include:
   active Person, with configurable notification offsets and a Today view), Lists & Notes
   (checklists + notes), Agenda/Appointments & events/People & Pet birthdays. The old
   Grocery/Shopping split and the standalone Atlas "Reminder" object were retired in favour of
-  this simplified model — see `docs/11_Node_Atlas.md`. `AtlasReminder` survives as archival data
-  only: nothing creates, reads or schedules one, Calendar's "Reminder" action and the ambient
-  Quick Add both create To-dos through `POST /atlas/todos/quick-create/`, and a To-do's
-  notifications come solely from its own `notify_offsets`.
+  this simplified model — see `docs/11_Node_Atlas.md`. `AtlasReminder` survives as archival data:
+  its HTTP write verbs return 410 (v0.40.1 — 0.40.0 left them mounted), reads are kept for
+  support, Calendar's "Reminder" action and the ambient Quick Add both create To-dos through
+  `POST /atlas/todos/quick-create/`, and a To-do's notifications come solely from its own
+  `notify_offsets`.
 - **Quick Launch (v0.40)** — per-user shortcuts to the places someone actually goes, resolved to
   a route at launch time so a saved shortcut never grants access or outlives its destination.
   See `docs/39_Core_Quick_Launch.md`.

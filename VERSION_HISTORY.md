@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.40.0**
+> **Current version: 0.40.1**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,24 @@
 ---
 
 ## 0.40 — Faster everyday household coordination
+
+### 0.40.1 — 2026-08-20 — Legacy reminder writes closed, rescheduled to-dos notify again
+- **The retired Atlas Reminder API can no longer create anything.** 0.40.0 removed reminders from
+  the interface but left the write routes mounted, so a client could still `POST` a brand-new
+  legacy reminder and reintroduce the parallel Reminder/To-do model the release exists to remove
+  — with it, a second calendar entry and a second notification for something a to-do already
+  covers. `POST /atlas/reminders/` and `PATCH`/`DELETE /atlas/reminders/<id>/` now return
+  **410 Gone** naming `POST /atlas/todos/quick-create/` as the replacement. Reads are kept so
+  historical rows stay visible for support, and no reminder data is deleted. An old request body
+  is deliberately not reinterpreted as a to-do: the two shapes are close but not equivalent.
+- **A to-do moved after its reminder already fired is announced again.** Notification
+  idempotency is keyed per item and lead (`offset:60`), which is right for repeated scheduler
+  runs against one occurrence but was also silencing later ones: a to-do whose 1-hour warning had
+  fired, then moved to tomorrow, would never warn again. Changing a to-do's due date or its
+  offsets now retires just that item's `offset:` delivery markers, so the new occurrence is
+  eligible while repeated runs stay idempotent and completing or deleting a to-do still stops
+  everything. Editing only the title or notes leaves the schedule alone. Delivery history is
+  preserved rather than erased.
 
 ### 0.40.0 — 2026-08-19 — Atlas simplified, Quick Launch and faster everyday navigation
 - **Atlas is now three things: Grocery, To-dos, and Lists & Notes.** The previous Grocery/Shopping

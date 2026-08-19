@@ -1,7 +1,16 @@
 {
-  "current_version": "0.40.0",
-  "source_sha256": "0238a50024d1b556389584518d4008512da81018d04397b467b6bde38469690e",
+  "current_version": "0.40.1",
+  "source_sha256": "e93472dd1a7686e1c7456a842168f0bfdb687dec5e3f15c5c1fb73d90d9b52e5",
   "releases": [
+    {
+      "version": "0.40.1",
+      "date": "2026-08-20",
+      "title": "Legacy reminder writes closed, rescheduled to-dos notify again",
+      "changes": [
+        "**The retired Atlas Reminder API can no longer create anything.** 0.40.0 removed reminders from the interface but left the write routes mounted, so a client could still `POST` a brand-new legacy reminder and reintroduce the parallel Reminder/To-do model the release exists to remove — with it, a second calendar entry and a second notification for something a to-do already covers. `POST /atlas/reminders/` and `PATCH`/`DELETE /atlas/reminders/<id>/` now return **410 Gone** naming `POST /atlas/todos/quick-create/` as the replacement. Reads are kept so historical rows stay visible for support, and no reminder data is deleted. An old request body is deliberately not reinterpreted as a to-do: the two shapes are close but not equivalent.",
+        "**A to-do moved after its reminder already fired is announced again.** Notification idempotency is keyed per item and lead (`offset:60`), which is right for repeated scheduler runs against one occurrence but was also silencing later ones: a to-do whose 1-hour warning had fired, then moved to tomorrow, would never warn again. Changing a to-do's due date or its offsets now retires just that item's `offset:` delivery markers, so the new occurrence is eligible while repeated runs stay idempotent and completing or deleting a to-do still stops everything. Editing only the title or notes leaves the schedule alone. Delivery history is preserved rather than erased."
+      ]
+    },
     {
       "version": "0.40.0",
       "date": "2026-08-19",
