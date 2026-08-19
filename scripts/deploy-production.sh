@@ -69,6 +69,9 @@ Options:
                             Git checkout.
   --help                    Show this help.
 
+--bootstrap-deployed-sha and --record-rollback-sha are mutually exclusive with each other and with
+--dry-run, --migrate and --skip-backup-age-check.
+
 Normal deployment:
   cd /opt/docker/project-homestack
   ./scripts/deploy-production.sh
@@ -121,6 +124,23 @@ parse_args() {
     esac
     shift
   done
+}
+
+# --bootstrap-deployed-sha and --record-rollback-sha are one-shot, state-writing corrections run
+# outside the normal deploy flow. Combining either with --dry-run, --migrate,
+# --skip-backup-age-check, or each other is always a mistake: the special mode runs before the
+# dry-run check, so without this guard a "--dry-run --bootstrap-deployed-sha ..." would still
+# write the marker. Fail closed before any marker is touched.
+validate_args() {
+  local special_modes=0
+  [[ -n "$BOOTSTRAP_DEPLOYED_SHA" ]] && special_modes=$((special_modes + 1))
+  [[ -n "$RECORD_ROLLBACK_SHA" ]] && special_modes=$((special_modes + 1))
+  (( special_modes <= 1 )) || fail "--bootstrap-deployed-sha and --record-rollback-sha are mutually exclusive"
+  if (( special_modes == 1 )); then
+    (( DRY_RUN == 0 )) || fail "--dry-run cannot be combined with --bootstrap-deployed-sha or --record-rollback-sha"
+    (( RUN_MIGRATIONS == 0 )) || fail "--migrate cannot be combined with --bootstrap-deployed-sha or --record-rollback-sha"
+    (( SKIP_BACKUP_AGE_CHECK == 0 )) || fail "--skip-backup-age-check cannot be combined with --bootstrap-deployed-sha or --record-rollback-sha"
+  fi
 }
 
 require_valid_commit() {
@@ -183,16 +203,34 @@ bootstrap_deployed_sha() {
 # fully validated by hand (docs/35_Production_Serving_and_Deployment.md section 13). This never
 # runs implicitly and never runs before that validation, so the marker cannot advance past a
 # rollback that has not actually been proven healthy. It does not touch containers or the checkout.
+#
+# Two fail-closed checks bind the marker to reality instead of trusting the operator's argument:
+#   - the candidate must equal the commit actually checked out (HEAD) right now, so the marker can
+#     never claim a SHA other than the one that was just built/promoted/validated;
+#   - the candidate must equal, or be a Git ancestor of, the previously recorded deployed SHA, so
+#     an unrelated or "forward" commit can never be recorded as a rollback.
 record_rollback_deployed_sha() {
   PHASE="record rollback deployed SHA"
   require_repo_dir
   require_clean_tree
   [[ -n "$RECORD_ROLLBACK_SHA" ]] || fail "No rollback SHA supplied"
   [[ -f "$DEPLOYED_SHA_FILE" ]] || fail "No deployed SHA marker found at $DEPLOYED_SHA_FILE. Use --bootstrap-deployed-sha for first-time setup instead."
-  local full_sha
-  full_sha="$(resolve_full_sha "$RECORD_ROLLBACK_SHA")"
-  write_deployed_sha "$full_sha"
-  printf 'Recorded rollback commit as the deployed SHA marker: %s\n' "$full_sha"
+
+  local candidate_sha head_sha previous_deployed_sha
+  candidate_sha="$(resolve_full_sha "$RECORD_ROLLBACK_SHA")"
+  head_sha="$(resolve_full_sha "$(git rev-parse HEAD)")"
+  [[ "$candidate_sha" == "$head_sha" ]] || \
+    fail "Rollback SHA ($candidate_sha) does not match the currently checked-out commit ($head_sha). The rollback marker must match the code that was actually checked out, built and validated; check out the rollback commit before recording it."
+
+  previous_deployed_sha="$(read_deployed_sha)"
+  if [[ "$candidate_sha" != "$previous_deployed_sha" ]]; then
+    git merge-base --is-ancestor "$candidate_sha" "$previous_deployed_sha" || \
+      fail "Rollback SHA ($candidate_sha) is not equal to, or an ancestor of, the previously recorded deployed SHA ($previous_deployed_sha). Refusing to record an unrelated or forward commit as a rollback; the deployed marker was left unchanged."
+  fi
+
+  write_deployed_sha "$candidate_sha"
+  printf 'Recorded rollback commit as the deployed SHA marker: %s\n' "$candidate_sha"
+  printf 'Previous deployed SHA: %s\n' "$previous_deployed_sha"
   printf 'Marker file: %s\n' "$DEPLOYED_SHA_FILE"
   printf 'No fetch, build, migration, container recreation, NPM reload, or checkout change was performed.\n'
   printf 'Only the next normal deploy will act on this marker.\n'
@@ -597,6 +635,7 @@ SUMMARY
 
 main() {
   parse_args "$@"
+  validate_args
   if [[ -n "$BOOTSTRAP_DEPLOYED_SHA" ]]; then
     bootstrap_deployed_sha
     exit 0

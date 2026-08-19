@@ -33,6 +33,9 @@ reset_state() {
   MOCK_CHECKOUT_SHA=""
   MOCK_TARGET_SHA=""
   MOCK_FAIL_PHASE=""
+  MOCK_ROLLBACK_HEAD_SHA=""
+  MOCK_ROLLBACK_PREVIOUS_SHA=""
+  MOCK_ROLLBACK_IS_ANCESTOR_RESULT=0
 }
 
 pass() {
@@ -403,18 +406,132 @@ test_rollback_marker_unchanged_when_recording_not_confirmed() {
   [[ "$(tr -d '[:space:]' < "$state")" == "old-deployed-sha" ]]
 }
 
+setup_record_rollback_mocks() {
+  local state="$1"
+  MOCK_ROLLBACK_HEAD_SHA="$2"
+  MOCK_ROLLBACK_PREVIOUS_SHA="$3"
+  MOCK_ROLLBACK_IS_ANCESTOR_RESULT="${4:-0}"
+  DEPLOYED_SHA_FILE="$state"
+  printf '%s\n' "$MOCK_ROLLBACK_PREVIOUS_SHA" > "$state"
+  require_repo_dir() { :; }
+  require_clean_tree() { :; }
+  resolve_full_sha() { printf '%s\n' "$1"; }
+  git() {
+    case "$*" in
+      "rev-parse HEAD") printf '%s\n' "$MOCK_ROLLBACK_HEAD_SHA" ;;
+      "merge-base --is-ancestor "*) return "$MOCK_ROLLBACK_IS_ANCESTOR_RESULT" ;;
+      *) command git "$@" ;;
+    esac
+  }
+}
+
 test_record_rollback_sha_stores_rollback_sha() {
+  local state
+  state="$(mktemp)"
+  setup_record_rollback_mocks "$state" "rollback-sha" "old-deployed-sha" 0
+  RECORD_ROLLBACK_SHA="rollback-sha"
+  record_rollback_deployed_sha >/dev/null
+  [[ "$(tr -d '[:space:]' < "$state")" == "rollback-sha" ]]
+}
+
+test_record_rollback_rejects_candidate_not_head() {
+  local state
+  state="$(mktemp)"
+  setup_record_rollback_mocks "$state" "head-sha" "old-deployed-sha" 0
+  RECORD_ROLLBACK_SHA="different-sha"
+  if ( record_rollback_deployed_sha ) 2>/dev/null; then
+    return 1
+  fi
+  [[ "$(tr -d '[:space:]' < "$state")" == "old-deployed-sha" ]]
+}
+
+test_record_rollback_accepts_candidate_equal_head() {
+  local state
+  state="$(mktemp)"
+  setup_record_rollback_mocks "$state" "rollback-sha" "rollback-sha" 0
+  RECORD_ROLLBACK_SHA="rollback-sha"
+  record_rollback_deployed_sha >/dev/null
+  [[ "$(tr -d '[:space:]' < "$state")" == "rollback-sha" ]]
+}
+
+test_record_rollback_rejects_unrelated_candidate() {
+  local state
+  state="$(mktemp)"
+  setup_record_rollback_mocks "$state" "rollback-sha" "unrelated-deployed-sha" 1
+  RECORD_ROLLBACK_SHA="rollback-sha"
+  if ( record_rollback_deployed_sha ) 2>/dev/null; then
+    return 1
+  fi
+  [[ "$(tr -d '[:space:]' < "$state")" == "unrelated-deployed-sha" ]]
+}
+
+test_record_rollback_rejects_forward_candidate() {
+  local state
+  state="$(mktemp)"
+  setup_record_rollback_mocks "$state" "newer-forward-sha" "old-deployed-sha" 1
+  RECORD_ROLLBACK_SHA="newer-forward-sha"
+  if ( record_rollback_deployed_sha ) 2>/dev/null; then
+    return 1
+  fi
+  [[ "$(tr -d '[:space:]' < "$state")" == "old-deployed-sha" ]]
+}
+
+test_dry_run_and_bootstrap_mutually_exclusive() {
+  local state
+  state="$(mktemp -u)"
+  DEPLOYED_SHA_FILE="$state"
+  parse_args --dry-run --bootstrap-deployed-sha abc1234
+  if ( validate_args ) 2>/dev/null; then
+    return 1
+  fi
+  [[ ! -f "$state" ]]
+}
+
+test_dry_run_and_record_rollback_mutually_exclusive() {
   local state
   state="$(mktemp)"
   printf 'old-deployed-sha\n' > "$state"
   DEPLOYED_SHA_FILE="$state"
-  require_valid_commit() { :; }
-  resolve_full_sha() { printf '%s\n' "$1"; }
-  require_repo_dir() { :; }
-  require_clean_tree() { :; }
-  RECORD_ROLLBACK_SHA="rollback-sha"
-  record_rollback_deployed_sha >/dev/null
-  [[ "$(tr -d '[:space:]' < "$state")" == "rollback-sha" ]]
+  parse_args --dry-run --record-rollback-sha abc1234
+  if ( validate_args ) 2>/dev/null; then
+    return 1
+  fi
+  [[ "$(tr -d '[:space:]' < "$state")" == "old-deployed-sha" ]]
+}
+
+test_bootstrap_and_record_rollback_mutually_exclusive() {
+  local state
+  state="$(mktemp)"
+  printf 'old-deployed-sha\n' > "$state"
+  DEPLOYED_SHA_FILE="$state"
+  parse_args --bootstrap-deployed-sha abc1234 --record-rollback-sha def5678
+  if ( validate_args ) 2>/dev/null; then
+    return 1
+  fi
+  [[ "$(tr -d '[:space:]' < "$state")" == "old-deployed-sha" ]]
+}
+
+test_migrate_and_bootstrap_mutually_exclusive() {
+  local state
+  state="$(mktemp -u)"
+  DEPLOYED_SHA_FILE="$state"
+  parse_args --migrate --bootstrap-deployed-sha abc1234
+  if ( validate_args ) 2>/dev/null; then
+    return 1
+  fi
+  [[ ! -f "$state" ]]
+}
+
+test_skip_backup_age_check_and_record_rollback_mutually_exclusive() {
+  local state
+  state="$(mktemp)"
+  printf 'old-deployed-sha\n' > "$state"
+  DEPLOYED_SHA_FILE="$state"
+  parse_args --skip-backup-age-check --record-rollback-sha abc1234
+  if ( validate_args ) 2>/dev/null; then
+    return 1
+  fi
+  [[ "$(tr -d '[:space:]' < "$state")" == "old-deployed-sha" ]]
 }
 
 expect_failure "dirty Git tree rejects deployment" test_dirty_git_rejected
@@ -441,6 +558,15 @@ expect_failure "deployed marker pointing to an unrelated commit is rejected" tes
 expect_success "deployed marker equal to target passes ancestry validation" test_ancestry_accepts_equal_deployed_and_target
 expect_success "rollback marker is unchanged when recording is not confirmed" test_rollback_marker_unchanged_when_recording_not_confirmed
 expect_success "successful rollback-state recording stores the rollback SHA" test_record_rollback_sha_stores_rollback_sha
+expect_success "record rollback rejects a candidate that does not match HEAD" test_record_rollback_rejects_candidate_not_head
+expect_success "record rollback accepts a candidate equal to HEAD" test_record_rollback_accepts_candidate_equal_head
+expect_success "record rollback rejects an unrelated candidate" test_record_rollback_rejects_unrelated_candidate
+expect_success "record rollback rejects a forward/non-ancestor candidate" test_record_rollback_rejects_forward_candidate
+expect_success "--dry-run and --bootstrap-deployed-sha are mutually exclusive with no marker mutation" test_dry_run_and_bootstrap_mutually_exclusive
+expect_success "--dry-run and --record-rollback-sha are mutually exclusive with no marker mutation" test_dry_run_and_record_rollback_mutually_exclusive
+expect_success "--bootstrap-deployed-sha and --record-rollback-sha are mutually exclusive with no marker mutation" test_bootstrap_and_record_rollback_mutually_exclusive
+expect_success "--migrate and --bootstrap-deployed-sha are mutually exclusive with no marker mutation" test_migrate_and_bootstrap_mutually_exclusive
+expect_success "--skip-backup-age-check and --record-rollback-sha are mutually exclusive with no marker mutation" test_skip_backup_age_check_and_record_rollback_mutually_exclusive
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAILURES"
 [[ "$FAILURES" -eq 0 ]]

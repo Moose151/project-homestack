@@ -454,24 +454,72 @@ Useful modes:
 ./scripts/deploy-production.sh --record-rollback-sha <rollback-sha>
 ```
 
+`--bootstrap-deployed-sha` and `--record-rollback-sha` are one-shot, state-writing corrections and
+are mutually exclusive with each other and with `--dry-run`, `--migrate` and
+`--skip-backup-age-check` — the script validates this before touching the marker, so for example
+`--dry-run --bootstrap-deployed-sha ...` fails closed rather than writing the marker anyway.
+
 The script tracks deployment state separately from Git checkout state in
 `.git/homestack-deployed-sha`. The checkout SHA is the current repository `HEAD`; the target SHA is
 `origin/main`; the deployed SHA is the last commit that completed the whole production deployment
 successfully; and the rollback SHA is the deployed SHA recorded before the current deployment.
 
-On the first run after introducing this marker, bootstrap it once with the commit that is actually
-running in production containers:
+### 11.1a First adoption of the deployed-SHA marker
+
+Bootstrapping records the marker only; it does not fetch, build, migrate, recreate containers or
+reload NPM. If the marker already exists, bootstrap stops and leaves it unchanged.
+
+On the very first adoption of this marker, the live production checkout **predates the deploy
+script itself** — `scripts/deploy-production.sh` does not exist yet in the commit actually running
+in the containers, so it cannot be invoked from inside that checkout. Do not resolve this by
+pulling `main` forward first: that would advance the checkout away from the commit actually
+running in the containers before the marker has captured it, and — because `git fetch` only
+updates remote-tracking refs and never touches the working tree or the running containers by
+itself — it is `git checkout`/`git merge`, not `git fetch`, that would cause that drift. The safe
+sequence keeps the checkout frozen on the running commit until the marker is written, using a copy
+of the *new* script fetched to a path outside the repository so it does not require modifying the
+still-old working tree:
 
 ```bash
 cd /opt/docker/project-homestack
+
+# 1. Confirm main is clean, and capture the commit actually running in production right now —
+#    before anything below touches origin or the checkout.
+git status --porcelain            # must be empty
+RUNNING_SHA="$(git rev-parse HEAD)"
+echo "Currently running: $RUNNING_SHA"
+
+# 2. Fetch origin. This only updates the remote-tracking ref origin/main; it does not change the
+#    checked-out code, HEAD, or the running containers.
 git fetch origin
-git rev-parse HEAD
-./scripts/deploy-production.sh --bootstrap-deployed-sha <sha-currently-running-in-production>
+
+# 3. Extract the new deploy script from origin/main to a path outside the working tree, since the
+#    still-old checkout does not contain it. This does not check out or merge anything.
+git show origin/main:scripts/deploy-production.sh > /tmp/homestack-deploy-production.sh
+chmod +x /tmp/homestack-deploy-production.sh
+
+# 4. Run the fetched script, still against the old checkout, using the SHA captured in step 1 —
+#    not whatever origin/main now points to.
+/tmp/homestack-deploy-production.sh --bootstrap-deployed-sha "$RUNNING_SHA"
+
+# 5. Confirm the marker records the canonical running commit.
+cat .git/homestack-deployed-sha
+git rev-parse "$RUNNING_SHA"      # must match
+
+# 6. Clean up the temporary copy.
+rm /tmp/homestack-deploy-production.sh
 ```
 
-Bootstrapping records the marker only; it does not fetch, build, migrate, recreate containers or
-reload NPM. Use the commit known to be serving production, not merely the newest checkout. If the
-marker already exists, bootstrap stops and leaves it unchanged.
+Only once the marker is confirmed does the checkout advance. From here on `main` is still on the
+old commit, so the very next step is simply the normal supported deployment command from section
+11.1, run from the now in-tree script:
+
+```bash
+./scripts/deploy-production.sh
+```
+
+which fetches, fast-forwards `main`, validates the marker's lineage against the new target, and
+deploys forward normally — exactly as every subsequent deployment does.
 
 The default constants match the live server and can be overridden by environment only when needed:
 
@@ -644,11 +692,25 @@ Cheaper outcomes come first:
 Manual code rollback, once new containers are already live. This procedure deliberately keeps
 `.git/homestack-deployed-sha` untouched until the rollback has fully proven itself, and only then
 records it and returns the checkout to `main` — so the marker never claims success before it is
-true, and the running containers are never rebuilt a second time just to move Git back:
+true, and the running containers are never rebuilt a second time just to move Git back.
+
+`--record-rollback-sha` also requires the candidate to exactly match `HEAD` and to be equal to, or
+a Git ancestor of, the SHA the marker recorded before the rollback — so it cannot be run from the
+rollback commit's own checkout of `scripts/deploy-production.sh` if the rollback release predates
+that flag (or the script itself). Preserve the *current, supported* script to a path outside the
+working tree **before** checking out the rollback commit, then use that preserved copy for the
+final marker recording — the same reason the first-adoption bootstrap in §11.1a fetches a copy
+of the script rather than assuming the target checkout contains it:
 
 ```bash
 cd /opt/docker/project-homestack
 git fetch origin
+
+# 0. Preserve the current, supported deploy script before moving the checkout anywhere. The
+#    rollback commit checked out in step 1 may predate --record-rollback-sha, or the script
+#    entirely, so it cannot be relied on to still be present/usable after that checkout.
+cp scripts/deploy-production.sh /tmp/homestack-deploy-production.sh
+chmod +x /tmp/homestack-deploy-production.sh
 
 # 1. Check out and build the rollback commit. This does not delete or recreate volumes.
 git checkout <rollback-sha-from-the-deploy-output>
@@ -680,18 +742,30 @@ done
 docker port homestack-postgres 5432/tcp; docker port homestack-backend 8000/tcp; docker port homestack-frontend 5173/tcp
 
 # 5. ONLY once every check above has passed, atomically record the rollback commit as the
-#    deployed marker. This does not build, recreate containers, or move the checkout.
-./scripts/deploy-production.sh --record-rollback-sha <rollback-sha-from-the-deploy-output>
+#    deployed marker, using the preserved script from step 0 — HEAD is still the rollback
+#    commit checked out in step 1, so this satisfies the candidate-must-equal-HEAD check, and
+#    the script validates the candidate against the previously recorded (newer) marker itself.
+#    This does not build, recreate containers, or move the checkout.
+/tmp/homestack-deploy-production.sh --record-rollback-sha <rollback-sha-from-the-deploy-output>
 
 # 6. Now return the working checkout to main. This does NOT rebuild or recreate containers,
 #    so homestack-backend/homestack-frontend remain on the rollback code just validated above.
 git checkout main
+
+# 7. Clean up the temporary copy.
+rm /tmp/homestack-deploy-production.sh
 ```
 
 After this, the deployed marker accurately records the rollback SHA, Git is back on `main`, and
 the containers are still serving the validated rollback code — so the next normal
 `./scripts/deploy-production.sh` run correctly sees `origin/main` differ from the deployed
 rollback SHA and deploys forward normally instead of treating the rollback as already current.
+
+`--record-rollback-sha` fails closed, and leaves the marker unchanged, if either safety check does
+not hold: if the candidate does not match `HEAD` (the marker must match code that was actually
+checked out, built and validated — not merely asserted by the operator), or if the candidate is
+not equal to, or an ancestor of, the SHA the marker held before the rollback (an unrelated or
+"forward" commit can never be recorded as a rollback).
 
 Do not record the marker before every validation step above has passed. Do not delete or recreate
 data volumes during code rollback. If the deployment used `--migrate`, rolling code back may also
