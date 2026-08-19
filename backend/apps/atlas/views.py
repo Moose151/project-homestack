@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from django.utils.dateparse import parse_date
 
 from rest_framework import status
-from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
+from rest_framework.exceptions import APIException, NotFound, PermissionDenied, ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -514,10 +514,40 @@ class ListSuggestionReviewView(APIView):
 
 
 # ---------------------------------------------------------------------------
-# Reminders
+# Reminders — legacy, read-only (D19 §E)
 # ---------------------------------------------------------------------------
 
+class LegacyReminderWriteRemoved(APIException):
+    """410 for any attempt to write through the retired Reminder API.
+
+    410 rather than 404 or 405 because the distinction matters to a caller: the resource is not
+    missing and the method is not merely unsupported here — this capability existed, was removed
+    deliberately, and has a named successor. The message says where to go.
+    """
+
+    status_code = status.HTTP_410_GONE
+    default_detail = (
+        "Atlas reminders were replaced by to-dos in v0.40. A reminder is now a to-do with a due "
+        "date and notification offsets — create one with POST /api/v1/atlas/todos/quick-create/. "
+        "Existing reminders remain readable here as archival data."
+    )
+    default_code = "reminder_api_retired"
+
+
 class ReminderListView(APIView):
+    """GET only. Archival reminders stay readable; nothing may create another one.
+
+    Leaving POST open is what would let the parallel Reminder/To-do model this release removed
+    be reintroduced by any client — an AtlasReminder and an AtlasListItem are both
+    CalendarSyncMixin records swept by different schedulers, so a new reminder means a second
+    calendar entry and a second notification for something a to-do already covers.
+
+    The old payload is deliberately *not* forwarded to the to-do endpoint. The two shapes are
+    close but not equivalent — ``body`` vs ``notes``, and a boolean ``notifications_enabled``
+    vs a list of offsets whose correct translation depends on ``is_all_day`` — so silently
+    reinterpreting one as the other would guess at the caller's intent.
+    """
+
     permission_classes = [_AtlasPerm]
 
     def get(self, request: Request) -> Response:
@@ -526,13 +556,17 @@ class ReminderListView(APIView):
         return Response(AtlasReminderSerializer(reminders, many=True).data)
 
     def post(self, request: Request) -> Response:
-        serializer = AtlasReminderSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        reminder = services.create_reminder(request.user, **serializer.validated_data)
-        return Response(AtlasReminderSerializer(reminder).data, status=status.HTTP_201_CREATED)
+        raise LegacyReminderWriteRemoved()
 
 
 class ReminderDetailView(APIView):
+    """GET only, for the same reason as the list view.
+
+    PATCH and DELETE are closed too: both run the record back through the reminder service,
+    which re-syncs (or removes) its CalendarEvent and would put an archival row back into the
+    calendar/notification workflows it was retired out of.
+    """
+
     permission_classes = [_AtlasPerm]
 
     def _get(self, pk: int):
@@ -545,12 +579,7 @@ class ReminderDetailView(APIView):
         return Response(AtlasReminderSerializer(self._get(reminder_id)).data)
 
     def patch(self, request: Request, reminder_id: int) -> Response:
-        reminder = self._get(reminder_id)
-        serializer = AtlasReminderSerializer(data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        reminder = services.update_reminder(request.user, reminder, **serializer.validated_data)
-        return Response(AtlasReminderSerializer(reminder).data)
+        raise LegacyReminderWriteRemoved()
 
     def delete(self, request: Request, reminder_id: int) -> Response:
-        services.delete_reminder(request.user, self._get(reminder_id))
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        raise LegacyReminderWriteRemoved()

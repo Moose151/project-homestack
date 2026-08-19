@@ -58,7 +58,9 @@ urlpatterns = [
     path("lists/<int:list_id>/suggestions/", ListSuggestionListView.as_view(), name="atlas-list-suggestion-list"),
     path("lists/<int:list_id>/suggestions/<int:suggestion_id>/<str:action>/", ListSuggestionReviewView.as_view(), name="atlas-list-suggestion-review"),
 
-    # Reminders — legacy: still backs Calendar's quick-create "Reminder" flow (docs/40)
+    # Reminders — legacy and read-only (D19 §E, docs/11_Node_Atlas.md). Calendar's
+    # quick-create "Reminder" action posts to todos/quick-create/ above; these routes exist
+    # only so archival rows stay readable. Every write returns 410.
     path("reminders/", ReminderListView.as_view(), name="atlas-reminder-list"),
     path("reminders/<int:reminder_id>/", ReminderDetailView.as_view(), name="atlas-reminder-detail"),
 ]

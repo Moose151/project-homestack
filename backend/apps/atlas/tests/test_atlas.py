@@ -484,8 +484,14 @@ class AtlasListTests(TestCase):
 # ---------------------------------------------------------------------------
 
 class ReminderCalendarSyncTests(TestCase):
-    """Verifies that creating/updating/deleting an AtlasReminder keeps its
-    CalendarEvent in sync via the scheduling helper (D7)."""
+    """Compatibility coverage for the archival AtlasReminder model, not product behaviour.
+
+    AtlasReminder is retired from the product (D19 §E) but its rows still exist in migrated
+    households, and the migration hands their calendar entries to to-dos. These exercise the
+    *service* functions directly, which is the only way they can still be reached — the HTTP
+    write routes return 410 (see ReminderAPITests). They stay because the CalendarSyncMixin
+    contract on that model still has to hold for the data that is out there.
+    """
 
     def setUp(self):
         self.admin = _make_user("admin", User.Role.ADMIN)
@@ -569,6 +575,8 @@ class ReminderCalendarSyncTests(TestCase):
 # ---------------------------------------------------------------------------
 
 class ReminderAPITests(TestCase):
+    """The legacy Reminder HTTP surface: readable, and closed to every write."""
+
     def setUp(self):
         self.admin = _make_user("admin", User.Role.ADMIN)
         self.guest = _make_user("guest", User.Role.GUEST)
@@ -578,35 +586,54 @@ class ReminderAPITests(TestCase):
     def _detail_url(self, pk):
         return reverse("atlas-reminder-detail", kwargs={"reminder_id": pk})
 
-    def test_create_reminder(self):
+    def test_creating_a_reminder_through_the_api_is_gone(self):
+        """The API cannot reintroduce the parallel Reminder object (D19 §E).
+
+        This is the hole 0.40.0 left open: the docs said AtlasReminder was archival, but the
+        write routes were still mounted, so any client could create a live reminder — and with
+        it a second calendar entry and a second notification for something a to-do covers.
+        """
+        from apps.atlas.models import AtlasReminder
+
+        before = AtlasReminder.all_objects.count()
         resp = self.client.post(
             self.list_url,
             {"title": "Pick up kids", "due_at": _future(2).isoformat()},
             content_type="application/json",
         )
-        self.assertEqual(resp.status_code, 201)
-        self.assertEqual(resp.json()["title"], "Pick up kids")
-        self.assertIsNotNone(resp.json()["calendar_event_id"])
-        self.assertEqual(resp.json()["notification_state"], "scheduled")
+        self.assertEqual(resp.status_code, 410, resp.content)
+        # It must point the caller at the replacement rather than just refusing.
+        self.assertIn("todos/quick-create", resp.json()["detail"])
+        self.assertEqual(
+            AtlasReminder.all_objects.count(), before,
+            "no reminder row may be created, active or otherwise",
+        )
 
-    def test_create_reminder_with_notes_recipient_and_notifications(self):
-        person = Person.objects.create(
-            household=get_active_household(), display_name="Alex", profile_type="adult",
-        )
-        resp = self.client.post(
-            self.list_url,
-            {
-                "title": "Medicine",
-                "body": "Take with food",
-                "due_at": _future(2).isoformat(),
-                "assigned_to_person_ids": [person.id],
-                "notifications_enabled": True,
-            },
-            content_type="application/json",
-        )
-        self.assertEqual(resp.status_code, 201, resp.json())
-        self.assertEqual(resp.json()["body"], "Take with food")
-        self.assertEqual(resp.json()["assigned_to_person_ids"], [person.id])
+    def test_no_reminder_write_verb_survives(self):
+        """PATCH and DELETE are closed too — both would run an archival row back through the
+        reminder service and re-sync or remove its CalendarEvent."""
+        reminder = create_reminder(self.admin, title="Archival", due_at=_future(2))
+        for method, url in (
+            ("post", self.list_url),
+            ("patch", self._detail_url(reminder.pk)),
+            ("delete", self._detail_url(reminder.pk)),
+        ):
+            with self.subTest(method=method):
+                resp = getattr(self.client, method)(
+                    url, {"title": "Changed"}, content_type="application/json",
+                )
+                self.assertEqual(resp.status_code, 410, f"{method} {url}")
+        reminder.refresh_from_db()
+        self.assertEqual(reminder.title, "Archival")
+        self.assertIsNone(reminder.deleted_at)
+
+    def test_archival_reminders_remain_readable(self):
+        """Read access is kept deliberately: support needs to be able to see that historical
+        reminders still exist and were retired, not just be told 410."""
+        reminder = create_reminder(self.admin, title="Historical")
+        resp = self.client.get(self._detail_url(reminder.pk))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["title"], "Historical")
 
     def test_list_reminders(self):
         create_reminder(self.admin, title="R1")
@@ -620,21 +647,9 @@ class ReminderAPITests(TestCase):
         resp = self.client.get(self._detail_url(reminder.pk))
         self.assertEqual(resp.status_code, 200)
 
-    def test_patch_reminder(self):
-        reminder = create_reminder(self.admin, title="Old")
-        resp = self.client.patch(
-            self._detail_url(reminder.pk), {"title": "New"}, content_type="application/json"
-        )
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json()["title"], "New")
-
-    def test_delete_reminder(self):
-        reminder = create_reminder(self.admin, title="Bye")
-        self.client.delete(self._detail_url(reminder.pk))
-        resp = self.client.get(self._detail_url(reminder.pk))
-        self.assertEqual(resp.status_code, 404)
-
     def test_guest_cannot_create(self):
+        """Permission is still checked before the 410 — an unauthorised caller must not learn
+        anything about the endpoint's state from the refusal."""
         self.client.logout()
         _login(self.client, "guest")
         resp = self.client.post(
@@ -988,6 +1003,97 @@ class TodoNotificationOffsetTests(TestCase):
         self.assertEqual(run_due_todo_offsets(), 1)
         self.assertTrue(Notification.objects.filter(message="Renew licence").exists())
 
+    def test_a_rescheduled_todo_can_fire_the_same_offset_again(self):
+        """Moving a To-do after its notification already fired must not silence the new date.
+
+        The idempotency ledger keys on (item, "offset:60"), which is exactly right for repeated
+        scheduler runs against *one* occurrence. It is wrong across a reschedule: without
+        invalidation the row from the old due date permanently suppresses the same lead for
+        every later one, so a job moved to tomorrow is never announced again.
+        """
+        from apps.atlas.services import update_list_item
+        from apps.notifications.models import Notification
+        from apps.notifications.tasks import run_due_todo_offsets
+
+        base = timezone.now()
+        item = create_list_item(
+            self.admin, self.household_list, title="Renew licence",
+            due_at=base + timezone.timedelta(minutes=60), notify_offsets=[60],
+        )
+
+        # The 1-hour lead for the original due date.
+        self.assertEqual(run_due_todo_offsets(now=base), 1)
+        self.assertEqual(run_due_todo_offsets(now=base), 0, "still idempotent per occurrence")
+        self.assertEqual(Notification.objects.filter(message="Renew licence").count(), 1)
+
+        # Same offset, new day.
+        update_list_item(self.admin, item, due_at=base + timezone.timedelta(hours=25))
+
+        self.assertEqual(
+            run_due_todo_offsets(now=base + timezone.timedelta(hours=23)), 0,
+            "nothing is due an hour before the new lead",
+        )
+        self.assertEqual(
+            run_due_todo_offsets(now=base + timezone.timedelta(hours=24)), 1,
+            "the new occurrence's 1-hour lead must be eligible again",
+        )
+        self.assertEqual(Notification.objects.filter(message="Renew licence").count(), 2)
+
+        self.assertEqual(
+            run_due_todo_offsets(now=base + timezone.timedelta(hours=24)), 0,
+            "and the new occurrence is idempotent in its turn",
+        )
+        self.assertEqual(Notification.objects.filter(message="Renew licence").count(), 2)
+
+    def test_editing_only_the_wording_does_not_reset_the_ledger(self):
+        """Invalidation must be limited to genuine schedule changes — retitling a To-do is not
+        a reason to announce it a second time."""
+        from apps.atlas.services import update_list_item
+        from apps.notifications.models import Notification
+        from apps.notifications.tasks import run_due_todo_offsets
+
+        base = timezone.now()
+        item = create_list_item(
+            self.admin, self.household_list, title="Renew licence",
+            due_at=base + timezone.timedelta(minutes=60), notify_offsets=[60],
+        )
+        self.assertEqual(run_due_todo_offsets(now=base), 1)
+
+        update_list_item(self.admin, item, title="Renew the licence", notes="At the post office")
+
+        self.assertEqual(run_due_todo_offsets(now=base), 0)
+        self.assertEqual(Notification.objects.count(), 1)
+
+    def test_changing_the_offsets_leaves_no_obsolete_schedule_state(self):
+        """Swapping which leads are wanted must not carry the old ones' ledger rows forward."""
+        from apps.atlas.services import update_list_item
+        from apps.notifications.models import Notification, NotificationReminderLog
+        from apps.notifications.tasks import run_due_todo_offsets
+
+        base = timezone.now()
+        item = create_list_item(
+            self.admin, self.household_list, title="Renew licence",
+            due_at=base + timezone.timedelta(minutes=60), notify_offsets=[60],
+        )
+        self.assertEqual(run_due_todo_offsets(now=base), 1)
+
+        # Drop notifications entirely, then ask for the same lead again on a new date.
+        update_list_item(self.admin, item, notify_offsets=[])
+        self.assertFalse(
+            NotificationReminderLog.objects.filter(
+                record_type="AtlasListItem", record_id=item.id,
+            ).exists(),
+            "clearing the offsets must not leave their ledger rows behind",
+        )
+        self.assertEqual(run_due_todo_offsets(now=base), 0)
+
+        update_list_item(
+            self.admin, item,
+            due_at=base + timezone.timedelta(hours=25), notify_offsets=[60],
+        )
+        self.assertEqual(run_due_todo_offsets(now=base + timezone.timedelta(hours=24)), 1)
+        self.assertEqual(Notification.objects.filter(message="Renew licence").count(), 2)
+
     def test_completing_item_prevents_future_notifications(self):
         from apps.atlas.services import complete_list_item
         from apps.notifications.tasks import run_due_todo_offsets
@@ -1118,10 +1224,10 @@ class TodoQuickCreateTests(TestCase):
         atlas_list = AtlasList.objects.get(pk=resp.json()["atlas_list_id"])
         self.assertEqual(atlas_list.owner_person_id, self.member_person.id)
 
-    def test_capturing_a_reminder_creates_no_parallel_reminder_object(self):
-        from apps.atlas.models import AtlasReminder
+    def test_capturing_a_reminder_creates_one_todo_and_no_parallel_reminder_object(self):
+        from apps.atlas.models import AtlasListItem, AtlasReminder
 
-        before = AtlasReminder.all_objects.count()
+        reminders_before = AtlasReminder.all_objects.count()
         resp = self.client.post(
             self.url,
             {
@@ -1131,7 +1237,14 @@ class TodoQuickCreateTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(resp.status_code, 201, resp.json())
-        self.assertEqual(AtlasReminder.all_objects.count(), before)
+        self.assertEqual(
+            AtlasListItem.all_objects.filter(title="Collect the turkey").count(), 1,
+            "exactly one to-do, not one plus a shadow record",
+        )
+        self.assertEqual(
+            AtlasReminder.all_objects.count(), reminders_before,
+            "and no AtlasReminder row at all, active or soft-deleted",
+        )
 
     def test_a_dated_capture_produces_exactly_one_calendar_entry(self):
         resp = self.client.post(

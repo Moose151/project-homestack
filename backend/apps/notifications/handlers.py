@@ -95,7 +95,35 @@ def _on_books_entry_finished(sender, *, payload, **kwargs) -> None:
     )
 
 
+def _on_atlas_todo_schedule_changed(sender, *, payload, **kwargs) -> None:
+    """Retire the "already sent" markers for a To-do whose schedule moved.
+
+    ``run_due_todo_offsets`` keys idempotency on (item, ``offset:<minutes>``), which is exactly
+    right while an occurrence stands still: any number of scheduler runs deliver one
+    notification. Across a reschedule it is wrong — the marker from the old due date would go on
+    suppressing that lead for every later one, so a To-do pushed to tomorrow would never be
+    announced again.
+
+    Scoped as narrowly as it can be: only this item, only this node, and only ``offset:`` leads.
+    The rows are soft-deleted rather than removed, so the record of what was actually delivered
+    survives while stopping short of blocking the new occurrence — ``_already_sent`` reads
+    through ``NotificationReminderLog.objects``, which excludes soft-deleted rows.
+    """
+    from django.utils import timezone
+
+    from apps.notifications.models import NotificationReminderLog
+
+    item_id = payload.get("item_id")
+    if item_id is None:
+        return
+    NotificationReminderLog.objects.filter(
+        source_node="atlas", record_type="AtlasListItem", record_id=item_id,
+        lead_kind__startswith="offset:",
+    ).update(deleted_at=timezone.now(), updated_at=timezone.now())
+
+
 def connect() -> None:
     subscribe("scheduling.event_created", _on_scheduling_event_created)
     subscribe("atlas.list_item_created", _on_atlas_list_item_created)
+    subscribe("atlas.todo_schedule_changed", _on_atlas_todo_schedule_changed)
     subscribe("books.entry_finished", _on_books_entry_finished)

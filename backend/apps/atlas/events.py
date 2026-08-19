@@ -24,3 +24,15 @@ def list_item_created(item_id: int, household_id: int) -> None:
 
 def reminder_created(reminder_id: int, household_id: int) -> None:
     publish("atlas.reminder_created", payload={"reminder_id": reminder_id, "household_id": household_id})
+
+
+def todo_schedule_changed(item_id: int, household_id: int) -> None:
+    """A To-do's due date or notification offsets changed materially.
+
+    Published so the notification layer can retire the delivery markers for this item's old
+    schedule, without Atlas having to know that such a ledger exists (D4). Not published for
+    ordinary edits — a retitled To-do is the same occurrence and must not be announced twice.
+    """
+    publish("atlas.todo_schedule_changed", payload={
+        "item_id": item_id, "household_id": household_id,
+    })

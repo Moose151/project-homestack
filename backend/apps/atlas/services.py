@@ -267,8 +267,18 @@ def create_list_item(acting_user: User, atlas_list: AtlasList, **data) -> AtlasL
     return item
 
 
+def _schedule_signature(item: AtlasListItem) -> tuple:
+    """What the To-do notification scheduler actually reads off an item.
+
+    Offsets are compared as a sorted set so re-sending the same selection in a different order
+    does not read as a change — the scheduler treats [60, 1440] and [1440, 60] identically.
+    """
+    return (item.due_at, tuple(sorted(set(item.notify_offsets or []))))
+
+
 def update_list_item(acting_user: User, item: AtlasListItem, **data) -> AtlasListItem:
     people = pop_assignees(data)
+    schedule_before = _schedule_signature(item)
     if item.atlas_list.list_type == AtlasList.ListType.GROCERY:
         people = []
     cache_image = data.pop("cache_image", False)
@@ -287,6 +297,10 @@ def update_list_item(acting_user: User, item: AtlasListItem, **data) -> AtlasLis
     apply_assignees(item, people)
     sync_event_for(item)
     _finish_product_item(acting_user, item, cache_image=cache_image, watch_enabled=watch_enabled)
+    if _schedule_signature(item) != schedule_before:
+        # Moved to a new date, or a different set of leads: the markers saying "already sent"
+        # describe an occurrence that no longer exists, so they have to stop suppressing.
+        events.todo_schedule_changed(item.id, item.household_id)
     return item
 
 
@@ -469,8 +483,14 @@ def dismiss_list_suggestion(acting_user: User, suggestion: AtlasListSuggestion) 
 
 
 # ---------------------------------------------------------------------------
-# Reminders
+# Reminders — legacy (D19 §E)
 # ---------------------------------------------------------------------------
+# No API route reaches any of these: the HTTP write verbs return 410 and Calendar's "Reminder"
+# action creates a to-do via quick_create_todo() above. They are kept because AtlasReminder rows
+# still exist in migrated households and the CalendarSyncMixin contract on that model has to go
+# on holding for them — the atlas tests exercise exactly that, and there is no other entry point
+# left to do it through. Do not wire these back to a view.
+
 
 def create_reminder(acting_user: User, **data) -> AtlasReminder:
     people = pop_assignees(data)
