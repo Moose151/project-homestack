@@ -5,7 +5,23 @@ from rest_framework import serializers
 
 from apps.core.serializers import AssigneeSerializerMixin
 
-from apps.atlas.models import AtlasContact, AtlasList, AtlasListItem, AtlasListSuggestion, AtlasNote, AtlasReminder
+from apps.atlas.models import (
+    NOTIFY_OFFSET_MINUTES,
+    AtlasContact,
+    AtlasList,
+    AtlasListItem,
+    AtlasListSuggestion,
+    AtlasNote,
+    AtlasReminder,
+)
+
+
+def validate_notify_offsets(value: list) -> list[int]:
+    offsets = sorted({int(v) for v in value})
+    invalid = [v for v in offsets if v not in NOTIFY_OFFSET_MINUTES]
+    if invalid:
+        raise serializers.ValidationError(f"Unsupported notification offset(s): {invalid}.")
+    return offsets
 
 
 class AtlasNoteSerializer(serializers.ModelSerializer):
@@ -29,11 +45,15 @@ class AtlasListItemSerializer(AssigneeSerializerMixin, serializers.ModelSerializ
     price_watch = serializers.SerializerMethodField()
     cache_image = serializers.BooleanField(write_only=True, required=False)
     price_watch_enabled = serializers.BooleanField(write_only=True, required=False)
+    # Read-only, so a to-do/grocery/checklist item can always be told apart by consumers
+    # (e.g. Dashboard widgets) without a second lookup — see D19 §K.
+    list_type = serializers.CharField(source="atlas_list.list_type", read_only=True)
 
     class Meta:
         model = AtlasListItem
         fields = [
-            "id", "atlas_list_id", "title", "notes", "quantity", "priority", "position", "due_at", "calendar_event_id",
+            "id", "atlas_list_id", "list_type", "title", "notes", "quantity", "priority", "position",
+            "due_at", "is_all_day", "is_important", "notify_offsets", "calendar_event_id",
             "product_url", "source_image_url", "cached_image_url", "image_attachment_id",
             "retailer", "unit_price", "currency", "imported_at",
             "price_watch", "cache_image", "price_watch_enabled",
@@ -41,7 +61,10 @@ class AtlasListItemSerializer(AssigneeSerializerMixin, serializers.ModelSerializ
             "completed_at", "completed_by_id", "is_complete",
             "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "atlas_list_id", "calendar_event_id", "cached_image_url", "image_attachment_id", "imported_at", "price_watch", "completed_at", "completed_by_id", "is_complete", "created_at", "updated_at"]
+        read_only_fields = ["id", "atlas_list_id", "list_type", "calendar_event_id", "cached_image_url", "image_attachment_id", "imported_at", "price_watch", "completed_at", "completed_by_id", "is_complete", "created_at", "updated_at"]
+
+    def validate_notify_offsets(self, value):
+        return validate_notify_offsets(value)
 
     def get_cached_image_url(self, obj):
         return f"/api/v1/attachments/{obj.image_attachment_id}/download/" if obj.image_attachment_id else ""
@@ -88,7 +111,8 @@ class AtlasListItemWriteSerializer(AssigneeSerializerMixin, serializers.ModelSer
     class Meta:
         model = AtlasListItem
         fields = [
-            "title", "notes", "quantity", "priority", "position", "due_at", "assigned_to_person_ids",
+            "title", "notes", "quantity", "priority", "position", "due_at", "is_all_day",
+            "is_important", "notify_offsets", "assigned_to_person_ids",
             "product_url", "source_image_url", "retailer", "unit_price", "currency",
             "cache_image", "price_watch_enabled",
         ]
@@ -97,6 +121,9 @@ class AtlasListItemWriteSerializer(AssigneeSerializerMixin, serializers.ModelSer
         if not value.strip():
             raise serializers.ValidationError("Title may not be blank.")
         return value
+
+    def validate_notify_offsets(self, value):
+        return validate_notify_offsets(value)
 
 
 class AtlasListSuggestionSerializer(serializers.ModelSerializer):

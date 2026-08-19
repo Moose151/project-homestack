@@ -55,12 +55,36 @@ def search_all(request, query: str, *, per_node_limit: int = 8) -> dict:
 
     if allowed("atlas"):
         from apps.atlas import selectors
+
+        # Atlas's simplified product model (D19): a list/item's tab depends on its list_type —
+        # grocery has its own tab, to-dos have their own tab, everything else lands on the
+        # merged Lists & Notes tab. Reminders (legacy — see docs/40) no longer have a tab of
+        # their own; a matching reminder is still dated, so send the reader to its calendar day.
+        def _atlas_list_tab(list_type: str) -> str:
+            if list_type == "grocery":
+                return "grocery"
+            if list_type == "todo":
+                return "todos"
+            return "lists"
+
         found = selectors.search_atlas(user, query)
         add_node([
-            *[_result("atlas", "list", row, row.title, "List", f"/atlas?tab=lists&q={encoded}") for row in found["lists"]],
-            *[_result("atlas", "item", row, row.title, "List item", f"/atlas?tab=lists&q={encoded}") for row in found["items"]],
-            *[_result("atlas", "note", row, row.title, "Note", f"/atlas?tab=notes&q={encoded}") for row in found["notes"]],
-            *[_result("atlas", "reminder", row, row.title, "Reminder", f"/atlas?tab=reminders&q={encoded}") for row in found["reminders"]],
+            *[
+                _result("atlas", "list", row, row.title, "List", f"/atlas?tab={_atlas_list_tab(row.list_type)}&q={encoded}")
+                for row in found["lists"]
+            ],
+            *[
+                _result("atlas", "item", row, row.title, "List item", f"/atlas?tab={_atlas_list_tab(row.atlas_list.list_type)}&q={encoded}")
+                for row in found["items"]
+            ],
+            *[_result("atlas", "note", row, row.title, "Note", f"/atlas?tab=lists&q={encoded}") for row in found["notes"]],
+            *[
+                _result(
+                    "atlas", "reminder", row, row.title, "Reminder",
+                    f"/calendar?date={row.due_at.date().isoformat()}&q={encoded}" if row.due_at else f"/atlas?tab=todos&q={encoded}",
+                )
+                for row in found["reminders"]
+            ],
         ])
 
     if allowed("meridian"):

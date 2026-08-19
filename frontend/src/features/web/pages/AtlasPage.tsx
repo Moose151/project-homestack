@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../../../api/client'
-import type { AtlasContact, AtlasList, AtlasListItem, AtlasNote, AtlasReminder, AtlasSearchResults, CalendarEvent, Person } from '../../../api/types'
+import type { AtlasContact, AtlasList, AtlasListItem, AtlasNote, AtlasSearchResults, CalendarEvent, Person } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
 import { Modal } from '../../../components/Modal'
@@ -19,7 +19,6 @@ import { useUrlQueryState } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
 import { sourcePath } from '../../../lib/sourceLinks'
 import { EventModal } from './CalendarPage'
-import { ShoppingTab } from './atlas/ShoppingTab'
 import { MobileListRow, MobileSection } from '../../../components/mobile'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
@@ -39,18 +38,19 @@ function calendarDayHref(iso: string | null) {
   return `/calendar?date=${new Date(iso).toISOString().slice(0, 10)}`
 }
 
-// One source of truth for list-type label + glyph (used by cards and the create form).
+// D19: Atlas's three primary areas are Grocery, To-dos and Lists & Notes (checklist). `general`
+// is a legacy fallback for anything that predates that model.
 const LIST_TYPE_META: Record<string, { label: string; icon: string }> = {
   todo: { label: 'To-do', icon: '✓' },
   grocery: { label: 'Grocery', icon: '🛒' },
-  shopping: { label: 'Shopping', icon: '🛍️' },
   checklist: { label: 'Checklist', icon: '☑️' },
-  general: { label: 'General', icon: '📋' },
+  general: { label: 'List', icon: '📋' },
 }
 const listTypeMeta = (t: string) => LIST_TYPE_META[t] ?? { label: t, icon: '•' }
 
 // ---------------------------------------------------------------------------
-// List item row
+// Checklist item row (Lists & Notes) — reused for checklist-type lists, which keep the
+// optional quantity/assignee fields plain To-dos and Grocery no longer need.
 // ---------------------------------------------------------------------------
 
 function ItemRow({
@@ -142,7 +142,7 @@ function ItemRow({
 }
 
 // ---------------------------------------------------------------------------
-// Single list card
+// Single checklist card (Lists & Notes)
 // ---------------------------------------------------------------------------
 
 function ListCard({ list, people, defaultAssignee, focusedItemId, onDeleted, onError }: {
@@ -155,12 +155,10 @@ function ListCard({ list, people, defaultAssignee, focusedItemId, onDeleted, onE
 }) {
   const [items, setItems] = useState<AtlasListItem[]>(list.items ?? [])
   const [newTitle, setNewTitle] = useState('')
-  const [qty, setQty] = useState('')
   const [assignee, setAssignee] = useState<number[]>(defaultAssignee)
   const [adding, setAdding] = useState(false)
   const [showDone, setShowDone] = useState(Boolean(focusedItemId && items.some(item => item.id === focusedItemId && item.is_complete)))
   const inputRef = useRef<HTMLInputElement>(null)
-  const hasQty = list.list_type === 'grocery' || list.list_type === 'shopping'
   const meta = listTypeMeta(list.list_type)
 
   const addItem = async (e: React.FormEvent) => {
@@ -169,11 +167,10 @@ function ListCard({ list, people, defaultAssignee, focusedItemId, onDeleted, onE
     setAdding(true)
     try {
       const item = await api.createItem(list.id, {
-        title: newTitle.trim(), quantity: qty.trim() || undefined,
-        assigned_to_person_ids: assignee,
+        title: newTitle.trim(), assigned_to_person_ids: assignee,
       })
       setItems(prev => [...prev, item])
-      setNewTitle(''); setQty(''); setAssignee(defaultAssignee)
+      setNewTitle(''); setAssignee(defaultAssignee)
       inputRef.current?.focus()
     } catch (e) {
       onError(errMsg(e))
@@ -216,10 +213,9 @@ function ListCard({ list, people, defaultAssignee, focusedItemId, onDeleted, onE
           <div className="min-w-0">
             <h3 className="font-bold text-ink truncate">{list.title}</h3>
             <span className="text-xs text-muted">
-              {meta.label}
               {pending.length > 0
-                ? ` · ${pending.length} to do`
-                : total > 0 ? ' · all done ✓' : ''}
+                ? `${pending.length} to do`
+                : total > 0 ? 'All done ✓' : 'Checklist'}
             </span>
           </div>
         </div>
@@ -265,23 +261,13 @@ function ListCard({ list, people, defaultAssignee, focusedItemId, onDeleted, onE
 
       {/* Add row: stacks on mobile (input, then who + add), inline from sm up. */}
       <form onSubmit={addItem} className="mt-3 pt-3 border-t border-line flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          {hasQty && (
-            <input
-              value={qty}
-              onChange={e => setQty(e.target.value)}
-              placeholder="Qty"
-              className="w-14 text-sm bg-transparent text-ink placeholder-muted outline-none min-h-[40px] border-b border-line focus:border-primary"
-            />
-          )}
-          <input
-            ref={inputRef}
-            value={newTitle}
-            onChange={e => setNewTitle(e.target.value)}
-            placeholder="Add item…"
-            className="flex-1 min-w-0 text-sm bg-transparent text-ink placeholder-muted outline-none min-h-[40px]"
-          />
-        </div>
+        <input
+          ref={inputRef}
+          value={newTitle}
+          onChange={e => setNewTitle(e.target.value)}
+          placeholder="Add item…"
+          className="flex-1 min-w-0 text-sm bg-transparent text-ink placeholder-muted outline-none min-h-[40px]"
+        />
         <div className="flex items-center gap-2">
           <AssigneeSelect
             people={people}
@@ -297,7 +283,7 @@ function ListCard({ list, people, defaultAssignee, focusedItemId, onDeleted, onE
 }
 
 // ---------------------------------------------------------------------------
-// Notes tab
+// Notes
 // ---------------------------------------------------------------------------
 
 function NoteCard({ note, onSaved, onDeleted, onError }: {
@@ -367,65 +353,324 @@ function NoteCard({ note, onSaved, onDeleted, onError }: {
   )
 }
 
-function NotesTab({ onError }: { onError: (m: string) => void }) {
-  const [notes, setNotes] = useState<AtlasNote[]>([])
-  const [loading, setLoading] = useState(true)
+// ---------------------------------------------------------------------------
+// Lists & Notes — checklists + notes, "New → Checklist / Note" (D19 §H)
+// ---------------------------------------------------------------------------
+
+function ListsAndNotesTab({ checklistLists, people, defaultAssignee, focusedListId, focusedItemId, onOpenList, onListCreated, onListDeleted, onError }: {
+  checklistLists: AtlasList[]
+  people: Person[]
+  defaultAssignee: number[]
+  focusedListId: number
+  focusedItemId: number
+  onOpenList: (id: number) => void
+  onListCreated: (list: AtlasList) => void
+  onListDeleted: (id: number) => void
+  onError: (m: string) => void
+}) {
+  const [notes, setNotes] = useState<AtlasNote[] | null>(null)
+  const [creating, setCreating] = useState<'checklist' | 'note' | null>(null)
   const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
-  const [visibility, setVisibility] = useState('household')
-  const [open, setOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    api.getNotes().then(setNotes).catch(e => onError(errMsg(e))).finally(() => setLoading(false))
-  }, [onError])
+  useEffect(() => { api.getNotes().then(setNotes).catch(e => onError(errMsg(e))) }, [onError])
 
-  const create = async (e: React.FormEvent) => {
+  const createChecklist = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
-    setSaving(true)
+    setBusy(true)
     try {
-      const n = await api.createNote({ title: title.trim(), body, visibility })
-      setNotes(prev => [n, ...prev])
-      setTitle(''); setBody(''); setVisibility('household'); setOpen(false)
-    } catch (e) { onError(errMsg(e)) } finally { setSaving(false) }
+      const list = await api.createList({ title: title.trim(), list_type: 'checklist' })
+      const full = await api.getList(list.id)
+      onListCreated(full)
+      setTitle(''); setCreating(null)
+    } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
 
-  if (loading) return <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
+  const createNote = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!title.trim()) return
+    setBusy(true)
+    try {
+      const note = await api.createNote({ title: title.trim(), visibility: 'household' })
+      setNotes(prev => [note, ...(prev ?? [])])
+      setTitle(''); setCreating(null)
+    } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
+  }
 
   return (
-    <div className="flex flex-col gap-4">
-      {open ? (
-        <Card title="New note">
-          <form onSubmit={create} className="flex flex-col gap-2">
-            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" autoFocus />
-            <Textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Write something…" rows={5} />
-            <div className="flex items-center gap-2">
-              <Select value={visibility} onChange={e => setVisibility(e.target.value)} className="max-w-[10rem]">
-                <option value="household">Household</option>
-                <option value="private">Private</option>
-              </Select>
-              <div className="ml-auto flex gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
-                <Button size="sm" type="submit" loading={saving} disabled={!title.trim()}>Save note</Button>
-              </div>
+    <div className="flex flex-col gap-5">
+      {creating === null ? (
+        <div className="flex gap-2">
+          <Button size="sm" onClick={() => setCreating('checklist')}>+ New checklist</Button>
+          <Button size="sm" variant="ghost" onClick={() => setCreating('note')}>+ New note</Button>
+        </div>
+      ) : (
+        <Card title={creating === 'checklist' ? 'New checklist' : 'New note'}>
+          <form onSubmit={creating === 'checklist' ? createChecklist : createNote} className="flex flex-col gap-2 sm:flex-row">
+            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder={creating === 'checklist' ? 'Checklist name…' : 'Note title…'} className="flex-1" autoFocus />
+            <div className="flex gap-2">
+              <Button type="button" variant="ghost" onClick={() => { setCreating(null); setTitle('') }}>Cancel</Button>
+              <Button type="submit" loading={busy} disabled={!title.trim()}>Create</Button>
             </div>
           </form>
         </Card>
-      ) : (
-        <Button size="sm" onClick={() => setOpen(true)} className="self-start">+ New note</Button>
       )}
 
-      {notes.length === 0 ? (
-        <EmptyState icon="📝" title="No notes yet" hint="Jot down anything you want to remember — recipes, ideas or household information." />
-      ) : (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          {notes.map(n => (
-            <NoteCard key={n.id} note={n}
-              onSaved={u => setNotes(prev => prev.map(x => x.id === u.id ? u : x))}
-              onDeleted={id => setNotes(prev => prev.filter(x => x.id !== id))}
-              onError={onError} />
+      <div>
+        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-strong">Checklists</p>
+        {checklistLists.length === 0 ? (
+          <EmptyState icon="☑️" title="No checklists yet" hint="Bunnings run, holiday packing, movies to watch — anything you'd tick off." />
+        ) : (
+          <>
+            <div className="sm:hidden">
+              <MobileSection title="Checklists">
+                {checklistLists.map(list => {
+                  const meta = listTypeMeta(list.list_type)
+                  const pendingCount = (list.items ?? []).filter(i => !i.is_complete).length
+                  const total = (list.items ?? []).length
+                  return (
+                    <MobileListRow
+                      key={list.id}
+                      icon={meta.icon}
+                      title={list.title}
+                      subtitle={pendingCount > 0 ? `${pendingCount} to do` : total > 0 ? 'All done ✓' : 'Checklist'}
+                      onClick={() => onOpenList(list.id)}
+                    />
+                  )
+                })}
+              </MobileSection>
+            </div>
+            <div className="hidden grid-cols-1 gap-4 lg:grid-cols-2 sm:grid">
+              {checklistLists.map(list => (
+                <ListCard
+                  key={list.id}
+                  list={list}
+                  people={people}
+                  defaultAssignee={defaultAssignee}
+                  focusedItemId={list.id === focusedListId ? focusedItemId : undefined}
+                  onDeleted={onListDeleted}
+                  onError={onError}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div>
+        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-strong">Notes</p>
+        {notes === null ? (
+          <div className="h-24 rounded-2xl bg-sunken animate-pulse" />
+        ) : notes.length === 0 ? (
+          <EmptyState icon="📝" title="No notes yet" hint="Jot down anything you want to remember — recipes, ideas or household information." />
+        ) : (
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {notes.map(n => (
+              <NoteCard key={n.id} note={n}
+                onSaved={u => setNotes(prev => (prev ?? []).map(x => x.id === u.id ? u : x))}
+                onDeleted={id => setNotes(prev => (prev ?? []).filter(x => x.id !== id))}
+                onError={onError} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Grocery — the single household list (D19 §C)
+// ---------------------------------------------------------------------------
+
+// Client-side only — a lightweight heuristic, not a stored field, so it costs nothing to
+// change or extend and never conflicts with anyone else's data.
+const GROCERY_CATEGORY_KEYWORDS: [string, string[]][] = [
+  ['Produce', ['apple', 'banana', 'carrot', 'potato', 'onion', 'tomato', 'lettuce', 'spinach', 'fruit', 'veg', 'vegetable', 'berry', 'avocado', 'capsicum', 'broccoli', 'garlic', 'mushroom', 'lemon', 'lime']],
+  ['Dairy', ['milk', 'cheese', 'yoghurt', 'yogurt', 'butter', 'cream', 'egg']],
+  ['Bakery', ['bread', 'bun', 'roll', 'bagel', 'muffin', 'croissant']],
+  ['Meat & Seafood', ['chicken', 'beef', 'pork', 'lamb', 'mince', 'fish', 'salmon', 'prawn', 'sausage', 'bacon']],
+  ['Pantry', ['rice', 'pasta', 'flour', 'sugar', 'oil', 'sauce', 'can', 'tin', 'cereal', 'coffee', 'tea', 'spice', 'salt', 'stock']],
+  ['Frozen', ['frozen', 'ice cream']],
+  ['Household', ['dishwasher', 'detergent', 'tablet', 'tissue', 'paper towel', 'toilet paper', 'cleaner', 'soap', 'bin bag', 'foil', 'wrap']],
+]
+function guessGroceryCategory(title: string): string {
+  const lower = title.toLowerCase()
+  for (const [category, keywords] of GROCERY_CATEGORY_KEYWORDS) {
+    if (keywords.some(k => lower.includes(k))) return category
+  }
+  return 'Other'
+}
+
+function GroceryItemRow({ item, onToggle, onDelete, onError }: {
+  item: AtlasListItem
+  onToggle: (item: AtlasListItem) => void
+  onDelete: (item: AtlasListItem) => void
+  onError: (m: string) => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const listId = item.atlas_list_id
+
+  const toggle = async () => {
+    setBusy(true)
+    const optimistic: AtlasListItem = {
+      ...item, is_complete: !item.is_complete, completed_at: item.is_complete ? null : new Date().toISOString(),
+    }
+    onToggle(optimistic)
+    try {
+      const updated = item.is_complete ? await api.uncompleteItem(listId, item.id) : await api.completeItem(listId, item.id)
+      onToggle(updated)
+    } catch (e) { onToggle(item); onError(errMsg(e)) } finally { setBusy(false) }
+  }
+
+  return (
+    <li id={`atlas-item-${item.id}`} className="group flex items-center gap-1 rounded-xl">
+      <button
+        onClick={toggle} disabled={busy}
+        className="flex min-h-[48px] min-w-0 flex-1 items-center gap-3 py-2 text-left disabled:opacity-60"
+        aria-label={item.is_complete ? 'Mark not bought' : 'Mark bought'}
+      >
+        <span className={`grid h-6 w-6 flex-shrink-0 place-items-center rounded-full border-2 ${item.is_complete ? 'bg-success border-success text-white' : 'border-line-strong group-hover:border-success'}`}>
+          {item.is_complete && <span className="text-xs">✓</span>}
+        </span>
+        <span className={`min-w-0 flex-1 truncate text-sm ${item.is_complete ? 'line-through text-muted' : 'text-ink'}`}>
+          {item.title}{item.quantity ? <span className="ml-1.5 text-muted-strong">× {item.quantity}</span> : ''}
+        </span>
+      </button>
+      <button
+        onClick={() => onDelete(item)}
+        className="grid h-10 w-9 flex-shrink-0 place-items-center rounded-xl text-lg leading-none text-muted hover:bg-danger-soft hover:text-danger sm:opacity-0 sm:group-hover:opacity-100"
+        aria-label="Delete"
+      >
+        ×
+      </button>
+    </li>
+  )
+}
+
+function GroceryTab({ groceryList, onError }: {
+  groceryList: AtlasList | null
+  onError: (m: string) => void
+}) {
+  const [items, setItems] = useState<AtlasListItem[]>(groceryList?.items ?? [])
+  const [title, setTitle] = useState('')
+  const [qty, setQty] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [grouped, setGrouped] = useState(true)
+  const [showBought, setShowBought] = useState(false)
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const [clearing, setClearing] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { setItems(groceryList?.items ?? []) }, [groceryList])
+  useEffect(() => { api.getGrocerySuggestions().then(setSuggestions).catch(() => { /* suggestions are a nicety */ }) }, [])
+
+  const addTitled = async (value: string, quantity?: string) => {
+    const trimmed = value.trim()
+    if (!trimmed) return
+    setAdding(true)
+    try {
+      const item = await api.addGroceryItem({ title: trimmed, quantity: quantity?.trim() || undefined })
+      setItems(prev => prev.some(i => i.id === item.id) ? prev.map(i => i.id === item.id ? item : i) : [...prev, item])
+      setTitle(''); setQty('')
+      inputRef.current?.focus()
+    } catch (e) { onError(errMsg(e)) } finally { setAdding(false) }
+  }
+
+  const add = (e: React.FormEvent) => { e.preventDefault(); void addTitled(title, qty) }
+
+  const handleToggle = (updated: AtlasListItem) => setItems(prev => prev.map(i => i.id === updated.id ? updated : i))
+  const handleDelete = async (item: AtlasListItem) => {
+    try { await api.deleteItem(item.atlas_list_id, item.id); setItems(prev => prev.filter(i => i.id !== item.id)) }
+    catch (e) { onError(errMsg(e)) }
+  }
+  const clearBought = async () => {
+    setClearing(true)
+    try { await api.clearBoughtGroceryItems(); setItems(prev => prev.filter(i => !i.is_complete)) }
+    catch (e) { onError(errMsg(e)) } finally { setClearing(false) }
+  }
+
+  if (!groceryList) return <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
+
+  const pending = items.filter(i => !i.is_complete)
+  const bought = items.filter(i => i.is_complete)
+  const groupEntries: [string, AtlasListItem[]][] = grouped
+    ? Object.entries(
+      pending.reduce<Record<string, AtlasListItem[]>>((acc, item) => {
+        const cat = guessGroceryCategory(item.title)
+        acc[cat] = acc[cat] ?? []
+        acc[cat].push(item)
+        return acc
+      }, {}),
+    ).sort(([a], [b]) => (a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)))
+    : [['Grocery', pending]]
+  const offeredSuggestions = suggestions.filter(s => !pending.some(i => i.title.toLowerCase() === s.toLowerCase()))
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card contentClassName="p-3">
+        <form onSubmit={add} className="flex items-center gap-2">
+          <input
+            ref={inputRef} value={title} onChange={e => setTitle(e.target.value)}
+            placeholder="Add grocery item…"
+            className="min-h-[44px] flex-1 min-w-0 bg-transparent text-sm text-ink placeholder-muted outline-none"
+          />
+          <input
+            value={qty} onChange={e => setQty(e.target.value)} placeholder="Qty" aria-label="Quantity"
+            className="w-16 min-h-[44px] border-l border-line bg-transparent pl-2 text-sm text-ink placeholder-muted outline-none"
+          />
+          <Button type="submit" size="sm" loading={adding} disabled={!title.trim()}>+</Button>
+        </form>
+      </Card>
+
+      {offeredSuggestions.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {offeredSuggestions.map(s => (
+            <button
+              key={s} type="button" onClick={() => void addTitled(s)}
+              className="min-h-9 rounded-full border border-line px-3 text-xs font-semibold text-muted-strong hover:border-primary hover:text-primary"
+            >
+              + {s}
+            </button>
           ))}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-muted-strong">{pending.length} item{pending.length === 1 ? '' : 's'} to buy</span>
+        <button type="button" onClick={() => setGrouped(v => !v)} className="text-xs font-semibold text-muted hover:text-ink">
+          {grouped ? 'Ungroup' : 'Group by category'}
+        </button>
+      </div>
+
+      {pending.length === 0 ? (
+        <EmptyState icon="🛒" title="Grocery list is empty" hint="Add the first item above." />
+      ) : (
+        <div className="flex flex-col gap-4">
+          {groupEntries.map(([category, rows]) => (
+            <div key={category}>
+              {grouped && <p className="mb-1 text-xs font-bold uppercase tracking-wide text-muted-strong">{category}</p>}
+              <ul className="divide-y divide-line/60">
+                {rows.map(item => <GroceryItemRow key={item.id} item={item} onToggle={handleToggle} onDelete={handleDelete} onError={onError} />)}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {bought.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between">
+            <button onClick={() => setShowBought(v => !v)} className="flex items-center gap-1 py-1.5 text-xs font-semibold text-muted hover:text-ink transition-colors">
+              <span className="w-3 inline-block">{showBought ? '▾' : '▸'}</span>{bought.length} bought
+            </button>
+            <Button size="sm" variant="ghost" onClick={clearBought} loading={clearing}>Clear bought</Button>
+          </div>
+          {showBought && (
+            <ul className="divide-y divide-line/60">
+              {bought.map(item => <GroceryItemRow key={item.id} item={item} onToggle={handleToggle} onDelete={handleDelete} onError={onError} />)}
+            </ul>
+          )}
         </div>
       )}
     </div>
@@ -433,194 +678,264 @@ function NotesTab({ onError }: { onError: (m: string) => void }) {
 }
 
 // ---------------------------------------------------------------------------
-// Reminders tab
+// To-dos — Household + one list per active Person, Today aggregation (D19 §D/§E/§F/§G)
 // ---------------------------------------------------------------------------
 
-function RemindersTab({ people, defaultAssignee, focusedReminderId, onError }: {
-  people: Person[]
-  defaultAssignee: number[]
-  focusedReminderId: number
-  onError: (m: string) => void
+const NOTIFY_OFFSET_CHOICES: { minutes: number; label: string }[] = [
+  { minutes: 0, label: 'At time' },
+  { minutes: 15, label: '15 min before' },
+  { minutes: 30, label: '30 min before' },
+  { minutes: 60, label: '1 hour before' },
+  { minutes: 120, label: '2 hours before' },
+  { minutes: 1440, label: '1 day before' },
+  { minutes: 2880, label: '2 days before' },
+  { minutes: 10080, label: '1 week before' },
+]
+
+function TodoItemRow({ item, lists, busy, showListLabel, onToggle, onToggleImportant, onSetOffsets, onMove, onDelete }: {
+  item: AtlasListItem
+  lists: AtlasList[]
+  busy: boolean
+  showListLabel: boolean
+  onToggle: () => void
+  onToggleImportant: () => void
+  onSetOffsets: (offsets: number[]) => void
+  onMove: (destinationListId: number) => void
+  onDelete: () => void
 }) {
-  const [reminders, setReminders] = useState<AtlasReminder[]>([])
-  const [loading, setLoading] = useState(true)
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
-  const [dueAt, setDueAt] = useState<string | null>(null)
-  const [dueAllDay, setDueAllDay] = useState(false)
-  const [assignees, setAssignees] = useState<number[]>(defaultAssignee)
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true)
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [open, setOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    api.getReminders().then(setReminders).catch(e => onError(errMsg(e))).finally(() => setLoading(false))
-  }, [onError])
-
-  useEffect(() => {
-    if (!focusedReminderId || !reminders.length) return
-    const reminder = reminders.find(row => row.id === focusedReminderId)
-    if (reminder) {
-      setEditingId(reminder.id); setTitle(reminder.title); setBody(reminder.body)
-      setDueAt(reminder.due_at); setDueAllDay(reminder.is_all_day)
-      setAssignees(reminder.assigned_to_person_ids); setNotificationsEnabled(reminder.notifications_enabled)
-      setOpen(true)
-    }
-  }, [focusedReminderId, reminders])
-
-  const resetForm = () => {
-    setEditingId(null); setTitle(''); setBody(''); setDueAt(null); setDueAllDay(false)
-    setAssignees(defaultAssignee); setNotificationsEnabled(true)
-  }
-
-  const edit = (reminder: AtlasReminder) => {
-    setEditingId(reminder.id); setTitle(reminder.title); setBody(reminder.body)
-    setDueAt(reminder.due_at); setDueAllDay(reminder.is_all_day)
-    setAssignees(reminder.assigned_to_person_ids); setNotificationsEnabled(reminder.notifications_enabled)
-    setOpen(true)
-  }
-
-  const create = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!title.trim()) return
-    setSaving(true)
-    try {
-      const payload = {
-        title: title.trim(), body: body.trim(), due_at: dueAt, is_all_day: dueAllDay,
-        assigned_to_person_ids: assignees, notifications_enabled: notificationsEnabled,
-      }
-      const reminder = editingId
-        ? await api.updateReminder(editingId, payload)
-        : await api.createReminder(payload)
-      setReminders(prev => editingId
-        ? prev.map(row => row.id === reminder.id ? reminder : row)
-        : [...prev, reminder])
-      resetForm(); setOpen(false)
-    } catch (e) {
-      onError(errMsg(e))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const remove = async (id: number) => {
-    try {
-      await api.deleteReminder(id)
-      setReminders(prev => prev.filter(r => r.id !== id))
-    } catch (e) {
-      onError(errMsg(e))
-    }
-  }
-
-  if (loading) return <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
-
-  // Soonest due first; undated reminders sink to the bottom.
-  const sortedReminders = [...reminders].sort((a, b) => {
-    if (!a.due_at && !b.due_at) return 0
-    if (!a.due_at) return 1
-    if (!b.due_at) return -1
-    return new Date(a.due_at).getTime() - new Date(b.due_at).getTime()
-  })
+  const [showNotify, setShowNotify] = useState(false)
+  const due = dueLabel(item.due_at)
+  const listLabel = showListLabel ? lists.find(l => l.id === item.atlas_list_id)?.title : null
 
   return (
-    <div className="flex flex-col gap-4">
-      <Button size="sm" onClick={() => { resetForm(); setOpen(true) }} className="self-start">+ New reminder</Button>
-
-      {reminders.length === 0 ? (
-        <EmptyState icon="⏰" title="No reminders yet" hint="Dated reminders also show on your Hub and Calendar." />
-      ) : (
-        <div className="flex flex-col gap-3">
-          {sortedReminders.map(r => {
-            const due = dueLabel(r.due_at)
+    <li id={`atlas-item-${item.id}`} className="group flex flex-col gap-1 rounded-xl px-1 py-1.5">
+      <div className="flex items-start gap-1">
+        <button
+          onClick={onToggle} disabled={busy}
+          className="flex min-h-[48px] min-w-0 flex-1 items-start gap-3 py-1 text-left disabled:opacity-60"
+          aria-label={item.is_complete ? 'Mark not done' : 'Mark done'}
+        >
+          <span className={`mt-0.5 grid h-6 w-6 flex-shrink-0 place-items-center rounded-full border-2 ${item.is_complete ? 'bg-success border-success text-white' : 'border-line-strong group-hover:border-success'}`}>
+            {item.is_complete && <span className="text-xs">✓</span>}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className={`block break-words text-sm leading-5 ${item.is_complete ? 'line-through text-muted' : 'text-ink'}`}>
+              {item.is_important && <span className="mr-1 text-warning" aria-label="Important">★</span>}
+              {item.title}
+            </span>
+            {(listLabel || (!item.is_complete && due)) && (
+              <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
+                {listLabel && <span className="rounded-full bg-sunken px-1.5 py-0.5 font-semibold">{listLabel}</span>}
+                {!item.is_complete && due && <span className={`rounded-full px-1.5 py-0.5 font-semibold ${due.tone}`}>{due.text}</span>}
+              </span>
+            )}
+          </span>
+        </button>
+        <div className="flex flex-shrink-0 items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+          <button
+            type="button" onClick={onToggleImportant}
+            className={`grid h-9 w-9 place-items-center rounded-xl text-base ${item.is_important ? 'text-warning' : 'text-muted hover:text-ink'}`}
+            aria-label={item.is_important ? 'Unmark important' : 'Mark important'}
+          >★</button>
+          {item.due_at && (
+            <button
+              type="button" onClick={() => setShowNotify(v => !v)}
+              className={`grid h-9 w-9 place-items-center rounded-xl text-base ${item.notify_offsets.length ? 'text-primary' : 'text-muted hover:text-ink'}`}
+              aria-label="Notification settings" aria-expanded={showNotify}
+            >🔔</button>
+          )}
+          {lists.length > 1 && (
+            <select
+              value={item.atlas_list_id} onChange={e => onMove(Number(e.target.value))}
+              aria-label="Move to list"
+              className="h-9 rounded-xl border border-line bg-surface px-1 text-xs text-muted-strong"
+            >
+              {lists.map(l => <option key={l.id} value={l.id}>{l.title}</option>)}
+            </select>
+          )}
+          <button type="button" onClick={onDelete} className="grid h-9 w-9 place-items-center rounded-xl text-lg leading-none text-muted hover:bg-danger-soft hover:text-danger" aria-label="Delete">×</button>
+        </div>
+      </div>
+      {showNotify && item.due_at && (
+        <div className="ml-9 flex flex-wrap gap-1.5 rounded-xl bg-sunken/60 p-2">
+          {NOTIFY_OFFSET_CHOICES.map(choice => {
+            const active = item.notify_offsets.includes(choice.minutes)
             return (
-              <Card key={r.id}>
-                <div className="flex items-start gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-ink">{r.title}</p>
-                    {r.body && <p className="text-sm text-muted mt-0.5">{r.body}</p>}
-                    {r.due_at && (
-                      <p className="text-xs text-muted mt-1">
-                        {new Date(r.due_at).toLocaleString(undefined,
-                          r.is_all_day ? { dateStyle: 'medium' } : { dateStyle: 'medium', timeStyle: 'short' })}
-                        <Link to={calendarDayHref(r.due_at)} className="ml-2 text-primary hover:underline">Open day</Link>
-                      </p>
-                    )}
-                    <p className="mt-1 text-xs text-muted">
-                      {r.assigned_to_person_ids.length
-                        ? `For ${r.assigned_to_person_ids.map(id => people.find(person => person.id === id)?.preferred_name || people.find(person => person.id === id)?.display_name).filter(Boolean).join(', ')}`
-                        : 'For the whole family'}
-                      {' · '}{r.notification_state === 'scheduled' ? 'Notification scheduled'
-                        : r.notification_state === 'sent' ? 'Notification sent'
-                          : r.notification_state === 'disabled' ? 'Notifications off'
-                            : r.notification_state === 'elapsed' ? 'Reminder time passed'
-                              : 'Choose a date and time to schedule'}
-                    </p>
-                  </div>
-                  {due && (
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${due.tone}`}>{due.text}</span>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => edit(r)}>Edit</Button>
-                  <DeleteAction onClick={() => remove(r.id)} label={r.title} />
-                </div>
-              </Card>
+              <button
+                key={choice.minutes} type="button"
+                onClick={() => onSetOffsets(active ? item.notify_offsets.filter(m => m !== choice.minutes) : [...item.notify_offsets, choice.minutes])}
+                aria-pressed={active}
+                className={`min-h-8 rounded-full px-2.5 text-xs font-semibold ${active ? 'bg-primary text-white' : 'border border-line bg-surface text-muted-strong'}`}
+              >
+                {choice.label}
+              </button>
             )
           })}
         </div>
       )}
-      {open && (
-        <Modal
-          title={editingId ? 'Edit reminder' : 'New reminder'}
-          onClose={() => { setOpen(false); resetForm() }}
-          size="full"
-          footer={(
-            <>
-              <Button variant="ghost" onClick={() => { setOpen(false); resetForm() }}>Cancel</Button>
-              <Button type="submit" form="atlas-reminder-form" loading={saving} disabled={!title.trim()}>{editingId ? 'Save reminder' : 'Schedule reminder'}</Button>
-            </>
-          )}
-        >
-          <form id="atlas-reminder-form" onSubmit={create} className="flex flex-col gap-4">
-            <Field label="Title"><Input value={title} onChange={e => setTitle(e.target.value)} placeholder="What should HomeStack remind you about?" data-autofocus /></Field>
-            <Field label="Notes"><Textarea rows={3} value={body} onChange={e => setBody(e.target.value)} placeholder="Optional details" /></Field>
-            <Field label="Date and time" hint="Timed reminders use your household timezone. All-day reminders arrive at your configured morning time.">
-              <DateTimeField value={dueAt} allDay={dueAllDay} onChange={({ value, allDay }) => { setDueAt(value); setDueAllDay(allDay) }} />
-            </Field>
-            <Field label="Who is this for?" hint="Assigned people receive the scheduled notification. Empty means the whole household.">
-              <AssigneeSelect people={people} value={assignees} onChange={setAssignees} />
-            </Field>
-            <label className="flex items-start gap-3 rounded-2xl border border-line bg-sunken/40 p-3 text-sm text-muted-strong">
-              <input type="checkbox" className="mt-1" checked={notificationsEnabled} onChange={event => setNotificationsEnabled(event.target.checked)} />
-              <span><strong className="block text-ink">Send notifications</strong>Uses HomeStack's existing 24-hour-before and morning-of notification schedule.</span>
-            </label>
+    </li>
+  )
+}
+
+function TodoTab({ todoLists, focusedListId, onRefresh, onError }: {
+  todoLists: AtlasList[]
+  focusedListId: number
+  onRefresh: () => Promise<void>
+  onError: (m: string) => void
+}) {
+  const household = todoLists.find(l => l.owner_person_id === null) ?? null
+  const [view, setView] = useState<number | 'today'>(focusedListId || household?.id || 'today')
+  const [today, setToday] = useState<AtlasListItem[] | null>(null)
+  const [title, setTitle] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [busyIds, setBusyIds] = useState<Set<number>>(new Set())
+  const [showDone, setShowDone] = useState(false)
+
+  const loadToday = () => api.getTodayTodos().then(setToday).catch(e => onError(errMsg(e)))
+  useEffect(() => { if (view === 'today') void loadToday() }, [view])
+  useEffect(() => {
+    if (focusedListId && todoLists.some(l => l.id === focusedListId)) setView(focusedListId)
+  }, [focusedListId, todoLists])
+  useEffect(() => {
+    if (view !== 'today' && !todoLists.some(l => l.id === view) && household) setView(household.id)
+  }, [todoLists, view, household])
+
+  const activeList = typeof view === 'number' ? todoLists.find(l => l.id === view) ?? null : null
+  const items = view === 'today' ? (today ?? []) : (activeList?.items ?? [])
+
+  const refreshAfterMutation = async () => {
+    await onRefresh()
+    if (view === 'today') await loadToday()
+  }
+
+  const add = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!title.trim() || activeList === null) return
+    setAdding(true)
+    try { await api.createItem(activeList.id, { title: title.trim() }); setTitle(''); await refreshAfterMutation() }
+    catch (e) { onError(errMsg(e)) } finally { setAdding(false) }
+  }
+
+  const withBusy = async (id: number, fn: () => Promise<void>) => {
+    setBusyIds(prev => new Set(prev).add(id))
+    try { await fn() } catch (e) { onError(errMsg(e)) } finally {
+      setBusyIds(prev => { const next = new Set(prev); next.delete(id); return next })
+    }
+  }
+
+  const toggle = (item: AtlasListItem) => withBusy(item.id, async () => {
+    if (item.is_complete) await api.uncompleteItem(item.atlas_list_id, item.id)
+    else await api.completeItem(item.atlas_list_id, item.id)
+    await refreshAfterMutation()
+  })
+  const toggleImportant = (item: AtlasListItem) => withBusy(item.id, async () => {
+    await api.updateItem(item.atlas_list_id, item.id, { is_important: !item.is_important })
+    await refreshAfterMutation()
+  })
+  const setOffsets = (item: AtlasListItem, offsets: number[]) => withBusy(item.id, async () => {
+    await api.updateItem(item.atlas_list_id, item.id, { notify_offsets: offsets })
+    await refreshAfterMutation()
+  })
+  const moveTo = (item: AtlasListItem, destinationId: number) => withBusy(item.id, async () => {
+    if (destinationId === item.atlas_list_id) return
+    await api.moveListItem(item.atlas_list_id, item.id, destinationId)
+    await refreshAfterMutation()
+  })
+  const remove = (item: AtlasListItem) => withBusy(item.id, async () => {
+    await api.deleteItem(item.atlas_list_id, item.id)
+    await refreshAfterMutation()
+  })
+
+  const pending = items.filter(i => !i.is_complete)
+  const done = items.filter(i => i.is_complete)
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap gap-1 rounded-xl bg-sunken p-1">
+        <button type="button" onClick={() => setView('today')} className={`min-h-9 rounded-lg px-3 text-xs font-bold ${view === 'today' ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'}`}>Today</button>
+        {todoLists.map(list => (
+          <button key={list.id} type="button" onClick={() => setView(list.id)} className={`min-h-9 rounded-lg px-3 text-xs font-bold ${view === list.id ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'}`}>{list.title}</button>
+        ))}
+      </div>
+
+      {view !== 'today' && (
+        <Card contentClassName="p-3">
+          <form onSubmit={add} className="flex items-center gap-2">
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Add a to-do…" className="min-h-[44px] flex-1 min-w-0 bg-transparent text-sm text-ink placeholder-muted outline-none" />
+            <Button type="submit" size="sm" loading={adding} disabled={!title.trim()}>+</Button>
           </form>
-        </Modal>
+        </Card>
+      )}
+
+      {view === 'today' && today === null ? (
+        <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
+      ) : pending.length === 0 && done.length === 0 ? (
+        <EmptyState
+          icon="✓"
+          title={view === 'today' ? 'Nothing due today' : 'Nothing here yet'}
+          hint={view === 'today' ? 'Overdue and today’s to-dos across Household and personal lists appear here.' : 'Add the first to-do above.'}
+        />
+      ) : (
+        <>
+          {pending.length === 0 ? <p className="text-sm text-muted py-1">All done ✓</p> : (
+            <ul className="divide-y divide-line/60">
+              {pending.map(item => (
+                <TodoItemRow
+                  key={item.id} item={item} lists={todoLists} busy={busyIds.has(item.id)} showListLabel={view === 'today'}
+                  onToggle={() => void toggle(item)} onToggleImportant={() => void toggleImportant(item)}
+                  onSetOffsets={offsets => void setOffsets(item, offsets)} onMove={id => void moveTo(item, id)}
+                  onDelete={() => void remove(item)}
+                />
+              ))}
+            </ul>
+          )}
+          {done.length > 0 && view !== 'today' && (
+            <div>
+              <button onClick={() => setShowDone(v => !v)} className="flex items-center gap-1 py-1.5 text-xs font-semibold text-muted hover:text-ink transition-colors">
+                <span className="w-3 inline-block">{showDone ? '▾' : '▸'}</span>{done.length} completed
+              </button>
+              {showDone && (
+                <ul className="divide-y divide-line/60">
+                  {done.map(item => (
+                    <TodoItemRow
+                      key={item.id} item={item} lists={todoLists} busy={busyIds.has(item.id)} showListLabel={false}
+                      onToggle={() => void toggle(item)} onToggleImportant={() => void toggleImportant(item)}
+                      onSetOffsets={offsets => void setOffsets(item, offsets)} onMove={id => void moveTo(item, id)}
+                      onDelete={() => void remove(item)}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Quick capture — one bar that drops text into a list, note or reminder.
+// Quick capture — one bar that drops text into a to-do, grocery item or note.
 // ---------------------------------------------------------------------------
 
-type CaptureKind = 'todo' | 'note' | 'reminder'
+type CaptureKind = 'todo' | 'grocery' | 'note'
 
-function CaptureBar({ lists, onCapture }: {
-  lists: AtlasList[]
+function CaptureBar({ todoLists, onCapture }: {
+  todoLists: AtlasList[]
   onCapture: (kind: CaptureKind, text: string, listId: number | null) => Promise<void>
 }) {
   const [kind, setKind] = useState<CaptureKind>('todo')
   const [text, setText] = useState('')
-  const [listId, setListId] = useState<number | null>(lists[0]?.id ?? null)
+  const household = todoLists.find(l => l.owner_person_id === null) ?? null
+  const [listId, setListId] = useState<number | null>(household?.id ?? todoLists[0]?.id ?? null)
   const [busy, setBusy] = useState(false)
   const [open, setOpen] = useState(false)
 
   // Keep a valid target list selected as lists load / change.
   useEffect(() => {
     if (kind !== 'todo') return
-    if (listId == null || !lists.some(l => l.id === listId)) setListId(lists[0]?.id ?? null)
-  }, [lists, kind, listId])
+    if (listId == null || !todoLists.some(l => l.id === listId)) setListId(household?.id ?? todoLists[0]?.id ?? null)
+  }, [todoLists, kind, listId, household])
 
   const noTarget = kind === 'todo' && listId == null
   const canSubmit = !!text.trim() && !noTarget
@@ -649,13 +964,13 @@ function CaptureBar({ lists, onCapture }: {
       {!open && (
         <button type="button" onClick={() => setOpen(true)} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-2 text-left text-sm font-semibold text-muted-strong sm:hidden">
           <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary-soft text-primary">＋</span>
-          Quickly capture a to-do, note or reminder
+          Quickly add a to-do, grocery item or note
         </button>
       )}
       <form onSubmit={submit} className={`${open ? 'flex' : 'hidden'} flex-col gap-2 sm:flex`}>
         <div className="flex items-center justify-between sm:hidden">
-          <span className="text-xs font-bold uppercase tracking-wide text-muted">Quick capture</span>
-          <button type="button" onClick={() => setOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl text-muted" aria-label="Close quick capture">✕</button>
+          <span className="text-xs font-bold uppercase tracking-wide text-muted">Quick add</span>
+          <button type="button" onClick={() => setOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl text-muted" aria-label="Close quick add">✕</button>
         </div>
         <div className="flex items-center gap-2">
           <span className="pl-1 text-muted-strong" aria-hidden>✎</span>
@@ -670,16 +985,16 @@ function CaptureBar({ lists, onCapture }: {
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex gap-1 bg-sunken p-1 rounded-xl">
             {seg('todo', 'To-do')}
+            {seg('grocery', 'Grocery')}
             {seg('note', 'Note')}
-            {seg('reminder', 'Reminder')}
           </div>
           {kind === 'todo' && (
-            lists.length > 0 ? (
+            todoLists.length > 0 ? (
               <Select value={listId ?? 0} onChange={e => setListId(Number(e.target.value))} className="!w-auto min-w-[9rem] !min-h-[38px] !py-1.5">
-                {lists.map(l => <option key={l.id} value={l.id}>{l.title}</option>)}
+                {todoLists.map(l => <option key={l.id} value={l.id}>{l.title}</option>)}
               </Select>
             ) : (
-              <span className="text-xs text-muted">Create a list first to capture to-dos.</span>
+              <span className="text-xs text-muted">Loading your to-do lists…</span>
             )
           )}
         </div>
@@ -701,15 +1016,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-// Grocery and Shopping are their own tabs now; everything else still lives under Lists.
-function listTabFor(listType: string): 'lists' | 'grocery' | 'shopping' {
+function listTabFor(listType: string): 'lists' | 'grocery' | 'todos' {
   if (listType === 'grocery') return 'grocery'
-  if (listType === 'shopping') return 'shopping'
+  if (listType === 'todo') return 'todos'
   return 'lists'
 }
 
 function SearchResults({ results, lists }: { results: AtlasSearchResults; lists: AtlasList[] }) {
-  const empty = !results.notes.length && !results.lists.length && !results.items.length && !results.reminders.length
+  const empty = !results.notes.length && !results.lists.length && !results.items.length
   if (empty) return <EmptyState icon="🔍" title="No matches" hint="Try a different word, or check another list." />
 
   return (
@@ -720,14 +1034,14 @@ function SearchResults({ results, lists }: { results: AtlasSearchResults; lists:
             <Link key={`l${l.id}`} to={`/atlas?tab=${listTabFor(l.list_type)}&list=${l.id}`} className="group block">
               <Card className="transition-colors group-hover:border-primary/40">
                 <span className="text-sm font-medium text-ink">{l.title}</span>
-                <span className="text-xs text-muted capitalize"> · {l.list_type}</span>
+                <span className="text-xs text-muted"> · {listTypeMeta(l.list_type).label}</span>
               </Card>
             </Link>
           ))}
         </Section>
       )}
       {results.items.length > 0 && (
-        <Section title="List items">
+        <Section title="Items">
           {results.items.map(i => {
             const parentType = lists.find(l => l.id === i.atlas_list_id)?.list_type ?? 'general'
             return (
@@ -741,20 +1055,11 @@ function SearchResults({ results, lists }: { results: AtlasSearchResults; lists:
       {results.notes.length > 0 && (
         <Section title="Notes">
           {results.notes.map(n => (
-            <Link key={`n${n.id}`} to="/atlas?tab=notes" className="group block">
+            <Link key={`n${n.id}`} to="/atlas?tab=lists" className="group block">
               <Card className="transition-colors group-hover:border-primary/40">
                 <p className="text-sm font-medium text-ink">{n.title}</p>
                 {n.body && <p className="text-xs text-muted truncate">{n.body}</p>}
               </Card>
-            </Link>
-          ))}
-        </Section>
-      )}
-      {results.reminders.length > 0 && (
-        <Section title="Reminders">
-          {results.reminders.map(r => (
-            <Link key={`r${r.id}`} to="/atlas?tab=reminders" className="block min-h-11 rounded-xl bg-sunken px-3 py-2.5 text-sm text-ink transition-colors hover:bg-primary-soft">
-              {r.title}
             </Link>
           ))}
         </Section>
@@ -764,7 +1069,8 @@ function SearchResults({ results, lists }: { results: AtlasSearchResults; lists:
 }
 
 // ---------------------------------------------------------------------------
-// Atlas page
+// Agenda / Appointments & Events / Birthdays — Calendar-adjacent conveniences,
+// secondary to the three primary areas above (D19 §B).
 // ---------------------------------------------------------------------------
 
 function AtlasItemAgendaModal({ list, item, people, onClose, onSaved, onError }: {
@@ -774,24 +1080,28 @@ function AtlasItemAgendaModal({ list, item, people, onClose, onSaved, onError }:
   const [title, setTitle] = useState(item.title)
   const [notes, setNotes] = useState(item.notes)
   const [dueAt, setDueAt] = useState<string | null>(item.due_at)
-  const [allDay, setAllDay] = useState(false)
+  const [allDay, setAllDay] = useState(item.is_all_day)
   const [assignees, setAssignees] = useState<number[]>(item.assigned_to_person_ids)
   const [saving, setSaving] = useState(false)
+  const isChecklist = list.list_type !== 'grocery'
   const save = async () => {
     if (!title.trim()) return
     setSaving(true)
     try {
       await api.updateItem(list.id, item.id, {
-        title: title.trim(), notes, due_at: dueAt, assigned_to_person_ids: assignees,
+        title: title.trim(), notes, due_at: dueAt, is_all_day: allDay,
+        ...(isChecklist ? { assigned_to_person_ids: assignees } : {}),
       })
       onSaved()
     } catch (error) { onError(errMsg(error)) } finally { setSaving(false) }
   }
-  return <Modal title="Edit to-do" onClose={onClose} footer={<><Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button><Button size="sm" onClick={save} loading={saving} disabled={!title.trim()}>Save</Button></>}>
+  return <Modal title="Edit item" onClose={onClose} footer={<><Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button><Button size="sm" onClick={save} loading={saving} disabled={!title.trim()}>Save</Button></>}>
     <div className="space-y-3">
-      <Field label="To-do"><Input value={title} onChange={event => setTitle(event.target.value)} autoFocus /></Field>
+      <Field label="Title"><Input value={title} onChange={event => setTitle(event.target.value)} autoFocus /></Field>
       <Field label="Due"><DateTimeField value={dueAt} allDay={allDay} onChange={({ value, allDay: nextAllDay }) => { setDueAt(value); setAllDay(nextAllDay) }} /></Field>
-      <Field label="Assigned to"><AssigneeSelect people={people} value={assignees} onChange={value => setAssignees(value || [])} /></Field>
+      {isChecklist && (
+        <Field label="Assigned to"><AssigneeSelect people={people} value={assignees} onChange={value => setAssignees(value || [])} /></Field>
+      )}
       <Field label="Notes"><Textarea value={notes} onChange={event => setNotes(event.target.value)} rows={3} /></Field>
     </div>
   </Modal>
@@ -861,146 +1171,72 @@ function PeopleBirthdaysTab({ people, onError }: { people: Person[]; onError: (m
   return <div className="flex flex-col gap-4">
     {open ? <Card title="Add a person"><form onSubmit={save} className="grid gap-3 sm:grid-cols-3"><Field label="Name"><Input value={name} onChange={e => setName(e.target.value)} autoFocus /></Field><Field label="Date of birth"><Input type="date" value={dob} onChange={e => setDob(e.target.value)} /></Field><Field label="Relationship"><Input value={relationship} onChange={e => setRelationship(e.target.value)} placeholder="Friend, aunt…" /></Field><div className="flex gap-2 sm:col-span-3 sm:justify-end"><Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" disabled={!name.trim() || !dob}>Save person</Button></div></form></Card>
       : <Button size="sm" className="self-start" onClick={() => setOpen(true)}>+ Add person</Button>}
-    {!rows.length ? <EmptyState icon="🎂" title="No birthdays yet" hint="Add friends and relatives here, or add a household member's birth date in user management." /> : <div className="grid gap-3 lg:grid-cols-2">{rows.map(row => <Card key={row.id}><div className="flex items-center justify-between gap-3"><div><h3 className="font-bold text-ink">{row.name}</h3><p className="text-sm text-muted">🎂 {new Date(`${row.dob}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}{row.relationship ? ` · ${row.relationship}` : ''}</p></div>{row.contact && <DeleteAction onClick={() => remove(row.contact!)} label={row.name} />}</div></Card>)}</div>}
+    {!rows.length ? <EmptyState icon="🎂" title="No birthdays yet" hint="Add friends and relatives here, or add a household member's birth date in user management. Pet birthdays appear automatically on the Calendar." /> : <div className="grid gap-3 lg:grid-cols-2">{rows.map(row => <Card key={row.id}><div className="flex items-center justify-between gap-3"><div><h3 className="font-bold text-ink">{row.name}</h3><p className="text-sm text-muted">🎂 {new Date(`${row.dob}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}{row.relationship ? ` · ${row.relationship}` : ''}</p></div>{row.contact && <DeleteAction onClick={() => remove(row.contact!)} label={row.name} />}</div></Card>)}</div>}
   </div>
 }
 
 // ---------------------------------------------------------------------------
-// Grocery tab — the plain-quantity list type, kept simple (no link/price/
-// priority) so a future Hearth/meal-planning pass can populate it from a
-// meal plan's ingredient list without fighting shopping-list-only fields.
+// Atlas page
 // ---------------------------------------------------------------------------
 
-function GroceryTab({ lists, people, defaultAssignee, focusedListId, focusedItemId, onListCreated, onListDeleted, onError }: {
-  lists: AtlasList[]
-  people: Person[]
-  defaultAssignee: number[]
-  focusedListId: number
-  focusedItemId: number
-  onListCreated: (list: AtlasList) => void
-  onListDeleted: (id: number) => void
-  onError: (message: string) => void
-}) {
-  const groceryLists = lists.filter(l => l.list_type === 'grocery')
-  const [creating, setCreating] = useState(false)
-  const [title, setTitle] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  const create = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!title.trim()) return
-    setBusy(true)
-    try {
-      const list = await api.createList({ title: title.trim(), list_type: 'grocery' })
-      const full = await api.getList(list.id)
-      onListCreated(full)
-      setTitle(''); setCreating(false)
-    } catch (err) { onError(errMsg(err)) } finally { setBusy(false) }
-  }
-
-  return (
-    <div className="flex flex-col gap-4">
-      {creating ? (
-        <form onSubmit={create} className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-3 sm:flex-row">
-          <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Grocery list name…" className="flex-1" autoFocus />
-          <div className="flex gap-2">
-            <Button type="button" variant="ghost" onClick={() => { setCreating(false); setTitle('') }} className="flex-1 sm:flex-none">Cancel</Button>
-            <Button type="submit" loading={busy} disabled={!title.trim()} className="flex-1 sm:flex-none">Create</Button>
-          </div>
-        </form>
-      ) : (
-        <Button size="sm" onClick={() => setCreating(true)} className="self-start">+ New grocery list</Button>
-      )}
-
-      {groceryLists.length === 0 ? (
-        <EmptyState
-          icon="🛒"
-          title="No grocery lists yet"
-          hint="A grocery list can later be filled automatically from a meal plan once Hearth ships."
-        />
-      ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {groceryLists.map(list => (
-            <ListCard
-              key={list.id}
-              list={list}
-              people={people}
-              defaultAssignee={defaultAssignee}
-              focusedItemId={list.id === focusedListId ? focusedItemId : undefined}
-              onDeleted={onListDeleted}
-              onError={onError}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-type Tab = 'agenda' | 'schedule' | 'lists' | 'grocery' | 'shopping' | 'notes' | 'reminders' | 'people'
-
-const LIST_TYPES = Object.entries(LIST_TYPE_META)
-  .filter(([key]) => key !== 'grocery' && key !== 'shopping')
-  .map(([key, m]) => ({ key, label: m.label, icon: m.icon }))
+type Tab = 'grocery' | 'todos' | 'lists' | 'agenda' | 'schedule' | 'people'
 
 export function AtlasPage() {
   const { user } = useAuth()
   const [lists, setLists] = useState<AtlasList[]>([])
+  const [groceryList, setGroceryList] = useState<AtlasList | null>(null)
+  const [todoLists, setTodoLists] = useState<AtlasList[]>([])
   const atlasTabs: TabDef<Tab>[] = [
+    { key: 'grocery', label: 'grocery' },
+    { key: 'todos', label: 'to-dos' },
+    { key: 'lists', label: 'lists & notes' },
     { key: 'agenda', label: 'agenda' },
     { key: 'schedule', label: 'appointments & events' },
-    { key: 'lists', label: 'lists', badge: lists.filter(l => l.list_type !== 'grocery' && l.list_type !== 'shopping').length || undefined },
-    { key: 'grocery', label: 'grocery', badge: lists.filter(l => l.list_type === 'grocery').length || undefined },
-    { key: 'shopping', label: 'shopping', badge: lists.filter(l => l.list_type === 'shopping').length || undefined },
-    { key: 'notes', label: 'notes' },
-    { key: 'reminders', label: 'reminders' },
     { key: 'people', label: 'people & birthdays' },
   ]
   const tabsState = useCustomisableTabs<Tab>('atlas', atlasTabs)
   const { tab, setTab } = tabsState
   const [people, setPeople] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
-  const [newTitle, setNewTitle] = useState('')
-  const [newType, setNewType] = useState('todo')
-  const [creating, setCreating] = useState(false)
-  const [creatingList, setCreatingList] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useUrlQueryState()
   const [results, setResults] = useState<AtlasSearchResults | null>(null)
-  // Remount only the affected list card / self-fetching tab after a quick capture.
-  const [cardRefresh, setCardRefresh] = useState<Record<number, number>>({})
-  const [captureTick, setCaptureTick] = useState(0)
-  // docs/36 §6.3: opening a list should be a focused screen on phone, not one card in an
+  // docs/36 §6.3: opening a checklist should be a focused screen on phone, not one card in an
   // already-tall stack of every list's full contents — desktop's grid is untouched.
   const [openListId, setOpenListId] = useState<number | null>(null)
   const [searchParams] = useSearchParams()
   const focusedListId = Number(searchParams.get('list') || 0)
   const focusedItemId = Number(searchParams.get('item') || 0)
-  const focusedReminderId = Number(searchParams.get('reminder') || 0)
-  const effectiveFocusedListId = focusedListId || lists.find(list => list.items?.some(item => item.id === focusedItemId))?.id || 0
+
+  const refreshGrocery = () => api.getGrocery().then(setGroceryList).catch(e => setError(errMsg(e)))
+  const refreshTodoLists = () => api.getTodoLists().then(setTodoLists).catch(e => setError(errMsg(e)))
+  const refreshLists = () => api.getLists().then(setLists).catch(e => setError(errMsg(e)))
 
   useEffect(() => {
-    api.getLists().then(setLists).catch(e => setError(errMsg(e))).finally(() => setLoading(false))
+    Promise.all([refreshLists(), refreshGrocery(), refreshTodoLists()]).finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useEffect(() => { api.getPeople().then(setPeople).catch(() => {}) }, [])
+
+  const checklistLists = lists.filter(l => l.list_type === 'checklist' || l.list_type === 'general')
+
   useEffect(() => {
-    if (loading || (!focusedListId && !focusedItemId)) return
-    if (!effectiveFocusedListId) return
-    const focusedList = lists.find(list => list.id === effectiveFocusedListId)
-    if (focusedList && focusedList.list_type !== 'grocery' && focusedList.list_type !== 'shopping') {
+    if (loading || !focusedListId) return
+    if (groceryList && focusedListId === groceryList.id) { setTab('grocery'); return }
+    if (todoLists.some(l => l.id === focusedListId)) { setTab('todos'); return }
+    const focusedList = checklistLists.find(list => list.id === focusedListId)
+    if (focusedList) {
       setTab('lists')
-      setOpenListId(effectiveFocusedListId)
+      setOpenListId(focusedListId)
+      window.setTimeout(() => {
+        document.getElementById(focusedItemId ? `atlas-item-${focusedItemId}` : `atlas-list-${focusedListId}`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 0)
     }
-    window.setTimeout(() => {
-      document.getElementById(focusedItemId ? `atlas-item-${focusedItemId}` : `atlas-list-${effectiveFocusedListId}`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }, 0)
-  }, [effectiveFocusedListId, focusedItemId, loading, lists, setTab])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedListId, focusedItemId, loading, groceryList, todoLists, checklistLists, setTab])
 
   const defaultAssignee = personIdForUser(people, user?.id)
-  // Grocery and Shopping now have their own dedicated tabs; the generic Lists tab keeps
-  // everything else (to-do, checklist, general, wishlist).
-  const otherLists = lists.filter(l => l.list_type !== 'grocery' && l.list_type !== 'shopping')
 
   // Debounced Atlas-wide search.
   useEffect(() => {
@@ -1012,38 +1248,19 @@ export function AtlasPage() {
     return () => clearTimeout(id)
   }, [query])
 
-  const createList = async () => {
-    if (!newTitle.trim()) return
-    setCreating(true)
-    try {
-      const list = await api.createList({ title: newTitle.trim(), list_type: newType })
-      const full = await api.getList(list.id)
-      setLists(prev => [full, ...prev])
-      setNewTitle(''); setNewType('todo')
-      setCreatingList(false)
-    } catch (e) {
-      setError(errMsg(e))
-    } finally {
-      setCreating(false)
-    }
-  }
-
   const capture = async (kind: CaptureKind, text: string, listId: number | null) => {
     try {
       if (kind === 'note') {
         await api.createNote({ title: text, visibility: 'household' })
-        setCaptureTick(t => t + 1)
-        setTab('notes')
-      } else if (kind === 'reminder') {
-        await api.createReminder({ title: text, due_at: null, is_all_day: true })
-        setCaptureTick(t => t + 1)
-        setTab('reminders')
-      } else if (kind === 'todo' && listId != null) {
-        await api.createItem(listId, { title: text, assigned_to_person_ids: defaultAssignee })
-        const full = await api.getList(listId)
-        setLists(prev => prev.map(l => l.id === listId ? full : l))
-        setCardRefresh(prev => ({ ...prev, [listId]: (prev[listId] ?? 0) + 1 }))
         setTab('lists')
+      } else if (kind === 'grocery') {
+        await api.addGroceryItem({ title: text })
+        await refreshGrocery()
+        setTab('grocery')
+      } else if (kind === 'todo' && listId != null) {
+        await api.createItem(listId, { title: text })
+        await refreshTodoLists()
+        setTab('todos')
       }
     } catch (e) {
       setError(errMsg(e))
@@ -1053,22 +1270,16 @@ export function AtlasPage() {
   return (
     <div className="flex flex-col gap-4 sm:gap-5">
       <div className="hidden sm:block">
-        <PageHeader
-          title="Lists & Notes"
-          icon="🗒"
-          actions={tab === 'lists' && lists.length > 0 && !creatingList
-            ? <Button size="sm" onClick={() => setCreatingList(true)}>+ New list</Button>
-            : undefined}
-        />
+        <PageHeader title="Atlas" icon="🗒" />
       </div>
 
-      <CaptureBar lists={otherLists} onCapture={capture} />
+      <CaptureBar todoLists={todoLists} onCapture={capture} />
 
       <SearchField
         value={query}
         onChange={e => setQuery(e.target.value)}
         onClear={() => setQuery('')}
-        placeholder="Search lists, items, notes, reminders…"
+        placeholder="Search to-dos, checklists, notes, grocery…"
       />
 
       {error && (
@@ -1083,128 +1294,48 @@ export function AtlasPage() {
       ) : (
         <>
           {/* Tabs */}
-          <CustomisableTabs state={tabsState} label="Lists &amp; Notes" className="w-fit" />
+          <CustomisableTabs state={tabsState} label="Atlas" className="w-fit" />
 
-          {tab === 'agenda' ? <AgendaTab people={people} lists={lists} defaultAssignee={defaultAssignee} onError={setError} onListsChanged={() => api.getLists().then(setLists).catch(error => setError(errMsg(error)))} /> : tab === 'schedule' ? <AppointmentsEventsTab people={people} defaultAssignee={defaultAssignee} onError={setError} /> : tab === 'lists' ? (
-            <div className="flex flex-col gap-4">
-              {loading ? (
-                <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
-              ) : otherLists.length === 0 ? (
-                <EmptyState
-                  icon="🗒"
-                  title="No lists yet"
-                  hint="Make a shared list for errands, chores or anything else. Groceries and shopping have their own tabs."
-                  action={<Button onClick={() => setCreatingList(true)}>Create your first list</Button>}
-                />
-              ) : (
-                <>
-                  {/* Phone: a summary row per list, opening the full list as a focused sheet —
-                      not every list's full contents stacked one after another. */}
-                  <div className="sm:hidden">
-                    <MobileSection title="Lists" action={<button type="button" onClick={() => setCreatingList(true)}>+ New</button>}>
-                      {otherLists.map(list => {
-                        const meta = listTypeMeta(list.list_type)
-                        const pendingCount = (list.items ?? []).filter(i => !i.is_complete).length
-                        const total = (list.items ?? []).length
-                        return (
-                          <MobileListRow
-                            key={list.id}
-                            icon={meta.icon}
-                            title={list.title}
-                            subtitle={pendingCount > 0 ? `${pendingCount} to do` : total > 0 ? 'All done ✓' : meta.label}
-                            onClick={() => setOpenListId(list.id)}
-                          />
-                        )
-                      })}
-                    </MobileSection>
-                  </div>
-                  <div className="hidden grid-cols-1 gap-4 lg:grid-cols-2 sm:grid">
-                    {otherLists.map(list => (
-                      <ListCard
-                        key={`${list.id}:${cardRefresh[list.id] ?? 0}`}
-                        list={list}
-                        people={people}
-                        defaultAssignee={defaultAssignee}
-                        focusedItemId={list.id === effectiveFocusedListId ? focusedItemId : undefined}
-                        onDeleted={id => setLists(prev => prev.filter(l => l.id !== id))}
-                        onError={setError}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          ) : tab === 'grocery' ? (
-            <GroceryTab
-              lists={lists}
-              people={people}
-              defaultAssignee={defaultAssignee}
-              focusedListId={effectiveFocusedListId}
-              focusedItemId={focusedItemId}
-              onListCreated={list => setLists(prev => [list, ...prev])}
-              onListDeleted={id => setLists(prev => prev.filter(l => l.id !== id))}
-              onError={setError}
-            />
-          ) : tab === 'shopping' ? (
-            <ShoppingTab
-              lists={lists}
-              people={people}
-              onListCreated={list => setLists(prev => [list, ...prev])}
-              onListDeleted={id => setLists(prev => prev.filter(l => l.id !== id))}
-              onError={setError}
-            />
-          ) : tab === 'notes' ? (
-            <NotesTab key={`notes-${captureTick}`} onError={setError} />
-          ) : tab === 'reminders' ? (
-            <RemindersTab
-              key={`reminders-${captureTick}`}
-              people={people}
-              defaultAssignee={defaultAssignee}
-              focusedReminderId={focusedReminderId}
-              onError={setError}
-            />
+          {tab === 'grocery' ? (
+            <GroceryTab groceryList={groceryList} onError={setError} />
+          ) : tab === 'todos' ? (
+            <TodoTab todoLists={todoLists} focusedListId={focusedListId} onRefresh={refreshTodoLists} onError={setError} />
+          ) : tab === 'lists' ? (
+            loading ? (
+              <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
+            ) : (
+              <ListsAndNotesTab
+                checklistLists={checklistLists}
+                people={people}
+                defaultAssignee={defaultAssignee}
+                focusedListId={focusedListId}
+                focusedItemId={focusedItemId}
+                onOpenList={setOpenListId}
+                onListCreated={list => setLists(prev => [list, ...prev])}
+                onListDeleted={id => setLists(prev => prev.filter(l => l.id !== id))}
+                onError={setError}
+              />
+            )
+          ) : tab === 'agenda' ? (
+            <AgendaTab people={people} lists={lists} defaultAssignee={defaultAssignee} onError={setError} onListsChanged={refreshLists} />
+          ) : tab === 'schedule' ? (
+            <AppointmentsEventsTab people={people} defaultAssignee={defaultAssignee} onError={setError} />
           ) : (
             <PeopleBirthdaysTab people={people} onError={setError} />
           )}
         </>
       )}
 
-      {creatingList && (
-        <Modal
-          title="New list"
-          onClose={() => { setCreatingList(false); setNewTitle('') }}
-          size="full"
-          footer={
-            <>
-              <Button variant="ghost" onClick={() => { setCreatingList(false); setNewTitle('') }}>Cancel</Button>
-              <Button onClick={createList} loading={creating} disabled={!newTitle.trim()}>Create</Button>
-            </>
-          }
-        >
-          <div className="flex flex-col gap-3">
-            <Field label="List name">
-              <Input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="New list name…" data-autofocus />
-            </Field>
-            <Field label="Type">
-              <Select value={newType} onChange={e => setNewType(e.target.value)}>
-                {LIST_TYPES.map(t => <option key={t.key} value={t.key}>{t.icon} {t.label}</option>)}
-              </Select>
-            </Field>
-          </div>
-        </Modal>
-      )}
-
       {openListId !== null && (() => {
-        const list = otherLists.find(l => l.id === openListId)
+        const list = checklistLists.find(l => l.id === openListId)
         if (!list) return null
         return (
           <Modal title={list.title} onClose={() => setOpenListId(null)} size="full">
             <ListCard
-              key={`${list.id}:${cardRefresh[list.id] ?? 0}`}
               list={list}
               people={people}
               defaultAssignee={defaultAssignee}
-              focusedItemId={list.id === effectiveFocusedListId ? focusedItemId : undefined}
+              focusedItemId={list.id === focusedListId ? focusedItemId : undefined}
               onDeleted={id => { setLists(prev => prev.filter(l => l.id !== id)); setOpenListId(null) }}
               onError={setError}
             />

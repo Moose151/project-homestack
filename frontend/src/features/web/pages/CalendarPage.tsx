@@ -834,8 +834,13 @@ export function CalendarPage() {
         const birthdayEvents: CalendarEvent[] = birthdays.map((birthday, index) => ({
           id: -1000000 - index, title: birthday.title, event_kind: 'birthday', description: '',
           start_at: `${birthday.date}T00:00:00`, end_at: null, is_all_day: true, timezone: '',
-          recurrence_rule: '', source_node: null, source_record_type: 'BirthdayOccurrence',
-          source_record_id: birthday.contact_id || birthday.person_id, assigned_to_person_ids: birthday.person_id ? [birthday.person_id] : [],
+          recurrence_rule: '',
+          // Pet birthdays deep-link to the pet's profile (D19 §N) — People/Contact birthdays
+          // have no equivalent detail route yet, so they stay unlinked as before.
+          source_node: birthday.pet_id ? 'pets' : null,
+          source_record_type: birthday.pet_id ? 'Pet' : 'BirthdayOccurrence',
+          source_record_id: birthday.pet_id || birthday.contact_id || birthday.person_id,
+          assigned_to_person_ids: birthday.person_id ? [birthday.person_id] : [],
           colour: '#C46A4A', location: '', provider: '', contact: '', visibility: 'household',
           sensitivity: 'normal', is_synced: true, created_at: '', updated_at: '',
           // Birthdays are derived locally from contacts, not mirrored from a calendar source.

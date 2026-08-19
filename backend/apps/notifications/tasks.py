@@ -103,8 +103,9 @@ def _recipients_for(event, category: str) -> list[User]:
 
 
 def _action_url(event, tz) -> str:
-    if event.source_record_type == "AtlasReminder" and event.source_record_id:
-        return f"/atlas?tab=reminders&reminder={event.source_record_id}"
+    # Atlas's "Reminders" tab was retired in favour of To-dos (D19 §E) — a reminder created
+    # through Calendar's quick-create still lives as an AtlasReminder record, but its own home
+    # is the calendar day it's on, same as any other dated entry.
     return f"/calendar?date={event.start_at.astimezone(tz).date().isoformat()}"
 
 
@@ -180,6 +181,91 @@ def run_due_reminders(*, now=None) -> dict[str, int]:
             sent_morning += 1
 
     return {"24h": sent_24h, "morning_of": sent_morning, "due_at": sent_due}
+
+
+def _offset_title(offset_minutes: int) -> str:
+    if offset_minutes <= 0:
+        return "Due now"
+    if offset_minutes < 60:
+        return f"Due in {offset_minutes} minute{'s' if offset_minutes != 1 else ''}"
+    if offset_minutes < 1440:
+        hours = offset_minutes // 60
+        return f"Due in {hours} hour{'s' if hours != 1 else ''}"
+    if offset_minutes < 10080:
+        days = offset_minutes // 1440
+        return f"Due in {days} day{'s' if days != 1 else ''}"
+    weeks = offset_minutes // 10080
+    return f"Due in {weeks} week{'s' if weeks != 1 else ''}"
+
+
+def _recipients_for_item(item) -> list[User]:
+    """Household members who may see this To-do, restricted to assignees when any are set —
+    the same rule Atlas reminders already use (docs/32 §3)."""
+    assignee_ids = set(
+        item.assigned_to_people.exclude(linked_user__isnull=True).values_list("linked_user_id", flat=True)
+    )
+    from apps.atlas.models import AtlasList
+    from apps.permissions.visibility import apply_visibility
+
+    recipients = []
+    for user in User.objects.filter(is_active=True, household_id=item.household_id):
+        if not apply_visibility(AtlasList.objects.filter(pk=item.atlas_list_id), user).exists():
+            continue
+        pref = NotificationPreference.objects.filter(user=user, category=NotificationCategory.ASSIGNED_TASKS).first()
+        mine_only = pref.mine_only if pref else False
+        if assignee_ids and user.id not in assignee_ids:
+            continue
+        if mine_only and user.id not in assignee_ids:
+            continue
+        recipients.append(user)
+    return recipients
+
+
+def run_due_todo_offsets(*, now=None) -> int:
+    """Configurable per-item notification offsets for Atlas To-dos (D19 §E/§F).
+
+    Unlike the three fixed leads above, a To-do's ``notify_offsets`` (a list of
+    minutes-before-due_at, 0 = at time) is data on the item itself rather than a hardcoded
+    window, so this reuses the same idempotency ledger/notification delivery but loops over
+    each item's own configured offsets instead of one fixed lead. Deleting/completing a To-do
+    removes it from the queryset (soft-delete + the ``completed_at__isnull`` filter), so no
+    further notification for it can ever fire; changing ``due_at`` or ``notify_offsets``
+    changes what's computed on the very next run since nothing is pre-scheduled.
+    """
+    from apps.atlas.models import AtlasListItem
+
+    now = now or timezone.now()
+    household = get_active_household()
+    if household is None:
+        return 0
+    tz = _household_timezone(household)
+    window_start = now - timedelta(hours=1)
+
+    sent = 0
+    items = AtlasListItem.objects.filter(
+        household=household, completed_at__isnull=True, due_at__isnull=False,
+    ).exclude(notify_offsets=[])
+    for item in items:
+        for offset_minutes in item.notify_offsets:
+            target_at = item.due_at - timedelta(minutes=offset_minutes)
+            if not (window_start < target_at <= now):
+                continue
+            lead_kind = f"offset:{offset_minutes}"
+            if _already_sent(
+                source_node="atlas", record_type="AtlasListItem", record_id=item.id, lead_kind=lead_kind,
+            ):
+                continue
+            for user in _recipients_for_item(item):
+                create_notification(
+                    user, title=_offset_title(offset_minutes), message=item.title,
+                    source_node="atlas", category=NotificationCategory.ASSIGNED_TASKS,
+                    action_url=f"/atlas?tab=todos&list={item.atlas_list_id}&item={item.id}",
+                )
+            _log_sent(
+                source_node="atlas", record_type="AtlasListItem", record_id=item.id, lead_kind=lead_kind,
+            )
+            sent += 1
+    return sent
 
 
 def _format_countdown(remaining: timedelta) -> str:

@@ -66,12 +66,16 @@ export interface UserPreferences {
 export interface AtlasListItem {
   id: number
   atlas_list_id: number
+  list_type: AtlasList['list_type']
   title: string
   notes: string
   quantity: string
   priority: '' | 'low' | 'medium' | 'high'
   position: number
   due_at: string | null
+  is_all_day: boolean
+  is_important: boolean
+  notify_offsets: number[]
   calendar_event_id: number | null
   product_url: string
   source_image_url: string
@@ -378,6 +382,7 @@ export interface BirthdayOccurrence {
   age: number
   person_id: number | null
   contact_id: number | null
+  pet_id: number | null
   event_kind: 'birthday'
 }
 
@@ -775,6 +780,8 @@ export interface HubWidget {
   items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | PetTreatment[] | PetAppointment[] | MaintenanceTask[] | Appliance[] | Improvement[] | SolaceBill[] | SolaceBillOccurrence[] | SolacePurchase[] | FitnessSession[] | AppNotification[]
   meta?: {
     unread_count?: number
+    /** Grocery widget: open item count, which may exceed the truncated items list. */
+    remaining_count?: number
     title?: string
     target_date?: string
     target_time?: string

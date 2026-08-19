@@ -158,7 +158,11 @@ Major shipped areas include:
 
 - Core auth, People/Users, roles/permissions, audit, backups and protected attachments.
 - Hub, Calendar, global search and notifications.
-- Atlas notes/to-do/Grocery/Shopping/reminders/Agenda.
+- **Atlas (v0.40, D19)** — Grocery (single household list), To-dos (Household + one list per
+  active Person, with configurable notification offsets and a Today view), Lists & Notes
+  (checklists + notes), Agenda/Appointments & events/People & Pet birthdays. The old
+  Grocery/Shopping split and the standalone Atlas "Reminder" object were retired in favour of
+  this simplified model — see `docs/11_Node_Atlas.md`.
 - Native Meridian tasks/rewards/points workflows.
 - Education, Home Wiki and Pets.
 - **Books** personal shelves, per-User ratings/notes and shared Book Clubs/up-next queue.

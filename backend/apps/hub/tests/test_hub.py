@@ -152,6 +152,37 @@ class HubContentTests(TestCase):
         self.assertIn("Visible task", titles)
         self.assertNotIn("Hidden task", titles)
 
+    def test_grocery_items_are_not_classified_as_todos(self):
+        """Regression: a grocery item must never appear in the atlas_todos widget (D19 §K)."""
+        todo_list = create_atlas_list(self.admin, title="Chores", list_type="todo")
+        create_list_item(self.admin, todo_list, title="Book pest inspection")
+        grocery_list = create_atlas_list(self.admin, title="Grocery", list_type="grocery")
+        create_list_item(self.admin, grocery_list, title="Milk")
+
+        todos = self._widget("atlas_todos")
+        self.assertIsNotNone(todos)
+        titles = [i["title"] for i in todos["items"]]
+        self.assertIn("Book pest inspection", titles)
+        self.assertNotIn("Milk", titles)
+
+    def test_grocery_widget_shows_grocery_items_with_remaining_count(self):
+        from apps.atlas.services import complete_list_item
+
+        grocery_list = create_atlas_list(self.admin, title="Grocery", list_type="grocery")
+        create_list_item(self.admin, grocery_list, title="Milk")
+        bought = create_list_item(self.admin, grocery_list, title="Bread")
+        complete_list_item(self.admin, bought)
+
+        grocery = self._widget("atlas_grocery")
+        self.assertIsNotNone(grocery)
+        titles = [i["title"] for i in grocery["items"]]
+        self.assertIn("Milk", titles)
+        self.assertNotIn("Bread", titles)
+        self.assertEqual(grocery["meta"]["remaining_count"], 1)
+
+    def test_grocery_widget_dropped_when_list_is_empty(self):
+        self.assertIsNone(self._widget("atlas_grocery"))
+
 
 class UpcomingWidgetTests(TestCase):
     """The unified Upcoming widget — one card for everything dated (owner, 2026-08-09).

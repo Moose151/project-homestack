@@ -75,6 +75,18 @@ Calendar/people views but not the actionable Atlas Agenda.
 
 The current leap-day policy should remain explicit in code/tests/UI rather than hidden in date math.
 
+### Pets (D19 §N)
+
+`Pet.date_of_birth` (optional — exact birth dates are not always known) reuses this exact
+mechanism rather than a second implementation: the same computed-on-read occurrence endpoint
+(`GET /api/v1/atlas/birthday-occurrences/`) unions Pets alongside People/Contacts, the same
+leap-day policy applies, and no yearly `CalendarEvent` row is persisted for a pet birthday either.
+The displayed title uses the pet's turning age ("Buddy's 6th Birthday"); it is always classified
+`event_kind: "birthday"`, never "due" or "overdue". Clearing or changing a pet's date of birth
+changes what the next request returns — there is nothing to backfill or clean up. Unlike People,
+a pet birthday deep-links to the pet's own profile (`/pets?tab=pets&pet=<id>`), since Pets already
+has a detail route; People does not yet have an equivalent profile route.
+
 ## 6. Pool maintenance scheduling
 
 Homestead Pool & spa owns pool-care schedule configuration.

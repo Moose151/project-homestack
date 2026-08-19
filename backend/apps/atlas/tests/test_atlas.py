@@ -83,6 +83,46 @@ class DailyCoordinationTests(TestCase):
         self.assertEqual([row["title"] for row in birthdays], ["Alex turns 36", "Jamie turns 41"])
         self.assertEqual(sum(row["person_id"] == person.id for row in birthdays), 1)
 
+    def test_pet_birthday_shows_turning_age_and_deep_link_id(self):
+        from apps.pets.models import Pet
+        pet = Pet.objects.create(
+            household=get_active_household(), name="Buddy",
+            date_of_birth=timezone.datetime(2020, 8, 20).date(),
+            created_by=self.admin, updated_by=self.admin,
+        )
+        rows = self.client.get("/api/v1/atlas/birthday-occurrences/?start=2026-08-19&end=2026-08-21").json()
+        pet_rows = [row for row in rows if row["pet_id"] == pet.id]
+        self.assertEqual(len(pet_rows), 1)
+        self.assertEqual(pet_rows[0]["title"], "Buddy's 6th Birthday")
+        self.assertEqual(pet_rows[0]["age"], 6)
+        self.assertEqual(pet_rows[0]["date"], "2026-08-20")
+
+    def test_pet_leap_day_birthday_lands_on_feb_28_in_non_leap_years(self):
+        from apps.pets.models import Pet
+        pet = Pet.objects.create(
+            household=get_active_household(), name="Frog", species="reptile",
+            date_of_birth=timezone.datetime(2020, 2, 29).date(),
+            created_by=self.admin, updated_by=self.admin,
+        )
+        rows = self.client.get("/api/v1/atlas/birthday-occurrences/?start=2027-02-27&end=2027-03-01").json()
+        pet_rows = [row for row in rows if row["pet_id"] == pet.id]
+        self.assertEqual([row["date"] for row in pet_rows], ["2027-02-28"])
+
+    def test_removing_pet_dob_removes_generated_birthday(self):
+        from apps.pets.models import Pet
+        pet = Pet.objects.create(
+            household=get_active_household(), name="Milo",
+            date_of_birth=timezone.datetime(2019, 8, 20).date(),
+            created_by=self.admin, updated_by=self.admin,
+        )
+        window = "/api/v1/atlas/birthday-occurrences/?start=2026-08-19&end=2026-08-21"
+        before = self.client.get(window).json()
+        self.assertTrue(any(row["pet_id"] == pet.id for row in before))
+        pet.date_of_birth = None
+        pet.save(update_fields=["date_of_birth"])
+        after = self.client.get(window).json()
+        self.assertFalse(any(row["pet_id"] == pet.id for row in after))
+
 
 # ---------------------------------------------------------------------------
 # Notes permission tests
@@ -600,3 +640,301 @@ class AtlasListItemFieldTests(TestCase):
             url, {"title": "Vacuum cleaner", "priority": "urgent"}, content_type="application/json",
         )
         self.assertEqual(resp.status_code, 400)
+
+
+# ---------------------------------------------------------------------------
+# Simplified Atlas product model (D19): Grocery, To-dos, notification offsets
+# ---------------------------------------------------------------------------
+
+class GroceryTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("groceryadmin", User.Role.ADMIN)
+        _login(self.client, "groceryadmin")
+
+    def test_household_has_exactly_one_grocery_list(self):
+        first = self.client.get("/api/v1/atlas/grocery/").json()
+        second = self.client.get("/api/v1/atlas/grocery/").json()
+        self.assertEqual(first["id"], second["id"])
+        self.assertEqual(first["list_type"], "grocery")
+
+    def test_item_creation_does_not_require_assignee(self):
+        resp = self.client.post(
+            "/api/v1/atlas/grocery/", {"title": "Apples"}, content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.json())
+        self.assertEqual(resp.json()["assigned_to_person_ids"], [])
+
+    def test_any_assignee_sent_is_ignored_for_grocery(self):
+        person = Person.objects.create(
+            household=get_active_household(), linked_user=self.admin, display_name="Nick",
+            created_by=self.admin, updated_by=self.admin,
+        )
+        resp = self.client.post(
+            "/api/v1/atlas/grocery/",
+            {"title": "Bananas", "assigned_to_person_ids": [person.id]},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.json())
+        self.assertEqual(resp.json()["assigned_to_person_ids"], [])
+
+    def test_member_can_add_edit_and_check_items(self):
+        grocery = self.client.get("/api/v1/atlas/grocery/").json()
+        item_id = self.client.post(
+            "/api/v1/atlas/grocery/", {"title": "Milk", "quantity": "2"}, content_type="application/json",
+        ).json()["id"]
+        edit_url = f"/api/v1/atlas/lists/{grocery['id']}/items/{item_id}/"
+        resp = self.client.patch(edit_url, {"quantity": "3"}, content_type="application/json")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["quantity"], "3")
+
+        complete_url = f"/api/v1/atlas/lists/{grocery['id']}/items/{item_id}/complete/"
+        resp = self.client.post(complete_url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["is_complete"])
+
+        uncomplete_url = f"/api/v1/atlas/lists/{grocery['id']}/items/{item_id}/uncomplete/"
+        resp = self.client.post(uncomplete_url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.json()["is_complete"])
+
+    def test_bought_items_move_to_completed_and_clear_bought_removes_them(self):
+        from apps.atlas.services import complete_list_item, ensure_household_grocery_list
+
+        grocery = ensure_household_grocery_list(self.admin)
+        bought = create_list_item(self.admin, grocery, title="Bread")
+        complete_list_item(self.admin, bought)
+        still_open = create_list_item(self.admin, grocery, title="Eggs")
+
+        resp = self.client.get(f"/api/v1/atlas/lists/{grocery.id}/items/")
+        titles_by_state = {row["title"]: row["is_complete"] for row in resp.json()}
+        self.assertEqual(titles_by_state, {"Bread": True, "Eggs": False})
+
+        clear_resp = self.client.post("/api/v1/atlas/grocery/clear-bought/")
+        self.assertEqual(clear_resp.status_code, 200)
+        self.assertEqual(clear_resp.json()["cleared"], 1)
+        remaining_titles = [row["title"] for row in self.client.get(f"/api/v1/atlas/lists/{grocery.id}/items/").json()]
+        self.assertEqual(remaining_titles, ["Eggs"])
+
+    def test_duplicate_open_item_is_not_recreated(self):
+        first = self.client.post(
+            "/api/v1/atlas/grocery/", {"title": "Milk"}, content_type="application/json",
+        ).json()
+        second = self.client.post(
+            "/api/v1/atlas/grocery/", {"title": "  milk "}, content_type="application/json",
+        ).json()
+        self.assertEqual(first["id"], second["id"])
+        grocery = self.client.get("/api/v1/atlas/grocery/").json()
+        self.assertEqual(len(grocery["items"]), 1)
+
+
+class DashboardClassificationRegressionTests(TestCase):
+    """apps.hub.tests covers the Hub widget end of D19 §K; this covers the selector directly."""
+
+    def setUp(self):
+        self.admin = _make_user("classifyadmin", User.Role.ADMIN)
+        _login(self.client, "classifyadmin")
+
+    def test_list_open_items_excludes_grocery_and_checklist(self):
+        from apps.atlas import selectors
+
+        todo_list = create_atlas_list(self.admin, title="Chores", list_type="todo")
+        create_list_item(self.admin, todo_list, title="Mow the lawn")
+        grocery_list = create_atlas_list(self.admin, title="Grocery", list_type="grocery")
+        create_list_item(self.admin, grocery_list, title="Milk")
+        checklist = create_atlas_list(self.admin, title="Packing", list_type="checklist")
+        create_list_item(self.admin, checklist, title="Passport")
+
+        titles = [item.title for item in selectors.list_open_items(self.admin)]
+        self.assertEqual(titles, ["Mow the lawn"])
+
+    def test_list_grocery_items_only_returns_grocery(self):
+        from apps.atlas import selectors
+
+        todo_list = create_atlas_list(self.admin, title="Chores", list_type="todo")
+        create_list_item(self.admin, todo_list, title="Mow the lawn")
+        grocery_list = create_atlas_list(self.admin, title="Grocery", list_type="grocery")
+        create_list_item(self.admin, grocery_list, title="Milk")
+
+        titles = [item.title for item in selectors.list_grocery_items(self.admin)]
+        self.assertEqual(titles, ["Milk"])
+
+
+class TodoListTests(TestCase):
+    def setUp(self):
+        self.admin_user = _make_user("todoadmin", User.Role.ADMIN)
+        self.member_user = _make_user("todomember", User.Role.USER)
+        self.admin_person = Person.objects.create(
+            household=get_active_household(), linked_user=self.admin_user, display_name="Admin",
+            created_by=self.admin_user, updated_by=self.admin_user,
+        )
+        self.member_person = Person.objects.create(
+            household=get_active_household(), linked_user=self.member_user, display_name="Member",
+            created_by=self.admin_user, updated_by=self.admin_user,
+        )
+        _login(self.client, "todoadmin")
+
+    def test_household_and_personal_lists_are_created_on_first_use(self):
+        lists = self.client.get("/api/v1/atlas/todos/lists/").json()
+        titles = {row["title"]: row["owner_person_id"] for row in lists}
+        self.assertIn("Household", titles)
+        self.assertIsNone(titles["Household"])
+        self.assertEqual(titles.get("Admin"), self.admin_person.id)
+        self.assertEqual(titles.get("Member"), self.member_person.id)
+
+    def test_quick_creation_requires_only_title(self):
+        lists = {row["title"]: row["id"] for row in self.client.get("/api/v1/atlas/todos/lists/").json()}
+        resp = self.client.post(
+            f"/api/v1/atlas/lists/{lists['Household']}/items/",
+            {"title": "Book pest inspection"}, content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.json())
+        self.assertIsNone(resp.json()["due_at"])
+        self.assertFalse(resp.json()["is_important"])
+        self.assertEqual(resp.json()["notify_offsets"], [])
+
+    def test_every_household_member_can_edit_household_and_others_personal_list(self):
+        lists = {row["title"]: row["id"] for row in self.client.get("/api/v1/atlas/todos/lists/").json()}
+        _login(self.client, "todomember")
+        resp = self.client.post(
+            f"/api/v1/atlas/lists/{lists['Admin']}/items/",
+            {"title": "Pick up dry cleaning"}, content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.json())
+
+    def test_moving_item_between_lists(self):
+        lists = {row["title"]: row["id"] for row in self.client.get("/api/v1/atlas/todos/lists/").json()}
+        item = self.client.post(
+            f"/api/v1/atlas/lists/{lists['Household']}/items/",
+            {"title": "Call plumber"}, content_type="application/json",
+        ).json()
+        resp = self.client.post(
+            f"/api/v1/atlas/lists/{lists['Household']}/items/{item['id']}/move/",
+            {"destination_list_id": lists["Admin"]}, content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.json())
+        self.assertEqual(resp.json()["atlas_list_id"], lists["Admin"])
+
+    def test_completion_leaves_active_list_and_is_restorable(self):
+        lists = {row["title"]: row["id"] for row in self.client.get("/api/v1/atlas/todos/lists/").json()}
+        item = self.client.post(
+            f"/api/v1/atlas/lists/{lists['Household']}/items/",
+            {"title": "Replace hallway globe"}, content_type="application/json",
+        ).json()
+        complete_resp = self.client.post(
+            f"/api/v1/atlas/lists/{lists['Household']}/items/{item['id']}/complete/"
+        )
+        self.assertTrue(complete_resp.json()["is_complete"])
+        restore_resp = self.client.post(
+            f"/api/v1/atlas/lists/{lists['Household']}/items/{item['id']}/uncomplete/"
+        )
+        self.assertFalse(restore_resp.json()["is_complete"])
+
+    def test_today_aggregates_overdue_and_due_today_across_lists(self):
+        lists = {row["title"]: row["id"] for row in self.client.get("/api/v1/atlas/todos/lists/").json()}
+        overdue_at = (timezone.now() - timezone.timedelta(days=2)).isoformat()
+        today_at = timezone.now().isoformat()
+        future_at = (timezone.now() + timezone.timedelta(days=5)).isoformat()
+        self.client.post(
+            f"/api/v1/atlas/lists/{lists['Household']}/items/",
+            {"title": "Overdue household job", "due_at": overdue_at}, content_type="application/json",
+        )
+        self.client.post(
+            f"/api/v1/atlas/lists/{lists['Admin']}/items/",
+            {"title": "Due today personal job", "due_at": today_at}, content_type="application/json",
+        )
+        self.client.post(
+            f"/api/v1/atlas/lists/{lists['Household']}/items/",
+            {"title": "Future job", "due_at": future_at}, content_type="application/json",
+        )
+        self.client.post(
+            f"/api/v1/atlas/lists/{lists['Household']}/items/",
+            {"title": "No due date job"}, content_type="application/json",
+        )
+        titles = {row["title"] for row in self.client.get("/api/v1/atlas/todos/today/").json()}
+        self.assertEqual(titles, {"Overdue household job", "Due today personal job"})
+
+
+class TodoNotificationOffsetTests(TestCase):
+    def setUp(self):
+        self.admin = _make_user("notifyadmin", User.Role.ADMIN)
+        _login(self.client, "notifyadmin")
+        self.household_list = create_atlas_list(self.admin, title="Household", list_type="todo")
+
+    def test_at_least_the_minimum_curated_offsets_are_accepted(self):
+        resp = self.client.post(
+            f"/api/v1/atlas/lists/{self.household_list.id}/items/",
+            {"title": "Renew licence", "due_at": _future(48).isoformat(), "notify_offsets": [0, 60, 1440]},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.json())
+        self.assertEqual(resp.json()["notify_offsets"], [0, 60, 1440])
+
+    def test_unsupported_offset_is_rejected(self):
+        resp = self.client.post(
+            f"/api/v1/atlas/lists/{self.household_list.id}/items/",
+            {"title": "Renew licence", "due_at": _future(48).isoformat(), "notify_offsets": [47]},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_offset_notification_fires_once_and_is_idempotent(self):
+        from apps.notifications.models import Notification
+        from apps.notifications.tasks import run_due_todo_offsets
+
+        item = create_list_item(
+            self.admin, self.household_list, title="Renew licence",
+            due_at=timezone.now() + timezone.timedelta(minutes=30), notify_offsets=[60],
+        )
+        sent_first = run_due_todo_offsets()
+        self.assertEqual(sent_first, 1)
+        self.assertTrue(Notification.objects.filter(message="Renew licence").exists())
+        sent_second = run_due_todo_offsets()
+        self.assertEqual(sent_second, 0)
+        self.assertEqual(Notification.objects.filter(message="Renew licence").count(), 1)
+
+    def test_notification_reschedules_when_due_at_changes(self):
+        from apps.atlas.services import update_list_item
+        from apps.notifications.models import Notification
+        from apps.notifications.tasks import run_due_todo_offsets
+
+        item = create_list_item(
+            self.admin, self.household_list, title="Renew licence",
+            due_at=timezone.now() + timezone.timedelta(days=10), notify_offsets=[60],
+        )
+        self.assertEqual(run_due_todo_offsets(), 0)
+        update_list_item(self.admin, item, due_at=timezone.now() + timezone.timedelta(minutes=30))
+        self.assertEqual(run_due_todo_offsets(), 1)
+        self.assertTrue(Notification.objects.filter(message="Renew licence").exists())
+
+    def test_completing_item_prevents_future_notifications(self):
+        from apps.atlas.services import complete_list_item
+        from apps.notifications.tasks import run_due_todo_offsets
+
+        item = create_list_item(
+            self.admin, self.household_list, title="Renew licence",
+            due_at=timezone.now() + timezone.timedelta(minutes=30), notify_offsets=[60],
+        )
+        complete_list_item(self.admin, item)
+        self.assertEqual(run_due_todo_offsets(), 0)
+
+    def test_deleting_item_prevents_future_notifications(self):
+        from apps.atlas.services import delete_list_item
+        from apps.notifications.tasks import run_due_todo_offsets
+
+        item = create_list_item(
+            self.admin, self.household_list, title="Renew licence",
+            due_at=timezone.now() + timezone.timedelta(minutes=30), notify_offsets=[60],
+        )
+        delete_list_item(self.admin, item)
+        self.assertEqual(run_due_todo_offsets(), 0)
+
+    def test_clearing_offsets_stops_notifications(self):
+        from apps.atlas.services import update_list_item
+        from apps.notifications.tasks import run_due_todo_offsets
+
+        item = create_list_item(
+            self.admin, self.household_list, title="Renew licence",
+            due_at=timezone.now() + timezone.timedelta(minutes=30), notify_offsets=[60],
+        )
+        update_list_item(self.admin, item, notify_offsets=[])
+        self.assertEqual(run_due_todo_offsets(), 0)

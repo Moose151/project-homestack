@@ -225,7 +225,8 @@ type InstitutionWrite = Partial<{
 
 type ItemWrite = Partial<{
   title: string; notes: string; quantity: string; priority: string; position: number
-  due_at: string | null; assigned_to_person_ids: number[]
+  due_at: string | null; is_all_day: boolean; is_important: boolean; notify_offsets: number[]
+  assigned_to_person_ids: number[]
   product_url: string; source_image_url: string; retailer: string; unit_price: string | null
   currency: string; cache_image: boolean; price_watch_enabled: boolean
 }>
@@ -529,6 +530,22 @@ export const api = {
     _fetch(`/atlas/lists/${listId}/suggestions/`, { method: 'POST', body: JSON.stringify(data) }),
   reviewListSuggestion: (listId: number, suggestionId: number, action: 'accept' | 'dismiss'): Promise<AtlasListSuggestion> =>
     _fetch(`/atlas/lists/${listId}/suggestions/${suggestionId}/${action}/`, { method: 'POST' }),
+
+  // --- Grocery — the single household list (D19 §C) ---
+  getGrocery: (): Promise<AtlasList> => _fetch('/atlas/grocery/'),
+  addGroceryItem: (data: ItemWrite): Promise<AtlasListItem> =>
+    _fetch('/atlas/grocery/', { method: 'POST', body: JSON.stringify(data) }),
+  clearBoughtGroceryItems: (): Promise<{ cleared: number }> =>
+    _fetch('/atlas/grocery/clear-bought/', { method: 'POST' }),
+  getGrocerySuggestions: (): Promise<string[]> => _fetch('/atlas/grocery/suggestions/'),
+
+  // --- To-dos — Household + one list per active Person (D19 §D) ---
+  getTodoLists: (): Promise<AtlasList[]> => _fetch('/atlas/todos/lists/'),
+  getTodayTodos: (): Promise<AtlasListItem[]> => _fetch('/atlas/todos/today/'),
+  moveListItem: (listId: number, itemId: number, destinationListId: number): Promise<AtlasListItem> =>
+    _fetch(`/atlas/lists/${listId}/items/${itemId}/move/`, {
+      method: 'POST', body: JSON.stringify({ destination_list_id: destinationListId }),
+    }),
 
   // --- Atlas search ---
   searchAtlas: (q: string): Promise<AtlasSearchResults> =>

@@ -74,10 +74,60 @@ def update_atlas_list(acting_user: User, atlas_list: AtlasList, **data) -> Atlas
 
 
 def can_manage_personal_list(acting_user: User, atlas_list: AtlasList) -> bool:
-    """Personal lists are edited by their owner; managers retain household oversight."""
+    """Personal lists are edited by their owner; managers retain household oversight.
+
+    To-do lists are the one exception (D19 §D/§U): every household member may view and edit
+    the Household To-do list *and* every member's personal To-do list — ownership there means
+    "whose list this is", not "who may touch it". The suggestion-gated Corner model still
+    applies to other owned lists (e.g. a personal wishlist/checklist).
+    """
+    if atlas_list.list_type == AtlasList.ListType.TODO:
+        return True
     return atlas_list.owner_person_id is None or acting_user.role in {
         User.Role.ADMIN, User.Role.MANAGER,
     } or atlas_list.owner_person.linked_user_id == acting_user.id
+
+
+def ensure_household_grocery_list(acting_user: User | None = None) -> AtlasList:
+    """The household's single Grocery list (D19 §C) — created on first use if missing."""
+    household = get_active_household()
+    existing = AtlasList.objects.filter(household=household, list_type=AtlasList.ListType.GROCERY).order_by("created_at", "id").first()
+    if existing:
+        return existing
+    return AtlasList.objects.create(
+        household=household, title="Grocery", list_type=AtlasList.ListType.GROCERY,
+        created_by=acting_user, updated_by=acting_user,
+    )
+
+
+def ensure_household_todo_list(acting_user: User | None = None) -> AtlasList:
+    """The shared Household To-do list (D19 §D) — created on first use if missing."""
+    household = get_active_household()
+    existing = (
+        AtlasList.objects.filter(household=household, list_type=AtlasList.ListType.TODO, owner_person__isnull=True)
+        .order_by("created_at", "id").first()
+    )
+    if existing:
+        return existing
+    return AtlasList.objects.create(
+        household=household, title="Household", list_type=AtlasList.ListType.TODO,
+        created_by=acting_user, updated_by=acting_user,
+    )
+
+
+def ensure_person_todo_list(person, acting_user: User | None = None) -> AtlasList:
+    """A Person's personal To-do list (D19 §D) — created on first use if missing."""
+    household = get_active_household()
+    existing = (
+        AtlasList.objects.filter(household=household, list_type=AtlasList.ListType.TODO, owner_person=person)
+        .order_by("created_at", "id").first()
+    )
+    if existing:
+        return existing
+    return AtlasList.objects.create(
+        household=household, title=person.display_name, list_type=AtlasList.ListType.TODO,
+        owner_person=person, created_by=acting_user, updated_by=acting_user,
+    )
 
 
 def delete_atlas_list(acting_user: User, atlas_list: AtlasList) -> None:
@@ -92,8 +142,25 @@ def delete_atlas_list(acting_user: User, atlas_list: AtlasList) -> None:
 # List items
 # ---------------------------------------------------------------------------
 
+def find_duplicate_open_item(atlas_list: AtlasList, title: str) -> AtlasListItem | None:
+    """A same-titled, still-open item already on this list (case/whitespace-insensitive).
+
+    Used to offer "bump the quantity" instead of a second identical grocery row (D19 §C).
+    """
+    normalised = title.strip().casefold()
+    if not normalised:
+        return None
+    for item in atlas_list.items.filter(completed_at__isnull=True):
+        if item.title.strip().casefold() == normalised:
+            return item
+    return None
+
+
 def create_list_item(acting_user: User, atlas_list: AtlasList, **data) -> AtlasListItem:
     people = pop_assignees(data)
+    if atlas_list.list_type == AtlasList.ListType.GROCERY:
+        # Grocery has no per-item owner (D19 §C) — silently ignore any assignee sent anyway.
+        people = []
     cache_image = data.pop("cache_image", None)
     watch_enabled = data.pop("price_watch_enabled", None)
     if cache_image is None:
@@ -120,11 +187,14 @@ def create_list_item(acting_user: User, atlas_list: AtlasList, **data) -> AtlasL
 
 def update_list_item(acting_user: User, item: AtlasListItem, **data) -> AtlasListItem:
     people = pop_assignees(data)
+    if item.atlas_list.list_type == AtlasList.ListType.GROCERY:
+        people = []
     cache_image = data.pop("cache_image", False)
     watch_enabled = data.pop("price_watch_enabled", None)
     allowed = {
         "title", "notes", "quantity", "priority", "position", "due_at", "product_url",
         "source_image_url", "retailer", "unit_price", "currency",
+        "is_all_day", "is_important", "notify_offsets",
     }
     for key, val in data.items():
         if key in allowed:
@@ -134,6 +204,22 @@ def update_list_item(acting_user: User, item: AtlasListItem, **data) -> AtlasLis
     apply_assignees(item, people)
     sync_event_for(item)
     _finish_product_item(acting_user, item, cache_image=cache_image, watch_enabled=watch_enabled)
+    return item
+
+
+def move_list_item(acting_user: User, item: AtlasListItem, destination_list: AtlasList) -> AtlasListItem:
+    """Move a To-do between Household and personal lists (D19 §D "Move to").
+
+    Both ends must be lists the acting user may manage — for To-do lists that is every
+    household member (see :func:`can_manage_personal_list`), so this is really just a
+    same-household/same-list-type guard in practice, kept generic for any list pairing.
+    """
+    if destination_list.list_type != item.atlas_list.list_type:
+        raise ValueError("Can only move an item between lists of the same type.")
+    item.atlas_list = destination_list
+    item.updated_by = acting_user
+    item.save(update_fields=["atlas_list", "updated_by", "updated_at"])
+    sync_event_for(item)
     return item
 
 
@@ -184,6 +270,15 @@ def uncomplete_list_item(acting_user: User, item: AtlasListItem) -> AtlasListIte
         item.save()
         sync_event_for(item)
     return item
+
+
+def clear_completed_items(acting_user: User, atlas_list: AtlasList) -> int:
+    """Permanently remove every completed (bought/done) item from a list. Returns the count."""
+    cleared = 0
+    for item in atlas_list.items.filter(completed_at__isnull=False):
+        delete_list_item(acting_user, item)
+        cleared += 1
+    return cleared
 
 
 def delete_list_item(acting_user: User, item: AtlasListItem) -> None:
