@@ -471,55 +471,93 @@ reload NPM. If the marker already exists, bootstrap stops and leaves it unchange
 
 On the very first adoption of this marker, the live production checkout **predates the deploy
 script itself** — `scripts/deploy-production.sh` does not exist yet in the commit actually running
-in the containers, so it cannot be invoked from inside that checkout. Do not resolve this by
-pulling `main` forward first: that would advance the checkout away from the commit actually
-running in the containers before the marker has captured it, and — because `git fetch` only
-updates remote-tracking refs and never touches the working tree or the running containers by
-itself — it is `git checkout`/`git merge`, not `git fetch`, that would cause that drift. The safe
-sequence keeps the checkout frozen on the running commit until the marker is written, using a copy
-of the *new* script fetched to a path outside the repository so it does not require modifying the
-still-old working tree:
+in the containers, so it cannot be invoked from inside that checkout. That remains true through the
+*first* deployment too: bootstrapping only writes the marker, it does not advance `main`, so the
+in-tree checkout still lacks the script right after bootstrap. The temporary copy therefore has to
+survive long enough to also run that first deployment; only the deployment it performs finally
+brings the script into the `main` checkout. Do not resolve the missing-script problem by pulling
+`main` forward first: that would advance the checkout away from the commit actually running in the
+containers before the marker has captured it, and — because `git fetch` only updates
+remote-tracking refs and never touches the working tree or the running containers by itself — it is
+`git checkout`/`git merge`, not `git fetch`, that would cause that drift.
+
+`RUNNING_SHA` must be the commit **actually serving production traffic right now**, not merely
+whatever `main` happens to be checked out to. A clean, non-diverged `main` checkout is common but
+not sufficient evidence on its own — nothing has necessarily kept it in lock-step with what was
+last built and promoted into the containers. Before bootstrapping:
+
+- if the operator can positively confirm that the current clean `main` `HEAD` is the release the
+  containers are actually running (for example, it is the last commit that was built and deployed,
+  and nothing has advanced `main` locally since), then `RUNNING_SHA="$(git rev-parse HEAD)"` is
+  fine;
+- if checkout state and actually-deployed state are uncertain, or are known to differ, **stop**.
+  Determine the real running SHA first — for example by inspecting the image/commit baked into the
+  live `homestack-backend`/`homestack-frontend` containers — and bootstrap with that value instead.
+  Do not guess.
+
+The safe sequence keeps the checkout frozen on the confirmed running commit until the marker is
+written, using a copy of the *new* script fetched to a path outside the repository so it does not
+require modifying the still-old working tree — and keeps using that same temporary copy to perform
+the first deployment, since the in-tree script still won't exist until that deployment itself
+fast-forwards `main`:
 
 ```bash
 cd /opt/docker/project-homestack
 
-# 1. Confirm main is clean, and capture the commit actually running in production right now —
-#    before anything below touches origin or the checkout.
+# 1. Confirm main is clean.
 git status --porcelain            # must be empty
-RUNNING_SHA="$(git rev-parse HEAD)"
+
+# 2. Confirm the commit actually running in production right now — before anything below touches
+#    origin or the checkout. Only use HEAD if it is positively known to match the live deployment;
+#    otherwise determine the real running SHA (e.g. from the deployed container image/commit) and
+#    use that instead. Do not guess.
+RUNNING_SHA="$(git rev-parse HEAD)"   # only if HEAD is confirmed to be the deployed release
 echo "Currently running: $RUNNING_SHA"
 
-# 2. Fetch origin. This only updates the remote-tracking ref origin/main; it does not change the
+# 3. Fetch origin. This only updates the remote-tracking ref origin/main; it does not change the
 #    checked-out code, HEAD, or the running containers.
 git fetch origin
 
-# 3. Extract the new deploy script from origin/main to a path outside the working tree, since the
+# 4. Extract the new deploy script from origin/main to a path outside the working tree, since the
 #    still-old checkout does not contain it. This does not check out or merge anything.
 git show origin/main:scripts/deploy-production.sh > /tmp/homestack-deploy-production.sh
 chmod +x /tmp/homestack-deploy-production.sh
 
-# 4. Run the fetched script, still against the old checkout, using the SHA captured in step 1 —
-#    not whatever origin/main now points to.
+# 5. Bootstrap using the confirmed running SHA from step 2 — not whatever origin/main now points
+#    to. This only writes the marker; it does not fetch, build, migrate, recreate containers or
+#    touch the checkout.
 /tmp/homestack-deploy-production.sh --bootstrap-deployed-sha "$RUNNING_SHA"
 
-# 5. Confirm the marker records the canonical running commit.
+# 6. Confirm the marker records the canonical running commit.
 cat .git/homestack-deployed-sha
 git rev-parse "$RUNNING_SHA"      # must match
 
-# 6. Clean up the temporary copy.
+# 7. Do NOT delete the temporary script yet. main is still on the old commit and does not contain
+#    scripts/deploy-production.sh, so the temporary copy is still the only usable copy. Run the
+#    first normal deployment from it — add --migrate only if this release carries reviewed
+#    migrations:
+/tmp/homestack-deploy-production.sh
+# or:
+/tmp/homestack-deploy-production.sh --migrate
+```
+
+That first deployment run is the ordinary supported deployment described in section 11.1: it
+fetches origin, validates the marker's lineage against the fetch target, fast-forwards `main`,
+builds, runs migration checks/migrations as applicable, promotes backend then frontend, validates
+NPM/API/DB/HTTPS and the hardened topology, and only after every check succeeds updates the
+deployed marker. Nothing about first adoption weakens any of that.
+
+```bash
+# 8. Only after that first deployment has succeeded does main actually contain
+#    scripts/deploy-production.sh. The temporary copy can now be removed.
 rm /tmp/homestack-deploy-production.sh
 ```
 
-Only once the marker is confirmed does the checkout advance. From here on `main` is still on the
-old commit, so the very next step is simply the normal supported deployment command from section
-11.1, run from the now in-tree script:
+From here on, every subsequent deployment uses the in-tree script directly:
 
 ```bash
 ./scripts/deploy-production.sh
 ```
-
-which fetches, fast-forwards `main`, validates the marker's lineage against the new target, and
-deploys forward normally — exactly as every subsequent deployment does.
 
 The default constants match the live server and can be overridden by environment only when needed:
 
