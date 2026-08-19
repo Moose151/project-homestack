@@ -1,32 +1,31 @@
 # Node Spec — Atlas
 
-> **Status:** shipped and in daily use. Atlas is HomeStack's general household organisation domain
-> and the owner of ordinary household lists, including the dedicated Grocery and Shopping surfaces.
-> Global rules D1–D24 apply.
+> **Status:** shipped and in daily use. Atlas is HomeStack's quick, low-friction household
+> capture surface — Grocery, lightweight To-dos and Lists & Notes (D19, v0.40). Global rules
+> D1–D24 apply.
 
 ## 1. Purpose
 
-Atlas is the place for everyday household information that needs to be written down, checked off,
-assigned or remembered but does not justify a dedicated domain.
+Atlas is the place somebody remembers something, types it, and moves on.
 
-It answers: **What do we need to remember, do, buy or organise?**
+It answers: **What do we need to buy, do or write down right now?**
 
-Atlas must remain lightweight. It is not the finance system, reward economy, recipe database,
-property system or large-project manager.
+Atlas must remain lightweight. It is not a full task-management system, the finance system,
+reward economy, recipe database, property system or large-project manager. **Meridian** remains
+the structured household chores/tasks system — recurring chores, assignment/accountability,
+rewards and richer task workflow. Atlas is deliberately the opposite of that: minimal metadata,
+no workflow, no dependencies.
 
-## 2. What belongs in Atlas
+## 2. Three primary areas (D19 §B)
 
-Examples:
+Atlas is simplified to exactly three primary areas:
 
-- quick notes;
-- ordinary household to-dos/checklists;
-- Grocery list;
-- Shopping list for non-room/non-personal purchases;
-- household reminders;
-- lightweight planning/packing lists not owned by Travel;
-- external People/birthday contacts;
-- Agenda / permitted Calendar projection;
-- quick capture from Hub/mobile.
+1. **Grocery** — the one household shopping list.
+2. **To-dos** — the Household list, plus one personal list per active household member.
+3. **Lists & Notes** — arbitrary checklists and freeform notes.
+
+Everything else Atlas surfaces (Agenda, Appointments & events, People & birthdays) is a
+secondary, Calendar-adjacent convenience, not a fourth primary area.
 
 ## 3. What belongs elsewhere
 
@@ -39,193 +38,193 @@ Examples:
 - medical information → Health;
 - complex cross-domain project planning → only a future Projects domain if real use justifies it.
 
-## 4. Core record types
+## 4. Grocery — one list only (D19 §C)
 
-### Notes
+There is exactly **one** Grocery list per household — not one per person, and no per-item
+owner/shopper. Every household member can view, add, edit, check off and restore items on it.
 
-Household/private notes with the implemented text/visibility/search/attachment behavior.
-Rich Markdown/templates remain optional future enhancements rather than requirements for basic
-capture.
+An item requires only a name. Optional properties: quantity, a short note, a simple category.
+Category grouping is a lightweight client-side heuristic (keyword-matched from the title), not a
+stored field — it costs nothing to change and never conflicts with anyone else's data, and can be
+switched off in favour of a flat list.
 
-### General lists / to-dos / checklists
+Checked-off items move into a collapsed "Bought" section rather than disappearing immediately;
+"Clear bought" removes them permanently. Duplicate-title detection avoids a second "Milk" row.
+Frequently-bought titles (from completed items) are offered as one-tap suggestions.
 
-Lists/items support the implemented combination of text, completion state, People assignment,
-due-date/Calendar sync, ordering and relevant visibility.
+Grocery does **not** have: assigned shopper, store assignment, budgeting, prices, complex
+statuses or approval workflow. Money/Meals integrations may read from or write into this one list
+in future without making Grocery itself more complicated (see §12).
 
-Completion actors are Users; assignees/subjects are People (D12).
+## 5. To-dos (D19 §D/§E/§F/§G)
 
-### Personal lists / wishes
+To-dos replace the old standalone "Reminder" object. There is no longer a separate choice between
+"To-do, Reminder, Task or Calendar Event" inside Atlas — a reminder is a notification schedule
+attached to a To-do, not a competing object type.
 
-Personal Atlas lists can belong to a Person and surface in Corners. Household members suggest
-changes/items through the bounded suggestion flow rather than silently rewriting somebody else's
-personal list. Meridian remains owner of the points/reward wishlist.
+Lists: the shared **Household** list, plus exactly one **personal** list per active Person. Every
+household member can view and edit both the Household list and every other member's personal
+list — the list itself is the ownership/context, so there is no per-item "Assigned to" field. An
+item can be moved between lists ("Move to → Household / Nick / …").
 
-## 5. Grocery — shipped dedicated surface
+A To-do requires only a title. Optional: due date/time, a simple ★ Important flag (deliberately
+not High/Medium/Low priority), a note, and notification offsets.
 
-Grocery is deliberately simple and fast for ordinary household shopping.
+**Notification offsets**: a dated To-do can select multiple offsets from a curated menu — at
+time, 15/30 minutes before, 1/2 hours before, 1/2 days before, 1 week before. Selections are
+idempotent, reschedule automatically when the due date/time changes, and stop firing the moment
+the To-do is completed or deleted (nothing is pre-scheduled; each scheduler run recomputes from
+the item's current `due_at`/`notify_offsets`). This reuses the existing shared notification
+infrastructure (`apps.notifications`) — see §11.
 
-The normal grocery item emphasizes:
+**Today view**: a lightweight aggregation of overdue and due-today To-dos across the Household
+list and every personal list. It is not a project planner; the Dashboard's "Upcoming" widget
+remains the broader cross-HomeStack view.
 
-- item/name;
-- quantity;
-- optional assignee/shopper as implemented;
-- completion/tick state.
+Completed To-dos leave the active list, remain visible in a collapsed "Completed" section, and
+are restorable.
 
-Do not turn Grocery into a product catalogue or pantry database. Future Hearth meal planning should
-**send missing ingredients into this existing Atlas Grocery list** rather than create a second
-grocery source of truth.
+### Legacy: AtlasReminder
 
-If future Inventory/Stock exists, it may suggest grocery needs but Atlas still owns the shopping
-list itself.
+The pre-D19 `AtlasReminder` model still exists in the schema, but **nothing in the product
+creates, reads or schedules one**. It is archival data only.
 
-## 6. Shopping — shipped dedicated surface
+Both surfaces that used to create reminders now create To-dos through
+`POST /atlas/todos/quick-create/`, which routes the capture to the right list server-side (one
+named person means their personal list, otherwise Household):
 
-Shopping is for ordinary household products that are neither:
+- Calendar's "Reminder" quick-create — "notify me" becomes a `notify_offsets` entry
+  (`[0]` at-time for a timed capture, `[1440]` day-before for an all-day one, `[]` when the
+  notification switch is off).
+- The ambient Quick Add card, whose "reminder" option is now "to-do".
 
-- a Homestead room/project purchase; nor
-- a Person-specific Corner wish; nor
-- a Solace financial/budget record.
+The `atlas.0010` migration converted every existing reminder into a To-do and then **retired**
+the reminder: it is soft-deleted, its `calendar_event_id` is cleared, and its existing
+`CalendarEvent` is repointed at the new To-do rather than duplicated.
 
-The shipped Shopping surface supports the richer product flow, including the implemented
-combination of:
+Retiring them is not tidiness — it is required for correctness. An `AtlasReminder` and an
+`AtlasListItem` are both `CalendarSyncMixin` records, and a live reminder is swept for
+notifications by `run_due_reminders` while its To-do copy is swept by `run_due_todo_offsets`.
+Leaving both active would give one household job two calendar entries and two notifications.
 
-- item/product name;
-- quantity;
-- priority (low/medium/high);
-- safe paste-a-link preview/fill through the shared link-import boundary;
-- confirmed product/supplier/price/image fields where available;
-- optional shared price watch;
-- completion state.
+For the same reason `_reminder_events()` in `apps.notifications.tasks` explicitly excludes
+`AtlasListItem`-sourced calendar events: a To-do's notifications are its `notify_offsets` and
+nothing else, so the fixed 24h/morning-of leads must not fire for it as well.
 
-The importer fills blank/confirmable fields and must not overwrite user-confirmed data with bot
-challenge/error-page content. Price watches notify about meaningful changes without silently
-rewriting the saved confirmed price.
+## 6. Lists & Notes (D19 §H)
 
-## 7. Reminders and dated work
+Everything miscellaneous: `New → Checklist` or `New → Note`.
 
-Atlas reminders and due-dated list/checklist items remain Atlas-owned. Their dates sync to Calendar
-through the shared scheduling helper (D7).
+A **checklist** (Bunnings run, holiday packing, camping gear, Christmas presents, movies to
+watch, things to repair) supports a title, quick-add items, check/uncheck, and a completed
+section — the same lightweight shape as a To-do list, without the Household/personal ownership
+model or notification offsets.
 
-There is no separate "show on Calendar" copy. Changing/clearing the Atlas due date updates/removes
-the projection.
+A **note** is lightweight free-form text (title + body + household/private visibility).
 
-## 8. Agenda / Appointments & events
+Personal (owned) checklists can still belong to a Person and surface in Corners; other members
+suggest changes through the existing bounded suggestion flow rather than editing someone else's
+personal list directly — this personal-list/suggestion behaviour is unchanged from before D19 and
+does **not** apply to To-do lists (§5), which every member can edit directly.
+
+## 7. Agenda / Appointments & events / People & birthdays
+
+Secondary, Calendar-adjacent tabs — not part of the three primary areas, kept because they are
+useful without duplicating Calendar's own UI.
 
 **Agenda** is an actionable permission-filtered projection of Calendar/source-owned work. It does
 not create duplicate Atlas records for Calendar-owned appointments or other nodes' records.
 
-**Appointments & events** is the browse/manage projection for standalone Calendar records with the
-implemented type/person/date filtering.
+**Appointments & events** is the browse/manage projection for standalone Calendar records with
+type/person/date filtering.
+
+**People & birthdays** manages external contacts (people without a HomeStack login) and their
+birthdays. Household member birthdays are sourced from `Person.date_of_birth`; **pet** birthdays
+are sourced from `Pet.date_of_birth` and appear automatically on Calendar via the same virtual,
+computed-on-read mechanism as People — see `13_Node_Pets.md` and `30_Core_Daily_Coordination.md`.
+Neither is a separate Atlas record a user has to remember to create annually, and neither is ever
+worded as "due" or "overdue".
 
 Rules:
 
 - standalone Calendar records can use the shared editor in context;
 - Atlas-owned records can expose Atlas edit/complete actions;
-- other node-owned rows expose only explicitly safe owner actions or deep-link to the exact source;
+- other node-owned rows expose only explicitly safe owner actions or deep-link to the exact
+  source;
 - birthdays/holidays/rotating background layers are excluded from Agenda where defined by
   `30_Core_Daily_Coordination.md`.
 
-## 9. People & birthdays
+## 8. Permissions (D19 §U)
 
-Atlas may manage important external contacts/birthdays for people who are not household login
-Users/People.
+- **Grocery**: every household member can view/edit the one list.
+- **To-dos**: every household member can view/edit the Household list and every person's list.
+- **Lists & Notes**: unchanged pre-D19 personal-list/suggestion behaviour.
 
-Household member birthdays remain sourced from `Person.date_of_birth`. A linked Person must not get
-a duplicate external contact merely for birthday display.
+Children may use permitted simple checklists/Grocery/To-dos, while private/restricted notes and
+adult-only material remain filtered. UI hiding is not the security boundary — one household must
+never access another household's data.
 
-## 10. Permissions
+## 9. Hub / Search / Notifications
 
-Atlas follows central visibility/permission rules. Children may use permitted simple household
-lists/checklists/Grocery, while private/restricted notes and adult-only material remain filtered.
+Dashboard widgets: a dedicated **Grocery** widget (remaining count, a few current items, quick
+add, "View grocery list") and a **To-do** widget (overdue/today, quick add into Household or the
+current user's personal list, "View To-dos"). Grocery items are never rendered under To-dos —
+this was a real bug (a grocery item leaking into the to-do widget because both derived from the
+same underlying list-item table) and is now fixed at the query layer:
+`apps.atlas.selectors.list_open_items` filters strictly to `list_type='todo'`, and Grocery has
+its own selector/widget entirely.
 
-UI hiding is not the security boundary.
+Search finds To-dos, Notes, Checklists and Grocery items. Within Atlas, simple views (Active /
+Completed / Today) are sufficient — no complex filtering UI.
 
-## 11. Hub / Search / Notifications
+Notification offsets are described in §5. The scheduling mechanism (`apps/notifications/tasks.py`
+`run_due_todo_offsets`) is additive alongside the existing 24h/morning-of/due-at leads used by
+standalone Calendar entries and legacy `AtlasReminder`s — not a second independent scheduler.
 
-Possible/current Atlas contributions include:
+## 10. Mobile / kiosk
 
-- my/household to-dos;
-- Grocery/Shopping summaries;
-- reminders/overdue items;
-- quick capture;
-- Agenda-related next actions.
+Atlas is a high-frequency mobile surface, especially while shopping or walking around the house:
 
-Search uses permission-filtered owning data (D9).
+- persistent quick-add on every list, large tap targets, minimal modals;
+- one-tap check/uncheck;
+- no horizontal scrolling, no dense desktop-style forms on mobile;
+- routine creation never opens a large modal — only the title is required, everything else is
+  editable after creation.
 
-Notifications include meaningful due/assignment/list events according to the shared notification
-system. Web Push preferences/delivery are defined in `32_Core_Notifications_and_Push.md`, not in an
-Atlas-specific notification implementation.
+Kiosk/child presentation stays simpler: permitted lists, checklists, Grocery and To-dos with
+minimal typing; notes remain web-only where appropriate.
 
-## 12. Events and integrations
-
-Atlas publishes source-domain events for meaningful changes. Other domains can react through D4
-without importing Atlas models.
-
-Examples of permitted future interaction:
-
-- Hearth produces missing ingredients → Atlas Grocery receives confirmed items;
-- Inventory/Stock low item → suggest/add Grocery/Shopping item through a service/event contract;
-- Home Assistant automation may consume an approved minimal Atlas event through the dedicated HA
-  bridge.
-
-Do not make Atlas depend on those future domains to function.
-
-## 13. Attachments / safe links
-
-Attachments use the shared protected attachment service.
-
-Product URL preview/cache/watch uses the shared Link Import core boundary (`29_Core_Link_Import.md`)
-rather than arbitrary Atlas scraping code.
-
-## 14. Mobile / kiosk
-
-Atlas is a high-frequency mobile surface:
-
-- fast add/tick;
-- large touch targets;
-- simple Grocery use while shopping;
-- Shopping product rows readable without horizontal tables;
-- quick filters and obvious completion state.
-
-Kiosk/child presentation stays simpler: permitted lists, checklists, Grocery and quick actions with
-minimal typing; complex note/product management can remain web-only where appropriate.
-
-## 15. Progressive detail
-
-Basic use: create a list, add items, tick them off.
-
-Standard use: assign People, dates, quantity/priority, reminders.
-
-Detailed use: notes/attachments/product link import/price watch/advanced visibility where the
-specific surface supports them.
-
-The detailed mode must not make the basic shopping/checklist flow slower.
-
-## 16. Data ownership
+## 11. Data ownership
 
 Exact schema is defined by current Django models/migrations. Atlas owns its note/list/list-item/
-reminder/contact data and source dates. Calendar, Hub, Corners, Search and notifications are derived
-or cross-cutting views of that data.
+reminder/contact data and source dates. Calendar, Hub, Corners, Search and notifications are
+derived or cross-cutting views of that data.
 
-## 17. Risks and guardrails
+## 12. Risks and guardrails
 
-Primary risk: Atlas becomes the dumping ground for every feature.
+Primary risk: Atlas becomes the dumping ground for every feature, or quietly regrows into a
+second task-management system.
 
 Guardrails:
 
-- rewarded household work remains Meridian;
+- rewarded household work remains Meridian — do not move Meridian features into Atlas;
 - durable reference remains Home Wiki;
 - home planning remains Homestead;
 - travel-specific plans remain Travel;
-- meal/recipe semantics belong to Hearth;
+- meal/recipe semantics belong to Hearth — a future Hearth meal plan may populate missing
+  ingredients into this existing Grocery list, but Grocery itself gains no budgeting, store
+  assignment or pricing to support that;
 - finance belongs to Solace;
-- future Inventory owns stock-on-hand, not the Grocery list.
+- future Inventory owns stock-on-hand, not the Grocery list;
+- no High/Medium/Low priority, Kanban boards, subtasks, dependencies or approval workflow on
+  To-dos — a simple ★ Important flag is sufficient.
 
-## 18. Completion state
+## 13. Completion state
 
-Atlas's current everyday baseline is complete and in use: notes/lists, dedicated Grocery and
-Shopping, due-date Calendar integration, Agenda/Appointments & events, People/birthdays, safe
-product-link integration, mobile-friendly completion and permission-aware search/projections.
+Atlas's D19 baseline is complete and in use: single-list Grocery, Household + personal To-do
+lists with configurable notification offsets and a Today view, merged Lists & Notes (checklists +
+notes), Agenda/Appointments & events, People & Pet birthdays, mobile-friendly completion and
+permission-aware search/projections.
 
-Future Atlas work should be driven by observed friction (templates/recurring lists/richer notes/
-voice capture), not by expanding the node to absorb unrelated domains.
+Future Atlas work should be driven by observed friction, not by expanding the node to absorb
+unrelated domains.

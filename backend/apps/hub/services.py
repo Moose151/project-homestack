@@ -61,7 +61,7 @@ def get_hub_widgets(
     """
     if solace_unlocked is None:
         solace_unlocked = sensitive_unlocked
-    from apps.atlas.selectors import list_open_items, list_reminders
+    from apps.atlas.selectors import list_grocery_items, list_open_items, list_reminders
     from apps.atlas.serializers import AtlasListItemSerializer, AtlasReminderSerializer
 
     qs = HouseholdHubWidget.objects.filter(
@@ -138,6 +138,11 @@ def get_hub_widgets(
 
         elif key == "atlas_todos":
             content = AtlasListItemSerializer(list_open_items(user, limit=20), many=True).data
+
+        elif key == "atlas_grocery":
+            open_items = list_grocery_items(user, include_complete=False)
+            content = AtlasListItemSerializer(open_items[:20], many=True).data
+            meta = {"remaining_count": len(open_items)}
 
         elif key == "atlas_reminders":
             week_ahead = timezone.now() + timezone.timedelta(days=7)

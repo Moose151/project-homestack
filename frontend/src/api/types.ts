@@ -61,17 +61,67 @@ export interface UserPreferences {
   tab_order: Record<string, string[]>
   /** the two configurable mobile dock slots, as stack keys */
   mobile_nav: string[]
+  /** desktop-only: whether this person keeps the sidebar as a compact icon rail */
+  sidebar_collapsed: boolean
+}
+
+/**
+ * A Quick Launch shortcut. It stores an intent, never a route — the destination is resolved at
+ * launch time, so a saved shortcut survives internal route changes and cannot carry a path.
+ */
+export interface QuickLaunchShortcut {
+  /** public UUID, the identifier used in /launch/:id */
+  id: string
+  target_key: string
+  target_object_id: number | null
+  custom_label: string
+  /** resolved display name: the custom label, else the record name, else the target name */
+  label: string
+  icon: string
+  node_key: string
+  launch_mode: 'normal' | 'focused'
+  display_order: number
+  /** re-evaluated for this user every time it is listed */
+  status: 'ok' | 'locked' | 'unavailable'
+  unavailable_reason: string
+}
+
+export interface QuickLaunchTarget {
+  key: string
+  label: string
+  description: string
+  icon: string
+  node_key: string
+  target_type: 'open' | 'action'
+  requires_object: boolean
+  sensitive: boolean
+  launch_modes: string[]
+  objects: Array<{ id: number; label: string }>
+}
+
+export interface QuickLaunchResolution {
+  status: 'ok' | 'locked' | 'unavailable'
+  label: string
+  reason: string
+  node_key: string
+  launch_mode: 'normal' | 'focused'
+  /** present only when the destination is open or merely locked */
+  route?: string
 }
 
 export interface AtlasListItem {
   id: number
   atlas_list_id: number
+  list_type: AtlasList['list_type']
   title: string
   notes: string
   quantity: string
   priority: '' | 'low' | 'medium' | 'high'
   position: number
   due_at: string | null
+  is_all_day: boolean
+  is_important: boolean
+  notify_offsets: number[]
   calendar_event_id: number | null
   product_url: string
   source_image_url: string
@@ -378,6 +428,7 @@ export interface BirthdayOccurrence {
   age: number
   person_id: number | null
   contact_id: number | null
+  pet_id: number | null
   event_kind: 'birthday'
 }
 
@@ -775,6 +826,8 @@ export interface HubWidget {
   items: AtlasListItem[] | AtlasReminder[] | MeridianTask[] | PointsSummaryRow[] | MeridianRewardRequest[] | CalendarEvent[] | EducationAssessment[] | EducationClassSession[] | EducationEvent[] | WikiPage[] | PetTreatment[] | PetAppointment[] | MaintenanceTask[] | Appliance[] | Improvement[] | SolaceBill[] | SolaceBillOccurrence[] | SolacePurchase[] | FitnessSession[] | AppNotification[]
   meta?: {
     unread_count?: number
+    /** Grocery widget: open item count, which may exceed the truncated items list. */
+    remaining_count?: number
     title?: string
     target_date?: string
     target_time?: string

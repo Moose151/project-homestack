@@ -70,6 +70,7 @@ LOCAL_APPS = [
     "apps.solace",  # Milestone 5 — native finance node (sensitive, re-auth required)
     "apps.fitness",  # Social fitness/training node; deliberately separate from medical Health
     "apps.travel",  # Project-like trips, destination ideas, bookings and travel deadlines
+    "apps.quicklaunch",  # Shared per-user shortcuts into registered destinations (docs/39)
 ]
 
 INSTALLED_APPS = [

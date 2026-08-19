@@ -38,6 +38,22 @@ const RECURRENCE_OPTS = [
   { value: 'FREQ=YEARLY', label: 'Yearly' },
 ]
 
+// DOB is the single source of truth for age (D19 §M) — there is no separate stored age field
+// to drift out of sync with it.
+function formatPetAge(dateOfBirth: string | null): string | null {
+  if (!dateOfBirth) return null
+  const dob = new Date(dateOfBirth)
+  if (Number.isNaN(dob.getTime())) return null
+  const now = new Date()
+  let years = now.getFullYear() - dob.getFullYear()
+  let months = now.getMonth() - dob.getMonth()
+  if (now.getDate() < dob.getDate()) months -= 1
+  if (months < 0) { years -= 1; months += 12 }
+  if (years < 0) return null
+  if (years === 0) return months <= 0 ? 'Under 1 month old' : `${months} month${months === 1 ? '' : 's'} old`
+  return `${years} year${years === 1 ? '' : 's'} old`
+}
+
 function dueBadge(iso: string | null, overdue: boolean) {
   if (!iso) return null
   const d = new Date(iso)
@@ -209,13 +225,16 @@ function AppointmentRow({ appointment, onDelete, onError, onEdit }: {
 function PetEditForm({ pet, onSaved, onCancel, onError }: {
   pet: Pet; onSaved: (p: Pet) => void; onCancel: () => void; onError: (m: string) => void
 }) {
-  const [form, setForm] = useState({ name: pet.name, species: pet.species, breed: pet.breed, vet_name: pet.vet_name, vet_phone: pet.vet_phone, microchip_number: pet.microchip_number, notes: pet.notes })
+  const [form, setForm] = useState({
+    name: pet.name, species: pet.species, breed: pet.breed, date_of_birth: pet.date_of_birth ?? '',
+    vet_name: pet.vet_name, vet_phone: pet.vet_phone, microchip_number: pet.microchip_number, notes: pet.notes,
+  })
   const [busy, setBusy] = useState(false)
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
     setBusy(true)
-    try { onSaved(await api.updatePet(pet.id, form)) }
+    try { onSaved(await api.updatePet(pet.id, { ...form, date_of_birth: form.date_of_birth || null })) }
     catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
 
@@ -227,6 +246,9 @@ function PetEditForm({ pet, onSaved, onCancel, onError }: {
           {Object.entries(SPECIES_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </Select></Field>
         <Field label="Breed"><Input value={form.breed} onChange={e => setForm(f => ({ ...f, breed: e.target.value }))} /></Field>
+        <Field label="Date of birth" hint="Optional — exact birth dates aren't always known.">
+          <Input type="date" value={form.date_of_birth} onChange={e => setForm(f => ({ ...f, date_of_birth: e.target.value }))} />
+        </Field>
         <Field label="Vet name"><Input value={form.vet_name} onChange={e => setForm(f => ({ ...f, vet_name: e.target.value }))} /></Field>
         <Field label="Vet phone"><Input type="tel" value={form.vet_phone} onChange={e => setForm(f => ({ ...f, vet_phone: e.target.value }))} /></Field>
       </div>
@@ -359,7 +381,10 @@ function PetDetailModal({ pet, canDelete, onChange, onDeleted, onError, onClose 
       ) : (
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-sm text-muted">{SPECIES_LABELS[pet.species]}{pet.breed ? ` · ${pet.breed}` : ''}</span>
+            <span className="text-sm text-muted">
+              {SPECIES_LABELS[pet.species]}{pet.breed ? ` · ${pet.breed}` : ''}
+              {formatPetAge(pet.date_of_birth) ? ` · ${formatPetAge(pet.date_of_birth)}` : ''}
+            </span>
             <div className="flex gap-1">
               <button type="button" onClick={() => setEditing(true)} className="min-h-10 px-2 text-xs font-semibold text-primary hover:underline">Edit</button>
               {canDelete && <button type="button" onClick={remove} className="min-h-10 px-2 text-xs font-semibold text-danger hover:underline">Delete</button>}
@@ -397,7 +422,10 @@ function PetCard({ pet, onChange, onDelete, onError, canDelete }: {
         <span className="text-3xl leading-none flex-shrink-0">{pet.avatar || SPECIES_EMOJI[pet.species]}</span>
         <button className="text-left min-w-0 flex-1" onClick={() => setExpanded(v => !v)}>
           <div className="font-semibold text-ink truncate">{pet.name}</div>
-          <div className="text-xs text-muted">{SPECIES_LABELS[pet.species]}{pet.breed ? ` · ${pet.breed}` : ''}</div>
+          <div className="text-xs text-muted">
+            {SPECIES_LABELS[pet.species]}{pet.breed ? ` · ${pet.breed}` : ''}
+            {formatPetAge(pet.date_of_birth) ? ` · ${formatPetAge(pet.date_of_birth)}` : ''}
+          </div>
         </button>
         <div className="flex flex-shrink-0 gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition">
           <RowActions>

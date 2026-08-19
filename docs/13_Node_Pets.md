@@ -36,8 +36,13 @@ Pets should remain fully useful without future Inventory/Stock being enabled.
 ## 3. Pet profiles
 
 A Pet profile includes the implemented useful combination of name, species/breed, avatar/photo,
-date/context, colour, notes, vet details, microchip/insurance/food-care information and relevant
-visibility.
+colour, notes, vet details, microchip/insurance/food-care information and relevant visibility.
+
+Date of birth is optional (exact birth dates are not always known) and, where set, is the single
+source of truth for the pet's displayed age — there is no separate stored/derived age field to
+drift out of sync with it. Where set, date of birth also drives an automatic annual Calendar
+birthday, generated the same way as People birthdays (see `30_Core_Daily_Coordination.md` §5); no
+manual yearly Calendar event is required or expected.
 
 Sensitive identifiers/documents follow the normal permission/attachment boundary rather than being
 assumed safe merely because ordinary pet information is household-visible.

@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.39.3**
+> **Current version: 0.40.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,89 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.40 — Faster everyday household coordination
+
+### 0.40.0 — 2026-08-19 — Atlas simplified, Quick Launch and faster everyday navigation
+- **Atlas is now three things: Grocery, To-dos, and Lists & Notes.** The previous Grocery/Shopping
+  split, the separate Reminders tab, and the generic multi-type Lists tab are gone, replaced by a
+  model matched to how Atlas actually gets used — quickly, often from a phone, without choosing
+  between four similar-sounding object types first.
+- **Grocery is now a single household list.** Per-person grocery lists and per-item
+  assigned-shopper metadata are gone — everyone sees and edits the same list. Checked-off items
+  collapse into a "Bought" section instead of vanishing; "Clear bought" removes them for good.
+  Adding "Milk" twice no longer creates two rows, frequently-bought items are offered as one-tap
+  suggestions, and items can optionally be grouped by a lightweight guessed category (Produce,
+  Dairy, Household, …) that can be switched off.
+- **To-dos replace the old standalone Reminder object.** There is a Household list and one
+  personal list for every active household member; anyone can view and edit any of them, and an
+  item's list is what determines whose it is — no "Assigned to" field to fill in. Items can be
+  moved between lists. A simple ★ Important flag replaces the old High/Medium/Low priority.
+  A new Today view aggregates overdue and due-today To-dos across every list.
+- **Notifications for a To-do are now a configurable set of offsets** — at time, 15/30 minutes,
+  1/2 hours, 1/2 days or 1 week before — instead of a single fixed reminder time. Selecting
+  several is supported, rescheduling on a due-date change is automatic, and completing or deleting
+  a To-do stops any further notification for it. This reuses HomeStack's existing scheduled
+  notification delivery rather than a second scheduler.
+- **Lists & Notes** now shows checklists and notes together, with a single "New → Checklist /
+  Note" choice — Bunnings runs, packing lists, movies to watch and plain notes all live here.
+- **Fixed: grocery items appearing under To-dos on the Dashboard.** A grocery item and a to-do
+  both used to come from the same underlying table with nothing distinguishing them once they
+  reached the Dashboard widget, so a "Milk" row could show up with a checkbox next to "Book pest
+  inspection". The Dashboard's To-do widget is now correctly scoped to actual to-do lists only,
+  and Grocery has its own Dashboard widget — remaining count, a few current items, quick add, and
+  a link to the full list.
+- **Dashboard quick add**: the Grocery and To-do widgets, and the ambient ✚ Quick Add card, can
+  now create a grocery item or a to-do (into Household or your own personal list) directly, without
+  opening Atlas first.
+- **Pets can now have an optional date of birth**, shown on the pet's profile and used to derive
+  its displayed age — there is no separate age field to drift out of sync. Where set, it also
+  generates the pet's birthday on the Calendar automatically and every year, exactly like a
+  household member's birthday (reusing that same mechanism): "Buddy's 6th Birthday", correctly
+  computed for the year, respecting the existing leap-day policy, and deep-linking to the pet's
+  profile. Clearing or changing the date of birth updates or removes the generated birthday with
+  no extra step.
+- **The desktop Calendar/Atlas/Travel/notification-settings time picker is faster to use.**
+  Instead of scrolling a 60-row minute list, it now offers direct keyboard entry (type the hour
+  and minute, or press Enter/→ to move between them) alongside a one-click grid of common
+  hour/minute values and a clear AM/PM toggle. Mobile keeps its native time picker.
+- Existing Grocery data, and existing Reminders, were preserved rather than discarded.
+  **Every** existing grocery list is folded into the single household one — including per-person
+  grocery lists, whose items would otherwise have been left on a list the product no longer shows.
+  The extra lists are retired (soft-deleted), never destroyed. Personal To-do lists belonging to
+  people who have since been removed are retired the same way, with their outstanding items moved
+  to the Household list rather than left somewhere unreachable.
+- Every existing Reminder became a To-do on the right list (its sole assignee's personal list, or
+  Household), carrying its title, notes, due date and notification intent across. The reminder
+  itself is then **retired**, and its existing calendar entry is handed to the new To-do rather
+  than duplicated: a migrated reminder therefore produces exactly one calendar entry and exactly
+  one notification per selected offset, not two of each. The legacy `AtlasReminder` rows survive
+  as archival data but no longer take part in any calendar or notification workflow, and nothing
+  in the product creates new ones — Calendar's "Reminder" action and the ambient Quick Add both
+  create a To-do now.
+- **One Grocery list is enforced by the backend, not just the interface.** The general-purpose
+  list endpoints, which predate this release and are still used for Lists & Notes, now refuse to
+  create or convert a second Grocery list — so the per-person split this release merges away
+  cannot quietly come back through an older code path.
+
+### Quick Launch, Log run and a collapsible sidebar
+
+- **Quick Launch** adds personal shortcuts to the places you actually use most. A shortcut can
+  point deeper than a section — for example a particular list, room, upcoming bills, or the
+  Log run form. Shortcuts are personal, ordered by the user and follow the account between
+  devices. They remain navigation only and never bypass the underlying permissions or
+  sensitive-node re-authentication requirements.
+- **Log run** provides a fast running-specific entry flow inside Fitness. Enter distance,
+  duration and time and HomeStack calculates average pace while preserving the workout as an
+  ordinary Fitness history record, rather than creating a second parallel exercise history.
+- **The desktop sidebar can now collapse to a compact icon rail**, recovering substantial
+  horizontal space for pages such as Calendar while keeping every destination accessible.
+  The preference is stored against the user's account; mobile navigation is unchanged.
+- Quick Launch's Atlas destinations match the simplified Atlas: Grocery and To-dos are their own
+  one-tap destinations, a shortcut can point at an individual Lists & Notes list or an individual
+  to-do list, and the old "Reminders" destination — which pointed at a tab that no longer
+  exists — is gone. A saved shortcut to a removed destination reports itself as unavailable
+  rather than silently landing somewhere else.
 
 ## 0.39 — Calendars beyond HomeStack, and an interface you arrange
 

@@ -10,6 +10,7 @@ from typing import Any
 
 from apps.accounts.models import User
 from apps.core.models import get_active_household
+from apps.people import events
 from apps.people.models import Person
 
 
@@ -51,3 +52,4 @@ def delete_person(acting_user: User, person: Person) -> None:
     person.updated_by = acting_user
     person.save(update_fields=["updated_by", "updated_at"])
     person.soft_delete()
+    events.person_deleted(person.id, person.household_id)

@@ -70,7 +70,22 @@ def _birthday_in_year(born: date, year: int) -> date:
         return date(year, 2, 28)
 
 
+def _ordinal(n: int) -> str:
+    if 11 <= n % 100 <= 13:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
 class BirthdayOccurrenceView(APIView):
+    """Virtual, computed-on-read annual birthdays — People, external Contacts, and Pets.
+
+    Nothing here is persisted as a CalendarEvent (D19 §N reuses the existing People mechanism
+    rather than building a second one): every occurrence is derived fresh from date_of_birth on
+    every request, so changing/clearing a DOB just changes what the next request returns.
+    """
+
     permission_classes = [_AtlasPerm]
 
     def get(self, request: Request) -> Response:
@@ -79,24 +94,33 @@ class BirthdayOccurrenceView(APIView):
         if end <= start or (end - start).days > 732:
             raise ValidationError("Choose an end date after start, within two years.")
         from apps.people.selectors import list_people
+        from apps.pets.selectors import list_pets
         sources = [
-            (f"person-{person.id}", person.name, person.date_of_birth, person.id, None)
+            (f"person-{person.id}", person.name, person.date_of_birth, {"person_id": person.id})
             for person in list_people(request.user) if person.date_of_birth
         ]
         sources += [
-            (f"contact-{contact.id}", contact.name, contact.date_of_birth, None, contact.id)
+            (f"contact-{contact.id}", contact.name, contact.date_of_birth, {"contact_id": contact.id})
             for contact in selectors.list_contacts(request.user) if not contact.linked_person_id
         ]
+        dated_pets = [pet for pet in list_pets(request.user) if pet.date_of_birth]
+        pet_source_ids = {f"pet-{pet.id}" for pet in dated_pets}
+        sources += [
+            (f"pet-{pet.id}", pet.name, pet.date_of_birth, {"pet_id": pet.id})
+            for pet in dated_pets
+        ]
         rows = []
-        for source_id, name, born, person_id, contact_id in sources:
+        for source_id, name, born, ref in sources:
             for year in range(start.year, end.year + 1):
                 occurrence = _birthday_in_year(born, year)
                 if start <= occurrence < end:
                     age = year - born.year
+                    title = f"{name}'s {_ordinal(age)} Birthday" if source_id in pet_source_ids else f"{name} turns {age}"
                     rows.append({
                         "id": f"birthday-{source_id}-{year}", "date": occurrence.isoformat(),
-                        "title": f"{name} turns {age}", "name": name, "age": age,
-                        "person_id": person_id, "contact_id": contact_id, "event_kind": "birthday",
+                        "title": title, "name": name, "age": age,
+                        "person_id": ref.get("person_id"), "contact_id": ref.get("contact_id"),
+                        "pet_id": ref.get("pet_id"), "event_kind": "birthday",
                     })
         return Response(sorted(rows, key=lambda row: (row["date"], row["name"])))
 
@@ -188,6 +212,8 @@ class ListListView(APIView):
             atlas_list = services.create_atlas_list(request.user, **serializer.validated_data)
         except PermissionError as exc:
             raise PermissionDenied(str(exc)) from exc
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
         return Response(AtlasListSerializer(atlas_list).data, status=status.HTTP_201_CREATED)
 
 
@@ -213,6 +239,8 @@ class ListDetailView(APIView):
             atlas_list = services.update_atlas_list(request.user, atlas_list, **serializer.validated_data)
         except PermissionError as exc:
             raise PermissionDenied(str(exc)) from exc
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
         return Response(AtlasListSerializer(atlas_list).data)
 
     def delete(self, request: Request, list_id: int) -> Response:
@@ -251,17 +279,21 @@ class ListItemListView(APIView):
         return Response(AtlasListItemSerializer(item).data, status=status.HTTP_201_CREATED)
 
 
+def _get_item_or_404(request: Request, list_id: int, item_id: int):
+    atlas_list = selectors.get_atlas_list(list_id, request.user)
+    if atlas_list is None:
+        raise NotFound()
+    item = selectors.get_list_item(item_id)
+    if item is None or item.atlas_list_id != list_id:
+        raise NotFound()
+    return item
+
+
 class ListItemDetailView(APIView):
     permission_classes = [_AtlasPerm]
 
     def _get_item(self, request: Request, list_id: int, item_id: int):
-        atlas_list = selectors.get_atlas_list(list_id, request.user)
-        if atlas_list is None:
-            raise NotFound()
-        item = selectors.get_list_item(item_id)
-        if item is None or item.atlas_list_id != list_id:
-            raise NotFound()
-        return item
+        return _get_item_or_404(request, list_id, item_id)
 
     def patch(self, request: Request, list_id: int, item_id: int) -> Response:
         item = self._get_item(request, list_id, item_id)
@@ -312,6 +344,121 @@ class ListItemUncompleteView(APIView):
             raise NotFound()
         item = services.uncomplete_list_item(request.user, item)
         return Response(AtlasListItemSerializer(item).data)
+
+
+class ListItemMoveView(APIView):
+    """POST .../items/<id>/move/ {destination_list_id} — To-do "Move to" (D19 §D)."""
+
+    permission_classes = [_AtlasPerm]
+    permission_action = "edit"
+
+    def post(self, request: Request, list_id: int, item_id: int) -> Response:
+        item = _get_item_or_404(request, list_id, item_id)
+        if not services.can_manage_personal_list(request.user, item.atlas_list):
+            raise PermissionDenied("Suggest items from their Corner instead of editing this personal list.")
+        destination_id = request.data.get("destination_list_id")
+        destination = selectors.get_atlas_list(destination_id, request.user) if destination_id else None
+        if destination is None:
+            raise NotFound("Destination list not found.")
+        if not services.can_manage_personal_list(request.user, destination):
+            raise PermissionDenied("Cannot move an item into a personal list you cannot edit.")
+        try:
+            item = services.move_list_item(request.user, item, destination)
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
+        return Response(AtlasListItemSerializer(item).data)
+
+
+# ---------------------------------------------------------------------------
+# Grocery — the single household list (D19 §C)
+# ---------------------------------------------------------------------------
+
+class GroceryListView(APIView):
+    """GET/POST /atlas/grocery/ — the one household Grocery list, created on first use."""
+
+    permission_classes = [_AtlasPerm]
+
+    def get(self, request: Request) -> Response:
+        grocery_list = services.ensure_household_grocery_list(request.user)
+        return Response(AtlasListSerializer(grocery_list).data)
+
+    def post(self, request: Request) -> Response:
+        grocery_list = services.ensure_household_grocery_list(request.user)
+        serializer = AtlasListItemWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        title = serializer.validated_data.get("title", "")
+        duplicate = services.find_duplicate_open_item(grocery_list, title)
+        if duplicate is not None:
+            return Response(AtlasListItemSerializer(duplicate).data)
+        item = services.create_list_item(request.user, grocery_list, **serializer.validated_data)
+        return Response(AtlasListItemSerializer(item).data, status=status.HTTP_201_CREATED)
+
+
+class GroceryClearBoughtView(APIView):
+    """POST /atlas/grocery/clear-bought/ — permanently remove completed grocery items."""
+
+    permission_classes = [_AtlasPerm]
+    permission_action = "edit"
+
+    def post(self, request: Request) -> Response:
+        grocery_list = services.ensure_household_grocery_list(request.user)
+        cleared = services.clear_completed_items(request.user, grocery_list)
+        return Response({"cleared": cleared})
+
+
+class GrocerySuggestionsView(APIView):
+    """GET /atlas/grocery/suggestions/ — frequently-bought item titles (D19 §C)."""
+
+    permission_classes = [_AtlasPerm]
+
+    def get(self, request: Request) -> Response:
+        grocery_list = services.ensure_household_grocery_list(request.user)
+        return Response(selectors.frequent_grocery_titles(grocery_list))
+
+
+# ---------------------------------------------------------------------------
+# To-dos — Household + one list per active Person (D19 §D)
+# ---------------------------------------------------------------------------
+
+class TodoListsView(APIView):
+    """GET /atlas/todos/lists/ — Household + every personal To-do list, with items."""
+
+    permission_classes = [_AtlasPerm]
+
+    def get(self, request: Request) -> Response:
+        services.ensure_household_todo_list(request.user)
+        from apps.people.selectors import list_people
+        for person in list_people(request.user):
+            services.ensure_person_todo_list(person, request.user)
+        lists = selectors.list_todo_lists(request.user)
+        return Response(AtlasListSerializer(lists, many=True).data)
+
+
+class TodoTodayView(APIView):
+    """GET /atlas/todos/today/ — overdue + due-today across Household + personal lists."""
+
+    permission_classes = [_AtlasPerm]
+
+    def get(self, request: Request) -> Response:
+        return Response(AtlasListItemSerializer(selectors.list_today_items(request.user), many=True).data)
+
+
+class TodoQuickCreateView(APIView):
+    """POST /atlas/todos/quick-create/ — capture a To-do without naming a list (D19 §D/§E).
+
+    The one endpoint behind Calendar's "Reminder" action and the ambient Quick Add. Both used to
+    POST an ``AtlasReminder``; routing them here is what stops ordinary user flows from creating
+    a second, parallel reminder object alongside the To-do model.
+    """
+
+    permission_classes = [_AtlasPerm]
+    permission_action = "edit"
+
+    def post(self, request: Request) -> Response:
+        serializer = AtlasListItemWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        item = services.quick_create_todo(request.user, **serializer.validated_data)
+        return Response(AtlasListItemSerializer(item).data, status=status.HTTP_201_CREATED)
 
 
 class ListSuggestionListView(APIView):

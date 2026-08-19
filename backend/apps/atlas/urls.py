@@ -5,10 +5,14 @@ from apps.atlas.views import (
     BirthdayOccurrenceView,
     ContactDetailView,
     ContactListView,
+    GroceryClearBoughtView,
+    GroceryListView,
+    GrocerySuggestionsView,
     ListDetailView,
     ListItemCompleteView,
     ListItemDetailView,
     ListItemListView,
+    ListItemMoveView,
     ListItemUncompleteView,
     ListSuggestionListView,
     ListSuggestionReviewView,
@@ -17,6 +21,9 @@ from apps.atlas.views import (
     NoteListView,
     ReminderDetailView,
     ReminderListView,
+    TodoListsView,
+    TodoQuickCreateView,
+    TodoTodayView,
 )
 
 urlpatterns = [
@@ -30,6 +37,16 @@ urlpatterns = [
     path("notes/", NoteListView.as_view(), name="atlas-note-list"),
     path("notes/<int:note_id>/", NoteDetailView.as_view(), name="atlas-note-detail"),
 
+    # Grocery — the single household list (D19 §C)
+    path("grocery/", GroceryListView.as_view(), name="atlas-grocery"),
+    path("grocery/clear-bought/", GroceryClearBoughtView.as_view(), name="atlas-grocery-clear-bought"),
+    path("grocery/suggestions/", GrocerySuggestionsView.as_view(), name="atlas-grocery-suggestions"),
+
+    # To-dos — Household + one list per active Person (D19 §D)
+    path("todos/lists/", TodoListsView.as_view(), name="atlas-todo-lists"),
+    path("todos/today/", TodoTodayView.as_view(), name="atlas-todo-today"),
+    path("todos/quick-create/", TodoQuickCreateView.as_view(), name="atlas-todo-quick-create"),
+
     # Lists
     path("lists/", ListListView.as_view(), name="atlas-list-list"),
     path("lists/<int:list_id>/", ListDetailView.as_view(), name="atlas-list-detail"),
@@ -37,10 +54,11 @@ urlpatterns = [
     path("lists/<int:list_id>/items/<int:item_id>/", ListItemDetailView.as_view(), name="atlas-list-item-detail"),
     path("lists/<int:list_id>/items/<int:item_id>/complete/", ListItemCompleteView.as_view(), name="atlas-list-item-complete"),
     path("lists/<int:list_id>/items/<int:item_id>/uncomplete/", ListItemUncompleteView.as_view(), name="atlas-list-item-uncomplete"),
+    path("lists/<int:list_id>/items/<int:item_id>/move/", ListItemMoveView.as_view(), name="atlas-list-item-move"),
     path("lists/<int:list_id>/suggestions/", ListSuggestionListView.as_view(), name="atlas-list-suggestion-list"),
     path("lists/<int:list_id>/suggestions/<int:suggestion_id>/<str:action>/", ListSuggestionReviewView.as_view(), name="atlas-list-suggestion-review"),
 
-    # Reminders
+    # Reminders — legacy: still backs Calendar's quick-create "Reminder" flow (docs/40)
     path("reminders/", ReminderListView.as_view(), name="atlas-reminder-list"),
     path("reminders/<int:reminder_id>/", ReminderDetailView.as_view(), name="atlas-reminder-detail"),
 ]

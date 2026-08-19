@@ -7,3 +7,6 @@ class AtlasConfig(AppConfig):
 
     def ready(self) -> None:
         from apps.atlas import corner_provider  # noqa: F401
+        from apps.atlas import handlers
+
+        handlers.connect()

@@ -19,7 +19,7 @@ export const STACKS: StackDef[] = [
   { key: 'hub', label: 'Dashboard', navLabel: 'Dashboard', shortLabel: 'Dashboard', description: 'Your household at a glance', navGroup: 'start', route: '/hub', icon: '🏡', colour: '#1d7a91', isNode: false },
   { key: 'corners', label: 'My Corner', navLabel: 'My Corner', shortLabel: 'Corner', description: 'Your activity, assignments and wishes', navGroup: 'start', route: '/corners', icon: '✨', colour: '#a85d7b', isNode: false },
   { key: 'calendar', label: 'Calendar', navLabel: 'Calendar', shortLabel: 'Calendar', description: 'Events, care and schedules', navGroup: 'start', route: '/calendar', icon: '📅', colour: '#2b7fd0', isNode: false },
-  { key: 'atlas', label: 'Lists & Notes', navLabel: 'Lists & Notes', shortLabel: 'Lists', description: 'To-dos, reminders and notes', navGroup: 'organise', route: '/atlas', icon: '🗒', colour: '#5b57d1', isNode: true },
+  { key: 'atlas', label: 'Lists & Notes', navLabel: 'Lists & Notes', shortLabel: 'Lists', description: 'Grocery, to-dos and notes', navGroup: 'organise', route: '/atlas', icon: '🗒', colour: '#5b57d1', isNode: true },
   { key: 'education', label: 'Education', navLabel: 'Education', shortLabel: 'Education', description: 'Classes, work and deadlines', navGroup: 'organise', route: '/education', icon: '🎓', colour: '#2f9e6f', isNode: true },
   { key: 'books', label: 'Books', navLabel: 'Books', shortLabel: 'Books', description: 'Reading, clubs and wishlists', navGroup: 'organise', route: '/books', icon: '📚', colour: '#8B5CF6', isNode: true },
   { key: 'home_wiki', label: 'Home Guide', navLabel: 'Home Guide', shortLabel: 'Guide', description: 'Useful shared information', navGroup: 'organise', route: '/wiki', icon: '📖', colour: '#0ca678', isNode: true },

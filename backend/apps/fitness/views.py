@@ -8,7 +8,8 @@ from apps.fitness import selectors, services
 from apps.fitness.models import SessionExercise, SessionSet
 from apps.fitness.serializers import (
     AddSessionExerciseSerializer, ExerciseSerializer, PersonalRecordSerializer,
-    SessionExerciseSerializer, SessionSetSerializer, StartSessionSerializer,
+    SessionExerciseSerializer, SessionSetSerializer, LogRunSerializer,
+    StartSessionSerializer,
     TrainingProgramReadSerializer, TrainingProgramWriteSerializer, WorkoutSessionSerializer,
 )
 from apps.permissions.drf import HomeStackPermission
@@ -124,6 +125,27 @@ class SessionStartView(APIView):
         serializer.is_valid(raise_exception=True)
         obj = _run(services.start_session, request.user, **serializer.validated_data)
         return Response(WorkoutSessionSerializer(selectors.get_session(request.user, obj.id)).data, status=status.HTTP_201_CREATED)
+
+
+class SessionLogRunView(APIView):
+    """Record a completed run in one request.
+
+    Deliberately its own endpoint rather than start -> add exercise -> add set -> finish: the
+    point of the feature is that logging an ordinary run is one step. It still lands as a normal
+    completed session through the shared services, so nothing about history, records or
+    permissions is special-cased.
+    """
+
+    permission_classes = [_Perm]
+
+    def post(self, request):
+        serializer = LogRunSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        obj = _run(services.log_run, request.user, **serializer.validated_data)
+        return Response(
+            WorkoutSessionSerializer(selectors.get_session(request.user, obj.id)).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class SessionDetailView(APIView):

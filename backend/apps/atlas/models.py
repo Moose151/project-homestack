@@ -30,6 +30,23 @@ class Sensitivity(models.TextChoices):
     PRIVATE = "private", "Private"
 
 
+# Curated To-do notification offsets, in minutes before due_at (0 = at time). Deliberately a
+# short fixed menu rather than an arbitrary-minutes picker (D19 §F) — a "1 day before" is
+# something anyone can reason about; "notify me 47 minutes before" is not.
+NOTIFY_OFFSET_CHOICES: list[tuple[int, str]] = [
+    (0, "At time"),
+    (15, "15 minutes before"),
+    (30, "30 minutes before"),
+    (60, "1 hour before"),
+    (120, "2 hours before"),
+    (1440, "1 day before"),
+    (2880, "2 days before"),
+    (10080, "1 week before"),
+]
+NOTIFY_OFFSET_MINUTES = {minutes for minutes, _label in NOTIFY_OFFSET_CHOICES}
+NOTIFY_OFFSET_LABELS = dict(NOTIFY_OFFSET_CHOICES)
+
+
 class AtlasNote(HouseholdBaseModel):
     """A freeform note, optionally private or role-restricted."""
 
@@ -54,14 +71,23 @@ class AtlasNote(HouseholdBaseModel):
 
 
 class AtlasList(HouseholdBaseModel):
-    """A named list (to-do, grocery, checklist, etc.)."""
+    """A named list (to-do, grocery, checklist, etc.).
+
+    Atlas's simplified product model (v0.40, D19) has exactly three primary areas: Grocery
+    (one list per household, ``GROCERY``), To-dos (one ``TODO`` list per household plus one per
+    active Person, distinguished by ``owner_person``), and Lists & Notes (``CHECKLIST`` lists
+    plus ``AtlasNote``). ``SHOPPING`` and ``WISHLIST`` are retained only so older rows keep
+    reading correctly — the 0010 data migration folded existing shopping/wishlist lists into
+    ``CHECKLIST`` and nothing creates these two types going forward. ``GENERAL`` remains as a
+    fallback for anything that doesn't fit the other categories.
+    """
 
     class ListType(models.TextChoices):
         TODO = "todo", "To Do"
         GROCERY = "grocery", "Grocery"
         CHECKLIST = "checklist", "Checklist"
-        SHOPPING = "shopping", "Shopping"
-        WISHLIST = "wishlist", "Wish list"
+        SHOPPING = "shopping", "Shopping"  # legacy — no longer created, see docstring above
+        WISHLIST = "wishlist", "Wish list"  # legacy — no longer created, see docstring above
         GENERAL = "general", "General"
 
     title = models.CharField(max_length=255)
@@ -134,6 +160,22 @@ class AtlasListItem(CalendarSyncMixin, HouseholdBaseModel):
         on_delete=models.SET_NULL,
         related_name="completed_list_items",
     )
+    is_all_day = models.BooleanField(
+        default=True,
+        help_text="A To-do with a due date but no specific time is all-day by default.",
+    )
+    is_important = models.BooleanField(
+        default=False,
+        help_text="Simple ★ Important flag for To-dos — deliberately not High/Medium/Low priority.",
+    )
+    notify_offsets = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "Minutes before due_at to notify (0 = at time), e.g. [0, 60, 1440] for "
+            "at-time + 1 hour before + 1 day before. Empty means no notifications."
+        ),
+    )
 
     objects = HouseholdManager()
     all_objects = AllObjectsManager()
@@ -155,6 +197,7 @@ class AtlasListItem(CalendarSyncMixin, HouseholdBaseModel):
         return {
             "title": self.title,
             "start_at": self.due_at,
+            "is_all_day": self.is_all_day,
             "description": self.notes,
             "event_kind": "task",
             "visibility": self.atlas_list.visibility,

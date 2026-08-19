@@ -338,6 +338,18 @@ reminder suppresses every lead, and these notifications deep-link to the reminde
 `mine_only` is applied to the appropriate categories when deciding recipients. A reminder with
 explicit recipients notifies only those people.
 
+### To-do notification offsets (D19 §F, v0.40)
+
+Atlas To-dos (`AtlasListItem` inside a `list_type='todo'` list) carry their own
+`notify_offsets` — a list of minutes-before-`due_at` (0 = at time), chosen from a curated menu
+(at time / 15 / 30 min / 1 / 2 hours / 1 / 2 days / 1 week before). `run_due_todo_offsets` is an
+**additive** function alongside `run_due_reminders` (same command, same
+`NotificationReminderLog` idempotency ledger, same `create_notification`/push delivery path) — it
+is not a second independent scheduler, and it does not change the three leads above. Unlike those
+three fixed leads, it loops per-item over that item's own configured offsets rather than one
+hardcoded window; this is still scoped to Atlas To-dos specifically, not a fully generic
+lead-time engine available to every domain (see §16).
+
 ## 10. Hub countdown digest
 
 The existing enabled Hub `countdown` widget remains the source of truth. There is no new countdown

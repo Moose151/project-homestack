@@ -31,10 +31,13 @@ def _notify_household_activity(
 
 
 def _atlas_tab_for(list_type: str) -> str:
+    """Mirrors AtlasPage's own listTabFor(). Atlas has three list tabs since v0.40 — the
+    standalone "shopping" tab is gone (0010 folded those lists into Lists & Notes), so a
+    notification must not deep-link into it."""
     if list_type == "grocery":
         return "grocery"
-    if list_type == "shopping":
-        return "shopping"
+    if list_type == "todo":
+        return "todos"
     return "lists"
 
 

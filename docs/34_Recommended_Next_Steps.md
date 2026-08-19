@@ -321,6 +321,22 @@ VPN-only remote access may still be preferable. Do not add router port forwardin
 
 ## 10. Feature work after reliability
 
+### Quick Launch — shipped (docs/39)
+
+Per-user shortcuts into registered destinations, with a stable `/launch/<uuid>` contract. No
+longer a parking-lot idea; `docs/39_Core_Quick_Launch.md` is canonical.
+
+Follow-ups it deliberately left open, in rough order of value:
+
+- **Focused launch mode** — the contract and stored intent ship; the visual simplification does
+  not. Doing it well means auditing each page's chrome, not adding a second shell.
+- **More action targets** — new reminder, add grocery item, new task, new calendar event. Each
+  opens a bounded form; none may perform an action on open.
+- **OS entry points** — QR codes, NFC tags, Home Assistant buttons and widgets are all "something
+  that opens a URL", so they need no further Quick Launch work. Manifest `shortcuts` remain
+  static and build-time, and per-user installed tiles are not available cross-platform
+  (docs/39 §12). Do not promise them.
+
 ### Home Assistant
 
 Next major integration after the reliability baseline. Preserve D22:

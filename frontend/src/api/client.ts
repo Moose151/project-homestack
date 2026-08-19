@@ -15,7 +15,7 @@ import type {
   MeridianWishlistItem, MeridianWishlistRequest, NodeInfo, NotificationList, NotificationPreference,
   Person, PushDevice,
   PersonBadge, PersonalBookEntry, Pet, PetAppointment, PetTreatment, Pool, PoolStatus,
-  PoolWrite, Property, RoomArea, RoomAreaType, RoomDetailResponse, RoomItemPriority,
+  PoolWrite, Property, QuickLaunchResolution, QuickLaunchShortcut, QuickLaunchTarget, RoomArea, RoomAreaType, RoomDetailResponse, RoomItemPriority,
   RoomItemStatus, RoomItemType, RoomListResponse, RoomPlanItem, RoomPlanMode, RoomPlanProduct,
   RotatingSchedule, RotatingScheduleOccurrence, RotatingScheduleWrite, ServiceProvider,
   SolaceAnnualSummary, SolaceBalanceForecast, SolaceBalanceSnapshot, SolaceBill,
@@ -225,7 +225,8 @@ type InstitutionWrite = Partial<{
 
 type ItemWrite = Partial<{
   title: string; notes: string; quantity: string; priority: string; position: number
-  due_at: string | null; assigned_to_person_ids: number[]
+  due_at: string | null; is_all_day: boolean; is_important: boolean; notify_offsets: number[]
+  assigned_to_person_ids: number[]
   product_url: string; source_image_url: string; retailer: string; unit_price: string | null
   currency: string; cache_image: boolean; price_watch_enabled: boolean
 }>
@@ -530,6 +531,22 @@ export const api = {
   reviewListSuggestion: (listId: number, suggestionId: number, action: 'accept' | 'dismiss'): Promise<AtlasListSuggestion> =>
     _fetch(`/atlas/lists/${listId}/suggestions/${suggestionId}/${action}/`, { method: 'POST' }),
 
+  // --- Grocery — the single household list (D19 §C) ---
+  getGrocery: (): Promise<AtlasList> => _fetch('/atlas/grocery/'),
+  addGroceryItem: (data: ItemWrite): Promise<AtlasListItem> =>
+    _fetch('/atlas/grocery/', { method: 'POST', body: JSON.stringify(data) }),
+  clearBoughtGroceryItems: (): Promise<{ cleared: number }> =>
+    _fetch('/atlas/grocery/clear-bought/', { method: 'POST' }),
+  getGrocerySuggestions: (): Promise<string[]> => _fetch('/atlas/grocery/suggestions/'),
+
+  // --- To-dos — Household + one list per active Person (D19 §D) ---
+  getTodoLists: (): Promise<AtlasList[]> => _fetch('/atlas/todos/lists/'),
+  getTodayTodos: (): Promise<AtlasListItem[]> => _fetch('/atlas/todos/today/'),
+  moveListItem: (listId: number, itemId: number, destinationListId: number): Promise<AtlasListItem> =>
+    _fetch(`/atlas/lists/${listId}/items/${itemId}/move/`, {
+      method: 'POST', body: JSON.stringify({ destination_list_id: destinationListId }),
+    }),
+
   // --- Atlas search ---
   searchAtlas: (q: string): Promise<AtlasSearchResults> =>
     _fetch(`/atlas/search/?q=${encodeURIComponent(q)}`),
@@ -542,7 +559,19 @@ export const api = {
     _fetch(`/atlas/notes/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteNote: (id: number): Promise<void> => _fetch(`/atlas/notes/${id}/`, { method: 'DELETE' }),
 
-  // --- Atlas reminders ---
+  /**
+   * Capture a to-do without naming a list. The server decides which list it belongs on (one
+   * named person means their list, otherwise Household), so no caller has to reimplement that.
+   */
+  quickCreateTodo: (data: {
+    title: string; notes?: string; due_at?: string | null; is_all_day?: boolean
+    notify_offsets?: number[]; assigned_to_person_ids?: number[]
+  }): Promise<AtlasListItem> =>
+    _fetch('/atlas/todos/quick-create/', { method: 'POST', body: JSON.stringify(data) }),
+
+  // --- Atlas reminders (legacy, archival) ---
+  // Nothing in the product creates these any more: a reminder is a property of a to-do since
+  // v0.40 (D19 §E). These stay only so historical rows remain readable/removable.
   getReminders: (upcoming?: boolean): Promise<AtlasReminder[]> =>
     _fetch(`/atlas/reminders/${upcoming ? '?upcoming=1' : ''}`),
   createReminder: (data: { title: string; due_at?: string | null; is_all_day?: boolean; body?: string; assigned_to_person_ids?: number[]; notifications_enabled?: boolean }): Promise<AtlasReminder> =>
@@ -550,6 +579,26 @@ export const api = {
   updateReminder: (id: number, data: Partial<{ title: string; due_at: string | null; is_all_day: boolean; body: string; assigned_to_person_ids: number[]; notifications_enabled: boolean }>): Promise<AtlasReminder> =>
     _fetch(`/atlas/reminders/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteReminder: (id: number): Promise<void> => _fetch(`/atlas/reminders/${id}/`, { method: 'DELETE' }),
+
+  // --- Quick Launch ---
+  getQuickLaunchShortcuts: (): Promise<QuickLaunchShortcut[]> => _fetch('/quick-launch/shortcuts/'),
+  getQuickLaunchTargets: (): Promise<{ targets: QuickLaunchTarget[] }> =>
+    _fetch('/quick-launch/targets/'),
+  createQuickLaunchShortcut: (data: {
+    target_key: string; target_object_id?: number | null; custom_label?: string
+    launch_mode?: 'normal' | 'focused'
+  }): Promise<QuickLaunchShortcut> =>
+    _fetch('/quick-launch/shortcuts/', { method: 'POST', body: JSON.stringify(data) }),
+  updateQuickLaunchShortcut: (
+    id: string, data: Partial<{ custom_label: string; launch_mode: 'normal' | 'focused' }>,
+  ): Promise<QuickLaunchShortcut> =>
+    _fetch(`/quick-launch/shortcuts/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteQuickLaunchShortcut: (id: string): Promise<void> =>
+    _fetch(`/quick-launch/shortcuts/${id}/`, { method: 'DELETE' }),
+  reorderQuickLaunchShortcuts: (ids: string[]): Promise<QuickLaunchShortcut[]> =>
+    _fetch('/quick-launch/shortcuts/reorder/', { method: 'PATCH', body: JSON.stringify({ ids }) }),
+  resolveQuickLaunchShortcut: (id: string): Promise<QuickLaunchResolution> =>
+    _fetch(`/quick-launch/shortcuts/${id}/resolve/`),
 
   // --- Calendar sources ---
   getCalendarSources: (): Promise<{ sources: CalendarSource[]; catalogue: CalendarSourceCatalogueEntry[] }> =>
@@ -1297,6 +1346,12 @@ export const api = {
     if (status) params.set('status', status)
     return _fetch(`/fitness/sessions/${params.size ? `?${params}` : ''}`)
   },
+  /** Record a completed run in one request. It lands as an ordinary finished session. */
+  logFitnessRun: (data: {
+    person_id: number; distance: string; duration_seconds: number
+    started_at?: string; notes?: string; visibility?: 'private' | 'household'
+  }): Promise<FitnessSession> =>
+    _fetch('/fitness/sessions/log-run/', { method: 'POST', body: JSON.stringify(data) }),
   startFitnessSession: (data: { person_id: number; workout_id?: number; name?: string; visibility?: 'private' | 'household' }): Promise<FitnessSession> =>
     _fetch('/fitness/sessions/start/', { method: 'POST', body: JSON.stringify(data) }),
   addFitnessSessionExercise: (sessionId: number, data: { exercise_id: number; target_sets: number; notes?: string }): Promise<FitnessSessionExercise> =>

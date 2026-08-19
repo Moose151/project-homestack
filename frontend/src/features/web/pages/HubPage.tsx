@@ -133,21 +133,99 @@ function calendarDayHref(iso: string | null) {
   return `/calendar?date=${new Date(iso).toISOString().slice(0, 10)}`
 }
 
-function TodoWidget({ items }: { items: AtlasListItem[] }) {
+function TodoWidget({ items, onChanged }: { items: AtlasListItem[]; onChanged: () => void }) {
   const pending = items.filter(i => !i.is_complete)
-  if (pending.length === 0) return <p className="text-sm text-muted">All done ✓</p>
+  const [lists, setLists] = useState<AtlasList[]>([])
+  const [listId, setListId] = useState<number | null>(null)
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    api.getTodoLists()
+      .then(rows => {
+        setLists(rows)
+        const household = rows.find(l => l.owner_person_id === null)
+        setListId(current => current ?? household?.id ?? rows[0]?.id ?? null)
+      })
+      .catch(() => { /* quick-add just stays disabled */ })
+  }, [])
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const title = text.trim()
+    if (!title || listId === null) return
+    setBusy(true)
+    try { await api.createItem(listId, { title }); setText(''); onChanged() }
+    finally { setBusy(false) }
+  }
+
   return (
-    <ul className="flex flex-col gap-2">
-      {pending.slice(0, 8).map(item => (
-        <li key={item.id} className="flex items-center gap-3 text-sm">
-          <div className="w-5 h-5 rounded-full border-2 border-line-strong flex-shrink-0" />
-          <span className="text-ink">{item.title}</span>
-        </li>
-      ))}
-      {pending.length > 8 && (
-        <li className="text-xs text-muted">+{pending.length - 8} more</li>
+    <div className="flex flex-col gap-3">
+      <form onSubmit={submit} className="flex gap-2">
+        {lists.length > 1 && (
+          <Select
+            value={listId ?? 0}
+            onChange={e => setListId(Number(e.target.value))}
+            aria-label="List for this to-do"
+            className="w-28 flex-shrink-0 sm:w-32"
+          >
+            {lists.map(list => <option key={list.id} value={list.id}>{list.title}</option>)}
+          </Select>
+        )}
+        <Input value={text} onChange={e => setText(e.target.value)} placeholder="Add a to-do…" className="flex-1" aria-label="Add a to-do" />
+        <Button type="submit" size="sm" loading={busy} disabled={!text.trim() || listId === null}>Add</Button>
+      </form>
+      {pending.length === 0 ? <p className="text-sm text-muted">All done ✓</p> : (
+        <ul className="flex flex-col gap-2">
+          {pending.slice(0, 8).map(item => (
+            <li key={item.id} className="flex items-center gap-3 text-sm">
+              <div className="w-5 h-5 rounded-full border-2 border-line-strong flex-shrink-0" />
+              <span className="text-ink">{item.is_important ? '★ ' : ''}{item.title}</span>
+            </li>
+          ))}
+          {pending.length > 8 && (
+            <li className="text-xs text-muted">+{pending.length - 8} more</li>
+          )}
+        </ul>
       )}
-    </ul>
+      <Link to="/atlas?tab=todos" className="text-xs font-semibold text-primary hover:underline">View To-dos</Link>
+    </div>
+  )
+}
+
+function GroceryWidget({ items, remainingCount, onChanged }: { items: AtlasListItem[]; remainingCount: number; onChanged: () => void }) {
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const title = text.trim()
+    if (!title) return
+    setBusy(true)
+    try { await api.addGroceryItem({ title }); setText(''); onChanged() }
+    finally { setBusy(false) }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <form onSubmit={submit} className="flex gap-2">
+        <Input value={text} onChange={e => setText(e.target.value)} placeholder="Add grocery item…" className="flex-1" aria-label="Add grocery item" />
+        <Button type="submit" size="sm" loading={busy} disabled={!text.trim()}>Add</Button>
+      </form>
+      <p className="text-xs font-semibold text-muted-strong">{remainingCount} item{remainingCount === 1 ? '' : 's'} remaining</p>
+      {items.length === 0 ? <p className="text-sm text-muted">Grocery list is empty</p> : (
+        <ul className="flex flex-col gap-2">
+          {items.slice(0, 8).map(item => (
+            <li key={item.id} className="flex items-center gap-3 text-sm">
+              <div className="w-5 h-5 rounded-full border-2 border-line-strong flex-shrink-0" />
+              <span className="text-ink">{item.title}{item.quantity ? ` × ${item.quantity}` : ''}</span>
+            </li>
+          ))}
+          {items.length > 8 && <li className="text-xs text-muted">+{items.length - 8} more</li>}
+        </ul>
+      )}
+      <Link to="/atlas?tab=grocery" className="text-xs font-semibold text-primary hover:underline">View grocery list</Link>
+    </div>
   )
 }
 
@@ -746,8 +824,8 @@ function moneyLabel(value: string | number) {
 // started it. A to-do needs a list to live in, which is why one is chosen here too.
 const QUICK_KINDS = [
   { key: 'todo', label: 'To-do' },
+  { key: 'grocery', label: 'Grocery' },
   { key: 'note', label: 'Note' },
-  { key: 'reminder', label: 'Reminder' },
 ] as const
 type QuickKind = (typeof QUICK_KINDS)[number]['key']
 
@@ -761,8 +839,13 @@ function QuickAddWidget({ onAdded }: { onAdded: () => void }) {
   const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
-    api.getLists()
-      .then(rows => { setLists(rows); setListId(current => current ?? rows[0]?.id ?? null) })
+    api.getTodoLists()
+      .then(rows => {
+        setLists(rows)
+        // Household first, then personal lists — matches the To-dos tab's own default.
+        const household = rows.find(l => l.owner_person_id === null)
+        setListId(current => current ?? household?.id ?? rows[0]?.id ?? null)
+      })
       .catch(() => { /* a missing list only disables to-do capture, not the widget */ })
   }, [])
 
@@ -775,11 +858,11 @@ function QuickAddWidget({ onAdded }: { onAdded: () => void }) {
     if (!canSubmit) return
     setBusy(true); setErr(null); setDone(null)
     try {
-      if (kind === 'reminder') await api.createReminder({ title })
+      if (kind === 'grocery') await api.addGroceryItem({ title })
       else if (kind === 'note') await api.createNote({ title })
       else await api.createItem(listId!, { title })
       setText('')
-      setDone(kind === 'reminder' ? 'Reminder added ✓' : kind === 'note' ? 'Note saved ✓' : 'To-do added ✓')
+      setDone(kind === 'grocery' ? 'Added to grocery ✓' : kind === 'note' ? 'Note saved ✓' : 'To-do added ✓')
       onAdded()
       setTimeout(() => setDone(null), 2500)
     } catch (e) {
@@ -808,7 +891,7 @@ function QuickAddWidget({ onAdded }: { onAdded: () => void }) {
         <Input
           value={text}
           onChange={e => setText(e.target.value)}
-          placeholder={kind === 'reminder' ? 'Remind me to…' : kind === 'note' ? 'Jot something down…' : 'Add a to-do…'}
+          placeholder={kind === 'grocery' ? 'Add grocery item…' : kind === 'note' ? 'Jot something down…' : 'Add a to-do…'}
           className="flex-1"
         />
         <Button type="submit" size="sm" loading={busy} disabled={!canSubmit}>Add</Button>
@@ -867,7 +950,9 @@ function renderWidget(w: HubWidget, onChanged: () => void) {
     case 'calendar_upcoming':
       return <CalendarUpcomingWidget items={w.items as CalendarEvent[]} />
     case 'atlas_todos':
-      return <TodoWidget items={w.items as AtlasListItem[]} />
+      return <TodoWidget items={w.items as AtlasListItem[]} onChanged={onChanged} />
+    case 'atlas_grocery':
+      return <GroceryWidget items={w.items as AtlasListItem[]} remainingCount={w.meta?.remaining_count ?? (w.items as AtlasListItem[]).length} onChanged={onChanged} />
     case 'atlas_reminders':
       return <RemindersWidget items={w.items as AtlasReminder[]} />
     case 'meridian_my_tasks':
