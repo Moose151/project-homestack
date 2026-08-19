@@ -1,4 +1,5 @@
-from decimal import Decimal
+from datetime import timedelta
+from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
 from django.utils import timezone
@@ -257,15 +258,27 @@ def _record_candidate(person, exercise, session, workout_set, kind, value, dista
 
 
 @transaction.atomic
-def finish_session(user, session, *, notes=None):
+def finish_session(user, session, *, notes=None, finished_at=None, duration_seconds=None):
+    """Complete a session, derive personal records, notify and emit the Corner event.
+
+    ``finished_at``/``duration_seconds`` exist for entries logged after the fact — a run
+    recorded this evening for this morning must keep its own duration rather than the wall-clock
+    gap since the row was created. Both default to the live behaviour, so an ordinary workout
+    finishes exactly as it always has. There is deliberately only one finish path: personal
+    records, notifications and social events are derived here and nowhere else.
+    """
     _active_session(session)
     _validate_session_access(user, session)
-    now = timezone.now()
+    now = finished_at or timezone.now()
     if notes is not None:
         session.notes = notes
     session.status = WorkoutSession.Status.COMPLETED
     session.finished_at = now
-    session.duration_seconds = max(0, int((now - session.started_at).total_seconds()))
+    session.duration_seconds = (
+        duration_seconds
+        if duration_seconds is not None
+        else max(0, int((now - session.started_at).total_seconds()))
+    )
     completed_sets = SessionSet.objects.select_related("session_exercise__exercise").filter(
         session_exercise__session=session, session_exercise__status=SessionExercise.Status.ACTIVE,
         is_completed=True,
@@ -313,3 +326,116 @@ def abandon_session(user, session):
     session.updated_by = user
     session.save()
     return session
+
+
+# ---------------------------------------------------------------------------
+# Quick run logging
+# ---------------------------------------------------------------------------
+
+# The run is recorded against a real distance/time exercise so it behaves like any other
+# training entry. Matched on the stable classification (exercise_type + measurement), never on a
+# display name — renaming "Running" must not break run logging.
+RUN_EXERCISE_NAME = "Running"
+
+
+def _run_exercise():
+    """The household's running exercise, created once if it is somehow absent.
+
+    0002_seed_common_exercises ships one, so this normally just finds it. Creating a fallback
+    rather than failing means a household that archived or renamed every running exercise can
+    still log a run.
+    """
+    exercise = (
+        Exercise.objects.filter(
+            exercise_type=Exercise.ExerciseType.RUNNING,
+            measurement=Exercise.Measurement.DISTANCE_TIME,
+            is_archived=False,
+        )
+        .order_by("id")
+        .first()
+    )
+    if exercise is not None:
+        return exercise
+    exercise = Exercise(
+        household=get_active_household(),
+        name=RUN_EXERCISE_NAME,
+        exercise_type=Exercise.ExerciseType.RUNNING,
+        measurement=Exercise.Measurement.DISTANCE_TIME,
+        muscle_group="Full body",
+        is_system=True,
+    )
+    exercise.save()
+    return exercise
+
+
+@transaction.atomic
+def log_run(user, *, person_id, distance, duration_seconds, started_at=None,
+            notes="", visibility="household"):
+    """Record a completed run as an ordinary Fitness session.
+
+    Deliberately not a separate Run model. A run logged here is a normal completed
+    WorkoutSession holding one distance/time exercise and one completed set, so it takes part in
+    history, personal records, permissions, notifications and Corner activity through exactly
+    the same code as a workout — there is one training history, not two.
+
+    ``program`` stays null: WorkoutSession already allows an ad-hoc session, so nobody has to
+    invent a training program merely to record a run.
+    """
+    person = _validate_person(person_id)
+    # The same rule as every other Fitness write: you log for yourself unless you manage.
+    _validate_subject_access(user, person)
+
+    try:
+        distance = Decimal(str(distance))
+    except (InvalidOperation, TypeError, ValueError):
+        raise FitnessError("Enter the distance you ran.")
+    if distance <= 0:
+        raise FitnessError("Distance must be greater than zero.")
+    if distance > Decimal("1000"):
+        raise FitnessError("That distance looks wrong — check the number.")
+
+    try:
+        duration_seconds = int(duration_seconds)
+    except (TypeError, ValueError):
+        raise FitnessError("Enter how long the run took.")
+    if duration_seconds <= 0:
+        raise FitnessError("Duration must be greater than zero.")
+    if duration_seconds > 24 * 3600:
+        raise FitnessError("That duration looks wrong — check the time.")
+
+    started_at = started_at or timezone.now()
+    if started_at > timezone.now():
+        raise FitnessError("A run cannot be logged in the future.")
+
+    exercise = _run_exercise()
+    session = WorkoutSession(
+        person=person,
+        program=None,
+        source_workout=None,
+        name="Run",
+        started_at=started_at,
+        visibility=visibility,
+        **_base(user),
+    )
+    session.save()
+    entry = SessionExercise(session=session, exercise=exercise, position=0, **_base(user))
+    entry.save()
+    SessionSet(
+        session_exercise=entry,
+        position=0,
+        distance=distance,
+        duration_seconds=duration_seconds,
+        is_completed=True,
+        completed_at=started_at,
+        **_base(user),
+    ).save()
+
+    # The shared finish path: personal records, notifications and the Corner event all come from
+    # here, so a quick-logged run earns the same records as the long way round.
+    return finish_session(
+        user,
+        session,
+        notes=notes,
+        finished_at=started_at + timedelta(seconds=duration_seconds),
+        duration_seconds=duration_seconds,
+    )

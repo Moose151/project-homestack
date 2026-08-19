@@ -9,6 +9,7 @@ urlpatterns = [
     path("programs/<int:program_id>/", views.ProgramDetailView.as_view()),
     path("sessions/", views.SessionListView.as_view()),
     path("sessions/start/", views.SessionStartView.as_view()),
+    path("sessions/log-run/", views.SessionLogRunView.as_view(), name="fitness-log-run"),
     path("sessions/<int:session_id>/", views.SessionDetailView.as_view()),
     path("sessions/<int:session_id>/exercises/", views.SessionAddExerciseView.as_view()),
     path("sessions/<int:session_id>/finish/", views.SessionFinishView.as_view()),

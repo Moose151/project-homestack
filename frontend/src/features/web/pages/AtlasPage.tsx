@@ -1220,8 +1220,18 @@ export function AtlasPage() {
 
   const checklistLists = lists.filter(l => l.list_type === 'checklist' || l.list_type === 'general')
 
+  // A deep link may name only the item (a calendar entry knows the record it came from, not
+  // which list holds it). Resolve the owning list from what is already loaded, so `?item=` alone
+  // still lands on the right tab instead of the default one.
+  const resolvedListId = focusedListId || (focusedItemId
+    ? [groceryList, ...todoLists, ...checklistLists].find(
+        list => list?.items?.some(item => item.id === focusedItemId),
+      )?.id ?? 0
+    : 0)
+
   useEffect(() => {
-    if (loading || !focusedListId) return
+    if (loading || !resolvedListId) return
+    const focusedListId = resolvedListId
     if (groceryList && focusedListId === groceryList.id) { setTab('grocery'); return }
     if (todoLists.some(l => l.id === focusedListId)) { setTab('todos'); return }
     const focusedList = checklistLists.find(list => list.id === focusedListId)
@@ -1234,7 +1244,7 @@ export function AtlasPage() {
       }, 0)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusedListId, focusedItemId, loading, groceryList, todoLists, checklistLists, setTab])
+  }, [resolvedListId, focusedItemId, loading, groceryList, todoLists, checklistLists, setTab])
 
   const defaultAssignee = personIdForUser(people, user?.id)
 
@@ -1299,7 +1309,7 @@ export function AtlasPage() {
           {tab === 'grocery' ? (
             <GroceryTab groceryList={groceryList} onError={setError} />
           ) : tab === 'todos' ? (
-            <TodoTab todoLists={todoLists} focusedListId={focusedListId} onRefresh={refreshTodoLists} onError={setError} />
+            <TodoTab todoLists={todoLists} focusedListId={resolvedListId} onRefresh={refreshTodoLists} onError={setError} />
           ) : tab === 'lists' ? (
             loading ? (
               <div className="h-32 rounded-2xl bg-sunken animate-pulse" />
@@ -1308,7 +1318,7 @@ export function AtlasPage() {
                 checklistLists={checklistLists}
                 people={people}
                 defaultAssignee={defaultAssignee}
-                focusedListId={focusedListId}
+                focusedListId={resolvedListId}
                 focusedItemId={focusedItemId}
                 onOpenList={setOpenListId}
                 onListCreated={list => setLists(prev => [list, ...prev])}
@@ -1335,7 +1345,7 @@ export function AtlasPage() {
               list={list}
               people={people}
               defaultAssignee={defaultAssignee}
-              focusedItemId={list.id === focusedListId ? focusedItemId : undefined}
+              focusedItemId={list.id === resolvedListId ? focusedItemId : undefined}
               onDeleted={id => { setLists(prev => prev.filter(l => l.id !== id)); setOpenListId(null) }}
               onError={setError}
             />

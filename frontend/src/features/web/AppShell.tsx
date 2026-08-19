@@ -129,7 +129,63 @@ function ProfileEditor({ user, onSaved, onClose }: {
 }
 
 /** A descriptive sidebar destination. Internal node names stay out of the way here. */
-function SidebarLink({ item, accent }: { item: NavItem; accent: boolean }) {
+function SidebarLink({ item, accent, collapsed = false }: {
+  item: NavItem
+  accent: boolean
+  collapsed?: boolean
+}) {
+  if (collapsed) return <CollapsedSidebarLink item={item} accent={accent} />
+  return <ExpandedSidebarLink item={item} accent={accent} />
+}
+
+/**
+ * The icon-rail form. Deliberately renders from the same NavItem as the expanded form — there is
+ * one navigation data structure, and collapsing is presentation only, so it cannot show a
+ * destination the expanded sidebar would have withheld.
+ *
+ * The label is not merely hidden: it stays in the accessible tree via aria-label, and appears as
+ * a tooltip on hover *and* on keyboard focus, so an icon is never ambiguous for either kind of
+ * user.
+ */
+function CollapsedSidebarLink({ item, accent }: { item: NavItem; accent: boolean }) {
+  return (
+    <NavLink
+      to={item.route}
+      aria-label={item.label}
+      data-nav-key={item.key}
+      style={({ isActive }) => (isActive && accent
+        ? { background: softColour(item.colour, '22'), color: item.colour }
+        : undefined)}
+      className={({ isActive }) =>
+        `group relative flex h-11 w-11 items-center justify-center rounded-xl transition-all ${
+          isActive ? (accent ? '' : 'bg-sunken text-ink') : 'text-muted-strong hover:bg-sunken/80'
+        }`
+      }
+    >
+      {({ isActive }) => (
+        <>
+          {isActive && (
+            <span
+              className="absolute -left-1.5 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full"
+              style={{ backgroundColor: accent ? item.colour : 'var(--hs-primary)' }}
+              aria-hidden
+            />
+          )}
+          <span className="text-lg" aria-hidden>{item.icon}</span>
+          {/* Visible on hover and on focus — never hover-only. */}
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute left-full z-30 ml-2 hidden whitespace-nowrap rounded-lg bg-ink px-2 py-1 text-xs font-semibold text-surface shadow-card group-hover:block group-focus-visible:block"
+          >
+            {item.label}
+          </span>
+        </>
+      )}
+    </NavLink>
+  )
+}
+
+function ExpandedSidebarLink({ item, accent }: { item: NavItem; accent: boolean }) {
   const activeStyle = ({ isActive }: { isActive: boolean }): CSSProperties | undefined =>
     isActive && accent ? { background: softColour(item.colour, '18'), color: item.colour } : undefined
   return (
@@ -259,6 +315,16 @@ function MoreSheet({
         </div>
 
         <div className="space-y-5 p-4">
+          <Link
+            to="/settings/quick-launch"
+            onClick={onClose}
+            className="flex min-h-14 w-full items-center gap-3 rounded-2xl border border-line bg-sunken/70 px-4 text-left text-sm font-bold text-ink shadow-soft transition-transform active:scale-[0.98] motion-reduce:transform-none"
+          >
+            <span className="text-xl" aria-hidden>🚀</span>
+            <span className="flex-1">Quick Launch</span>
+            <span className="text-xs font-semibold text-muted">Shortcuts</span>
+          </Link>
+
           <button
             onClick={() => { onClose(); onSearch() }}
             className="flex min-h-14 w-full items-center gap-3 rounded-2xl border border-line bg-sunken/70 px-4 text-left text-sm font-bold text-ink shadow-soft transition-transform active:scale-[0.98] motion-reduce:transform-none"
@@ -453,8 +519,13 @@ export function AppShell() {
   // The dock's two shortcuts are a per-user server preference, so they follow the account onto
   // a new phone instead of living in one browser. PreferencesProvider migrates any legacy
   // localStorage value once on load and then removes it.
-  const { preferences, setMobileNav, resetMobileNav } = usePreferences()
+  const { preferences, setMobileNav, resetMobileNav, setSidebarCollapsed } = usePreferences()
   const mobileKeys = preferences.mobile_nav
+  // Desktop only. The phone shell never reads this — it has its own bottom nav, and inheriting a
+  // desktop choice there would be meaningless.
+  const sidebarCollapsed = preferences.sidebar_collapsed
+  const SIDEBAR_WIDTH = sidebarCollapsed ? 'w-[76px]' : 'w-[272px]'
+  const SIDEBAR_OFFSET = sidebarCollapsed ? 'md:ml-[76px]' : 'md:ml-[272px]'
   const hasCustomizedNav = mobileKeys.length > 0
   const { enabledKeys, loading: stacksLoading, error: stacksError, refresh: refreshStacks } = useStacks()
   useScrollRestoration()
@@ -606,67 +677,134 @@ export function AppShell() {
   return (
     <div className="min-h-screen flex">
       {/* Sidebar — md+ */}
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-[272px] flex-col border-r border-line bg-surface/92 backdrop-blur-xl md:flex">
+      <aside
+        data-sidebar
+        data-collapsed={sidebarCollapsed ? 'true' : 'false'}
+        className={`fixed inset-y-0 left-0 z-20 hidden ${SIDEBAR_WIDTH} flex-col border-r border-line bg-surface/92 backdrop-blur-xl md:flex`}
+      >
         {/* Height and padding match the main header exactly so the two bottom borders and the
             two title baselines line up across the sidebar seam. */}
-        <NavLink
-          to="/hub"
-          className="flex h-[62px] flex-shrink-0 items-center gap-3 border-b border-line px-3 transition-colors hover:bg-sunken/60 md:h-[68px] md:px-6"
-          aria-label="HomeStack home"
-        >
-          <Logo className="h-9 w-9 flex-shrink-0" />
-          <span className="min-w-0">
-            <span className="block truncate text-base font-extrabold tracking-tight text-ink">HomeStack</span>
-            <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">Our household</span>
-          </span>
-        </NavLink>
+        <div className={`flex h-[62px] flex-shrink-0 items-center border-b border-line md:h-[68px] ${
+          sidebarCollapsed ? 'justify-center px-2' : 'gap-2 px-3 md:px-4'
+        }`}>
+          <NavLink
+            to="/hub"
+            className={`flex min-w-0 items-center gap-3 rounded-xl transition-colors hover:bg-sunken/60 ${
+              sidebarCollapsed ? 'p-1' : 'flex-1 p-1'
+            }`}
+            aria-label="HomeStack home"
+          >
+            <Logo className="h-9 w-9 flex-shrink-0" />
+            {!sidebarCollapsed && (
+              <span className="min-w-0">
+                <span className="block truncate text-base font-extrabold tracking-tight text-ink">HomeStack</span>
+                <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">Our household</span>
+              </span>
+            )}
+          </NavLink>
+          {!sidebarCollapsed && (
+            <button
+              type="button"
+              onClick={() => void setSidebarCollapsed(true)}
+              aria-label="Collapse navigation"
+              title="Collapse navigation"
+              className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl text-muted transition-colors hover:bg-sunken hover:text-ink focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              <span aria-hidden>«</span>
+            </button>
+          )}
+        </div>
+        {sidebarCollapsed && (
+          <button
+            type="button"
+            onClick={() => void setSidebarCollapsed(false)}
+            aria-label="Expand navigation"
+            title="Expand navigation"
+            className="mx-auto mt-2 grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl text-muted transition-colors hover:bg-sunken hover:text-ink focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <span aria-hidden>»</span>
+          </button>
+        )}
 
         {/* The mask fades the last row when the list overflows, so a half-visible destination
             reads as "scroll for more" instead of a clipped layout. */}
+        {/* One navigation source for both modes: collapsing filters nothing and reveals
+            nothing, it only changes how each item is drawn. */}
         <nav
-          className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3 py-2 [mask-image:linear-gradient(to_bottom,black_calc(100%-1.5rem),transparent)]"
+          className={`flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto py-2 [mask-image:linear-gradient(to_bottom,black_calc(100%-1.5rem),transparent)] ${
+            sidebarCollapsed ? 'items-center px-2' : 'px-3'
+          }`}
+          aria-label="Sidebar navigation"
         >
           {NAV_GROUPS.map(group => {
             const items = stackNav.filter(item => item.group === group.key)
             if (items.length === 0) return null
             return (
-              <div key={group.key}>
-                <SectionLabel>{group.label}</SectionLabel>
-                {items.map(item => <SidebarLink key={item.route} item={item} accent />)}
+              <div key={group.key} className={sidebarCollapsed ? 'flex flex-col items-center gap-0.5' : ''}>
+                {sidebarCollapsed
+                  // The heading text cannot fit; a rule keeps the grouping legible without it.
+                  ? <span className="my-1.5 block h-px w-6 bg-line" aria-hidden />
+                  : <SectionLabel>{group.label}</SectionLabel>}
+                {items.map(item => (
+                  <SidebarLink key={item.route} item={item} accent collapsed={sidebarCollapsed} />
+                ))}
               </div>
             )
           })}
 
           {adminNav.length > 0 && (
-            <>
-              <SectionLabel>Manage</SectionLabel>
-              {adminNav.map(item => <SidebarLink key={item.route} item={item} accent={false} />)}
-            </>
+            <div className={sidebarCollapsed ? 'flex flex-col items-center gap-0.5' : ''}>
+              {sidebarCollapsed
+                ? <span className="my-1.5 block h-px w-6 bg-line" aria-hidden />
+                : <SectionLabel>Manage</SectionLabel>}
+              {adminNav.map(item => (
+                <SidebarLink key={item.route} item={item} accent={false} collapsed={sidebarCollapsed} />
+              ))}
+            </div>
           )}
         </nav>
 
-        <div className="flex flex-col gap-2 border-t border-line bg-sunken/25 px-3 py-3">
-          <div className="grid grid-cols-2 gap-1">
+        <div className={`flex flex-col gap-2 border-t border-line bg-sunken/25 py-3 ${
+          sidebarCollapsed ? 'items-center px-2' : 'px-3'
+        }`}>
+          <div className={sidebarCollapsed ? 'flex flex-col gap-1' : 'grid grid-cols-2 gap-1'}>
             <button
               onClick={() => setDark(!dark)}
-              className="flex min-h-10 items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-muted hover:bg-surface hover:text-ink"
+              aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={dark ? 'Light mode' : 'Dark mode'}
+              className={`flex items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-muted hover:bg-surface hover:text-ink ${
+                sidebarCollapsed ? 'h-10 w-10' : 'min-h-10'
+              }`}
             >
-              {dark ? '☀ Light' : '☾ Dark'}
+              {sidebarCollapsed ? <span aria-hidden>{dark ? '☀' : '☾'}</span> : (dark ? '☀ Light' : '☾ Dark')}
             </button>
+            {/* Kiosk stays reachable when collapsed — hiding it would change what the sidebar
+                offers, and collapsing must not do that. */}
             <a
               href="/kiosk"
-              className="flex min-h-10 items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-muted hover:bg-surface hover:text-ink"
+              aria-label="Open kiosk"
+              title="Kiosk"
+              className={`flex items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-muted hover:bg-surface hover:text-ink ${
+                sidebarCollapsed ? 'h-10 w-10' : 'min-h-10'
+              }`}
             >
-              <span>▣</span> Kiosk
+              {sidebarCollapsed ? <span aria-hidden>▣</span> : <><span>▣</span> Kiosk</>}
             </a>
           </div>
           {user && (
             <>
-              <div className="flex items-center gap-2 rounded-2xl border border-line bg-surface p-2.5 shadow-soft">
-                <button onClick={() => setEditingProfile(v => !v)} className="flex-shrink-0 rounded-full" title="Edit profile">
+              <div className={`flex items-center gap-2 rounded-2xl border border-line bg-surface shadow-soft ${
+                sidebarCollapsed ? 'justify-center p-1.5' : 'p-2.5'
+              }`}>
+                <button
+                  onClick={() => setEditingProfile(v => !v)}
+                  className="flex-shrink-0 rounded-full"
+                  title="Edit profile"
+                  aria-label={`Edit profile for ${user.display_name}`}
+                >
                   <Avatar name={user.display_name} colour={user.colour} avatar={user.avatar} size="sm" />
                 </button>
-                <div className="flex-1 min-w-0">
+                <div className={`flex-1 min-w-0 ${sidebarCollapsed ? 'hidden' : ''}`}>
                   <button onClick={() => setEditingProfile(v => !v)} className="text-left w-full">
                     <p className="truncate text-sm font-bold text-ink transition-colors hover:text-primary">{user.display_name}</p>
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">{user.role}</p>
@@ -674,7 +812,9 @@ export function AppShell() {
                 </div>
                 <button
                   onClick={logout}
-                  className="grid h-9 w-9 place-items-center rounded-xl text-sm text-muted transition-colors hover:bg-danger-soft hover:text-danger"
+                  className={`grid h-9 w-9 place-items-center rounded-xl text-sm text-muted transition-colors hover:bg-danger-soft hover:text-danger ${
+                    sidebarCollapsed ? 'hidden' : ''
+                  }`}
                   title="Sign out"
                   aria-label="Sign out"
                 >
@@ -690,12 +830,14 @@ export function AppShell() {
               )}
             </>
           )}
-          <p className="select-none text-center text-[9px] font-semibold tracking-wider text-muted/40">v{APP_VERSION}</p>
+          {!sidebarCollapsed && (
+            <p className="select-none text-center text-[9px] font-semibold tracking-wider text-muted/40">v{APP_VERSION}</p>
+          )}
         </div>
       </aside>
 
       {/* Main content */}
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col md:ml-[272px]">
+      <div className={`flex min-h-screen min-w-0 flex-1 flex-col ${SIDEBAR_OFFSET}`}>
         <header className="sticky top-0 z-10 h-[62px] border-b border-line bg-surface/82 backdrop-blur-xl md:h-[68px]">
           <div className={`${CONTENT_CONTAINER} flex h-full items-center gap-1.5`}>
           <div className="mr-auto flex min-w-0 items-center gap-2.5">

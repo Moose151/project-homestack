@@ -96,9 +96,12 @@ export function EventModal({
   const base = event ? new Date(event.start_at) : (defaultDate ?? new Date())
   const [f, setF] = useState({
     title: event?.title ?? '',
-    // 'reminder' is offered only when creating: it saves an Atlas reminder through the shared
-    // reminder API rather than a calendar event, so it is a choice of *what to create*, not a
-    // calendar event_kind. Existing entries keep their own kind.
+    // 'reminder' is offered only when creating: it saves an Atlas *to-do* with a due date and
+    // a notification offset rather than a calendar event, so it is a choice of *what to
+    // create*, not a calendar event_kind. Existing entries keep their own kind. It deliberately
+    // does not create a standalone reminder object — since v0.40 a reminder is a property of a
+    // to-do (D19 §E), and a second dated record here would double up on the calendar and in
+    // notifications.
     event_kind: event?.event_kind === 'appointment' ? 'appointment' : 'event',
     body: '',
     notifications_enabled: true,
@@ -126,15 +129,18 @@ export function EventModal({
     setSaving(true)
     try {
       if (isReminder) {
-        // The real reminder record — same model and API the Atlas reminders tab uses, so it
-        // schedules notifications and syncs itself back onto the calendar.
-        await api.createReminder({
+        // A to-do on the right list. The server picks the list (one named person means theirs,
+        // otherwise Household), it syncs itself onto the calendar like any dated to-do, and
+        // "notify me" is expressed as the at-time offset rather than a separate scheduler.
+        // An all-day capture gets the day-before offset instead: its due moment is midnight,
+        // and notifying then is not what "remind me on Thursday" means.
+        await api.quickCreateTodo({
           title: f.title.trim(),
-          body: f.body.trim(),
+          notes: f.body.trim(),
           due_at: new Date(f.start_at).toISOString(),
           is_all_day: f.is_all_day,
+          notify_offsets: f.notifications_enabled ? (f.is_all_day ? [1440] : [0]) : [],
           assigned_to_person_ids: f.assigned_to_person_ids,
-          notifications_enabled: f.notifications_enabled,
         })
         onSaved()
         return
@@ -257,7 +263,7 @@ export function EventModal({
               Send a notification when it is time
             </label>
             <p className="text-xs text-muted">
-              Saved in Lists &amp; Notes and shown on your calendar. Open the reminder to edit it.
+              Saved as a to-do and shown on your calendar. Open it under To-dos to edit it.
             </p>
           </div>
         ) : !showMore ? (

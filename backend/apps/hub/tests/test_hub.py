@@ -12,7 +12,9 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.atlas.models import Visibility as AtlasVisibility
-from apps.atlas.services import create_atlas_list, create_list_item, create_reminder
+from apps.atlas.services import (
+    create_atlas_list, create_list_item, create_reminder, ensure_household_grocery_list,
+)
 from apps.people.services import create_person
 from apps.permissions.services import grant_user_permission
 from apps.scheduling.models import CalendarEvent
@@ -156,7 +158,7 @@ class HubContentTests(TestCase):
         """Regression: a grocery item must never appear in the atlas_todos widget (D19 §K)."""
         todo_list = create_atlas_list(self.admin, title="Chores", list_type="todo")
         create_list_item(self.admin, todo_list, title="Book pest inspection")
-        grocery_list = create_atlas_list(self.admin, title="Grocery", list_type="grocery")
+        grocery_list = ensure_household_grocery_list(self.admin)
         create_list_item(self.admin, grocery_list, title="Milk")
 
         todos = self._widget("atlas_todos")
@@ -168,7 +170,7 @@ class HubContentTests(TestCase):
     def test_grocery_widget_shows_grocery_items_with_remaining_count(self):
         from apps.atlas.services import complete_list_item
 
-        grocery_list = create_atlas_list(self.admin, title="Grocery", list_type="grocery")
+        grocery_list = ensure_household_grocery_list(self.admin)
         create_list_item(self.admin, grocery_list, title="Milk")
         bought = create_list_item(self.admin, grocery_list, title="Bread")
         complete_list_item(self.admin, bought)

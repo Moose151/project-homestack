@@ -212,6 +212,8 @@ class ListListView(APIView):
             atlas_list = services.create_atlas_list(request.user, **serializer.validated_data)
         except PermissionError as exc:
             raise PermissionDenied(str(exc)) from exc
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
         return Response(AtlasListSerializer(atlas_list).data, status=status.HTTP_201_CREATED)
 
 
@@ -237,6 +239,8 @@ class ListDetailView(APIView):
             atlas_list = services.update_atlas_list(request.user, atlas_list, **serializer.validated_data)
         except PermissionError as exc:
             raise PermissionDenied(str(exc)) from exc
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
         return Response(AtlasListSerializer(atlas_list).data)
 
     def delete(self, request: Request, list_id: int) -> Response:
@@ -437,6 +441,24 @@ class TodoTodayView(APIView):
 
     def get(self, request: Request) -> Response:
         return Response(AtlasListItemSerializer(selectors.list_today_items(request.user), many=True).data)
+
+
+class TodoQuickCreateView(APIView):
+    """POST /atlas/todos/quick-create/ — capture a To-do without naming a list (D19 §D/§E).
+
+    The one endpoint behind Calendar's "Reminder" action and the ambient Quick Add. Both used to
+    POST an ``AtlasReminder``; routing them here is what stops ordinary user flows from creating
+    a second, parallel reminder object alongside the To-do model.
+    """
+
+    permission_classes = [_AtlasPerm]
+    permission_action = "edit"
+
+    def post(self, request: Request) -> Response:
+        serializer = AtlasListItemWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        item = services.quick_create_todo(request.user, **serializer.validated_data)
+        return Response(AtlasListItemSerializer(item).data, status=status.HTTP_201_CREATED)
 
 
 class ListSuggestionListView(APIView):

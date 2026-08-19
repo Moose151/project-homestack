@@ -26,7 +26,9 @@ export function QuickCreate({
   contextKey?: string
 }) {
   const navigate = useNavigate()
-  const [kind, setKind] = useState<'reminder' | 'note'>('reminder')
+  // 'reminder' is not one of these on purpose: a reminder is a property of a to-do since
+  // v0.40 (D19 §E), not a second kind of record that also lands on the calendar.
+  const [kind, setKind] = useState<'to-do' | 'note'>('to-do')
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
@@ -40,10 +42,10 @@ export function QuickCreate({
     setBusy(true)
     setMessage('')
     try {
-      if (kind === 'reminder') await api.createReminder({ title })
+      if (kind === 'to-do') await api.quickCreateTodo({ title })
       else await api.createNote({ title })
       setText('')
-      setMessage(kind === 'reminder' ? 'Reminder added' : 'Note saved')
+      setMessage(kind === 'to-do' ? 'To-do added' : 'Note saved')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not save')
     } finally {
@@ -79,7 +81,7 @@ export function QuickCreate({
         {enabledKeys.has('atlas') && (
           <form onSubmit={create} className="space-y-3 rounded-2xl bg-sunken p-3">
             <div className="flex rounded-xl bg-surface p-1">
-              {(['reminder', 'note'] as const).map(option => (
+              {(['to-do', 'note'] as const).map(option => (
                 <button
                   key={option}
                   type="button"
@@ -91,7 +93,7 @@ export function QuickCreate({
               ))}
             </div>
             <div className="flex gap-2">
-              <Input value={text} onChange={event => setText(event.target.value)} placeholder={kind === 'reminder' ? 'Remind me to…' : 'Note title…'} />
+              <Input value={text} onChange={event => setText(event.target.value)} placeholder={kind === 'to-do' ? 'Remind me to…' : 'Note title…'} />
               <Button type="submit" loading={busy} disabled={!text.trim()}>Add</Button>
             </div>
             {message && <p className="text-xs text-muted-strong">{message}</p>}

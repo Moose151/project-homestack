@@ -10,6 +10,8 @@ const HubPage = lazy(() => import('./features/web/pages/HubPage').then(m => ({ d
 const AtlasPage = lazy(() => import('./features/web/pages/AtlasPage').then(m => ({ default: m.AtlasPage })))
 const MeridianPage = lazy(() => import('./features/web/pages/MeridianPage').then(m => ({ default: m.MeridianPage })))
 const CalendarPage = lazy(() => import('./features/web/pages/CalendarPage').then(m => ({ default: m.CalendarPage })))
+const QuickLaunchPage = lazy(() => import('./features/web/quicklaunch/QuickLaunchPage').then(m => ({ default: m.QuickLaunchPage })))
+const LaunchPage = lazy(() => import('./features/web/quicklaunch/LaunchPage').then(m => ({ default: m.LaunchPage })))
 const CalendarSourcesPage = lazy(() => import('./features/web/pages/CalendarSourcesPage').then(m => ({ default: m.CalendarSourcesPage })))
 const EducationPage = lazy(() => import('./features/web/pages/EducationPage').then(m => ({ default: m.EducationPage })))
 const BooksPage = lazy(() => import('./features/web/pages/BooksPage').then(m => ({ default: m.BooksPage })))
@@ -75,6 +77,10 @@ function WebRoutes({ isAdmin }: { isAdmin: boolean }) {
         {isAdmin && <Route path="/settings" element={<Deferred><SettingsPage /></Deferred>} />}
         <Route path="/settings/guides/:nodeKey" element={<Deferred><NodeGuidePage /></Deferred>} />
         <Route path="/settings/version-history" element={<Deferred><VersionHistoryPage /></Deferred>} />
+        {/* The stable Quick Launch contract (docs/39 §6). The server resolves the shortcut;
+            nothing here decides where it goes. */}
+        <Route path="/launch/:shortcutId" element={<Deferred><LaunchPage /></Deferred>} />
+        <Route path="/settings/quick-launch" element={<Deferred><QuickLaunchPage /></Deferred>} />
         <Route path="/settings/notifications" element={<Deferred><NotificationSettingsPage /></Deferred>} />
         {isAdmin && <Route path="/settings/push-devices" element={<Deferred><PushDevicesPage /></Deferred>} />}
         <Route path="*" element={<Navigate to="/hub" replace />} />

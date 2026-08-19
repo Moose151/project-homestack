@@ -227,6 +227,7 @@ export function SettingsPage() {
       {isAdmin && <MobileListRow icon="👥" to="/users" title="People & access" subtitle="Profiles, roles and sign-in" />}
       <MobileListRow icon="🧩" title="Stacks" subtitle="Enabled HomeStack areas" onClick={() => setMobileSection('stacks')} />
       {isAdmin && <MobileListRow icon="💾" title="Backups" subtitle="Run and review backups" onClick={() => setMobileSection('backups')} />}
+      <MobileListRow icon="🚀" to="/settings/quick-launch" title="Quick Launch" subtitle="Your own shortcuts to the places you go most" />
       <MobileListRow icon="🔔" to="/settings/notifications" title="Notifications" subtitle="Your notification preferences" />
       {isAdmin && <MobileListRow icon="📱" to="/settings/push-devices" title="Push devices" subtitle="Registered notification devices" />}
       <MobileListRow icon="🎨" title="Appearance" subtitle="Family colour" onClick={() => setMobileSection('appearance')} />

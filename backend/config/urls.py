@@ -37,6 +37,7 @@ urlpatterns = [
     path("api/v1/solace/", include("apps.solace.urls")),
     path("api/v1/fitness/", include("apps.fitness.urls")),
     path("api/v1/travel/", include("apps.travel.urls")),
+    path("api/v1/quick-launch/", include("apps.quicklaunch.urls")),
     path("api/v1/kiosk/meridian/", KioskMeridianView.as_view(), name="kiosk-meridian"),
     path("api/v1/hub/", include("apps.hub.urls")),
     path("api/v1/notifications/", include("apps.notifications.urls")),

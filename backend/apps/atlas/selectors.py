@@ -144,8 +144,18 @@ def frequent_grocery_titles(grocery_list: AtlasList, *, limit: int = 6) -> list[
 
 
 def list_todo_lists(user=None) -> list[AtlasList]:
-    """The Household To-do list plus every personal To-do list (D19 §D)."""
-    qs = AtlasList.objects.filter(list_type="todo").order_by("owner_person_id", "title")
+    """The Household To-do list plus one personal list per *active* Person (D19 §D).
+
+    A Person is soft-deleted, so their ``owner_person`` FK survives their removal. Without the
+    exclusion below the To-dos tab would keep rendering a list under a deleted person's name.
+    Their items are not stranded by this: ``delete_person`` moves them to the Household list
+    before the person goes, and the 0010 migration did the same for people already deleted.
+    """
+    qs = (
+        AtlasList.objects.filter(list_type="todo")
+        .exclude(owner_person__isnull=False, owner_person__deleted_at__isnull=False)
+        .order_by("owner_person_id", "title")
+    )
     if user is not None:
         qs = apply_visibility(qs, user)
     return list(qs)

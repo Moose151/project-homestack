@@ -16,12 +16,30 @@ from apps.atlas.models import (
 )
 
 
-def validate_notify_offsets(value: list) -> list[int]:
-    offsets = sorted({int(v) for v in value})
-    invalid = [v for v in offsets if v not in NOTIFY_OFFSET_MINUTES]
+def validate_notify_offsets(value) -> list[int]:
+    """Normalise a To-do's notification offsets to a sorted, de-duplicated, supported list.
+
+    This is a JSONField, so the payload can be any JSON at all. Everything that is not a list
+    of numbers from the curated menu is a client error (400), never an unhandled coercion
+    failure: ``int("soon")`` and ``int({})`` both raise, and a bare 500 would tell the caller
+    nothing about what it got wrong.
+
+    Booleans are rejected rather than treated as 0/1 — ``True`` is not a lead time, and Python
+    would otherwise quietly accept it as "15 minutes"-adjacent nonsense.
+    """
+    if not isinstance(value, list):
+        raise serializers.ValidationError("Notification offsets must be a list of minutes.")
+    offsets: set[int] = set()
+    for entry in value:
+        if isinstance(entry, bool) or not isinstance(entry, int):
+            raise serializers.ValidationError(
+                "Notification offsets must be whole numbers of minutes before the due time."
+            )
+        offsets.add(entry)
+    invalid = sorted(v for v in offsets if v not in NOTIFY_OFFSET_MINUTES)
     if invalid:
         raise serializers.ValidationError(f"Unsupported notification offset(s): {invalid}.")
-    return offsets
+    return sorted(offsets)
 
 
 class AtlasNoteSerializer(serializers.ModelSerializer):

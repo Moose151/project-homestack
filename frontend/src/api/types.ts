@@ -61,6 +61,52 @@ export interface UserPreferences {
   tab_order: Record<string, string[]>
   /** the two configurable mobile dock slots, as stack keys */
   mobile_nav: string[]
+  /** desktop-only: whether this person keeps the sidebar as a compact icon rail */
+  sidebar_collapsed: boolean
+}
+
+/**
+ * A Quick Launch shortcut. It stores an intent, never a route — the destination is resolved at
+ * launch time, so a saved shortcut survives internal route changes and cannot carry a path.
+ */
+export interface QuickLaunchShortcut {
+  /** public UUID, the identifier used in /launch/:id */
+  id: string
+  target_key: string
+  target_object_id: number | null
+  custom_label: string
+  /** resolved display name: the custom label, else the record name, else the target name */
+  label: string
+  icon: string
+  node_key: string
+  launch_mode: 'normal' | 'focused'
+  display_order: number
+  /** re-evaluated for this user every time it is listed */
+  status: 'ok' | 'locked' | 'unavailable'
+  unavailable_reason: string
+}
+
+export interface QuickLaunchTarget {
+  key: string
+  label: string
+  description: string
+  icon: string
+  node_key: string
+  target_type: 'open' | 'action'
+  requires_object: boolean
+  sensitive: boolean
+  launch_modes: string[]
+  objects: Array<{ id: number; label: string }>
+}
+
+export interface QuickLaunchResolution {
+  status: 'ok' | 'locked' | 'unavailable'
+  label: string
+  reason: string
+  node_key: string
+  launch_mode: 'normal' | 'focused'
+  /** present only when the destination is open or merely locked */
+  route?: string
 }
 
 export interface AtlasListItem {

@@ -19,6 +19,7 @@ from apps.atlas.services import (
     create_note,
     create_reminder,
     delete_reminder,
+    ensure_household_grocery_list,
     update_reminder,
 )
 from apps.scheduling.models import CalendarEvent
@@ -107,6 +108,55 @@ class DailyCoordinationTests(TestCase):
         rows = self.client.get("/api/v1/atlas/birthday-occurrences/?start=2027-02-27&end=2027-03-01").json()
         pet_rows = [row for row in rows if row["pet_id"] == pet.id]
         self.assertEqual([row["date"] for row in pet_rows], ["2027-02-28"])
+
+    def test_archived_and_deleted_pets_generate_no_birthday(self):
+        """A pet that is no longer part of the household must stop appearing every year."""
+        from apps.pets.models import Pet
+        dob = timezone.datetime(2018, 8, 20).date()
+        archived = Pet.objects.create(
+            household=get_active_household(), name="Rex", date_of_birth=dob,
+            is_archived=True, created_by=self.admin, updated_by=self.admin,
+        )
+        removed = Pet.objects.create(
+            household=get_active_household(), name="Smokey", date_of_birth=dob,
+            created_by=self.admin, updated_by=self.admin,
+        )
+        removed.soft_delete()
+        rows = self.client.get(
+            "/api/v1/atlas/birthday-occurrences/?start=2026-08-19&end=2026-08-21"
+        ).json()
+        pet_ids = {row["pet_id"] for row in rows}
+        self.assertNotIn(archived.id, pet_ids)
+        self.assertNotIn(removed.id, pet_ids)
+
+    def test_a_pet_without_a_date_of_birth_is_simply_absent(self):
+        """date_of_birth is optional and pre-dates this feature — existing pets stay valid."""
+        from apps.pets.models import Pet
+        pet = Pet.objects.create(
+            household=get_active_household(), name="Nameless",
+            created_by=self.admin, updated_by=self.admin,
+        )
+        self.assertIsNone(pet.date_of_birth)
+        rows = self.client.get(
+            "/api/v1/atlas/birthday-occurrences/?start=2026-08-19&end=2027-08-21"
+        ).json()
+        self.assertNotIn(pet.id, {row["pet_id"] for row in rows})
+
+    def test_changing_a_pets_dob_moves_its_birthday_immediately(self):
+        """Occurrences are computed on read, so there is no stored event to fall out of step."""
+        from apps.pets.models import Pet
+        pet = Pet.objects.create(
+            household=get_active_household(), name="Pip",
+            date_of_birth=timezone.datetime(2021, 8, 20).date(),
+            created_by=self.admin, updated_by=self.admin,
+        )
+        window = "/api/v1/atlas/birthday-occurrences/?start=2026-08-19&end=2026-08-25"
+        dates = [row["date"] for row in self.client.get(window).json() if row["pet_id"] == pet.id]
+        self.assertEqual(dates, ["2026-08-20"])
+        pet.date_of_birth = timezone.datetime(2021, 8, 23).date()
+        pet.save(update_fields=["date_of_birth"])
+        dates = [row["date"] for row in self.client.get(window).json() if row["pet_id"] == pet.id]
+        self.assertEqual(dates, ["2026-08-23"])
 
     def test_removing_pet_dob_removes_generated_birthday(self):
         from apps.pets.models import Pet
@@ -326,11 +376,43 @@ class AtlasListTests(TestCase):
     def test_create_list(self):
         resp = self.client.post(
             self.list_url,
-            {"title": "Shopping", "list_type": "grocery"},
+            {"title": "Packing", "list_type": "checklist"},
             content_type="application/json",
         )
         self.assertEqual(resp.status_code, 201)
-        self.assertEqual(resp.json()["title"], "Shopping")
+        self.assertEqual(resp.json()["title"], "Packing")
+
+    def test_the_generic_list_endpoint_cannot_create_a_second_grocery_list(self):
+        """One Grocery list per household is a backend invariant, not a React convention
+        (D19 §C).
+
+        The list endpoints predate the revamp and are still used for Lists & Notes, so without
+        this guard the per-person grocery split that atlas.0010 exists to merge away could be
+        recreated through the ordinary API a day after migrating.
+        """
+        from apps.atlas.models import AtlasList
+
+        resp = self.client.post(
+            self.list_url,
+            {"title": "Aldi list", "list_type": "grocery"},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertEqual(
+            AtlasList.objects.filter(list_type="grocery").count(), 1,
+        )
+
+    def test_an_existing_list_cannot_be_converted_into_a_second_grocery_list(self):
+        from apps.atlas.models import AtlasList
+
+        other = create_atlas_list(self.admin, title="Packing", list_type="checklist")
+        resp = self.client.patch(
+            reverse("atlas-list-detail", kwargs={"list_id": other.pk}),
+            {"list_type": "grocery"},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertEqual(AtlasList.objects.filter(list_type="grocery").count(), 1)
 
     def test_list_endpoint_returns_id_and_items(self):
         # Regression: GET /atlas/lists/ must use the read serializer (id + nested items),
@@ -607,7 +689,7 @@ class AtlasListItemFieldTests(TestCase):
     def setUp(self):
         self.admin = _make_user("admin", User.Role.ADMIN)
         _login(self.client, "admin")
-        self.list = create_atlas_list(self.admin, title="Groceries", list_type="grocery")
+        self.list = ensure_household_grocery_list(self.admin)
 
     def test_create_item_with_quantity_and_due(self):
         url = reverse("atlas-list-item-list", kwargs={"list_id": self.list.pk})
@@ -739,7 +821,7 @@ class DashboardClassificationRegressionTests(TestCase):
 
         todo_list = create_atlas_list(self.admin, title="Chores", list_type="todo")
         create_list_item(self.admin, todo_list, title="Mow the lawn")
-        grocery_list = create_atlas_list(self.admin, title="Grocery", list_type="grocery")
+        grocery_list = ensure_household_grocery_list(self.admin)
         create_list_item(self.admin, grocery_list, title="Milk")
         checklist = create_atlas_list(self.admin, title="Packing", list_type="checklist")
         create_list_item(self.admin, checklist, title="Passport")
@@ -752,7 +834,7 @@ class DashboardClassificationRegressionTests(TestCase):
 
         todo_list = create_atlas_list(self.admin, title="Chores", list_type="todo")
         create_list_item(self.admin, todo_list, title="Mow the lawn")
-        grocery_list = create_atlas_list(self.admin, title="Grocery", list_type="grocery")
+        grocery_list = ensure_household_grocery_list(self.admin)
         create_list_item(self.admin, grocery_list, title="Milk")
 
         titles = [item.title for item in selectors.list_grocery_items(self.admin)]
@@ -938,3 +1020,206 @@ class TodoNotificationOffsetTests(TestCase):
         )
         update_list_item(self.admin, item, notify_offsets=[])
         self.assertEqual(run_due_todo_offsets(), 0)
+
+
+class TodoOffsetValidationTests(TestCase):
+    """``notify_offsets`` is a JSONField, so its contents are whatever the client sent."""
+
+    def setUp(self):
+        self.admin = _make_user("offsetadmin", User.Role.ADMIN)
+        _login(self.client, "offsetadmin")
+        self.todo_list = create_atlas_list(self.admin, title="Household", list_type="todo")
+
+    def _post(self, payload):
+        body = {"title": "Renew licence", "due_at": _future(48).isoformat()}
+        body.update(payload)
+        return self.client.post(
+            f"/api/v1/atlas/lists/{self.todo_list.id}/items/", body,
+            content_type="application/json",
+        )
+
+    def test_malformed_offsets_are_a_client_error_not_a_crash(self):
+        """int("soon") raises. Every one of these must come back 400, never a 500."""
+        for bad in (["soon"], "60", {"at": 60}, [None], [[60]], [1.5], [True]):
+            with self.subTest(bad=bad):
+                self.assertEqual(self._post({"notify_offsets": bad}).status_code, 400, bad)
+
+    def test_negative_offsets_are_rejected(self):
+        self.assertEqual(self._post({"notify_offsets": [-60]}).status_code, 400)
+
+    def test_duplicate_offsets_are_normalised_rather_than_stored_twice(self):
+        resp = self._post({"notify_offsets": [1440, 60, 60, 1440, 0]})
+        self.assertEqual(resp.status_code, 201, resp.json())
+        # De-duplicated and sorted, so the scheduler cannot notify twice for one lead.
+        self.assertEqual(resp.json()["notify_offsets"], [0, 60, 1440])
+
+    def test_offsets_are_dropped_when_there_is_no_due_date(self):
+        """Nothing to count back from, so nothing may sit pending against it (D19 §F)."""
+        resp = self.client.post(
+            f"/api/v1/atlas/lists/{self.todo_list.id}/items/",
+            {"title": "Someday", "notify_offsets": [1440]},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.json())
+        self.assertEqual(resp.json()["notify_offsets"], [])
+
+    def test_removing_a_due_date_clears_the_offsets_it_was_anchored_to(self):
+        from apps.notifications.tasks import run_due_todo_offsets
+
+        item = create_list_item(
+            self.admin, self.todo_list, title="Renew licence",
+            due_at=timezone.now() + timezone.timedelta(minutes=30), notify_offsets=[60],
+        )
+        resp = self.client.patch(
+            f"/api/v1/atlas/lists/{self.todo_list.id}/items/{item.id}/",
+            {"due_at": None}, content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.json())
+        self.assertEqual(resp.json()["notify_offsets"], [])
+        self.assertEqual(run_due_todo_offsets(), 0)
+
+
+class TodoQuickCreateTests(TestCase):
+    """Calendar's "remind me" and the ambient Quick Add both land here (D19 §E).
+
+    The rule under test: capturing a reminder-shaped thing produces **one** To-do and no second
+    parallel record. Before v0.40 both flows created an ``AtlasReminder``, which then had its own
+    calendar entry and its own notification sweep.
+    """
+
+    def setUp(self):
+        self.admin = _make_user("quickadmin", User.Role.ADMIN)
+        self.member = _make_user("quickmember", User.Role.USER)
+        self.member_person = Person.objects.create(
+            household=get_active_household(), linked_user=self.member, display_name="Member",
+            created_by=self.admin, updated_by=self.admin,
+        )
+        _login(self.client, "quickadmin")
+        self.url = "/api/v1/atlas/todos/quick-create/"
+
+    def test_a_capture_with_no_assignee_lands_on_the_household_list(self):
+        resp = self.client.post(
+            self.url, {"title": "Collect parcel"}, content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.json())
+        from apps.atlas.models import AtlasList
+        atlas_list = AtlasList.objects.get(pk=resp.json()["atlas_list_id"])
+        self.assertEqual(atlas_list.list_type, "todo")
+        self.assertIsNone(atlas_list.owner_person_id)
+
+    def test_a_capture_for_one_person_lands_on_their_own_list(self):
+        resp = self.client.post(
+            self.url,
+            {"title": "Dentist", "assigned_to_person_ids": [self.member_person.id]},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.json())
+        from apps.atlas.models import AtlasList
+        atlas_list = AtlasList.objects.get(pk=resp.json()["atlas_list_id"])
+        self.assertEqual(atlas_list.owner_person_id, self.member_person.id)
+
+    def test_capturing_a_reminder_creates_no_parallel_reminder_object(self):
+        from apps.atlas.models import AtlasReminder
+
+        before = AtlasReminder.all_objects.count()
+        resp = self.client.post(
+            self.url,
+            {
+                "title": "Collect the turkey", "due_at": _future(24).isoformat(),
+                "is_all_day": False, "notify_offsets": [0],
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.json())
+        self.assertEqual(AtlasReminder.all_objects.count(), before)
+
+    def test_a_dated_capture_produces_exactly_one_calendar_entry(self):
+        resp = self.client.post(
+            self.url,
+            {"title": "Collect the turkey", "due_at": _future(24).isoformat()},
+            content_type="application/json",
+        )
+        item_id = resp.json()["id"]
+        events = CalendarEvent.objects.filter(title="Collect the turkey")
+        self.assertEqual(events.count(), 1)
+        self.assertEqual(events.get().source_record_type, "AtlasListItem")
+        self.assertEqual(events.get().source_record_id, item_id)
+
+    def test_an_ordinary_member_may_capture_a_todo(self):
+        _login(self.client, "quickmember")
+        resp = self.client.post(
+            self.url, {"title": "Bins out"}, content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.json())
+
+
+class TodoCrossHouseholdTests(TestCase):
+    """The one operation that can re-parent a row across households is "move to list".
+
+    HomeStack is one household per install (D1) and ``HouseholdManager`` documents its household
+    filtering as a deliberate structural no-op until multi-household is actually wanted — so a
+    second Household's rows are *not* hidden by the managers today. That makes the explicit
+    ``household_id`` check in ``move_list_item`` the thing standing between an item and another
+    household's list, which is what these tests pin down.
+    """
+
+    def setUp(self):
+        self.admin = _make_user("isoadmin", User.Role.ADMIN)
+        _login(self.client, "isoadmin")
+        from apps.core.models import Household
+        self.other_household = Household.objects.create(name="Next door")
+        self.mine = create_atlas_list(self.admin, title="Household", list_type="todo")
+        from apps.atlas.models import AtlasList
+        self.theirs = AtlasList.objects.create(
+            household=self.other_household, title="Theirs", list_type="todo",
+        )
+
+    def test_an_item_cannot_be_moved_into_another_households_list(self):
+        from apps.atlas.services import move_list_item
+
+        item = create_list_item(self.admin, self.mine, title="Mow the lawn")
+        with self.assertRaises(ValueError):
+            move_list_item(self.admin, item, self.theirs)
+        item.refresh_from_db()
+        self.assertEqual(item.atlas_list_id, self.mine.id)
+
+    def test_the_move_endpoint_refuses_another_households_list(self):
+        item = create_list_item(self.admin, self.mine, title="Mow the lawn")
+        resp = self.client.post(
+            f"/api/v1/atlas/lists/{self.mine.id}/items/{item.id}/move/",
+            {"destination_list_id": self.theirs.id}, content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        item.refresh_from_db()
+        self.assertEqual(item.atlas_list_id, self.mine.id)
+
+
+class DeletedPersonTodoListTests(TestCase):
+    """A personal To-do list must not outlive its owner holding unreachable work."""
+
+    def setUp(self):
+        self.admin = _make_user("goneadmin", User.Role.ADMIN)
+        _login(self.client, "goneadmin")
+        self.person = Person.objects.create(
+            household=get_active_household(), display_name="Housemate",
+            created_by=self.admin, updated_by=self.admin,
+        )
+
+    def test_deleting_a_person_rehomes_their_todos_and_retires_the_list(self):
+        from apps.atlas import selectors
+        from apps.atlas.services import ensure_household_todo_list, ensure_person_todo_list
+        from apps.people.services import delete_person
+
+        household_list = ensure_household_todo_list(self.admin)
+        personal = ensure_person_todo_list(self.person, self.admin)
+        create_list_item(self.admin, personal, title="Return the key")
+
+        delete_person(self.admin, self.person)
+
+        visible = {row.id for row in selectors.list_todo_lists(self.admin)}
+        self.assertNotIn(personal.id, visible, "a deleted person's list must not be shown")
+        self.assertIn(
+            "Return the key",
+            list(household_list.items.values_list("title", flat=True)),
+            "their outstanding work must not be stranded on a hidden list",
+        )

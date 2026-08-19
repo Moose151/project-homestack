@@ -86,11 +86,30 @@ are restorable.
 
 ### Legacy: AtlasReminder
 
-The pre-D19 `AtlasReminder` model still exists and still backs Calendar's own "quick-create a
-reminder" flow (a different surface from Atlas's own UI) — it is not exposed anywhere in Atlas's
-UI any more, and nothing new is created through Atlas itself as a `AtlasReminder`. Existing
-reminders were copied into the appropriate To-do list at migration time; the original rows are
-kept (not deleted) since Calendar's quick-create still depends on them.
+The pre-D19 `AtlasReminder` model still exists in the schema, but **nothing in the product
+creates, reads or schedules one**. It is archival data only.
+
+Both surfaces that used to create reminders now create To-dos through
+`POST /atlas/todos/quick-create/`, which routes the capture to the right list server-side (one
+named person means their personal list, otherwise Household):
+
+- Calendar's "Reminder" quick-create — "notify me" becomes a `notify_offsets` entry
+  (`[0]` at-time for a timed capture, `[1440]` day-before for an all-day one, `[]` when the
+  notification switch is off).
+- The ambient Quick Add card, whose "reminder" option is now "to-do".
+
+The `atlas.0010` migration converted every existing reminder into a To-do and then **retired**
+the reminder: it is soft-deleted, its `calendar_event_id` is cleared, and its existing
+`CalendarEvent` is repointed at the new To-do rather than duplicated.
+
+Retiring them is not tidiness — it is required for correctness. An `AtlasReminder` and an
+`AtlasListItem` are both `CalendarSyncMixin` records, and a live reminder is swept for
+notifications by `run_due_reminders` while its To-do copy is swept by `run_due_todo_offsets`.
+Leaving both active would give one household job two calendar entries and two notifications.
+
+For the same reason `_reminder_events()` in `apps.notifications.tasks` explicitly excludes
+`AtlasListItem`-sourced calendar events: a To-do's notifications are its `notify_offsets` and
+nothing else, so the fixed 24h/morning-of leads must not fire for it as well.
 
 ## 6. Lists & Notes (D19 §H)
 

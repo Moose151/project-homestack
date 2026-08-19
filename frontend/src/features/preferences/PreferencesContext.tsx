@@ -15,7 +15,7 @@ import type { UserPreferences } from '../../api/types'
  * nodes the user can actually see, so a stale key for something now hidden stays hidden.
  */
 
-const EMPTY: UserPreferences = { tab_order: {}, mobile_nav: [] }
+const EMPTY: UserPreferences = { tab_order: {}, mobile_nav: [], sidebar_collapsed: false }
 
 /**
  * Trust the shape, not the payload. Preferences drive navigation and the landing tab, so a
@@ -35,6 +35,7 @@ function normalise(raw: unknown): UserPreferences {
       )
       : {},
     mobile_nav: Array.isArray(mobileNav) ? mobileNav.filter(key => typeof key === 'string') : [],
+    sidebar_collapsed: source.sidebar_collapsed === true,
   }
 }
 
@@ -45,6 +46,7 @@ interface PreferencesCtx {
   resetTabOrder: (pageKey: string) => Promise<void>
   setMobileNav: (keys: string[]) => Promise<void>
   resetMobileNav: () => Promise<void>
+  setSidebarCollapsed: (collapsed: boolean) => Promise<void>
 }
 
 const Ctx = createContext<PreferencesCtx>({
@@ -54,6 +56,7 @@ const Ctx = createContext<PreferencesCtx>({
   resetTabOrder: async () => {},
   setMobileNav: async () => {},
   resetMobileNav: async () => {},
+  setSidebarCollapsed: async () => {},
 })
 
 /** The pre-server key the mobile dock used, migrated once then removed. */
@@ -128,6 +131,13 @@ export function PreferencesProvider({ userId, children }: { userId: number | nul
     await commit({ ...preferences, mobile_nav: keys }, { mobile_nav: keys })
   }, [commit, preferences])
 
+  const setSidebarCollapsed = useCallback(async (collapsed: boolean) => {
+    await commit(
+      { ...preferences, sidebar_collapsed: collapsed },
+      { sidebar_collapsed: collapsed },
+    )
+  }, [commit, preferences])
+
   const resetMobileNav = useCallback(async () => {
     const previous = preferences
     setPreferences({ ...preferences, mobile_nav: [] })
@@ -139,7 +149,10 @@ export function PreferencesProvider({ userId, children }: { userId: number | nul
   }, [preferences])
 
   return (
-    <Ctx.Provider value={{ preferences, loading, setTabOrder, resetTabOrder, setMobileNav, resetMobileNav }}>
+    <Ctx.Provider value={{
+      preferences, loading, setTabOrder, resetTabOrder, setMobileNav, resetMobileNav,
+      setSidebarCollapsed,
+    }}>
       {children}
     </Ctx.Provider>
   )

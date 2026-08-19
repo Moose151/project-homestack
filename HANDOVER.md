@@ -122,6 +122,8 @@ Important newer/current specs:
 - `36_Mobile_UX_Strategy_and_Implementation_Plan.md` — the phone experience contract.
 - `38_Calendar_Sources.md` — managed calendar sources: holiday/school providers, ICS
   subscriptions and imports, sync semantics, the SSRF network boundary and the refresh cron.
+- `39_Core_Quick_Launch.md` — per-user shortcuts, the target registry, the `/launch/<uuid>`
+  contract, the security model, and why this is distinct from the mobile bottom nav.
 
 `VERSION_HISTORY.md` is the release chronology. Do not duplicate that history here.
 
@@ -162,7 +164,13 @@ Major shipped areas include:
   active Person, with configurable notification offsets and a Today view), Lists & Notes
   (checklists + notes), Agenda/Appointments & events/People & Pet birthdays. The old
   Grocery/Shopping split and the standalone Atlas "Reminder" object were retired in favour of
-  this simplified model — see `docs/11_Node_Atlas.md`.
+  this simplified model — see `docs/11_Node_Atlas.md`. `AtlasReminder` survives as archival data
+  only: nothing creates, reads or schedules one, Calendar's "Reminder" action and the ambient
+  Quick Add both create To-dos through `POST /atlas/todos/quick-create/`, and a To-do's
+  notifications come solely from its own `notify_offsets`.
+- **Quick Launch (v0.40)** — per-user shortcuts to the places someone actually goes, resolved to
+  a route at launch time so a saved shortcut never grants access or outlives its destination.
+  See `docs/39_Core_Quick_Launch.md`.
 - Native Meridian tasks/rewards/points workflows.
 - Education, Home Wiki and Pets.
 - **Books** personal shelves, per-User ratings/notes and shared Book Clubs/up-next queue.

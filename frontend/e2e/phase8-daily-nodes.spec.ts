@@ -22,10 +22,13 @@ test.describe('phone', () => {
     test.skip(testInfo.project.name === 'tablet-768', 'phone-only: each page splits mobile/desktop at its own sm: breakpoint')
   })
 
+  // The fixtures below are `checklist` lists on purpose. Since v0.40 the Lists tab renders only
+  // Lists & Notes lists (checklist/general) — Grocery and To-dos have their own tabs — so a
+  // `todo` fixture here would simply never appear and the test would fail for the wrong reason.
   test('Atlas: the Lists tab shows summary rows on phone, and tapping one opens the list in a focused sheet', async ({ page }) => {
     await mockAuthenticatedApi(page, {
       '/api/v1/atlas/lists/': [{
-        id: 1, title: 'Groceries run', list_type: 'todo', visibility: 'household', owner_person_id: null,
+        id: 1, title: 'Bunnings run', list_type: 'checklist', visibility: 'household', owner_person_id: null,
         items: [{
           id: 1, atlas_list_id: 1, title: 'Milk', notes: '', quantity: '', priority: '', position: 0,
           due_at: null, calendar_event_id: null, product_url: '', source_image_url: '', cached_image_url: '',
@@ -50,7 +53,7 @@ test.describe('phone', () => {
   test('Atlas: a cold item deep link opens the focused list sheet on phone', async ({ page }) => {
     await mockAuthenticatedApi(page, {
       '/api/v1/atlas/lists/': [{
-        id: 4, title: 'Packing list', list_type: 'todo', visibility: 'household', owner_person_id: null,
+        id: 4, title: 'Packing list', list_type: 'checklist', visibility: 'household', owner_person_id: null,
         items: [{
           id: 44, atlas_list_id: 4, title: 'Passports', notes: '', quantity: '', priority: '', position: 0,
           due_at: null, calendar_event_id: null, product_url: '', source_image_url: '', cached_image_url: '',

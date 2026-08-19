@@ -9,14 +9,18 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import User
-from apps.atlas.services import create_atlas_list, create_list_item, create_reminder
+from apps.atlas.services import (
+    create_atlas_list, create_list_item, create_reminder, ensure_household_grocery_list,
+)
 from apps.books.services import create_personal_entry, update_personal_entry
 from apps.core.models import get_active_household
 from apps.hub.models import HouseholdHubWidget, HubWidget
 from apps.meridian import services as meridian
 from apps.nodes.models import HouseholdNode
 from apps.notifications import device_naming, selectors, services
-from apps.notifications.models import Notification, PushDevice, UserNotificationSettings
+from apps.notifications.models import (
+    Notification, NotificationReminderLog, PushDevice, UserNotificationSettings,
+)
 from apps.notifications.tasks import run_countdown_digest, run_due_reminders
 from apps.people.models import Person
 from apps.scheduling.services import create_event
@@ -686,7 +690,7 @@ class HouseholdActivityDispatcherTests(TestCase):
             household=self.other.household, user=self.other,
             endpoint="https://push.example/other", p256dh="p", auth="a",
         )
-        atlas_list = create_atlas_list(self.actor, title="Groceries", list_type="grocery")
+        atlas_list = ensure_household_grocery_list(self.actor)
         with override_settings(**_VAPID_SETTINGS), \
                 patch("apps.notifications.push._send_to_device") as send:
             create_list_item(self.actor, atlas_list, title="Milk")
@@ -701,13 +705,13 @@ class HouseholdActivityDispatcherTests(TestCase):
         self.assertEqual(self._unread_for(self.other, "scheduling").count(), 0)
 
     def test_atlas_list_additions_are_bundled_not_spammed(self):
-        atlas_list = create_atlas_list(self.actor, title="Groceries", list_type="grocery")
+        atlas_list = ensure_household_grocery_list(self.actor)
         create_list_item(self.actor, atlas_list, title="Milk")
         create_list_item(self.actor, atlas_list, title="Eggs")
         create_list_item(self.actor, atlas_list, title="Bread")
         notes = self._unread_for(self.other, "atlas")
         self.assertEqual(notes.count(), 1)
-        self.assertIn("Groceries", notes.first().title)
+        self.assertIn("Grocery", notes.first().title)
         self.assertEqual(notes.first().message, "Bread")  # updated in place to the latest addition
 
     def test_private_atlas_list_does_not_notify_others(self):
@@ -735,7 +739,7 @@ class HouseholdActivityDispatcherTests(TestCase):
 
     def test_disabling_household_activity_suppresses_its_sources(self):
         services.set_preference(self.other, category="household_activity", in_app_enabled=False, push_enabled=False)
-        atlas_list = create_atlas_list(self.actor, title="Groceries", list_type="grocery")
+        atlas_list = ensure_household_grocery_list(self.actor)
         create_list_item(self.actor, atlas_list, title="Milk")
         create_personal_entry(self.actor, book={"title": "Dune"}, status="history")
         self.assertEqual(Notification.objects.filter(recipient_user=self.other, is_read=False).count(), 0)
@@ -786,16 +790,51 @@ class ScheduledReminderTests(TestCase):
         result = run_due_reminders()
         self.assertEqual(result["24h"], 0)
 
-    def test_atlas_item_due_tomorrow_uses_assigned_tasks_category(self):
+    def test_a_todo_is_notified_by_its_own_offsets_not_the_fixed_sweep(self):
+        """A To-do's notifications are its ``notify_offsets`` and nothing else (D19 §F).
+
+        Regression for the v0.40 integration: a To-do's due date syncs an Atlas-sourced calendar
+        event, which the fixed 24h/morning-of sweep here used to pick up as well. A household
+        that selected "1 day before" would then have been told twice about the same occurrence
+        — once by this sweep and once by run_due_todo_offsets.
+        """
+        from apps.notifications.tasks import run_due_todo_offsets
+
         atlas_list = create_atlas_list(self.parent, title="Chores", list_type="todo")
         due = timezone.now() + timedelta(hours=24)
-        create_list_item(self.parent, atlas_list, title="Take out bins", due_at=due)
-        run_due_reminders()
+        create_list_item(
+            self.parent, atlas_list, title="Take out bins", due_at=due, notify_offsets=[1440],
+        )
+
+        self.assertEqual(run_due_reminders()["24h"], 0)
+        self.assertFalse(
+            Notification.objects.filter(source_node="atlas", title="Due tomorrow").exists()
+        )
+
+        self.assertEqual(run_due_todo_offsets(), 1)
         notes = Notification.objects.filter(
-            recipient_user=self.other, source_node="atlas", title="Due tomorrow",
+            recipient_user=self.other, source_node="atlas", title="Due in 1 day",
         )
         self.assertEqual(notes.count(), 1)
         self.assertEqual(notes.first().message, "Take out bins")
+
+    def test_a_todo_with_no_offsets_is_not_notified_at_all(self):
+        """Empty ``notify_offsets`` means "no notifications" (the field's own contract) — the
+        fixed sweep must not quietly reinstate one."""
+        from apps.notifications.tasks import run_due_todo_offsets
+
+        atlas_list = create_atlas_list(self.parent, title="Chores", list_type="todo")
+        due = timezone.now() + timedelta(hours=24)
+        create_list_item(self.parent, atlas_list, title="Silent job", due_at=due)
+
+        run_due_reminders()
+        run_due_todo_offsets()
+        # "Actor added Silent job" household-activity notifications are a different feature and
+        # are expected; what must not exist is any *scheduled reminder* for this item.
+        self.assertFalse(
+            Notification.objects.filter(message="Silent job", title__startswith="Due").exists()
+        )
+        self.assertFalse(NotificationReminderLog.objects.filter(record_type="AtlasListItem").exists())
 
     def test_scheduled_reminder_notifies_only_its_selected_recipient(self):
         recipient = _make_person("Other", linked_user=self.other)

@@ -22,6 +22,7 @@ from apps.atlas.views import (
     ReminderDetailView,
     ReminderListView,
     TodoListsView,
+    TodoQuickCreateView,
     TodoTodayView,
 )
 
@@ -44,6 +45,7 @@ urlpatterns = [
     # To-dos — Household + one list per active Person (D19 §D)
     path("todos/lists/", TodoListsView.as_view(), name="atlas-todo-lists"),
     path("todos/today/", TodoTodayView.as_view(), name="atlas-todo-today"),
+    path("todos/quick-create/", TodoQuickCreateView.as_view(), name="atlas-todo-quick-create"),
 
     # Lists
     path("lists/", ListListView.as_view(), name="atlas-list-list"),

@@ -9,9 +9,9 @@
 
 ---
 
-## 0.40 — Atlas, simplified
+## 0.40 — Faster everyday household coordination
 
-### 0.40.0 — 2026-08-19 — Grocery, To-dos and Lists & Notes replace the old Atlas grab-bag
+### 0.40.0 — 2026-08-19 — Atlas simplified, Quick Launch and faster everyday navigation
 - **Atlas is now three things: Grocery, To-dos, and Lists & Notes.** The previous Grocery/Shopping
   split, the separate Reminders tab, and the generic multi-type Lists tab are gone, replaced by a
   model matched to how Atlas actually gets used — quickly, often from a phone, without choosing
@@ -54,11 +54,43 @@
   Instead of scrolling a 60-row minute list, it now offers direct keyboard entry (type the hour
   and minute, or press Enter/→ to move between them) alongside a one-click grid of common
   hour/minute values and a clear AM/PM toggle. Mobile keeps its native time picker.
-- Existing Grocery data, and existing Reminders, were preserved rather than discarded: duplicate
-  grocery/To-do lists were merged rather than deleted, and every existing Reminder was copied into
-  the right To-do list (its sole assignee's personal list, or Household). The underlying legacy
-  `AtlasReminder` records themselves were kept, not removed, since Calendar's own "quick-create a
-  reminder" shortcut still uses them.
+- Existing Grocery data, and existing Reminders, were preserved rather than discarded.
+  **Every** existing grocery list is folded into the single household one — including per-person
+  grocery lists, whose items would otherwise have been left on a list the product no longer shows.
+  The extra lists are retired (soft-deleted), never destroyed. Personal To-do lists belonging to
+  people who have since been removed are retired the same way, with their outstanding items moved
+  to the Household list rather than left somewhere unreachable.
+- Every existing Reminder became a To-do on the right list (its sole assignee's personal list, or
+  Household), carrying its title, notes, due date and notification intent across. The reminder
+  itself is then **retired**, and its existing calendar entry is handed to the new To-do rather
+  than duplicated: a migrated reminder therefore produces exactly one calendar entry and exactly
+  one notification per selected offset, not two of each. The legacy `AtlasReminder` rows survive
+  as archival data but no longer take part in any calendar or notification workflow, and nothing
+  in the product creates new ones — Calendar's "Reminder" action and the ambient Quick Add both
+  create a To-do now.
+- **One Grocery list is enforced by the backend, not just the interface.** The general-purpose
+  list endpoints, which predate this release and are still used for Lists & Notes, now refuse to
+  create or convert a second Grocery list — so the per-person split this release merges away
+  cannot quietly come back through an older code path.
+
+### Quick Launch, Log run and a collapsible sidebar
+
+- **Quick Launch** adds personal shortcuts to the places you actually use most. A shortcut can
+  point deeper than a section — for example a particular list, room, upcoming bills, or the
+  Log run form. Shortcuts are personal, ordered by the user and follow the account between
+  devices. They remain navigation only and never bypass the underlying permissions or
+  sensitive-node re-authentication requirements.
+- **Log run** provides a fast running-specific entry flow inside Fitness. Enter distance,
+  duration and time and HomeStack calculates average pace while preserving the workout as an
+  ordinary Fitness history record, rather than creating a second parallel exercise history.
+- **The desktop sidebar can now collapse to a compact icon rail**, recovering substantial
+  horizontal space for pages such as Calendar while keeping every destination accessible.
+  The preference is stored against the user's account; mobile navigation is unchanged.
+- Quick Launch's Atlas destinations match the simplified Atlas: Grocery and To-dos are their own
+  one-tap destinations, a shortcut can point at an individual Lists & Notes list or an individual
+  to-do list, and the old "Reminders" destination — which pointed at a tab that no longer
+  exists — is gone. A saved shortcut to a removed destination reports itself as unavailable
+  rather than silently landing somewhere else.
 
 ## 0.39 — Calendars beyond HomeStack, and an interface you arrange
 

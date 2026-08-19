@@ -23,7 +23,10 @@ class HomeFinanceOwnershipMigrationTests(TransactionTestCase):
         Bill = old_apps.get_model("solace", "Bill")
         InsurancePolicy = old_apps.get_model("homestead", "InsurancePolicy")
         HouseholdCost = old_apps.get_model("homestead", "HouseholdCost")
-        household = Household.objects.first()
+        # A TransactionTestCase truncates every table when it finishes, taking the
+        # migration-seeded Household with it, so a migration test cannot assume an
+        # earlier one left it in place. Same defensive fixture as apps.solace's.
+        household = Household.objects.first() or Household.objects.create(name="Home")
         due_at = timezone.make_aware(datetime(2026, 8, 12, 0, 0))
 
         linked_bill = Bill.objects.create(

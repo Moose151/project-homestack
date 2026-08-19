@@ -54,6 +54,13 @@ def _reminder_events():
     ).exclude(
         source_record_type="AtlasReminder", source_record_id__in=disabled_reminder_ids,
     ).exclude(
+        # A To-do's notifications are entirely its own ``notify_offsets`` (D19 §F), delivered by
+        # run_due_todo_offsets below. Its calendar entry is an Atlas-sourced event, so without
+        # this exclusion the fixed 24h/morning-of leads here would fire *as well* — a To-do with
+        # "1 day before" selected would be announced twice for the same occurrence. One To-do
+        # plus one selected offset must mean exactly one notification.
+        source_record_type="AtlasListItem",
+    ).exclude(
         # Calendar-source entries look like standalone events (no source_node), so without this
         # a subscribed season would notify the household about every single fixture and every
         # public holiday. A source stays silent unless it was deliberately switched on.

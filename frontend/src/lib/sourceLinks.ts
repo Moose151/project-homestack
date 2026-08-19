@@ -25,10 +25,13 @@ export function sourcePath(ref: SourceRef): string | null {
   const query = encodeURIComponent(ref.title)
   switch (ref.source_node) {
     case 'atlas':
-      if (ref.source_record_type === 'AtlasListItem' && ref.source_record_id) return `/atlas?tab=lists&item=${ref.source_record_id}`
-      if (ref.source_record_type === 'AtlasList' && ref.source_record_id) return `/atlas?tab=lists&list=${ref.source_record_id}`
-      if (ref.source_record_type === 'AtlasReminder' && ref.source_record_id) return `/atlas?tab=reminders&reminder=${ref.source_record_id}`
-      return `/atlas?tab=reminders&q=${query}`
+      // Atlas has no Reminders tab since v0.40 (D19 §E). A dated Atlas item is a to-do, and
+      // the page resolves a bare `?item=` to whichever tab actually holds it, so no tab is
+      // guessed here. Legacy AtlasReminder rows were converted to to-dos by atlas.0010 and
+      // their calendar entries repointed, so that branch only ever sees archival data.
+      if (ref.source_record_type === 'AtlasListItem' && ref.source_record_id) return `/atlas?item=${ref.source_record_id}`
+      if (ref.source_record_type === 'AtlasList' && ref.source_record_id) return `/atlas?list=${ref.source_record_id}`
+      return `/atlas?tab=todos&q=${query}`
     case 'pets':
       if (ref.source_record_id) {
         if (ref.source_record_type === 'PetAppointment') return `/pets?tab=appointments&appointment=${ref.source_record_id}`
