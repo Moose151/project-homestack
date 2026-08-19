@@ -448,6 +448,10 @@ Useful modes:
 
 # First-time marker setup only; use the SHA already running in production containers
 ./scripts/deploy-production.sh --bootstrap-deployed-sha <sha-currently-running-in-production>
+
+# After a manual rollback (section 13) has been built, promoted and fully validated: record
+# that commit as the deployed marker. Does not fetch/build/recreate/reload/move the checkout.
+./scripts/deploy-production.sh --record-rollback-sha <rollback-sha>
 ```
 
 The script tracks deployment state separately from Git checkout state in
@@ -495,10 +499,19 @@ The phases are printed in the terminal as they run:
 2. **Backup gate** — requires the newest `/app/backups/backup_YYYYMMDD_HHMMSS/` directory to be
    recent enough and to contain non-empty `db.dump` and `media.tar.gz`. If this fails, create a
    backup through HomeStack and retry.
-3. **Git update** — `git fetch origin`, confirms the relationship again and fast-forwards `main`
-   with `--ff-only`. Divergence or local-ahead state stops the deploy. The only genuine no-op is
-   when the fetched `origin/main` target equals `.git/homestack-deployed-sha`; a checkout already at
-   the target still deploys when the marker records an older successfully deployed SHA.
+3. **Git update** — `git fetch origin`, confirms the relationship again, resolves the target SHA and
+   validates that the recorded deployed SHA is either equal to it or a true Git ancestor of it
+   (`git merge-base --is-ancestor`). A marker pointing at an unrelated or non-ancestor commit stops
+   the deploy with an explicit lineage error instead of silently continuing — that state means
+   deployment tracking itself cannot be trusted and needs manual inspection. Once lineage checks
+   out, the script fast-forwards `main` with `--ff-only`; divergence or local-ahead state stops the
+   deploy. The only genuine no-op is when the fetched `origin/main` target equals
+   `.git/homestack-deployed-sha`; a checkout already at the target still deploys when the marker
+   records an older successfully deployed SHA. If the marker already equals the target but the local
+   checkout is merely behind it, the script fast-forwards the local checkout only — it does not
+   recreate containers or touch the marker. Deployed-SHA values are always normalised to the full
+   commit SHA (`git rev-parse <ref>^{commit}`) wherever they are read, written or compared, so an
+   abbreviated bootstrap SHA is never compared literally against a full `origin/main` SHA.
 4. **Build before promotion** — builds `homestack-backend` and `homestack-frontend` before any
    running application container is recreated.
 5. **Migration handling** — always runs `python manage.py check` from the newly built backend
@@ -628,29 +641,63 @@ Cheaper outcomes come first:
 - **Frontend promotion failed** — backend may already be on the new image; decide whether to fix
   frontend forward or roll both app services back.
 
-Manual code rollback, once new containers are already live:
+Manual code rollback, once new containers are already live. This procedure deliberately keeps
+`.git/homestack-deployed-sha` untouched until the rollback has fully proven itself, and only then
+records it and returns the checkout to `main` — so the marker never claims success before it is
+true, and the running containers are never rebuilt a second time just to move Git back:
 
 ```bash
 cd /opt/docker/project-homestack
 git fetch origin
+
+# 1. Check out and build the rollback commit. This does not delete or recreate volumes.
 git checkout <rollback-sha-from-the-deploy-output>
 docker compose build homestack-backend homestack-frontend
+
+# 2. Recreate and validate the backend only.
 docker compose up -d --no-deps --force-recreate homestack-backend
 # wait for homestack-backend healthy
 docker exec nginx-proxy-manager nginx -t
 docker exec nginx-proxy-manager nginx -s reload
 curl -fsS https://homestack.moosesoftwares.com/api/v1/health/; echo
+docker exec homestack-backend python manage.py shell -c \
+  "from django.db import connection; connection.ensure_connection(); print('db-ok')"
+
+# 3. Recreate and validate the frontend only.
 docker compose up -d --no-deps --force-recreate homestack-frontend
 # wait for homestack-frontend healthy
 docker exec nginx-proxy-manager nginx -t
 docker exec nginx-proxy-manager nginx -s reload
-curl -fsS https://homestack.moosesoftwares.com/api/v1/health/; echo
 curl -fsS -o /dev/null -w '%{http_code}\n' https://homestack.moosesoftwares.com/
+
+# 4. Re-check the hardened topology exactly as the deploy script does: frontend on `proxy`
+#    only, backend on `proxy` + `project-homestack_private`, PostgreSQL on
+#    `project-homestack_private` only, and no published 5432/8000/5173 (see section 12).
+docker compose ps
+for c in homestack-frontend homestack-backend homestack-postgres; do
+  echo "$c:"; docker inspect "$c" --format '{{range $n,$_ := .NetworkSettings.Networks}}{{println $n}}{{end}}'
+done
+docker port homestack-postgres 5432/tcp; docker port homestack-backend 8000/tcp; docker port homestack-frontend 5173/tcp
+
+# 5. ONLY once every check above has passed, atomically record the rollback commit as the
+#    deployed marker. This does not build, recreate containers, or move the checkout.
+./scripts/deploy-production.sh --record-rollback-sha <rollback-sha-from-the-deploy-output>
+
+# 6. Now return the working checkout to main. This does NOT rebuild or recreate containers,
+#    so homestack-backend/homestack-frontend remain on the rollback code just validated above.
+git checkout main
 ```
 
-Do not delete or recreate data volumes during code rollback. If the deployment used `--migrate`,
-rolling code back may also require separate migration/recovery analysis. Do not assume the old code
-can read a newer schema until the migration has been reviewed.
+After this, the deployed marker accurately records the rollback SHA, Git is back on `main`, and
+the containers are still serving the validated rollback code — so the next normal
+`./scripts/deploy-production.sh` run correctly sees `origin/main` differ from the deployed
+rollback SHA and deploys forward normally instead of treating the rollback as already current.
+
+Do not record the marker before every validation step above has passed. Do not delete or recreate
+data volumes during code rollback. If the deployment used `--migrate`, rolling code back may also
+require separate migration/recovery analysis — code-only rollback is not automatically safe once
+migrations have been applied. Do not assume the old code can read a newer schema until the
+migration has been reviewed.
 
 Symptom-specific guidance:
 

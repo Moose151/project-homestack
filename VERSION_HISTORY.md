@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.39.2**
+> **Current version: 0.39.3**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,29 @@
 ---
 
 ## 0.39 — Calendars beyond HomeStack, and an interface you arrange
+
+### 0.39.3 — 2026-08-19 — Supported production deployment and deployed-state tracking
+- **`scripts/deploy-production.sh` is now the supported safe production deployment workflow.**
+  Manual rollback no longer leaves deployment-state tracking wrong: the documented rollback
+  procedure records the rollback commit as the deployed marker only after the rollback has been
+  checked out, built, promoted and fully validated (backend, NPM config test/reload, API/DB
+  health, frontend, and the hardened Docker topology), then returns the working checkout to
+  `main` without rebuilding or recreating containers a second time — so the containers stay on
+  the validated rollback code, and the next normal deploy correctly sees `main` differ from the
+  recorded rollback SHA and proceeds. A new `--record-rollback-sha` option performs that marker
+  update on its own; it never touches containers, migrations or the checkout.
+- **The deployed-state marker (`.git/homestack-deployed-sha`) now fails closed if it does not
+  make sense.** After fetching `origin` and resolving the deploy target, the script requires the
+  recorded deployed SHA to be a genuine Git ancestor of the target (or equal to it) before doing
+  anything else. A marker pointing at an unrelated commit — for example after manual repository
+  surgery — now stops the deploy with a clear lineage error instead of silently continuing.
+- **Deployed SHA values are always normalised to the full commit SHA**, on every read, write and
+  comparison, so an abbreviated `--bootstrap-deployed-sha` no longer risks being compared
+  literally against a full `origin/main` SHA.
+- If the recorded deployed SHA already matches the fetch target but the local checkout is merely
+  behind it, the script now safely fast-forwards the local checkout before reporting the
+  production no-op, instead of leaving the repository behind `origin/main`. This still recreates
+  no containers and changes no deployment-state marker.
 
 ### 0.39.2 — 2026-08-18 — Household location saves, and the Calendar toolbar reflows
 - **Fixed: the household location would not save.** Choosing a country, state and local area in

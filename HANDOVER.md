@@ -303,13 +303,16 @@ Frontend is attached only to `proxy`; backend is attached to `proxy` plus
 `project-homestack_private`; PostgreSQL is attached only to `project-homestack_private`.
 Development Compose remains isolated on `homestack_dev`.
 
-**Deployment automation status (v0.37.6):** `scripts/deploy-production.sh` is prepared for review.
-It performs preflight, backup freshness/completeness gating, fast-forward-only Git update,
-build-before-promotion, explicit `--migrate` handling, backend/frontend recreation one at a time,
-NPM `nginx -t`/reload after each app-container promotion, HTTPS/API checks and final topology
-validation. It tracks the last successfully deployed commit in `.git/homestack-deployed-sha` and
-updates that marker only after the full deployment succeeds. Do not use it for a live deployment
-until the branch has been reviewed and merged.
+**Deployment automation status (v0.39.3):** `scripts/deploy-production.sh` is the supported safe
+production deployment workflow and is prepared for review. It performs preflight, backup
+freshness/completeness gating, fast-forward-only Git update, build-before-promotion, explicit
+`--migrate` handling, backend/frontend recreation one at a time, NPM `nginx -t`/reload after each
+app-container promotion, HTTPS/API checks and final topology validation. It tracks the last
+successfully deployed commit in `.git/homestack-deployed-sha`, updates that marker only after the
+full deployment succeeds, always normalises SHAs to the full commit hash, and fails closed if the
+marker is not a Git ancestor of the deploy target. `--record-rollback-sha` lets an operator record
+a manually validated rollback as the deployed marker without touching containers or the checkout.
+Do not use it for a live deployment until the branch has been reviewed and merged.
 
 Explicitly avoid generic plugins/integrations, Kubernetes/microservices, Redis/Celery without
 measured need, or public exposure before the Security Architecture gate is satisfied.

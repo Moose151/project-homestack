@@ -19,6 +19,7 @@ reset_state() {
   SKIP_BACKUP_AGE_CHECK=0
   DRY_RUN=0
   BOOTSTRAP_DEPLOYED_SHA=""
+  RECORD_ROLLBACK_SHA=""
   HEALTH_TIMEOUT=1
   HEALTH_INTERVAL=1
   BACKUP_MAX_AGE_HOURS=24
@@ -202,6 +203,7 @@ setup_mock_deploy() {
   DEPLOYED_SHA_FILE="$state"
   printf '%s\n' "$deployed" > "$state"
   require_valid_commit() { :; }
+  resolve_full_sha() { printf '%s\n' "$1"; }
   require_repo_dir() { :; }
   require_branch_main() { :; }
   require_clean_tree() { :; }
@@ -225,6 +227,7 @@ setup_mock_deploy() {
       "rev-parse origin/main") printf '%s\n' "$MOCK_TARGET_SHA" ;;
       "fetch origin") return 0 ;;
       "merge --ff-only origin/main") return 0 ;;
+      "merge-base --is-ancestor "*) return 0 ;;
       *) command git "$@" ;;
     esac
   }
@@ -332,6 +335,88 @@ test_checkout_at_target_with_deployed_marker_at_target_noops() {
   [[ "$(tr -d '[:space:]' < "$state")" == "target-sha" ]]
 }
 
+test_deployed_target_checkout_behind_fast_forwards() {
+  local state ff_marker
+  state="$(mktemp)"
+  ff_marker="$(mktemp -u)"
+  printf 'target-sha\n' > "$state"
+  DEPLOYED_SHA_FILE="$state"
+  CHECKOUT_SHA="old-sha"
+  require_valid_commit() { :; }
+  resolve_full_sha() { printf '%s\n' "$1"; }
+  require_main_not_ahead_or_diverged() { :; }
+  git() {
+    case "$*" in
+      "rev-parse origin/main") printf 'target-sha\n' ;;
+      "fetch origin") return 0 ;;
+      "merge --ff-only origin/main") printf 'merged\n' > "$ff_marker" ;;
+      *) command git "$@" ;;
+    esac
+  }
+  DEPLOYED_SHA="$(read_deployed_sha)"
+  ( git_update ) || true
+  [[ -f "$ff_marker" ]] || return 1
+  [[ "$(tr -d '[:space:]' < "$state")" == "target-sha" ]]
+}
+
+test_bootstrap_normalises_abbreviated_sha() {
+  local short full state
+  short="$(git rev-parse --short HEAD)"
+  full="$(git rev-parse HEAD)"
+  state="$(mktemp -u)"
+  DEPLOYED_SHA_FILE="$state"
+  BOOTSTRAP_DEPLOYED_SHA="$short"
+  require_repo_dir() { :; }
+  require_branch_main() { :; }
+  require_clean_tree() { :; }
+  bootstrap_deployed_sha >/dev/null
+  [[ "$(tr -d '[:space:]' < "$state")" == "$full" ]]
+}
+
+make_unrelated_commit() {
+  git commit-tree "$(git rev-parse HEAD^{tree})" -m "test unrelated commit $$-$RANDOM"
+}
+
+test_ancestry_rejects_unrelated_deployed_sha() {
+  DEPLOYED_SHA="$(make_unrelated_commit)"
+  TARGET_SHA="$(git rev-parse HEAD)"
+  require_deployed_sha_lineage
+}
+
+test_ancestry_accepts_equal_deployed_and_target() {
+  DEPLOYED_SHA="$(git rev-parse HEAD)"
+  TARGET_SHA="$DEPLOYED_SHA"
+  require_deployed_sha_lineage
+}
+
+test_rollback_marker_unchanged_when_recording_not_confirmed() {
+  local state
+  state="$(mktemp)"
+  printf 'old-deployed-sha\n' > "$state"
+  DEPLOYED_SHA_FILE="$state"
+  require_repo_dir() { :; }
+  require_clean_tree() { :; }
+  RECORD_ROLLBACK_SHA=""
+  if ( record_rollback_deployed_sha ) 2>/dev/null; then
+    return 1
+  fi
+  [[ "$(tr -d '[:space:]' < "$state")" == "old-deployed-sha" ]]
+}
+
+test_record_rollback_sha_stores_rollback_sha() {
+  local state
+  state="$(mktemp)"
+  printf 'old-deployed-sha\n' > "$state"
+  DEPLOYED_SHA_FILE="$state"
+  require_valid_commit() { :; }
+  resolve_full_sha() { printf '%s\n' "$1"; }
+  require_repo_dir() { :; }
+  require_clean_tree() { :; }
+  RECORD_ROLLBACK_SHA="rollback-sha"
+  record_rollback_deployed_sha >/dev/null
+  [[ "$(tr -d '[:space:]' < "$state")" == "rollback-sha" ]]
+}
+
 expect_failure "dirty Git tree rejects deployment" test_dirty_git_rejected
 expect_failure "wrong branch rejects deployment" test_wrong_branch_rejected
 expect_failure "missing proxy network rejects deployment" test_missing_proxy_network_rejected
@@ -350,6 +435,12 @@ expect_success "retry after failed deployment proceeds when Git is already at ta
 expect_success "initial run without --migrate followed by retry with --migrate proceeds" test_initial_without_migrate_then_retry_with_migrate_proceeds
 expect_success "checkout at target with older deployed marker still deploys" test_checkout_at_target_with_older_deployed_marker_deploys
 expect_success "checkout at target with deployed marker at target gives genuine no-op" test_checkout_at_target_with_deployed_marker_at_target_noops
+expect_success "deployed target with checkout behind fast-forwards without redeploying" test_deployed_target_checkout_behind_fast_forwards
+expect_success "abbreviated bootstrap SHA is normalised to full SHA" test_bootstrap_normalises_abbreviated_sha
+expect_failure "deployed marker pointing to an unrelated commit is rejected" test_ancestry_rejects_unrelated_deployed_sha
+expect_success "deployed marker equal to target passes ancestry validation" test_ancestry_accepts_equal_deployed_and_target
+expect_success "rollback marker is unchanged when recording is not confirmed" test_rollback_marker_unchanged_when_recording_not_confirmed
+expect_success "successful rollback-state recording stores the rollback SHA" test_record_rollback_sha_stores_rollback_sha
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAILURES"
 [[ "$FAILURES" -eq 0 ]]

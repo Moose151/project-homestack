@@ -40,6 +40,7 @@ RUN_MIGRATIONS=0
 SKIP_BACKUP_AGE_CHECK=0
 DRY_RUN=0
 BOOTSTRAP_DEPLOYED_SHA=""
+RECORD_ROLLBACK_SHA=""
 PHASE="startup"
 CHECKOUT_SHA=""
 TARGET_SHA=""
@@ -58,6 +59,14 @@ Options:
   --dry-run                 Run preflight and backup inspection only; do not fetch/build/recreate/reload.
   --bootstrap-deployed-sha SHA
                             First-time setup only: record the SHA already running in production.
+                            Fails if a deployed SHA marker already exists.
+  --record-rollback-sha SHA
+                            Manual-rollback correction only: after a manual rollback has been
+                            built, promoted and fully validated (see
+                            docs/35_Production_Serving_and_Deployment.md section 13), atomically
+                            record that rollback commit as the deployed SHA marker. Does not
+                            fetch, build, migrate, recreate containers, reload NPM, or move the
+                            Git checkout.
   --help                    Show this help.
 
 Normal deployment:
@@ -102,6 +111,11 @@ parse_args() {
         [[ $# -gt 0 ]] || fail "--bootstrap-deployed-sha requires a commit SHA"
         BOOTSTRAP_DEPLOYED_SHA="$1"
         ;;
+      --record-rollback-sha)
+        shift
+        [[ $# -gt 0 ]] || fail "--record-rollback-sha requires a commit SHA"
+        RECORD_ROLLBACK_SHA="$1"
+        ;;
       --help) usage; exit 0 ;;
       *) fail "Unknown option: $1" ;;
     esac
@@ -114,6 +128,14 @@ require_valid_commit() {
   git rev-parse --verify --quiet "$sha^{commit}" >/dev/null || fail "Commit SHA is not present in this repository: $sha"
 }
 
+# Resolves any commit-ish (abbreviated SHA, tag, ref) to the canonical full commit SHA, so
+# marker reads/writes and comparisons never depend on abbreviation length.
+resolve_full_sha() {
+  local ref="$1"
+  require_valid_commit "$ref"
+  git rev-parse --verify --quiet "${ref}^{commit}"
+}
+
 read_deployed_sha() {
   if [[ ! -f "$DEPLOYED_SHA_FILE" ]]; then
     fail "No deployed SHA marker found at $DEPLOYED_SHA_FILE. Bootstrap once with: ./scripts/deploy-production.sh --bootstrap-deployed-sha <sha-currently-running-in-production>"
@@ -121,16 +143,25 @@ read_deployed_sha() {
   local sha
   sha="$(tr -d '[:space:]' < "$DEPLOYED_SHA_FILE")"
   [[ -n "$sha" ]] || fail "Deployed SHA marker is empty: $DEPLOYED_SHA_FILE"
-  require_valid_commit "$sha"
-  printf '%s\n' "$sha"
+  resolve_full_sha "$sha"
 }
 
 write_deployed_sha() {
   local sha="$1"
-  require_valid_commit "$sha"
+  local full_sha
+  full_sha="$(resolve_full_sha "$sha")"
   local tmp="${DEPLOYED_SHA_FILE}.tmp"
-  printf '%s\n' "$sha" > "$tmp"
+  printf '%s\n' "$full_sha" > "$tmp"
   mv "$tmp" "$DEPLOYED_SHA_FILE"
+}
+
+# Fails closed unless the recorded deployed SHA is genuinely part of target's history (or equal
+# to it). A marker pointing at an unrelated/non-ancestor commit means deployment-state tracking
+# itself is untrustworthy, so this must never be silently skipped.
+require_deployed_sha_lineage() {
+  [[ "$DEPLOYED_SHA" == "$TARGET_SHA" ]] && return 0
+  git merge-base --is-ancestor "$DEPLOYED_SHA" "$TARGET_SHA" || \
+    fail "Deployed SHA marker ($DEPLOYED_SHA) is not an ancestor of target SHA ($TARGET_SHA). Deployed-state lineage is inconsistent with origin/main history in $DEPLOYED_SHA_FILE and requires manual inspection before deploying."
 }
 
 bootstrap_deployed_sha() {
@@ -140,11 +171,31 @@ bootstrap_deployed_sha() {
   require_clean_tree
   [[ -n "$BOOTSTRAP_DEPLOYED_SHA" ]] || fail "No bootstrap SHA supplied"
   [[ ! -f "$DEPLOYED_SHA_FILE" ]] || fail "Deployed SHA marker already exists at $DEPLOYED_SHA_FILE"
-  require_valid_commit "$BOOTSTRAP_DEPLOYED_SHA"
-  write_deployed_sha "$BOOTSTRAP_DEPLOYED_SHA"
-  printf 'Recorded deployed SHA marker: %s\n' "$BOOTSTRAP_DEPLOYED_SHA"
+  local full_sha
+  full_sha="$(resolve_full_sha "$BOOTSTRAP_DEPLOYED_SHA")"
+  write_deployed_sha "$full_sha"
+  printf 'Recorded deployed SHA marker: %s\n' "$full_sha"
   printf 'Marker file: %s\n' "$DEPLOYED_SHA_FILE"
   printf 'No deployment was performed.\n'
+}
+
+# Manual-rollback correction: run only after a rollback has been checked out, built, promoted and
+# fully validated by hand (docs/35_Production_Serving_and_Deployment.md section 13). This never
+# runs implicitly and never runs before that validation, so the marker cannot advance past a
+# rollback that has not actually been proven healthy. It does not touch containers or the checkout.
+record_rollback_deployed_sha() {
+  PHASE="record rollback deployed SHA"
+  require_repo_dir
+  require_clean_tree
+  [[ -n "$RECORD_ROLLBACK_SHA" ]] || fail "No rollback SHA supplied"
+  [[ -f "$DEPLOYED_SHA_FILE" ]] || fail "No deployed SHA marker found at $DEPLOYED_SHA_FILE. Use --bootstrap-deployed-sha for first-time setup instead."
+  local full_sha
+  full_sha="$(resolve_full_sha "$RECORD_ROLLBACK_SHA")"
+  write_deployed_sha "$full_sha"
+  printf 'Recorded rollback commit as the deployed SHA marker: %s\n' "$full_sha"
+  printf 'Marker file: %s\n' "$DEPLOYED_SHA_FILE"
+  printf 'No fetch, build, migration, container recreation, NPM reload, or checkout change was performed.\n'
+  printf 'Only the next normal deploy will act on this marker.\n'
 }
 
 require_repo_dir() {
@@ -356,7 +407,13 @@ git_update() {
   info "Target SHA:   $TARGET_SHA"
   info "Deployed SHA: $DEPLOYED_SHA"
   info "Rollback SHA: $ROLLBACK_SHA"
+  require_deployed_sha_lineage
   if [[ "$TARGET_SHA" == "$DEPLOYED_SHA" ]]; then
+    if [[ "$CHECKOUT_SHA" != "$TARGET_SHA" ]]; then
+      log "Production is already up to date; fast-forwarding local checkout only"
+      git merge --ff-only origin/main
+      CHECKOUT_SHA="$(git rev-parse HEAD)"
+    fi
     no_op_summary
     exit 0
   fi
@@ -542,6 +599,10 @@ main() {
   parse_args "$@"
   if [[ -n "$BOOTSTRAP_DEPLOYED_SHA" ]]; then
     bootstrap_deployed_sha
+    exit 0
+  fi
+  if [[ -n "$RECORD_ROLLBACK_SHA" ]]; then
+    record_rollback_deployed_sha
     exit 0
   fi
   if (( SKIP_BACKUP_AGE_CHECK == 1 )); then
