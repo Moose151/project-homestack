@@ -23,7 +23,9 @@ export function NodeGuidePage() {
           {enabled ? 'Available now' : 'Currently disabled'}
         </span>
         {enabled && stack && <Link to={stack.route} className="text-sm font-bold text-primary hover:underline">Open {guide.label} →</Link>}
-        {!enabled && <Link to="/settings" className="text-sm font-bold text-primary hover:underline">Manage nodes →</Link>}
+        {/* #stacks opens the Stacks accordion section directly rather than landing on a
+            collapsed settings directory the reader then has to search through. */}
+        {!enabled && <Link to="/settings#stacks" className="text-sm font-bold text-primary hover:underline">Manage nodes →</Link>}
       </div>
 
       <Card title="What it does">

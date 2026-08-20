@@ -136,33 +136,67 @@ test.describe('Notification settings', () => {
   })
 })
 
-test.describe('Manage HomeStack directory', () => {
+test.describe('Manage HomeStack accordion', () => {
   test.beforeEach(async ({}, testInfo) => {
-    test.skip(testInfo.project.name === 'tablet-768', 'phone-only: MobileListRow is this page\'s new addition')
+    test.skip(testInfo.project.name === 'tablet-768', 'phone-only: exercised once is enough for this directory')
   })
 
-  test('opens as a phone settings directory with focused sections', async ({ page }) => {
+  test('sections are collapsed by default and expand one at a time', async ({ page }) => {
     await mockAuthenticatedApi(page)
     await page.goto('/settings')
-    await expect(page.getByRole('link', { name: /People & access/ })).toHaveAttribute('href', '/users')
-    await expect(page.getByRole('link', { name: /Notifications/ })).toHaveAttribute('href', '/settings/notifications')
-    await expect(page.getByRole('link', { name: /Push devices/ })).toHaveAttribute('href', '/settings/push-devices')
-    await expect(page.getByRole('button', { name: /Stacks/ })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Stacks' })).toHaveCount(0)
-    await page.getByRole('button', { name: /Stacks/ }).click()
-    await expect(page.locator('main h1', { hasText: 'Stacks' })).toBeVisible()
-    await expect(page.getByRole('main').getByRole('button', { name: 'Back' })).toBeVisible()
+    const main = page.getByRole('main')
+
+    const stacksButton = main.getByRole('button', { name: /Stacks/ })
+    const peopleButton = main.getByRole('button', { name: /People & access/ })
+    await expect(stacksButton).toHaveAttribute('aria-expanded', 'false')
+    await expect(peopleButton).toHaveAttribute('aria-expanded', 'false')
+
+    // People & access is a genuinely separate management page (docs/31 §5): the row expands to
+    // a clear action rather than inline fields, and it is not in the DOM until expanded.
+    await expect(main.getByRole('link', { name: /Open People & access/ })).toHaveCount(0)
+    await peopleButton.click()
+    await expect(peopleButton).toHaveAttribute('aria-expanded', 'true')
+    await expect(main.getByRole('link', { name: /Open People & access/ })).toHaveAttribute('href', '/users')
+
+    // Opening Stacks closes People & access — only one section open at a time.
+    await stacksButton.click()
+    await expect(stacksButton).toHaveAttribute('aria-expanded', 'true')
+    await expect(peopleButton).toHaveAttribute('aria-expanded', 'false')
+    await expect(main.getByRole('link', { name: /Open People & access/ })).toHaveCount(0)
+    await expect(main.getByRole('switch').first()).toBeVisible()
+
+    const notificationsButton = main.getByRole('button', { name: /Notifications/ })
+    await expect(notificationsButton).toBeVisible()
+    await notificationsButton.click()
+    await expect(main.getByRole('link', { name: /Open Notifications/ })).toHaveAttribute('href', '/settings/notifications')
+
+    await main.getByRole('button', { name: /Push devices/ }).click()
+    await expect(main.getByRole('link', { name: /Open push devices/ })).toHaveAttribute('href', '/settings/push-devices')
+
     await expectNoHorizontalOverflow(page)
   })
 
   test('Stacks toggle meets the 44px touch-target baseline', async ({ page }) => {
     await mockAuthenticatedApi(page)
     await page.goto('/settings')
-    await page.getByRole('button', { name: /Stacks/ }).click()
-    const toggle = page.getByRole('switch').first()
+    const main = page.getByRole('main')
+    await main.getByRole('button', { name: /Stacks/ }).click()
+    const toggle = main.getByRole('switch').first()
     await expect(toggle).toBeVisible()
     const box = await toggle.boundingBox()
     expect(box?.height).toBeGreaterThanOrEqual(42)
     expect(box?.width).toBeGreaterThanOrEqual(42)
+  })
+
+  test('a #hash deep link opens the matching section and survives reload', async ({ page }) => {
+    await mockAuthenticatedApi(page)
+    await page.goto('/settings#stacks')
+    const main = page.getByRole('main')
+    const stacksButton = main.getByRole('button', { name: /Stacks/ })
+    await expect(stacksButton).toHaveAttribute('aria-expanded', 'true')
+    await expect(main.getByRole('switch').first()).toBeVisible()
+
+    await page.reload()
+    await expect(stacksButton).toHaveAttribute('aria-expanded', 'true')
   })
 })

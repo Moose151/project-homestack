@@ -35,6 +35,7 @@ test.describe('household location', () => {
     const stored = await mockHouseholdStore(page)
 
     await page.goto('/settings')
+    await page.getByRole('button', { name: /Household/ }).click()
     await page.getByLabel('Country').selectOption('AU')
     await page.getByLabel('State / territory').selectOption('QLD')
     await page.getByLabel('Local area').selectOption('townsville')
@@ -65,6 +66,7 @@ test.describe('household location', () => {
     })
 
     await page.goto('/settings')
+    await page.getByRole('button', { name: /Household/ }).click()
     await page.getByLabel('Country').selectOption('AU')
     await page.getByLabel('State / territory').selectOption('QLD')
     await page.getByRole('button', { name: 'Save' }).first().click()
@@ -92,6 +94,7 @@ test.describe('household location', () => {
     })
 
     await page.goto('/settings')
+    await page.getByRole('button', { name: /Household/ }).click()
     await page.getByLabel('Country').selectOption('AU')
     await page.getByLabel('State / territory').selectOption('QLD')
     await page.getByRole('button', { name: 'Save' }).first().click()
@@ -105,6 +108,7 @@ test.describe('household location', () => {
     await mockAuthenticatedApi(page)
     await mockHouseholdStore(page)
     await page.goto('/settings')
+    await page.getByRole('button', { name: /Household/ }).click()
 
     await expect(page.getByLabel('Local area')).toBeDisabled()
     await page.getByLabel('Country').selectOption('AU')
