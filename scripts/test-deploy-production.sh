@@ -99,6 +99,17 @@ test_missing_proxy_network_rejected() {
   require_network_exists
 }
 
+test_network_membership_ignores_blank_docker_lines() {
+  docker() {
+    if [[ "$1" == "inspect" && "$2" == "$FRONTEND_CONTAINER" ]]; then
+      printf 'proxy\n\n'
+      return 0
+    fi
+    return 0
+  }
+  require_network_membership_exact "$FRONTEND_CONTAINER" "$NPM_NETWORK"
+}
+
 test_stale_backup_rejected() {
   newest_backup_dir() { printf '/app/backups/backup_20000101_000000\n'; }
   docker() {
@@ -537,6 +548,7 @@ test_skip_backup_age_check_and_record_rollback_mutually_exclusive() {
 expect_failure "dirty Git tree rejects deployment" test_dirty_git_rejected
 expect_failure "wrong branch rejects deployment" test_wrong_branch_rejected
 expect_failure "missing proxy network rejects deployment" test_missing_proxy_network_rejected
+expect_success "blank Docker network lines are ignored" test_network_membership_ignores_blank_docker_lines
 expect_failure "stale backup rejects deployment" test_stale_backup_rejected
 expect_failure "incomplete backup rejects deployment" test_incomplete_backup_rejected
 expect_failure "unhealthy starting stack rejects deployment" test_unhealthy_starting_stack_rejected

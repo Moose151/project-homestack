@@ -350,7 +350,7 @@ require_no_sensitive_host_ports() {
 }
 
 container_networks() {
-  docker inspect "$1" --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}'
+  docker inspect "$1" --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' | sed '/^$/d'
 }
 
 require_network_membership_exact() {
