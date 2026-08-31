@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.40.1**
+> **Current version: 0.40.2**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,17 @@
 ---
 
 ## 0.40 — Faster everyday household coordination
+
+### 0.40.2 — 2026-08-31 — Dashboard item ticking and assignment mark-done
+- **Grocery and to-do items on the Dashboard can now be ticked off in place.** The static
+  circles in the Grocery and To-dos widgets are now clickable buttons: tapping one calls the
+  existing `complete/` endpoint immediately, then refreshes the widget. A spinner-disabled
+  state prevents double-taps while the request is in flight. Items disappear from the list
+  on refresh as they would in the full Atlas view.
+- **Education assignment deadlines on the Dashboard can be marked done.** The
+  `education_deadlines` widget row gains the same circle-button pattern — clicking marks the
+  assessment `status: done` via `PATCH /education/assessments/<id>/` and refreshes the widget,
+  removing the completed item. The due-date calendar link is preserved alongside it.
 
 ### 0.40.1 — 2026-08-20 — Legacy reminder writes closed, rescheduled to-dos notify again
 - **The retired Atlas Reminder API can no longer create anything.** 0.40.0 removed reminders from

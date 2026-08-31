@@ -139,6 +139,7 @@ function TodoWidget({ items, onChanged }: { items: AtlasListItem[]; onChanged: (
   const [listId, setListId] = useState<number | null>(null)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [ticking, setTicking] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     api.getTodoLists()
@@ -157,6 +158,16 @@ function TodoWidget({ items, onChanged }: { items: AtlasListItem[]; onChanged: (
     setBusy(true)
     try { await api.createItem(listId, { title }); setText(''); onChanged() }
     finally { setBusy(false) }
+  }
+
+  const tick = async (item: AtlasListItem) => {
+    setTicking(prev => new Set(prev).add(item.id))
+    try {
+      await api.completeItem(item.atlas_list_id, item.id)
+      onChanged()
+    } finally {
+      setTicking(prev => { const next = new Set(prev); next.delete(item.id); return next })
+    }
   }
 
   return (
@@ -179,7 +190,13 @@ function TodoWidget({ items, onChanged }: { items: AtlasListItem[]; onChanged: (
         <ul className="flex flex-col gap-2">
           {pending.slice(0, 8).map(item => (
             <li key={item.id} className="flex items-center gap-3 text-sm">
-              <div className="w-5 h-5 rounded-full border-2 border-line-strong flex-shrink-0" />
+              <button
+                type="button"
+                onClick={() => tick(item)}
+                disabled={ticking.has(item.id)}
+                aria-label={`Mark ${item.title} as done`}
+                className="w-5 h-5 rounded-full border-2 border-line-strong flex-shrink-0 hover:border-success hover:bg-success/10 transition-colors disabled:opacity-40"
+              />
               <span className="text-ink">{item.is_important ? '★ ' : ''}{item.title}</span>
             </li>
           ))}
@@ -196,6 +213,7 @@ function TodoWidget({ items, onChanged }: { items: AtlasListItem[]; onChanged: (
 function GroceryWidget({ items, remainingCount, onChanged }: { items: AtlasListItem[]; remainingCount: number; onChanged: () => void }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [ticking, setTicking] = useState<Set<number>>(new Set())
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -206,6 +224,18 @@ function GroceryWidget({ items, remainingCount, onChanged }: { items: AtlasListI
     finally { setBusy(false) }
   }
 
+  const tick = async (item: AtlasListItem) => {
+    setTicking(prev => new Set(prev).add(item.id))
+    try {
+      await api.completeItem(item.atlas_list_id, item.id)
+      onChanged()
+    } finally {
+      setTicking(prev => { const next = new Set(prev); next.delete(item.id); return next })
+    }
+  }
+
+  const pending = items.filter(i => !i.is_complete)
+
   return (
     <div className="flex flex-col gap-3">
       <form onSubmit={submit} className="flex gap-2">
@@ -213,15 +243,21 @@ function GroceryWidget({ items, remainingCount, onChanged }: { items: AtlasListI
         <Button type="submit" size="sm" loading={busy} disabled={!text.trim()}>Add</Button>
       </form>
       <p className="text-xs font-semibold text-muted-strong">{remainingCount} item{remainingCount === 1 ? '' : 's'} remaining</p>
-      {items.length === 0 ? <p className="text-sm text-muted">Grocery list is empty</p> : (
+      {pending.length === 0 ? <p className="text-sm text-muted">Grocery list is empty</p> : (
         <ul className="flex flex-col gap-2">
-          {items.slice(0, 8).map(item => (
+          {pending.slice(0, 8).map(item => (
             <li key={item.id} className="flex items-center gap-3 text-sm">
-              <div className="w-5 h-5 rounded-full border-2 border-line-strong flex-shrink-0" />
+              <button
+                type="button"
+                onClick={() => tick(item)}
+                disabled={ticking.has(item.id)}
+                aria-label={`Mark ${item.title} as bought`}
+                className="w-5 h-5 rounded-full border-2 border-line-strong flex-shrink-0 hover:border-success hover:bg-success/10 transition-colors disabled:opacity-40"
+              />
               <span className="text-ink">{item.title}{item.quantity ? ` × ${item.quantity}` : ''}</span>
             </li>
           ))}
-          {items.length > 8 && <li className="text-xs text-muted">+{items.length - 8} more</li>}
+          {pending.length > 8 && <li className="text-xs text-muted">+{pending.length - 8} more</li>}
         </ul>
       )}
       <Link to="/atlas?tab=grocery" className="text-xs font-semibold text-primary hover:underline">View grocery list</Link>
@@ -515,7 +551,19 @@ function CalendarUpcomingWidget({ items }: { items: CalendarEvent[] }) {
   )
 }
 
-function EducationDeadlinesWidget({ items }: { items: EducationAssessment[] }) {
+function EducationDeadlinesWidget({ items, onChanged }: { items: EducationAssessment[]; onChanged: () => void }) {
+  const [ticking, setTicking] = useState<Set<number>>(new Set())
+
+  const markDone = async (a: EducationAssessment) => {
+    setTicking(prev => new Set(prev).add(a.id))
+    try {
+      await api.updateAssessment(a.id, { status: 'done' })
+      onChanged()
+    } finally {
+      setTicking(prev => { const next = new Set(prev); next.delete(a.id); return next })
+    }
+  }
+
   if (items.length === 0) return <p className="text-sm text-muted">Nothing due</p>
   return (
     <ul className="flex flex-col gap-2">
@@ -524,8 +572,15 @@ function EducationDeadlinesWidget({ items }: { items: EducationAssessment[] }) {
           ? new Date(a.due_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
           : ''
         return (
-          <li key={a.id} className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-ink truncate">
+          <li key={a.id} className="flex items-center gap-3 text-sm">
+            <button
+              type="button"
+              onClick={() => markDone(a)}
+              disabled={ticking.has(a.id)}
+              aria-label={`Mark ${a.title} as done`}
+              className="w-5 h-5 rounded-full border-2 border-line-strong flex-shrink-0 hover:border-success hover:bg-success/10 transition-colors disabled:opacity-40"
+            />
+            <span className="text-ink truncate flex-1">
               {a.course_code && <span className="text-muted mr-1">{a.course_code}</span>}
               {a.title}
             </span>
@@ -964,7 +1019,7 @@ function renderWidget(w: HubWidget, onChanged: () => void) {
     case 'meridian_reward_requests':
       return <RewardRequestsWidget items={w.items as MeridianRewardRequest[]} />
     case 'education_deadlines':
-      return <EducationDeadlinesWidget items={w.items as EducationAssessment[]} />
+      return <EducationDeadlinesWidget items={w.items as EducationAssessment[]} onChanged={onChanged} />
     case 'education_classes':
       return <EducationClassesWidget items={w.items as EducationClassSession[]} />
     case 'education_events':
