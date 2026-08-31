@@ -98,9 +98,25 @@ class Bill(CalendarSyncMixin, HouseholdBaseModel):
     def get_calendar_data(self) -> dict | None:
         if not self.due_at or not self.is_active or (self.is_paid and not self.recurrence_rule):
             return None
+        if self.recurrence_rule:
+            # For recurring bills, the CalendarEvent must always point to the next
+            # UPCOMING occurrence so the Upcoming widget never shows a stale past date.
+            next_occ = (
+                self.occurrences.filter(status=BillOccurrence.Status.UPCOMING)
+                .order_by("due_at")
+                .values("due_at")
+                .first()
+            )
+            if next_occ is None:
+                # All materialised occurrences are paid/skipped and none are generated yet —
+                # delete the CalendarEvent until ensure_bill_occurrences() runs next.
+                return None
+            start_at = next_occ["due_at"]
+        else:
+            start_at = self.due_at
         return {
             "title": f"Bill: {self.name}",
-            "start_at": self.due_at,
+            "start_at": start_at,
             "is_all_day": self.is_all_day,
             "description": self.notes,
             "recurrence_rule": self.recurrence_rule,

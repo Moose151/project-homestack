@@ -704,3 +704,145 @@ class HubWidgetConfigTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(resp.status_code, 400)
+
+
+class BillCalendarEventSyncTests(TestCase):
+    """CalendarEvent for a recurring bill must always point to the next UPCOMING occurrence.
+
+    Root cause: mark_occurrence_paid() did not call sync_event_for(bill) for recurring
+    bills, leaving the CalendarEvent frozen at the original anchor date forever. As a result,
+    the Upcoming widget kept showing the bill as overdue after every payment.
+    """
+
+    def setUp(self):
+        self.admin = _make_user("admin", User.Role.ADMIN)
+        _login(self.client, "admin")
+        from apps.nodes.services import enable_node
+        enable_node(self.admin, "solace")
+        grant_user_permission(self.admin, "solace.view")
+
+    def _upcoming_titles(self):
+        _reauth(self.client)
+        widget = next(
+            (w for w in self.client.get(reverse("hub")).json()["widgets"] if w["key"] == "upcoming"),
+            None,
+        )
+        return [item["title"] for item in (widget or {"items": []})["items"]]
+
+    def test_new_recurring_bill_with_past_anchor_shows_next_occurrence_not_stale_date(self):
+        """Regression: create_bill() must sync *after* settle_history_on_entry().
+
+        A bill entered with a past anchor date has its past occurrences auto-settled.
+        The CalendarEvent must reflect the first *future* occurrence, not the stale anchor.
+        """
+        from apps.scheduling.models import CalendarEvent
+        from apps.solace.services import create_bill
+
+        bill = create_bill(
+            self.admin,
+            name="Internet",
+            amount="89.00",
+            due_at=_future(hours=-48),
+            recurrence_rule="FREQ=WEEKLY",
+        )
+        self.assertIsNotNone(bill.calendar_event_id)
+        event = CalendarEvent.objects.get(pk=bill.calendar_event_id)
+        from django.utils import timezone
+        # The CalendarEvent must be in the future, not the stale past anchor.
+        self.assertGreater(event.start_at, timezone.now(), "CalendarEvent should point to next future occurrence")
+
+    def test_paid_recurring_bill_advances_calendar_event_to_next_occurrence(self):
+        """Regression: mark_occurrence_paid() must sync the CalendarEvent for recurring bills.
+
+        Before the fix: paying an occurrence left the CalendarEvent on the old past date
+        and the bill kept appearing as overdue in the Upcoming widget forever.
+        """
+        from apps.scheduling.models import CalendarEvent
+        from apps.solace.models import BillOccurrence
+        from apps.solace.services import create_bill, mark_occurrence_paid
+
+        bill = create_bill(
+            self.admin,
+            name="Electricity",
+            amount="120.00",
+            due_at=_future(hours=72),
+            recurrence_rule="FREQ=WEEKLY",
+        )
+        first_occ = bill.occurrences.filter(status=BillOccurrence.Status.UPCOMING).order_by("due_at").first()
+        self.assertIsNotNone(first_occ)
+        first_start = CalendarEvent.objects.get(pk=bill.calendar_event_id).start_at
+
+        mark_occurrence_paid(self.admin, first_occ)
+
+        bill.refresh_from_db()
+        second_start = CalendarEvent.objects.get(pk=bill.calendar_event_id).start_at
+        self.assertGreater(second_start, first_start, "CalendarEvent must advance after payment")
+
+    def test_stale_recurring_bill_disappears_from_upcoming_after_payment(self):
+        """End-to-end: paying a past-due recurring occurrence removes it from the Upcoming widget.
+
+        The Upcoming widget reads CalendarEvents. After payment the CalendarEvent must
+        advance past the window, leaving the stale overdue entry gone.
+        """
+        from apps.solace.models import BillOccurrence
+        from apps.solace.services import create_bill, mark_occurrence_paid
+
+        bill = create_bill(
+            self.admin,
+            name="Phone bill",
+            amount="45.00",
+            due_at=_future(hours=48),
+            recurrence_rule="FREQ=WEEKLY",
+        )
+        # Confirm the bill appears in Upcoming.
+        self.assertIn("Bill: Phone bill", self._upcoming_titles())
+
+        # Pay the upcoming occurrence.
+        occ = bill.occurrences.filter(status=BillOccurrence.Status.UPCOMING).order_by("due_at").first()
+        self.assertIsNotNone(occ)
+        mark_occurrence_paid(self.admin, occ)
+
+        # The paid occurrence's date is now gone; the CalendarEvent moved forward a week.
+        # With a weekly bill starting 2 days out, the next occurrence is 9 days out —
+        # still inside the 62-day Upcoming window — so the title must still appear but
+        # now at the advanced date, proving it was not frozen on the old date.
+        bill.refresh_from_db()
+        titles = self._upcoming_titles()
+        self.assertIn("Bill: Phone bill", titles, "Next occurrence should still appear in Upcoming")
+
+    def test_unpaid_overdue_non_recurring_bill_stays_in_upcoming(self):
+        """Genuine unpaid bills must never be hidden regardless of how old they are."""
+        from apps.solace.services import create_bill
+
+        create_bill(self.admin, name="One-off fee", amount="200.00", due_at=_future(hours=-48))
+        self.assertIn("Bill: One-off fee", self._upcoming_titles())
+
+    def test_mark_occurrence_unpaid_re_syncs_calendar_event(self):
+        """Reversing a payment must also update the CalendarEvent back to that occurrence."""
+        from apps.scheduling.models import CalendarEvent
+        from apps.solace.models import BillOccurrence
+        from apps.solace.services import create_bill, mark_occurrence_paid, mark_occurrence_unpaid
+
+        bill = create_bill(
+            self.admin,
+            name="Gas",
+            amount="60.00",
+            due_at=_future(hours=24),
+            recurrence_rule="FREQ=WEEKLY",
+        )
+        occ = bill.occurrences.filter(status=BillOccurrence.Status.UPCOMING).order_by("due_at").first()
+        paid_at_date = occ.due_at
+        mark_occurrence_paid(self.admin, occ)
+
+        # Now advance to the next occurrence — CalendarEvent should be ahead of original.
+        bill.refresh_from_db()
+        advanced = CalendarEvent.objects.get(pk=bill.calendar_event_id).start_at
+        self.assertGreater(advanced, paid_at_date)
+
+        occ.refresh_from_db()
+        mark_occurrence_unpaid(self.admin, occ)
+
+        # After reversal the CalendarEvent must snap back to the re-opened occurrence.
+        bill.refresh_from_db()
+        reverted = CalendarEvent.objects.get(pk=bill.calendar_event_id).start_at
+        self.assertEqual(reverted.date(), paid_at_date.date())

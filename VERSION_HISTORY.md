@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.40.2**
+> **Current version: 0.40.3**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,34 @@
 ---
 
 ## 0.40 — Faster everyday household coordination
+
+### 0.40.3 — 2026-08-31 — Fix stale overdue bills in Upcoming widget
+
+- **Root-cause fix for stale "overdue" bill entries in the Upcoming dashboard widget.**
+  Recurring bills that had been paid were permanently showing as overdue because
+  `mark_occurrence_paid()` never re-synced the CalendarEvent for recurring bills, leaving it
+  frozen on the original anchor date. Three layers of the fix:
+  1. `Bill.get_calendar_data()` now returns the next **UPCOMING** occurrence's `due_at` as
+     `start_at` (not the stale `bill.due_at` anchor). If no upcoming occurrence is materialised,
+     it returns `None`, which deletes the CalendarEvent until occurrences are generated.
+  2. `mark_occurrence_paid()` now calls `ensure_bill_occurrences()` then `sync_event_for(bill)`
+     for **all** bills (was only non-recurring). The CalendarEvent now correctly advances to the
+     next occurrence date after every payment.
+  3. `create_bill()` now calls `sync_event_for()` **after** `settle_history_on_entry()` so that
+     bills entered with a past anchor date immediately get the correct future-occurrence date.
+  4. `mark_occurrence_unpaid()` also now calls `sync_event_for(bill)` for recurring bills.
+- **"Paid" action on the Upcoming widget** for bill entries only. A compact "Paid" button sits
+  beside each Bill row in the Upcoming widget. Clicking it calls the existing
+  `POST /solace/bills/<id>/paid/` endpoint, advances the recurring bill to its next occurrence,
+  then refreshes the Hub — no page reload. Button is disabled while the request is in flight;
+  shows an inline error on failure.
+- **`reconcile_bill_calendar_events` management command** added to
+  `apps/solace/management/commands/`. Run once after deploying to repair existing stale
+  CalendarEvents in production. Supports `--dry-run` and `--household` filters.
+- **Regression tests** (`BillCalendarEventSyncTests`) covering: new recurring bill with past
+  anchor shows next occurrence not stale date; paying an occurrence advances CalendarEvent;
+  stale entry disappears from Upcoming after payment; unpaid overdue one-off bill is preserved;
+  reversing a payment re-syncs CalendarEvent.
 
 ### 0.40.2 — 2026-08-31 — Dashboard item ticking and assignment mark-done
 - **Grocery and to-do items on the Dashboard can now be ticked off in place.** The static

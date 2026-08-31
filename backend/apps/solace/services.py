@@ -249,12 +249,14 @@ def set_cycle_closeout(
 def create_bill(acting_user: User, **data) -> Bill:
     obj = Bill(household=get_active_household(), created_by=acting_user, updated_by=acting_user, **data)
     obj.save()
-    sync_event_for(obj)
     from apps.solace.bill_schedule import ensure_bill_occurrences, settle_history_on_entry
 
     today = timezone.localdate()
     ensure_bill_occurrences(obj, today - timedelta(days=90), today + timedelta(days=550))
     settle_history_on_entry(obj)
+    # Sync after occurrences are materialised so get_calendar_data() sees the correct
+    # next-due date rather than the potentially stale anchor from bill.due_at.
+    sync_event_for(obj)
     events.bill_created(obj.id, obj.household_id)
     events.bill_saved(obj, acting_user.id if acting_user else None)
     return obj
@@ -342,13 +344,19 @@ def mark_occurrence_paid(acting_user: User, obj: BillOccurrence) -> BillOccurren
     obj.paid_at = timezone.now()
     obj.updated_by = acting_user
     obj.save()
-    if not obj.bill.recurrence_rule:
-        bill = obj.bill
+    bill = obj.bill
+    if not bill.recurrence_rule:
         bill.is_paid = True
         bill.paid_at = obj.paid_at
         bill.updated_by = acting_user
         bill.save()
-        sync_event_for(bill)
+    else:
+        # Materialise future occurrences so get_calendar_data() can find the next
+        # UPCOMING one and sync the CalendarEvent to the correct date.
+        from apps.solace.bill_schedule import ensure_bill_occurrences
+        today = timezone.localdate()
+        ensure_bill_occurrences(bill, today - timedelta(days=90), today + timedelta(days=550))
+    sync_event_for(bill)
     events.bill_paid(obj.bill_id, obj.household_id)
     return obj
 
@@ -358,13 +366,13 @@ def mark_occurrence_unpaid(acting_user: User, obj: BillOccurrence) -> BillOccurr
     obj.paid_at = None
     obj.updated_by = acting_user
     obj.save()
-    if not obj.bill.recurrence_rule:
-        bill = obj.bill
+    bill = obj.bill
+    if not bill.recurrence_rule:
         bill.is_paid = False
         bill.paid_at = None
         bill.updated_by = acting_user
         bill.save()
-        sync_event_for(bill)
+    sync_event_for(bill)
     return obj
 
 

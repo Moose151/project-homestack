@@ -445,12 +445,27 @@ function upcomingRowLabel(item: CalendarEvent) {
   return formatEventWhen(item.start_at, item.is_all_day)
 }
 
-function UpcomingWidget({ items, horizons }: { items: CalendarEvent[]; horizons?: UpcomingHorizon[] }) {
+function UpcomingWidget({ items, horizons, onChanged }: { items: CalendarEvent[]; horizons?: UpcomingHorizon[]; onChanged: () => void }) {
   const ranges = horizons?.length ? horizons : [{ key: 'week', label: 'Next 7 days', until: '9999-12-31' }]
   const [horizonKey, setHorizonKey] = useState(
     () => localStorage.getItem(HORIZON_STORAGE_KEY) || ranges[0].key,
   )
   const active = ranges.find(r => r.key === horizonKey) ?? ranges[0]
+  const [paying, setPaying] = useState<Set<number>>(new Set())
+  const [payError, setPayError] = useState<string | null>(null)
+
+  const markPaid = async (billId: number) => {
+    setPaying(prev => new Set(prev).add(billId))
+    setPayError(null)
+    try {
+      await api.markSolaceBillPaid(billId)
+      onChanged()
+    } catch {
+      setPayError('Could not mark as paid — please try again.')
+    } finally {
+      setPaying(prev => { const next = new Set(prev); next.delete(billId); return next })
+    }
+  }
 
   const chooseHorizon = (key: string) => {
     setHorizonKey(key)
@@ -492,6 +507,8 @@ function UpcomingWidget({ items, horizons }: { items: CalendarEvent[]; horizons?
         </div>
       )}
 
+      {payError && <p className="text-xs text-danger">{payError}</p>}
+
       {groups.length === 0 ? (
         <p className="text-sm text-muted">Nothing in this range — try a longer one.</p>
       ) : (
@@ -505,11 +522,12 @@ function UpcomingWidget({ items, horizons }: { items: CalendarEvent[]; horizons?
                 {group.items.map(item => {
                   const href = sourcePath(item) ?? calendarDayHref(item.start_at)
                   const when = upcomingRowLabel(item)
+                  const isBill = item.source_record_type === 'Bill' && item.source_record_id != null
                   return (
-                    <li key={item.id}>
+                    <li key={item.id} className="flex items-center gap-1">
                       <Link
                         to={href}
-                        className="flex min-h-11 items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-sunken"
+                        className="flex min-h-11 flex-1 items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-sunken"
                       >
                         <span
                           className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
@@ -522,6 +540,17 @@ function UpcomingWidget({ items, horizons }: { items: CalendarEvent[]; horizons?
                         </span>
                         {when && <span className="flex-shrink-0 text-xs tabular-nums text-muted">{when}</span>}
                       </Link>
+                      {isBill && (
+                        <button
+                          type="button"
+                          onClick={() => markPaid(item.source_record_id!)}
+                          disabled={paying.has(item.source_record_id!)}
+                          aria-label={`Mark ${item.title} as paid`}
+                          className="flex-shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-muted hover:bg-sunken hover:text-ink disabled:opacity-40 transition-colors"
+                        >
+                          Paid
+                        </button>
+                      )}
                     </li>
                   )
                 })}
@@ -1001,7 +1030,7 @@ function renderWidget(w: HubWidget, onChanged: () => void) {
     case 'daily_quote':
       return <DailyQuoteWidget />
     case 'upcoming':
-      return <UpcomingWidget items={w.items as CalendarEvent[]} horizons={w.meta?.horizons} />
+      return <UpcomingWidget items={w.items as CalendarEvent[]} horizons={w.meta?.horizons} onChanged={onChanged} />
     case 'calendar_upcoming':
       return <CalendarUpcomingWidget items={w.items as CalendarEvent[]} />
     case 'atlas_todos':
