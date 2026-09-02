@@ -207,6 +207,49 @@ class EducationCalendarSyncTests(TestCase):
         delete_assessment(self.admin, a)
         self.assertFalse(CalendarEvent.objects.filter(pk=event_id).exists())
 
+    def test_completing_overdue_assessment_deletes_calendar_event(self):
+        """Regression: marking an assessment Done must clear its CalendarEvent (D7).
+
+        Before the fix, get_calendar_data() ignored status entirely, so sync_event_for()
+        kept re-syncing the event to the same stale due_at forever — the Upcoming widget
+        showed it as overdue even after completion.
+        """
+        a = create_assessment(self.admin, title="Overdue essay", due_at=_future(hours=-72))
+        self.assertIsNotNone(a.calendar_event_id)
+
+        update_assessment(self.admin, a, status=EducationAssessment.Status.DONE)
+        a.refresh_from_db()
+        self.assertIsNone(a.calendar_event_id)
+        self.assertEqual(self._events().filter(source_record_id=a.id).count(), 0)
+
+    def test_submitted_assessment_also_deletes_calendar_event(self):
+        """SUBMITTED counts as complete (is_complete), same as DONE."""
+        a = create_assessment(self.admin, title="Essay draft", due_at=_future(hours=-24))
+        update_assessment(self.admin, a, status=EducationAssessment.Status.SUBMITTED)
+        a.refresh_from_db()
+        self.assertIsNone(a.calendar_event_id)
+
+    def test_future_completed_assessment_creates_no_event(self):
+        """A future assessment created already-Done must never get a CalendarEvent."""
+        a = create_assessment(
+            self.admin, title="Pre-done", due_at=_future(hours=72),
+            status=EducationAssessment.Status.DONE,
+        )
+        self.assertIsNone(a.calendar_event_id)
+
+    def test_reopening_assessment_recreates_calendar_event(self):
+        """Reopening Done -> To do restores the CalendarEvent when still due."""
+        a = create_assessment(self.admin, title="Reopen me", due_at=_future(hours=-48))
+        update_assessment(self.admin, a, status=EducationAssessment.Status.DONE)
+        a.refresh_from_db()
+        self.assertIsNone(a.calendar_event_id)
+
+        update_assessment(self.admin, a, status=EducationAssessment.Status.TODO)
+        a.refresh_from_db()
+        self.assertIsNotNone(a.calendar_event_id)
+        event = CalendarEvent.objects.get(pk=a.calendar_event_id)
+        self.assertEqual(event.start_at, a.due_at)
+
     def test_class_session_creates_recurring_event(self):
         s = create_class_session(
             self.admin, title="Lecture", start_at=_future(2), end_at=_future(3),

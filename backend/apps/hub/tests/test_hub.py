@@ -846,3 +846,99 @@ class BillCalendarEventSyncTests(TestCase):
         bill.refresh_from_db()
         reverted = CalendarEvent.objects.get(pk=bill.calendar_event_id).start_at
         self.assertEqual(reverted.date(), paid_at_date.date())
+
+
+class EducationAssessmentUpcomingSyncTests(TestCase):
+    """Completing an Education assignment must clear it from Dashboard -> Upcoming.
+
+    Root cause: EducationAssessment.get_calendar_data() ignored status entirely, so an
+    overdue assignment marked Done kept re-syncing its CalendarEvent to the same stale
+    due_at forever — the same class of bug as the Bill/CalendarEvent sync issue above,
+    fixed the same way: get_calendar_data() returns None once the record is complete.
+    """
+
+    def setUp(self):
+        self.admin = _make_user("admin", User.Role.ADMIN)
+        _login(self.client, "admin")
+        from apps.nodes.services import enable_node
+        enable_node(self.admin, "education")
+        grant_user_permission(self.admin, "education.view")
+
+    def _upcoming_titles(self):
+        _reauth(self.client)
+        widget = next(
+            (w for w in self.client.get(reverse("hub")).json()["widgets"] if w["key"] == "upcoming"),
+            None,
+        )
+        return [item["title"] for item in (widget or {"items": []})["items"]]
+
+    def test_overdue_todo_assessment_appears_in_upcoming(self):
+        from apps.education.services import create_assessment
+
+        create_assessment(self.admin, title="Assignment 2 - Submission 1", due_at=_future(hours=-48))
+        titles = self._upcoming_titles()
+        self.assertTrue(any("Assignment 2 - Submission 1" in t for t in titles))
+
+    def test_marking_assessment_done_removes_it_from_upcoming(self):
+        from apps.education.models import EducationAssessment
+        from apps.education.services import create_assessment, update_assessment
+
+        a = create_assessment(self.admin, title="Assignment 2 - Submission 1", due_at=_future(hours=-48))
+        self.assertTrue(any("Assignment 2 - Submission 1" in t for t in self._upcoming_titles()))
+
+        update_assessment(self.admin, a, status=EducationAssessment.Status.DONE)
+        titles = self._upcoming_titles()
+        self.assertFalse(any("Assignment 2 - Submission 1" in t for t in titles))
+
+    def test_completed_assessment_remains_visible_in_education(self):
+        from apps.education.models import EducationAssessment
+        from apps.education.services import create_assessment, update_assessment
+
+        a = create_assessment(self.admin, title="Finished essay", due_at=_future(hours=-48))
+        update_assessment(self.admin, a, status=EducationAssessment.Status.DONE)
+
+        resp = self.client.get(reverse("education-assessment-detail", args=[a.id]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["status"], "done")
+
+    def test_reopening_assessment_returns_it_to_upcoming_when_still_due(self):
+        from apps.education.models import EducationAssessment
+        from apps.education.services import create_assessment, update_assessment
+
+        a = create_assessment(self.admin, title="Reopened task", due_at=_future(hours=-48))
+        update_assessment(self.admin, a, status=EducationAssessment.Status.DONE)
+        self.assertFalse(any("Reopened task" in t for t in self._upcoming_titles()))
+
+        update_assessment(self.admin, a, status=EducationAssessment.Status.TODO)
+        self.assertTrue(any("Reopened task" in t for t in self._upcoming_titles()))
+
+    def test_future_completed_assessment_does_not_appear_in_upcoming(self):
+        from apps.education.models import EducationAssessment
+        from apps.education.services import create_assessment
+
+        create_assessment(
+            self.admin, title="Already done ahead of time", due_at=_future(hours=72),
+            status=EducationAssessment.Status.DONE,
+        )
+        titles = self._upcoming_titles()
+        self.assertFalse(any("Already done ahead of time" in t for t in titles))
+
+    def test_unrelated_upcoming_entries_are_unaffected_by_assessment_completion(self):
+        """Calendar/reminder, bill and assessment entries in Upcoming don't cross-contaminate."""
+        from apps.education.models import EducationAssessment
+        from apps.education.services import create_assessment, update_assessment
+        from apps.nodes.services import enable_node
+        from apps.solace.services import create_bill
+
+        enable_node(self.admin, "solace")
+        grant_user_permission(self.admin, "solace.view")
+        create_reminder(self.admin, title="Doctor visit", due_at=_future(48))
+        create_bill(self.admin, name="Internet", amount="89.00", due_at=_future(hours=-24))
+        a = create_assessment(self.admin, title="Assignment X", due_at=_future(hours=-24))
+
+        update_assessment(self.admin, a, status=EducationAssessment.Status.DONE)
+
+        titles = self._upcoming_titles()
+        self.assertFalse(any("Assignment X" in t for t in titles))
+        self.assertIn("Doctor visit", titles)
+        self.assertIn("Bill: Internet", titles)

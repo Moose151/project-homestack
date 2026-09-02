@@ -185,7 +185,7 @@ class EducationAssessment(CalendarSyncMixin, HouseholdBaseModel):
     # --- CalendarSyncMixin contract ---
 
     def get_calendar_data(self) -> dict | None:
-        if not self.due_at:
+        if not self.due_at or self.is_complete:
             return None
         label = self.get_assessment_type_display()
         return {
