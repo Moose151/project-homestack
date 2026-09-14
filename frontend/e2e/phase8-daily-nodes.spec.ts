@@ -138,6 +138,40 @@ test.describe('phone', () => {
     await expect(dialog.getByRole('heading', { name: 'Cryptography essay' })).toBeVisible()
   })
 
+  test('Education: an assignment can be edited without deleting and recreating it', async ({ page }) => {
+    const assessment = {
+      id: 9, title: 'Draft essay', assessment_type: 'assignment', course_id: null, course_name: '',
+      course_code: '', assigned_to_person_ids: [], due_at: new Date().toISOString(), is_all_day: true,
+      status: 'todo', priority: 'medium', weight: '', description: '', is_complete: false,
+      calendar_event_id: null, visibility: 'household', sensitivity: 'normal', created_at: '', updated_at: '',
+    }
+    await mockAuthenticatedApi(page, {
+      '/api/v1/nodes/': [enabledNode('education')],
+      '/api/v1/education/courses/': [],
+      '/api/v1/education/assessments/': [assessment],
+      '/api/v1/education/assessments/9/': { ...assessment, title: 'Final essay', priority: 'high' },
+      '/api/v1/education/institutions/': [],
+      '/api/v1/education/assessments/9/notes/': [],
+      '/api/v1/education/assessments/9/files/': [],
+      '/api/v1/people/': [],
+    })
+
+    await page.goto('/education?tab=assignments&assessment=9')
+    const dialog = page.getByRole('dialog')
+    await dialog.getByRole('button', { name: 'Edit', exact: true }).click()
+    await dialog.getByLabel('Title').fill('Final essay')
+    await dialog.getByLabel('Priority').selectOption('high')
+
+    const update = page.waitForRequest(request => (
+      request.method() === 'PATCH' && request.url().endsWith('/api/v1/education/assessments/9/')
+    ))
+    await dialog.getByRole('button', { name: 'Save changes' }).click()
+    const body = (await update).postDataJSON()
+    expect(body.title).toBe('Final essay')
+    expect(body.priority).toBe('high')
+    await expect(dialog.getByRole('heading', { name: 'Final essay' })).toBeVisible()
+  })
+
   test('Pets: the phone dashboard shows what needs attention next, and opens a pet in a detail sheet', async ({ page }) => {
     await mockAuthenticatedApi(page, {
       '/api/v1/pets/pets/': [{

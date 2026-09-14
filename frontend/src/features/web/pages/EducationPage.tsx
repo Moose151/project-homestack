@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type {
   AcademicProfile, AcademicProfileResponse,
@@ -342,14 +342,28 @@ function AssignmentForm({ courses, people, defaultAssignee, onCreated, onError }
 
 // docs/36 §6.5: assignments get a real detail screen — notes/files/status/priority/due date
 // live inside a focused sheet, not an accordion expanding inline into the list itself.
-function AssignmentDetailModal({ assessment, onClose, onChange, onDelete, onError }: {
+function AssignmentDetailModal({ assessment, courses, people, onClose, onChange, onDelete, onError }: {
   assessment: EducationAssessment
+  courses: EducationCourse[]
+  people: Person[]
   onClose: () => void
   onChange: (a: EducationAssessment) => void
   onDelete: (id: number) => void
   onError: (m: string) => void
 }) {
   const [busy, setBusy] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState({
+    title: assessment.title,
+    assessment_type: assessment.assessment_type,
+    course_id: assessment.course_id ? String(assessment.course_id) : '',
+    priority: assessment.priority,
+    due_at: assessment.due_at,
+    is_all_day: assessment.is_all_day,
+    assigned_to_person_ids: assessment.assigned_to_person_ids,
+    description: assessment.description,
+    weight: assessment.weight,
+  })
   const due = dueLabel(assessment.due_at, assessment.is_all_day)
 
   const setStatus = async (status: AssessmentStatus) => {
@@ -361,6 +375,25 @@ function AssignmentDetailModal({ assessment, onClose, onChange, onDelete, onErro
     if (!(await confirmDialog({ title: 'Delete this assignment?', confirmLabel: 'Delete' }))) return
     try { await api.deleteAssessment(assessment.id); onDelete(assessment.id) } catch (e) { onError(errMsg(e)) }
   }
+  const save = async () => {
+    if (!form.title.trim()) return
+    setBusy(true)
+    try {
+      const updated = await api.updateAssessment(assessment.id, {
+        title: form.title.trim(),
+        assessment_type: form.assessment_type,
+        course_id: form.course_id ? Number(form.course_id) : null,
+        priority: form.priority,
+        due_at: form.due_at,
+        is_all_day: form.is_all_day,
+        assigned_to_person_ids: form.assigned_to_person_ids,
+        description: form.description.trim(),
+        weight: form.weight,
+      })
+      onChange(updated)
+      setEditing(false)
+    } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
+  }
 
   return (
     <Modal
@@ -370,10 +403,67 @@ function AssignmentDetailModal({ assessment, onClose, onChange, onDelete, onErro
       footer={
         <>
           <button onClick={remove} className="mr-auto text-sm text-danger hover:underline">Delete</button>
-          <Button variant="ghost" onClick={onClose}>Close</Button>
+          {editing ? (
+            <>
+              <Button variant="ghost" onClick={() => setEditing(false)} disabled={busy}>Cancel</Button>
+              <Button onClick={save} loading={busy} disabled={!form.title.trim()}>Save changes</Button>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={onClose}>Close</Button>
+              <Button onClick={() => setEditing(true)}>Edit</Button>
+            </>
+          )}
         </>
       }
     >
+      {editing ? (
+        <div className="flex flex-col gap-4">
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-muted-strong" htmlFor={`assessment-title-${assessment.id}`}>Title</label>
+            <Input id={`assessment-title-${assessment.id}`} value={form.title} onChange={e => setForm(prev => ({ ...prev, title: e.target.value }))} data-autofocus />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-muted-strong">Type</label>
+              <Select aria-label="Type" value={form.assessment_type} onChange={e => setForm(prev => ({ ...prev, assessment_type: e.target.value as AssessmentType }))}>
+                {Object.entries(TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </Select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-muted-strong">Course</label>
+              <Select aria-label="Course" value={form.course_id} onChange={e => setForm(prev => ({ ...prev, course_id: e.target.value }))}>
+                <option value="">No course</option>
+                {courses.map(course => <option key={course.id} value={course.id}>{course.code || course.name}</option>)}
+              </Select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-muted-strong">Priority</label>
+              <Select aria-label="Priority" value={form.priority} onChange={e => setForm(prev => ({ ...prev, priority: e.target.value as AssessmentPriority }))}>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </Select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-muted-strong">Weight (optional)</label>
+              <Input value={form.weight} onChange={e => setForm(prev => ({ ...prev, weight: e.target.value }))} placeholder="For example, 20%" />
+            </div>
+          </div>
+          <div>
+            <div className="mb-1 text-xs font-semibold text-muted-strong">Due</div>
+            <DateTimeField value={form.due_at} allDay={form.is_all_day} onChange={({ value, allDay }) => setForm(prev => ({ ...prev, due_at: value, is_all_day: allDay }))} />
+          </div>
+          <div>
+            <div className="mb-1 text-xs font-semibold text-muted-strong">Assigned to</div>
+            <AssigneeSelect people={people} value={form.assigned_to_person_ids} onChange={value => setForm(prev => ({ ...prev, assigned_to_person_ids: value }))} />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-muted-strong">Description</label>
+            <Textarea value={form.description} onChange={e => setForm(prev => ({ ...prev, description: e.target.value }))} rows={4} placeholder="Instructions, requirements or useful context" />
+          </div>
+        </div>
+      ) : (
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-xs px-2 py-0.5 rounded-full bg-sunken text-muted-strong">{TYPE_LABELS[assessment.assessment_type]}</span>
@@ -393,12 +483,15 @@ function AssignmentDetailModal({ assessment, onClose, onChange, onDelete, onErro
         </div>
         <AssessmentDetail assessment={assessment} onError={onError} />
       </div>
+      )}
     </Modal>
   )
 }
 
-function AssignmentRow({ a, focused, onChange, onDelete, onError }: {
+function AssignmentRow({ a, courses, people, focused, onChange, onDelete, onError }: {
   a: EducationAssessment
+  courses: EducationCourse[]
+  people: Person[]
   focused?: boolean
   onChange: (a: EducationAssessment) => void
   onDelete: (id: number) => void
@@ -463,16 +556,19 @@ function AssignmentRow({ a, focused, onChange, onDelete, onError }: {
           value={a.status}
           onChange={e => setStatus(e.target.value as AssessmentStatus)}
           disabled={busy}
-          className="max-w-24 flex-shrink-0 rounded-lg border border-line bg-surface px-2 py-1 text-xs text-muted-strong sm:max-w-none"
+          className="hidden max-w-24 flex-shrink-0 rounded-lg border border-line bg-surface px-2 py-1 text-xs text-muted-strong sm:block sm:max-w-none"
         >
           {Object.entries(STATUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
-        <DeleteAction onClick={remove} label={a.title} />
+        <span className="mt-1 text-lg text-muted sm:hidden" aria-hidden>›</span>
+        <span className="hidden sm:block"><DeleteAction onClick={remove} label={a.title} /></span>
       </div>
 
       {open && (
         <AssignmentDetailModal
           assessment={a}
+          courses={courses}
+          people={people}
           onClose={() => setOpen(false)}
           onChange={onChange}
           onDelete={id => { onDelete(id); setOpen(false) }}
@@ -526,7 +622,7 @@ function AssignmentsTab({ courses, people, defaultAssignee, focusedAssessmentId,
         ) : (
           <ul className="divide-y divide-line">
             {assessments.map(a => (
-              <AssignmentRow key={a.id} a={a} focused={a.id === focusedAssessmentId} onChange={upsert} onDelete={id => setAssessments(prev => prev.filter(x => x.id !== id))} onError={onError} />
+              <AssignmentRow key={a.id} a={a} courses={courses} people={people} focused={a.id === focusedAssessmentId} onChange={upsert} onDelete={id => setAssessments(prev => prev.filter(x => x.id !== id))} onError={onError} />
             ))}
           </ul>
         )}
@@ -1302,7 +1398,10 @@ const TABS: TabDef<Tab>[] = [
 // docs/36 §6.5: the landing screen should be deadline/timetable-first — "Today" plus "Due soon" —
 // with Profile/Institutions moved out of the primary path (they're now last in the tab order and
 // reachable from the "More" row below rather than being the default landing tab).
-function EducationOverviewTab({ onGoTab }: { onGoTab: (t: Tab) => void }) {
+function EducationOverviewTab({ onGoTab, onOpenAssessment }: {
+  onGoTab: (t: Tab) => void
+  onOpenAssessment: (id: number) => void
+}) {
   const [todaySessions, setTodaySessions] = useState<EducationClassSession[]>([])
   const [dueSoon, setDueSoon] = useState<EducationAssessment[]>([])
   const [loading, setLoading] = useState(true)
@@ -1365,19 +1464,22 @@ function EducationOverviewTab({ onGoTab }: { onGoTab: (t: Tab) => void }) {
                 title={a.title}
                 subtitle={a.course_code || a.course_name || TYPE_LABELS[a.assessment_type]}
                 trailing={due?.text}
-                onClick={() => onGoTab('assignments')}
+                onClick={() => onOpenAssessment(a.id)}
               />
             )
           })
         )}
       </MobileSection>
 
-      <MobileSection title="Sections">
-        <MobileListRow icon="📌" title="Assignments" onClick={() => onGoTab('assignments')} />
-        <MobileListRow icon="🗓" title="Timetable" onClick={() => onGoTab('timetable')} />
-        <MobileListRow icon="🏫" title="Courses" onClick={() => onGoTab('courses')} />
-        <MobileListRow icon="🎉" title="Events" onClick={() => onGoTab('events')} />
-        <MobileListRow icon="⚙️" title="More" subtitle="Profile and institutions" onClick={() => onGoTab('profile')} />
+      <MobileSection title="Plan and track">
+        <MobileListRow icon="📌" title="Assignments" subtitle="Work, deadlines and progress" onClick={() => onGoTab('assignments')} />
+        <MobileListRow icon="🗓" title="Timetable" subtitle="Classes and weekly schedule" onClick={() => onGoTab('timetable')} />
+        <MobileListRow icon="🎉" title="School events" subtitle="Excursions, terms and important dates" onClick={() => onGoTab('events')} />
+      </MobileSection>
+      <MobileSection title="Study setup">
+        <MobileListRow icon="📚" title="Courses" subtitle="Subjects, teachers and course details" onClick={() => onGoTab('courses')} />
+        <MobileListRow icon="👤" title="Academic profile" subtitle="Study progress and credits" onClick={() => onGoTab('profile')} />
+        <MobileListRow icon="🏫" title="Schools and institutions" onClick={() => onGoTab('institutions')} />
       </MobileSection>
     </div>
   )
@@ -1474,6 +1576,7 @@ function InstitutionsTab({ institutions, onChange, onError }: {
 
 export function EducationPage() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const tabsState = useCustomisableTabs<Tab>('education', TABS)
   const { tab, setTab } = tabsState
   const [searchParams] = useSearchParams()
@@ -1505,6 +1608,7 @@ export function EducationPage() {
       <div className="hidden sm:block">
         <PageHeader title="Education" icon="🎓" />
       </div>
+      {tab === 'overview' && <MobileScreenHeader className="sm:hidden" title="Education" />}
 
       <SearchField
         value={query}
@@ -1536,7 +1640,12 @@ export function EducationPage() {
             />
           )}
 
-          {tab === 'overview' && <EducationOverviewTab onGoTab={setTab} />}
+          {tab === 'overview' && (
+            <EducationOverviewTab
+              onGoTab={setTab}
+              onOpenAssessment={id => navigate(`/education?tab=assignments&assessment=${id}`)}
+            />
+          )}
           {tab === 'profile' && <ProfileTab people={people} institutions={institutions} defaultPersonId={defaultAssignee[0] ?? null} onAddInstitution={() => setTab('institutions')} onError={setError} />}
           {tab === 'assignments' && <AssignmentsTab courses={courses} people={people} defaultAssignee={defaultAssignee} focusedAssessmentId={focusedAssessmentId || undefined} onError={setError} />}
           {tab === 'courses' && <CoursesTab courses={courses} reload={loadCourses} people={people} institutions={institutions} defaultAssignee={defaultAssignee} onAddInstitution={() => setTab('institutions')} onError={setError} />}
