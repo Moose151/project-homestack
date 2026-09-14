@@ -41,6 +41,9 @@ A real Let's Encrypt certificate is issued by NPM through a **Cloudflare DNS-01 
 **Pi-hole** resolves `homestack.moosesoftwares.com` to the server's LAN address
 (`192.168.1.125`) so the app remains LAN-only.
 
+The server itself also requires this hostname to resolve for the deploy script's HTTPS validation;
+its `/etc/hosts` maps `homestack.moosesoftwares.com` to `192.168.1.125`.
+
 No router port forwarding is required for certificate issue/renewal and HomeStack is **not
 publicly exposed**.
 
@@ -62,9 +65,9 @@ Production network hardening is complete: the production Compose stack publishes
 PostgreSQL/backend/frontend host ports; Nginx Proxy Manager reaches the app over the external
 `proxy` Docker network; PostgreSQL stays isolated on `project-homestack_private`.
 
-The next production-readiness work after this branch is review/live adoption of the safe one-command
-deployment script (`scripts/deploy-production.sh`), then CI, off-server backup validation and
-System Health.
+The safe one-command deployment script (`scripts/deploy-production.sh`) is live and is the
+supported production update path. The next production-readiness priorities are CI, off-server
+backup validation and System Health.
 
 ### Live HTTPS environment
 
@@ -177,6 +180,11 @@ Major shipped areas include:
 - **Books** personal shelves, per-User ratings/notes and shared Book Clubs/up-next queue.
 - Homestead rooms/planning/maintenance/appliances/services/cover/pools/utilities/floor plan.
 - Native Solace/Money.
+- **v0.40.4 everyday phone follow-up** — Calendar opens on a readable event-labelled Month,
+  Money starts with the current household position, Education assignments edit in their focused
+  sheet, Home leads with a daily brief, and global Add captures a shared task/grocery/note without
+  losing unfinished text. Atlas to-do lists use a phone picker, so several household lists do not
+  collapse into a wrapped chip row.
 - Fitness & Training.
 - Travel trips/bookings/costs/itinerary.
 - Corners and safe link/product/book enrichment/watch infrastructure.
@@ -298,8 +306,7 @@ Recommended order:
 
 1. ~~replace Django `runserver` and Vite dev serving with production serving~~ — **done, v0.35.0**;
 2. ~~reduce unnecessary LAN-exposed database/backend/frontend ports~~ — **done, v0.37.x**;
-3. create one supported deploy command with migration + smoke validation — **prepared for review
-   in `scripts/deploy-production.sh`**;
+3. create one supported deploy command with migration + smoke validation — **done**;
 4. add frontend unit/E2E testing and CI;
 5. establish encrypted off-server backup + recovery validation;
 6. add small operational/System Health visibility;
@@ -317,7 +324,7 @@ Frontend is attached only to `proxy`; backend is attached to `proxy` plus
 Development Compose remains isolated on `homestack_dev`.
 
 **Deployment automation status (v0.39.3):** `scripts/deploy-production.sh` is the supported safe
-production deployment workflow and is prepared for review. It performs preflight, backup
+production deployment workflow. It performs preflight, backup
 freshness/completeness gating, fast-forward-only Git update, build-before-promotion, explicit
 `--migrate` handling, backend/frontend recreation one at a time, NPM `nginx -t`/reload after each
 app-container promotion, HTTPS/API checks and final topology validation. It tracks the last
@@ -325,7 +332,7 @@ successfully deployed commit in `.git/homestack-deployed-sha`, updates that mark
 full deployment succeeds, always normalises SHAs to the full commit hash, and fails closed if the
 marker is not a Git ancestor of the deploy target. `--record-rollback-sha` lets an operator record
 a manually validated rollback as the deployed marker without touching containers or the checkout.
-Do not use it for a live deployment until the branch has been reviewed and merged.
+Use it for normal production updates after pushing the intended commit to `main`.
 
 Explicitly avoid generic plugins/integrations, Kubernetes/microservices, Redis/Celery without
 measured need, or public exposure before the Security Architecture gate is satisfied.

@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.40.3**
+> **Current version: 0.40.4**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,28 @@
 ---
 
 ## 0.40 — Faster everyday household coordination
+
+### 0.40.4 — 2026-09-14 — Mobile daily-use foundations
+
+- **Mobile Calendar now opens to a readable Month view.** Days are taller and show compact,
+  colour-coded event names and rotation labels directly in the grid, with a clear overflow count,
+  while full day detail remains one tap away.
+- **Money's phone home is organised around ordinary household questions.** It now leads with what
+  is left to pay, what is reserved and when payday is due, followed by clear destinations for
+  bills, payday planning and savings/goals; reports and setup are intentionally secondary.
+- **Assignments can be edited in place.** The Education assignment sheet now edits title, type,
+  course, priority, weighting, due date/time, assignees and description without deleting and
+  recreating the record. Education's phone navigation is grouped around planning/tracking and
+  study setup, and a due-soon row opens the exact assignment.
+- **The phone Home screen now starts with a short daily briefing** before its detailed feed, and
+  the global Add sheet can capture a shared task, grocery item or note immediately. It also links
+  directly into creating an Education assignment.
+- Mobile Calendar and Education regression coverage was extended for the new default month layout,
+  assignment editing and deep-link behaviour. No migration is required.
+- **Shared To-dos stay readable for a whole household on a phone.** The list switcher is now a
+  full-width picker rather than a wrapped row of small household-member chips; the quick Add
+  surface also retains an unfinished task, grocery or note title locally until it is saved, so a
+  brief interruption does not lose a capture.
 
 ### 0.40.3 — 2026-08-31 — Fix stale overdue bills in Upcoming widget
 

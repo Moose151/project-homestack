@@ -17,7 +17,7 @@ export function ConnectionBanner() {
   if (online) return null
   return (
     <div className="sticky top-16 z-20 bg-warning px-4 py-2 text-center text-xs font-semibold text-white">
-      You’re offline. Changes will be available again when the connection returns.
+      You’re offline. You can keep reading saved screens, but new changes cannot be saved until you reconnect.
     </div>
   )
 }

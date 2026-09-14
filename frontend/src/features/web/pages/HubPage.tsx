@@ -37,6 +37,7 @@ import { STACK_BY_KEY, softColour } from '../../../config/stacks'
 import { InlineAlert, PageSkeleton } from '../../../components/PageState'
 import { openGlobalSearch } from '../../../lib/shellEvents'
 import { isPhoneViewport } from '../../../lib/viewport'
+import { MobileSummaryCard } from '../../../components/mobile'
 
 // Spans are chosen so a board of same-size widgets tiles a row exactly and leaves no dead
 // column: at xl the grid is 4 columns, so 4 small / 2 medium / 1 large fills a row.
@@ -1218,6 +1219,16 @@ export function HubPage() {
       {!data ? <PageSkeleton /> : (
         phone ? (
           <div className="flex flex-col gap-5" aria-label="Your daily feed">
+            {(() => {
+              const attention = data.widgets.filter(widget => MOBILE_ATTENTION_WIDGETS.has(widget.key))
+              const upcoming = data.widgets.filter(widget => MOBILE_UPCOMING_WIDGETS.has(widget.key))
+              const attentionCount = attention.reduce((total, widget) => total + widget.items.length, 0)
+              const upcomingCount = upcoming.reduce((total, widget) => total + widget.items.length, 0)
+              const lines = attentionCount > 0
+                ? [`${attentionCount} thing${attentionCount === 1 ? '' : 's'} need${attentionCount === 1 ? 's' : ''} attention`, upcomingCount > 0 ? `${upcomingCount} upcoming item${upcomingCount === 1 ? '' : 's'}` : 'Your day is otherwise clear']
+                : [upcomingCount > 0 ? `${upcomingCount} upcoming item${upcomingCount === 1 ? '' : 's'}` : 'Nothing urgent right now', 'Your household is on track today']
+              return <MobileSummaryCard title="Today at a glance" lines={lines} tone={attentionCount > 0 ? 'attention' : 'success'} />
+            })()}
             {data.widgets.length === 0 ? (
               <Card>
                 <p className="py-4 text-center text-sm text-muted">Nothing needs your attention right now.</p>

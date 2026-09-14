@@ -21,7 +21,7 @@ import { DateTimeField } from '../../../components/DateTimeField'
 import { AssigneeSelect, personIdForUser } from '../../../components/AssigneeSelect'
 import { DeleteAction } from '../../../components/RowActions'
 import { useAuth } from '../../auth/AuthContext'
-import { useUrlQueryState } from '../../../hooks/useUrlTab'
+import { useUrlAction, useUrlQueryState } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
 import { Modal } from '../../../components/Modal'
 import { MobileListRow, MobileScreenHeader, MobileSection } from '../../../components/mobile'
@@ -273,6 +273,7 @@ function AssignmentForm({ courses, people, defaultAssignee, onCreated, onError }
   const [priority, setPriority] = useState<AssessmentPriority>('medium')
   const [assignee, setAssignee] = useState<number[]>(defaultAssignee)
   const [busy, setBusy] = useState(false)
+  useUrlAction('assignment', () => setOpen(true))
 
   // Sync assignee when people finish loading and defaultAssignee becomes available
   useEffect(() => {
@@ -1608,8 +1609,6 @@ export function EducationPage() {
       <div className="hidden sm:block">
         <PageHeader title="Education" icon="🎓" />
       </div>
-      {tab === 'overview' && <MobileScreenHeader className="sm:hidden" title="Education" />}
-
       <SearchField
         value={query}
         onChange={e => setQuery(e.target.value)}

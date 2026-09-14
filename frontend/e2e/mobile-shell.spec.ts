@@ -177,6 +177,26 @@ test.describe('phone layout', () => {
     await expect(dialog).not.toBeVisible()
   })
 
+  test('Quick Create keeps an unfinished capture and saves a grocery item from the phone sheet', async ({ page }) => {
+    let saved: Record<string, unknown> | null = null
+    await page.route('**/api/v1/atlas/grocery/', async route => {
+      if (route.request().method() === 'POST') saved = route.request().postDataJSON() as Record<string, unknown>
+      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ id: 1, title: 'Oat milk' }) })
+    })
+
+    await page.getByRole('button', { name: 'Create something' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Add something' })
+    await dialog.getByLabel('New shared task').fill('Oat milk')
+    await page.keyboard.press('Escape')
+
+    await page.getByRole('button', { name: 'Create something' }).click()
+    await expect(dialog.getByLabel('New shared task')).toHaveValue('Oat milk')
+    await dialog.getByRole('button', { name: 'Grocery' }).click()
+    await dialog.getByRole('button', { name: 'Add', exact: true }).click()
+    await expect.poll(() => saved).toMatchObject({ title: 'Oat milk' })
+    await expect(dialog.getByText('Added to groceries')).toBeVisible()
+  })
+
   test('Quick Create prioritizes actions for the current area and keeps global actions', async ({ page }) => {
     await page.goto('/calendar')
     await page.getByRole('button', { name: 'Create something' }).click()

@@ -848,10 +848,29 @@ function TodoTab({ todoLists, focusedListId, onRefresh, onError }: {
 
   const pending = items.filter(i => !i.is_complete)
   const done = items.filter(i => i.is_complete)
+  const viewLabel = view === 'today' ? 'Today' : activeList?.title ?? 'To-dos'
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap gap-1 rounded-xl bg-sunken p-1">
+      {/* A household with several people quickly outgrows a chip row. Keep direct taps on
+          desktop, but give phones one clear full-width list switcher instead of wrapped labels. */}
+      <label className="flex flex-col gap-1.5 sm:hidden">
+        <span className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted">To-do list</span>
+        <span className="relative block">
+          <select
+            value={view}
+            onChange={event => setView(event.target.value === 'today' ? 'today' : Number(event.target.value))}
+            aria-label="To-do list"
+            className="min-h-12 w-full appearance-none rounded-2xl border border-line bg-surface px-4 py-2.5 pr-11 text-sm font-bold text-ink shadow-soft outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="today">Today</option>
+            {todoLists.map(list => <option key={list.id} value={list.id}>{list.title}</option>)}
+          </select>
+          <span className="pointer-events-none absolute inset-y-0 right-4 grid place-items-center text-sm text-muted">⌄</span>
+        </span>
+        <span className="sr-only">Viewing {viewLabel}</span>
+      </label>
+      <div className="hidden flex-wrap gap-1 rounded-xl bg-sunken p-1 sm:flex">
         <button type="button" onClick={() => setView('today')} className={`min-h-9 rounded-lg px-3 text-xs font-bold ${view === 'today' ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'}`}>Today</button>
         {todoLists.map(list => (
           <button key={list.id} type="button" onClick={() => setView(list.id)} className={`min-h-9 rounded-lg px-3 text-xs font-bold ${view === list.id ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink'}`}>{list.title}</button>

@@ -1,7 +1,40 @@
 {
-  "current_version": "0.40.1",
-  "source_sha256": "e93472dd1a7686e1c7456a842168f0bfdb687dec5e3f15c5c1fb73d90d9b52e5",
+  "current_version": "0.40.4",
+  "source_sha256": "af1bfb5ad352ae902d0df63f5851cf88c75d8c730d04d6c60bfcd4a7f60145ca",
   "releases": [
+    {
+      "version": "0.40.4",
+      "date": "2026-09-14",
+      "title": "Mobile daily-use foundations",
+      "changes": [
+        "**Mobile Calendar now opens to a readable Month view.** Days are taller and show compact, colour-coded event names and rotation labels directly in the grid, with a clear overflow count, while full day detail remains one tap away.",
+        "**Money's phone home is organised around ordinary household questions.** It now leads with what is left to pay, what is reserved and when payday is due, followed by clear destinations for bills, payday planning and savings/goals; reports and setup are intentionally secondary.",
+        "**Assignments can be edited in place.** The Education assignment sheet now edits title, type, course, priority, weighting, due date/time, assignees and description without deleting and recreating the record. Education's phone navigation is grouped around planning/tracking and study setup, and a due-soon row opens the exact assignment.",
+        "**The phone Home screen now starts with a short daily briefing** before its detailed feed, and the global Add sheet can capture a shared task, grocery item or note immediately. It also links directly into creating an Education assignment.",
+        "Mobile Calendar and Education regression coverage was extended for the new default month layout, assignment editing and deep-link behaviour. No migration is required.",
+        "**Shared To-dos stay readable for a whole household on a phone.** The list switcher is now a full-width picker rather than a wrapped row of small household-member chips; the quick Add surface also retains an unfinished task, grocery or note title locally until it is saved, so a brief interruption does not lose a capture."
+      ]
+    },
+    {
+      "version": "0.40.3",
+      "date": "2026-08-31",
+      "title": "Fix stale overdue bills in Upcoming widget",
+      "changes": [
+        "**Root-cause fix for stale \"overdue\" bill entries in the Upcoming dashboard widget.** Recurring bills that had been paid were permanently showing as overdue because `mark_occurrence_paid()` never re-synced the CalendarEvent for recurring bills, leaving it frozen on the original anchor date. Three layers of the fix: 1. `Bill.get_calendar_data()` now returns the next **UPCOMING** occurrence's `due_at` as `start_at` (not the stale `bill.due_at` anchor). If no upcoming occurrence is materialised, it returns `None`, which deletes the CalendarEvent until occurrences are generated. 2. `mark_occurrence_paid()` now calls `ensure_bill_occurrences()` then `sync_event_for(bill)` for **all** bills (was only non-recurring). The CalendarEvent now correctly advances to the next occurrence date after every payment. 3. `create_bill()` now calls `sync_event_for()` **after** `settle_history_on_entry()` so that bills entered with a past anchor date immediately get the correct future-occurrence date. 4. `mark_occurrence_unpaid()` also now calls `sync_event_for(bill)` for recurring bills.",
+        "**\"Paid\" action on the Upcoming widget** for bill entries only. A compact \"Paid\" button sits beside each Bill row in the Upcoming widget. Clicking it calls the existing `POST /solace/bills/<id>/paid/` endpoint, advances the recurring bill to its next occurrence, then refreshes the Hub — no page reload. Button is disabled while the request is in flight; shows an inline error on failure.",
+        "**`reconcile_bill_calendar_events` management command** added to `apps/solace/management/commands/`. Run once after deploying to repair existing stale CalendarEvents in production. Supports `--dry-run` and `--household` filters.",
+        "**Regression tests** (`BillCalendarEventSyncTests`) covering: new recurring bill with past anchor shows next occurrence not stale date; paying an occurrence advances CalendarEvent; stale entry disappears from Upcoming after payment; unpaid overdue one-off bill is preserved; reversing a payment re-syncs CalendarEvent."
+      ]
+    },
+    {
+      "version": "0.40.2",
+      "date": "2026-08-31",
+      "title": "Dashboard item ticking and assignment mark-done",
+      "changes": [
+        "**Grocery and to-do items on the Dashboard can now be ticked off in place.** The static circles in the Grocery and To-dos widgets are now clickable buttons: tapping one calls the existing `complete/` endpoint immediately, then refreshes the widget. A spinner-disabled state prevents double-taps while the request is in flight. Items disappear from the list on refresh as they would in the full Atlas view.",
+        "**Education assignment deadlines on the Dashboard can be marked done.** The `education_deadlines` widget row gains the same circle-button pattern — clicking marks the assessment `status: done` via `PATCH /education/assessments/<id>/` and refreshes the widget, removing the completed item. The due-date calendar link is preserved alongside it."
+      ]
+    },
     {
       "version": "0.40.1",
       "date": "2026-08-20",
