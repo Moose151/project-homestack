@@ -47,15 +47,16 @@ test.describe('phone', () => {
     test.skip(testInfo.project.name === 'tablet-768', 'phone-only: this page splits mobile/desktop at its own sm: breakpoint')
   })
 
-  test('defaults to Agenda, not Month, with no stored preference', async ({ page }) => {
+  test('defaults to a readable Month with no stored preference', async ({ page }) => {
     await page.goto('/calendar')
-    await expect(page.getByLabel('Calendar view')).toHaveValue('agenda')
-    await expect(page.getByText('Dentist')).toBeVisible()
+    await expect(page.getByLabel('Calendar view')).toHaveValue('month')
+    await expect(page.locator('div.touch-pan-y').getByText('Dentist', { exact: true })).toBeVisible()
     await expectNoHorizontalOverflow(page)
   })
 
   test('Agenda hides Previous/Next/Today since they cannot page its fixed 60-day window', async ({ page }) => {
     await page.goto('/calendar')
+    await page.getByLabel('Calendar view').selectOption('agenda')
     await expect(page.getByLabel('Calendar view')).toHaveValue('agenda')
     await expect(page.getByRole('button', { name: 'Previous period' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Next period' })).toHaveCount(0)
@@ -63,13 +64,10 @@ test.describe('phone', () => {
     await expect(page.getByText('Upcoming')).toBeVisible()
   })
 
-  test('Month cells show a dot, not a truncated title, and tapping the actual event day opens it in the day sheet', async ({ page }) => {
+  test('Month cells show event names at a glance and tapping the event day opens its detail sheet', async ({ page }) => {
     await page.goto('/calendar')
     await page.getByLabel('Calendar view').selectOption('month')
-    // The fixture event's title must not leak into the (illegible) month cell itself — it's
-    // meant only for the sheet opened by tapping the day (docs/36 §6.2: "Month is for
-    // orientation, not full event content").
-    await expect(page.locator('div.touch-pan-y').getByText('Dentist', { exact: true })).toHaveCount(0)
+    await expect(page.locator('div.touch-pan-y').getByText('Dentist', { exact: true })).toBeVisible()
     // The one fixture event lives on today, so today's cell — and only today's cell — carries
     // a ", 1 events" suffix in its aria-label; tap that specific cell, not just "the first one".
     await page.getByRole('button', { name: /1 events$/ }).click()
@@ -127,6 +125,7 @@ test.describe('phone', () => {
 
   test('opening an event uses a full-height sheet with a sticky Save, and the title field is focused', async ({ page }) => {
     await page.goto('/calendar')
+    await page.getByLabel('Calendar view').selectOption('agenda')
     await page.getByText('Dentist').click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
@@ -145,6 +144,7 @@ test.describe('phone', () => {
 
   test('the full-height event editor remains usable after scrolling to reveal more options', async ({ page }) => {
     await page.goto('/calendar')
+    await page.getByLabel('Calendar view').selectOption('agenda')
     await page.getByText('Dentist').click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
@@ -180,6 +180,7 @@ test.describe('phone', () => {
       '/api/v1/people/': [],
     })
     await page.goto('/calendar')
+    await page.getByLabel('Calendar view').selectOption('agenda')
     await page.getByText('Roof gutter clearing').click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
@@ -207,6 +208,7 @@ test.describe('phone', () => {
       ],
     })
     await page.goto('/calendar')
+    await page.getByLabel('Calendar view').selectOption('agenda')
     await expect(page.getByText('My dentist')).toBeVisible()
     await expect(page.getByText('Partner dentist')).toBeVisible()
 

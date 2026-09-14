@@ -734,9 +734,10 @@ export function CalendarPage() {
     if (initialLinkedDate) return 'day'
     const stored = localStorage.getItem('hs_cal_view')
     if (stored) return stored as View
-    // docs/36 §6.2: Agenda is the default everyday reading mode on phone, independent of the
-    // household's own (typically desktop-oriented) default — never overridden below either.
-    return isPhoneViewport() ? 'agenda' : 'month'
+    // A phone month view now carries readable event labels, so it is useful as the everyday
+    // landing view instead of being only an orientation grid that immediately sends people to
+    // Agenda. Keep an explicitly saved preference, but make Month the helpful first experience.
+    return 'month'
   })
   const [weekStart, setWeekStart] = useState<number>(() => Number(lsGet('hs_cal_weekstart', '1')))
   const [time24, setTime24] = useState<boolean>(() => lsGet('hs_cal_24h', '0') === '1')
@@ -1256,29 +1257,43 @@ export function CalendarPage() {
                         if (monthSwipeHandled.current) return
                         selectMonthDay(day)
                       }}
-                      className={`relative min-h-[58px] border-b border-r border-line p-1.5 pt-2 text-left transition-colors ${selected ? 'z-[1] bg-primary-soft/70 ring-2 ring-inset ring-primary' : 'active:bg-sunken'} ${inMonth ? 'text-ink' : 'text-muted opacity-45'}`}
+                      className={`relative min-h-[94px] overflow-hidden border-b border-r border-line px-0.5 pb-1 pt-1.5 text-left align-top transition-colors ${selected ? 'z-[1] bg-primary-soft/55 ring-2 ring-inset ring-primary' : 'active:bg-sunken'} ${inMonth ? 'text-ink' : 'text-muted opacity-40'}`}
                       aria-pressed={selected}
                       aria-label={`${day.toLocaleDateString()}${occurrence ? `, ${occurrence.label}` : ''}${dayItems.length ? `, ${dayItems.length} events` : ''}`}
                     >
                       {occurrence && <span className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: occurrence.colour }} />}
-                      <span className={`inline-grid h-6 min-w-6 place-items-center rounded-full px-1 text-xs font-bold ${isToday(day) ? 'bg-primary text-white' : ''}`}>{day.getDate()}</span>
+                      <span className={`mx-auto grid h-6 min-w-6 w-fit place-items-center rounded-full px-1 text-xs font-bold ${isToday(day) ? 'bg-primary text-white' : ''}`}>{day.getDate()}</span>
                       {occurrence?.is_override && <span className="absolute right-1 top-2 text-[8px] font-black text-primary" aria-label="Changed day">S</span>}
-                      {/* Month is for orientation, not full event content (docs/36 §6.2) — a
-                          dot per event plus an overflow count, not a truncated illegible title. */}
-                      {dayItems.length > 0 && (
-                        <span className="absolute inset-x-1 bottom-1.5 flex min-w-0 items-center justify-center gap-0.5" aria-hidden>
-                          {dayItems.slice(0, 3).map((item, i) => (
-                            <span key={i} className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: colourFor(item) }} />
-                          ))}
-                          {dayItems.length > 3 && <span className="flex-shrink-0 text-[8px] font-black text-muted">+{dayItems.length - 3}</span>}
-                        </span>
-                      )}
+                      <span className="mt-1 flex min-w-0 flex-col gap-0.5" aria-hidden>
+                        {occurrence && (
+                          <span
+                            className="block truncate rounded-sm px-0.5 text-center text-[9px] font-bold leading-4 text-white"
+                            style={{ backgroundColor: occurrence.colour }}
+                          >
+                            {occurrence.label}
+                          </span>
+                        )}
+                        {dayItems.slice(0, occurrence ? 2 : 3).map(item => (
+                          <span
+                            key={item.id}
+                            className="block truncate rounded-sm px-0.5 text-center text-[9px] font-bold leading-4 text-white"
+                            style={{ backgroundColor: colourFor(item) }}
+                          >
+                            {item.title}
+                          </span>
+                        ))}
+                        {dayItems.length > (occurrence ? 2 : 3) && (
+                          <span className="block text-center text-[9px] font-bold leading-3 text-muted">
+                            +{dayItems.length - (occurrence ? 2 : 3)} more
+                          </span>
+                        )}
+                      </span>
                     </button>
                   )
                 })}
               </div>
             </div>
-            <p className="mt-2 px-1 text-[11px] text-muted">Tap a date for its details · swipe sideways to change month · <strong>S</strong> marks a changed rotation day.</p>
+            <p className="mt-2 px-1 text-[11px] text-muted">Tap a date for full details · swipe sideways to change month · <strong>S</strong> marks a changed rotation day.</p>
           </div>
           <div data-calendar-grid className="hidden rounded-2xl border border-line overflow-hidden sm:block">
             <div className="grid grid-cols-7 bg-sunken">

@@ -2409,9 +2409,11 @@ function MoneyMobileHome({ now, health, onTab, onSection, onAction }: {
   const [payingId, setPayingId] = useState<number | null>(null)
   if (!now) return <div className="h-64 animate-pulse rounded-2xl bg-sunken" />
   const lines = [
-    `${money(now.due_total)} due before next payday`,
-    `${money(now.bucket_total)} set aside`,
-    `${now.days_until_cycle_end <= 0 ? 'Payday today' : `${now.days_until_cycle_end} days until next pay cycle`}`,
+    now.due.length === 0
+      ? 'No bills left to pay before payday'
+      : `${money(now.due_total)} left to pay before payday`,
+    `${money(now.bucket_total)} reserved in your buckets`,
+    now.days_until_cycle_end <= 0 ? 'Payday is today' : `Next payday in ${now.days_until_cycle_end} days`,
   ]
   const nextDue = now.due.slice(0, 3)
   return (
@@ -2446,13 +2448,14 @@ function MoneyMobileHome({ now, health, onTab, onSection, onAction }: {
         ))}
         <Button variant="secondary" className="w-full" onClick={() => onSection('bills', 'upcoming')}>View all upcoming bills</Button>
       </MobileSection>
-      <MobileSection title="Money">
-        <MobileListRow icon="🧾" title="Bills" subtitle="Bills and payment schedule" onClick={() => onSection('bills', 'bills')} />
-        <MobileListRow icon="✅" title="Pay plan" subtitle="This cycle's checklist and allocations" onClick={() => onSection('plan', 'payplan')} />
-        <MobileListRow icon="🪣" title="Buckets" subtitle="Set-asides and rules" onClick={() => onSection('plan', 'buckets')} />
-        <MobileListRow icon="🛒" title="Purchases" subtitle="Planned spending goals" onClick={() => onSection('plan', 'purchases')} />
-        <MobileListRow icon="📈" title="Insights" subtitle="Forecasts and history" onClick={() => onTab('insights')} />
-        <MobileListRow icon="⚙️" title="Manage" subtitle="Settings and balances" onClick={() => onTab('manage')} />
+      <MobileSection title="What would you like to do?">
+        <MobileListRow icon="🧾" title="See and manage bills" subtitle="What is due, what is paid, and your regular bills" onClick={() => onSection('bills', 'upcoming')} />
+        <MobileListRow icon="✅" title="Plan the next payday" subtitle="See what to transfer and what remains" onClick={() => onSection('plan', 'payplan')} />
+        <MobileListRow icon="🪣" title="Manage savings and goals" subtitle="Buckets and planned purchases" onClick={() => onSection('plan', 'buckets')} />
+      </MobileSection>
+      <MobileSection title="More">
+        <MobileListRow icon="📈" title="Reports and forecasts" subtitle="Future balances and past pay cycles" onClick={() => onTab('insights')} />
+        <MobileListRow icon="⚙️" title="Money setup" subtitle="Income, accounts, categories and settings" onClick={() => onTab('manage')} />
       </MobileSection>
     </div>
   )
