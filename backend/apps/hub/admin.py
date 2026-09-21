@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from apps.hub.models import HouseholdHubWidget, HubWidget, UserHubWidget
+from apps.hub.models import HouseholdHubWidget, HubUpcomingDismissal, HubWidget, UserHubWidget
 
 
 @admin.register(HubWidget)
@@ -16,3 +16,8 @@ class HouseholdHubWidgetAdmin(admin.ModelAdmin):
 @admin.register(UserHubWidget)
 class UserHubWidgetAdmin(admin.ModelAdmin):
     list_display = ["user", "widget", "is_enabled", "display_order"]
+
+
+@admin.register(HubUpcomingDismissal)
+class HubUpcomingDismissalAdmin(admin.ModelAdmin):
+    list_display = ["user", "event", "dismissed_at"]

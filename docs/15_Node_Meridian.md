@@ -186,6 +186,17 @@ points, badges, goals and review queues.
 
 Dated/recurring task information follows D7/D8 Calendar ownership rules.
 
+A completed **one-off** task drops its Calendar deadline projection, so finished work does not sit
+on Hub as permanently overdue. A **recurring** task keeps its projection: `MeridianTask.status` is
+only recomputed on write (`_sync_task_from_latest_completion`), so last cycle's completion must not
+be allowed to erase this cycle's deadline. This is the same rule Solace already applies to Bills.
+`_sync_task_from_latest_completion` is the single choke point that re-syncs the projection, so
+submit, approve and reject all keep Calendar honest — a rejected completion restores the deadline.
+
+Tasks can be completed from Hub's Upcoming feed through the shared row contract
+(`23_Core_Hub.md` §11). Hub gates that on Meridian's own `complete` permission action, not `edit`,
+so a child can finish their own task from the Dashboard exactly as they can on the kiosk.
+
 Notifications use the shared Notifications/Web Push infrastructure for meaningful events such as
 approval/rejection, reward state, badges and allowance. Meridian does not implement its own push
 channel.

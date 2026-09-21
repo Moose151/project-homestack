@@ -24,6 +24,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { useUrlAction, useUrlQueryState } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
 import { Modal } from '../../../components/Modal'
+import { UndoToast } from '../../../components/UndoToast'
 import { MobileListRow, MobileScreenHeader, MobileSection } from '../../../components/mobile'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
@@ -62,6 +63,16 @@ function dueLabel(iso: string | null, allDay = false) {
     text: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
     tone: 'bg-sunken text-muted-strong',
   }
+}
+
+function assessmentStateLabel(assessment: EducationAssessment) {
+  if (assessment.is_complete) {
+    return {
+      text: STATUS_LABELS[assessment.status],
+      tone: 'bg-success-soft text-success',
+    }
+  }
+  return dueLabel(assessment.due_at, assessment.is_all_day)
 }
 
 function calendarDayHref(iso: string | null) {
@@ -365,7 +376,7 @@ function AssignmentDetailModal({ assessment, courses, people, onClose, onChange,
     description: assessment.description,
     weight: assessment.weight,
   })
-  const due = dueLabel(assessment.due_at, assessment.is_all_day)
+  const due = assessmentStateLabel(assessment)
 
   const setStatus = async (status: AssessmentStatus) => {
     setBusy(true)
@@ -472,9 +483,11 @@ function AssignmentDetailModal({ assessment, courses, people, onClose, onChange,
             <span className="text-xs text-muted">{assessment.course_code || assessment.course_name}</span>
           )}
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PRIORITY_TONE[assessment.priority]}`}>{assessment.priority}</span>
-          {due && (
+          {due && (assessment.is_complete ? (
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${due.tone}`}>{due.text}</span>
+          ) : (
             <Link to={calendarDayHref(assessment.due_at)} className={`text-xs px-2 py-0.5 rounded-full font-medium ${due.tone}`}>{due.text}</Link>
-          )}
+          ))}
         </div>
         <div>
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-strong">Status</div>
@@ -489,7 +502,7 @@ function AssignmentDetailModal({ assessment, courses, people, onClose, onChange,
   )
 }
 
-function AssignmentRow({ a, courses, people, focused, onChange, onDelete, onError }: {
+function AssignmentRow({ a, courses, people, focused, onChange, onDelete, onError, onFocusCleared }: {
   a: EducationAssessment
   courses: EducationCourse[]
   people: Person[]
@@ -497,14 +510,20 @@ function AssignmentRow({ a, courses, people, focused, onChange, onDelete, onErro
   onChange: (a: EducationAssessment) => void
   onDelete: (id: number) => void
   onError: (m: string) => void
+  onFocusCleared: () => void
 }) {
   const [busy, setBusy] = useState(false)
   const [open, setOpen] = useState(Boolean(focused))
-  const due = dueLabel(a.due_at, a.is_all_day)
+  const due = assessmentStateLabel(a)
 
   const setStatus = async (status: AssessmentStatus) => {
     setBusy(true)
-    try { onChange(await api.updateAssessment(a.id, { status })) }
+    try {
+      onChange(await api.updateAssessment(a.id, { status }))
+      // The ring only means "this is the row you arrived at". Once you have acted on it,
+      // keeping it would leave a blue highlight that reads as a completion state.
+      if (focused) onFocusCleared()
+    }
     catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
   const remove = async () => {
@@ -540,7 +559,11 @@ function AssignmentRow({ a, courses, people, focused, onChange, onDelete, onErro
                 <span className="text-xs text-muted">{a.course_code || a.course_name}</span>
               )}
               {!a.is_complete && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PRIORITY_TONE[a.priority]}`}>{a.priority}</span>}
-              {due && (
+              {due && (a.is_complete ? (
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${due.tone}`}>
+                  {due.text}
+                </span>
+              ) : (
                 <Link
                   to={calendarDayHref(a.due_at)}
                   onClick={e => e.stopPropagation()}
@@ -548,7 +571,7 @@ function AssignmentRow({ a, courses, people, focused, onChange, onDelete, onErro
                 >
                   {due.text}
                 </Link>
-              )}
+              ))}
             </div>
           </button>
         </div>
@@ -570,9 +593,9 @@ function AssignmentRow({ a, courses, people, focused, onChange, onDelete, onErro
           assessment={a}
           courses={courses}
           people={people}
-          onClose={() => setOpen(false)}
+          onClose={() => { setOpen(false); if (focused) onFocusCleared() }}
           onChange={onChange}
-          onDelete={id => { onDelete(id); setOpen(false) }}
+          onDelete={id => { onDelete(id); setOpen(false); if (focused) onFocusCleared() }}
           onError={onError}
         />
       )}
@@ -580,16 +603,20 @@ function AssignmentRow({ a, courses, people, focused, onChange, onDelete, onErro
   )
 }
 
-function AssignmentsTab({ courses, people, defaultAssignee, focusedAssessmentId, onError }: {
+function AssignmentsTab({ courses, people, defaultAssignee, focusedAssessmentId, onError, onFocusCleared }: {
   courses: EducationCourse[]
   people: Person[]
   defaultAssignee: number[]
   focusedAssessmentId?: number
   onError: (m: string) => void
+  onFocusCleared: () => void
 }) {
   const [assessments, setAssessments] = useState<EducationAssessment[]>([])
   const [showDone, setShowDone] = useState(Boolean(focusedAssessmentId))
   const [loading, setLoading] = useState(true)
+  const [justCompleted, setJustCompleted] = useState<
+    { id: number; title: string; previousStatus: AssessmentStatus } | null
+  >(null)
 
   useEffect(() => {
     api.getAssessments(showDone ? undefined : { open: true })
@@ -599,12 +626,28 @@ function AssignmentsTab({ courses, people, defaultAssignee, focusedAssessmentId,
     if (!loading && focusedAssessmentId) window.setTimeout(() => document.getElementById(`education-assessment-${focusedAssessmentId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
   }, [loading, focusedAssessmentId])
 
-  const upsert = (a: EducationAssessment) =>
-    setAssessments(prev => {
-      const next = prev.some(x => x.id === a.id) ? prev.map(x => x.id === a.id ? a : x) : [...prev, a]
-      if (!showDone && a.is_complete) return next.filter(x => x.id !== a.id)
-      return next
-    })
+  // Completing used to do two different things depending on a checkbox the reader never
+  // set: with "Show completed" off the row vanished silently, and with it on (which a
+  // Dashboard deep link forces) the row stayed, struck through and still ring-highlighted.
+  // Same action, two outcomes. Now it always does the same thing — the row stays in place
+  // with its completed treatment and an Undo, matching the Dashboard's row contract.
+  const upsert = (a: EducationAssessment) => {
+    const previous = assessments.find(x => x.id === a.id)
+    if (previous && !previous.is_complete && a.is_complete) {
+      setJustCompleted({ id: a.id, title: a.title, previousStatus: previous.status })
+    }
+    setAssessments(prev => (
+      prev.some(x => x.id === a.id) ? prev.map(x => x.id === a.id ? a : x) : [...prev, a]
+    ))
+  }
+
+  const undoComplete = async () => {
+    const target = justCompleted
+    if (!target) return
+    setJustCompleted(null)
+    try { upsert(await api.updateAssessment(target.id, { status: target.previousStatus })) }
+    catch (e) { onError(errMsg(e)) }
+  }
 
   return (
     <div className="space-y-4">
@@ -623,11 +666,18 @@ function AssignmentsTab({ courses, people, defaultAssignee, focusedAssessmentId,
         ) : (
           <ul className="divide-y divide-line">
             {assessments.map(a => (
-              <AssignmentRow key={a.id} a={a} courses={courses} people={people} focused={a.id === focusedAssessmentId} onChange={upsert} onDelete={id => setAssessments(prev => prev.filter(x => x.id !== id))} onError={onError} />
+              <AssignmentRow key={a.id} a={a} courses={courses} people={people} focused={a.id === focusedAssessmentId} onChange={upsert} onDelete={id => setAssessments(prev => prev.filter(x => x.id !== id))} onError={onError} onFocusCleared={onFocusCleared} />
             ))}
           </ul>
         )}
       </Card>
+      {justCompleted && (
+        <UndoToast
+          message={`Marked ${justCompleted.title} as done`}
+          onUndo={undoComplete}
+          onDismiss={() => setJustCompleted(null)}
+        />
+      )}
     </div>
   )
 }
@@ -1646,7 +1696,7 @@ export function EducationPage() {
             />
           )}
           {tab === 'profile' && <ProfileTab people={people} institutions={institutions} defaultPersonId={defaultAssignee[0] ?? null} onAddInstitution={() => setTab('institutions')} onError={setError} />}
-          {tab === 'assignments' && <AssignmentsTab courses={courses} people={people} defaultAssignee={defaultAssignee} focusedAssessmentId={focusedAssessmentId || undefined} onError={setError} />}
+          {tab === 'assignments' && <AssignmentsTab courses={courses} people={people} defaultAssignee={defaultAssignee} focusedAssessmentId={focusedAssessmentId || undefined} onError={setError} onFocusCleared={() => navigate('/education?tab=assignments', { replace: true })} />}
           {tab === 'courses' && <CoursesTab courses={courses} reload={loadCourses} people={people} institutions={institutions} defaultAssignee={defaultAssignee} onAddInstitution={() => setTab('institutions')} onError={setError} />}
           {tab === 'timetable' && <TimetableTab courses={courses} onError={setError} />}
           {tab === 'events' && <EventsTab courses={courses} people={people} institutions={institutions} defaultAssignee={defaultAssignee} onError={setError} />}

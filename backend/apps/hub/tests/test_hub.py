@@ -16,7 +16,7 @@ from apps.atlas.services import (
     create_atlas_list, create_list_item, create_reminder, ensure_household_grocery_list,
 )
 from apps.people.services import create_person
-from apps.permissions.services import grant_user_permission
+from apps.permissions.services import deny_user_permission, grant_user_permission
 from apps.scheduling.models import CalendarEvent
 
 
@@ -214,6 +214,40 @@ class UpcomingWidgetTests(TestCase):
         create_reminder(self.admin, title="Doctor visit", due_at=_future(48))
         self.assertIn("Doctor visit", [i["title"] for i in self._upcoming()["items"]])
 
+    def test_user_can_dismiss_and_restore_an_upcoming_item(self):
+        reminder = create_reminder(self.admin, title="Doctor visit", due_at=_future(48))
+        event_id = reminder.calendar_event_id
+
+        dismissed = self.client.post(reverse("hub-upcoming-dismissal", args=[event_id]))
+        self.assertEqual(dismissed.status_code, 200)
+        self.assertIsNone(self._upcoming())
+        self.assertTrue(CalendarEvent.objects.filter(pk=event_id).exists())
+
+        restored = self.client.delete(reverse("hub-upcoming-dismissal", args=[event_id]))
+        self.assertEqual(restored.status_code, 204)
+        self.assertIn("Doctor visit", [i["title"] for i in self._upcoming()["items"]])
+
+    def test_upcoming_dismissal_is_per_user(self):
+        reminder = create_reminder(self.admin, title="Shared appointment", due_at=_future(48))
+        self.client.post(reverse("hub-upcoming-dismissal", args=[reminder.calendar_event_id]))
+        self.assertIsNone(self._upcoming())
+
+        _make_user("other-admin", User.Role.ADMIN)
+        _login(self.client, "other-admin")
+        self.assertIn("Shared appointment", [i["title"] for i in self._upcoming()["items"]])
+
+    def test_cannot_dismiss_an_item_hidden_by_sensitivity(self):
+        from apps.scheduling.services import create_event
+
+        event = create_event(
+            self.admin,
+            title="Private appointment",
+            start_at=_future(48),
+            sensitivity="private",
+        )
+        response = self.client.post(reverse("hub-upcoming-dismissal", args=[event.id]))
+        self.assertEqual(response.status_code, 404)
+
     def test_dated_record_appears_exactly_once(self):
         reminder = create_reminder(self.admin, title="Book dentist", due_at=_future(36))
         self.assertIsNotNone(reminder.calendar_event_id)
@@ -244,6 +278,20 @@ class UpcomingWidgetTests(TestCase):
         """A missed reminder still needs attention, so it survives its own due date."""
         create_reminder(self.admin, title="Overdue thing", due_at=_future(hours=-72))
         self.assertIn("Overdue thing", [i["title"] for i in self._upcoming()["items"]])
+
+    def test_overdue_todo_is_kept(self):
+        """Modern Atlas To-dos use AtlasListItem projections, not legacy Reminder rows."""
+        todo_list = create_atlas_list(self.admin, title="Household", list_type="todo")
+        create_list_item(
+            self.admin,
+            todo_list,
+            title="Overdue household job",
+            due_at=_future(hours=-48),
+        )
+        self.assertIn(
+            "Overdue household job",
+            [item["title"] for item in self._upcoming()["items"]],
+        )
 
     def test_past_standalone_event_is_dropped(self):
         """A party last Tuesday is history, not something coming up."""
@@ -942,3 +990,256 @@ class EducationAssessmentUpcomingSyncTests(TestCase):
         self.assertFalse(any("Assignment X" in t for t in titles))
         self.assertIn("Doctor visit", titles)
         self.assertIn("Bill: Internet", titles)
+
+
+class UpcomingCompletionContractTests(TestCase):
+    """Every node on the Dashboard is finished the same way (owner, 2026-09-21).
+
+    The owner's complaint was that each node had its own workflow: some rows could be
+    actioned where you saw them, most could not, and Education in particular forced a trip
+    into an edit screen. The contract now is uniform — the backend names the transition on
+    each row and applies it through the owning domain's own service, so no node gets a
+    bespoke Dashboard path.
+    """
+
+    def setUp(self):
+        from apps.nodes.services import enable_node
+
+        self.admin = _make_user("admin", User.Role.ADMIN)
+        _login(self.client, "admin")
+        for node in ("education", "solace", "meridian", "pets", "homestead", "atlas"):
+            enable_node(self.admin, node)
+            grant_user_permission(self.admin, f"{node}.view")
+
+    def _rows(self):
+        _reauth(self.client)
+        widget = next(
+            (w for w in self.client.get(reverse("hub")).json()["widgets"] if w["key"] == "upcoming"),
+            None,
+        )
+        return (widget or {"items": []})["items"]
+
+    def _row_for(self, title_fragment):
+        return next(
+            (row for row in self._rows() if title_fragment in row["title"]), None
+        )
+
+    def _complete(self, event_id):
+        return self.client.post(reverse("hub-upcoming-complete", args=[event_id]))
+
+    # --- the label each node advertises ---
+
+    def test_every_actionable_node_advertises_its_own_word_for_finished(self):
+        from apps.education.services import create_assessment
+        from apps.solace.services import create_bill
+
+        create_assessment(self.admin, title="Research report", due_at=_future(hours=-48))
+        create_bill(self.admin, name="Internet", amount="89.00", due_at=_future(hours=-24))
+
+        self.assertEqual(self._row_for("Research report")["complete_action"], "Done")
+        # Money keeps its own vocabulary — one interaction, not one flattened word.
+        self.assertEqual(self._row_for("Internet")["complete_action"], "Paid")
+
+    def test_a_row_with_no_unambiguous_transition_advertises_none(self):
+        from apps.scheduling.services import create_event
+
+        create_event(self.admin, title="Dinner with friends", start_at=_future(48))
+        self.assertIsNone(self._row_for("Dinner with friends")["complete_action"])
+
+    # --- the transition itself, per node ---
+
+    def test_education_assignment_completes_from_the_dashboard(self):
+        from apps.education.models import EducationAssessment
+        from apps.education.services import create_assessment
+
+        assessment = create_assessment(
+            self.admin, title="Research report", due_at=_future(hours=-48)
+        )
+        response = self._complete(assessment.calendar_event_id)
+
+        self.assertEqual(response.status_code, 200)
+        assessment.refresh_from_db()
+        self.assertEqual(assessment.status, EducationAssessment.Status.DONE)
+        self.assertIsNone(self._row_for("Research report"))
+
+    def test_bill_is_paid_from_the_dashboard(self):
+        from apps.solace.services import create_bill
+
+        bill = create_bill(
+            self.admin, name="Internet", amount="89.00", due_at=_future(hours=-24)
+        )
+        _reauth(self.client)  # Money rows stay filtered until the reader re-authenticates.
+        response = self._complete(bill.calendar_event_id)
+
+        self.assertEqual(response.status_code, 200)
+        bill.refresh_from_db()
+        self.assertTrue(bill.is_paid)
+
+    def test_atlas_todo_completes_from_the_dashboard(self):
+        todo_list = create_atlas_list(self.admin, title="Household", list_type="todo")
+        item = create_list_item(
+            self.admin, todo_list, title="Put the bins out", due_at=_future(hours=-24)
+        )
+        response = self._complete(item.calendar_event_id)
+
+        self.assertEqual(response.status_code, 200)
+        item.refresh_from_db()
+        self.assertTrue(item.is_complete)
+        self.assertIsNone(self._row_for("Put the bins out"))
+
+    def test_meridian_task_completes_from_the_dashboard(self):
+        from apps.meridian.models import MeridianTask
+        from apps.meridian.services import create_task
+
+        person = create_person(self.admin, display_name="Alex", linked_user_id=self.admin.id)
+        task = create_task(
+            self.admin, title="Tidy the garage", due_at=_future(hours=-24),
+            assigned_to_people=[person.id],
+        )
+        response = self._complete(task.calendar_event_id)
+
+        self.assertEqual(response.status_code, 200)
+        task.refresh_from_db()
+        self.assertTrue(task.is_complete)
+        self.assertIsNone(self._row_for("Tidy the garage"))
+
+    def test_maintenance_task_completes_from_the_dashboard(self):
+        from apps.homestead.services import create_maintenance
+
+        task = create_maintenance(
+            self.admin, title="Service the boiler", next_due_at=_future(hours=-24)
+        )
+        response = self._complete(task.calendar_event_id)
+
+        self.assertEqual(response.status_code, 200)
+        task.refresh_from_db()
+        self.assertIsNotNone(task.last_done_at)
+        self.assertIsNone(self._row_for("Service the boiler"))
+
+    def test_pet_treatment_completes_from_the_dashboard(self):
+        from apps.pets.services import create_pet, create_treatment
+
+        pet = create_pet(self.admin, name="Rosie", species="dog")
+        treatment = create_treatment(
+            self.admin, pet=pet, treatment_type="flea", next_due_at=_future(hours=-24)
+        )
+        response = self._complete(treatment.calendar_event_id)
+
+        self.assertEqual(response.status_code, 200)
+        treatment.refresh_from_db()
+        self.assertIsNotNone(treatment.last_done_at)
+
+    # --- boundaries ---
+
+    def test_a_row_with_no_source_action_cannot_be_completed(self):
+        from apps.scheduling.services import create_event
+
+        event = create_event(self.admin, title="Dinner with friends", start_at=_future(48))
+        self.assertEqual(self._complete(event.id).status_code, 404)
+
+    def test_cannot_complete_a_row_hidden_by_sensitivity(self):
+        """Hub must never become a side door onto a record the reader cannot see."""
+        from apps.solace.services import create_bill
+
+        bill = create_bill(
+            self.admin, name="Private loan", amount="500.00", due_at=_future(hours=-24)
+        )
+        # No re-auth on this client, so the financial row is filtered out of Upcoming.
+        self.assertEqual(self._complete(bill.calendar_event_id).status_code, 404)
+        bill.refresh_from_db()
+        self.assertFalse(bill.is_paid)
+
+    def test_viewer_without_edit_on_the_owning_node_is_refused(self):
+        from apps.education.services import create_assessment
+
+        assessment = create_assessment(
+            self.admin, title="Research report", due_at=_future(hours=-48)
+        )
+        viewer = _make_user("viewer", User.Role.USER)
+        grant_user_permission(viewer, "education.view")
+        grant_user_permission(viewer, "hub.view")
+        # Seeing a row must not imply being allowed to finish it.
+        deny_user_permission(viewer, "education.edit")
+        deny = self.client_class()
+        _login(deny, "viewer")
+        _reauth(deny, password="pass123!")
+
+        response = deny.post(
+            reverse("hub-upcoming-complete", args=[assessment.calendar_event_id])
+        )
+        self.assertEqual(response.status_code, 403)
+        assessment.refresh_from_db()
+        self.assertFalse(assessment.is_complete)
+
+
+class MeridianTaskUpcomingSyncTests(TestCase):
+    """A finished Meridian task must leave Upcoming, like every other node.
+
+    Same bug class as the Bill and Education cases above: MeridianTask.get_calendar_data()
+    ignored completion, so a completed one-off task kept its deadline projection and sat on
+    the Dashboard as permanently overdue.
+    """
+
+    def setUp(self):
+        from apps.nodes.services import enable_node
+
+        self.admin = _make_user("admin", User.Role.ADMIN)
+        _login(self.client, "admin")
+        enable_node(self.admin, "meridian")
+        grant_user_permission(self.admin, "meridian.view")
+        self.person = create_person(
+            self.admin, display_name="Alex", linked_user_id=self.admin.id
+        )
+
+    def _upcoming_titles(self):
+        _reauth(self.client)
+        widget = next(
+            (w for w in self.client.get(reverse("hub")).json()["widgets"] if w["key"] == "upcoming"),
+            None,
+        )
+        return [item["title"] for item in (widget or {"items": []})["items"]]
+
+    def _task(self, title, **extra):
+        from apps.meridian.services import create_task
+
+        return create_task(
+            self.admin, title=title, due_at=_future(hours=-24),
+            assigned_to_people=[self.person.id], **extra,
+        )
+
+    def test_overdue_task_appears_in_upcoming(self):
+        self._task("Tidy the garage")
+        self.assertIn("Tidy the garage", self._upcoming_titles())
+
+    def test_completing_a_one_off_task_removes_it_from_upcoming(self):
+        from apps.meridian.services import complete_task
+
+        task = self._task("Tidy the garage")
+        complete_task(self.admin, task, person_id=self.person.id)
+
+        self.assertNotIn("Tidy the garage", self._upcoming_titles())
+        task.refresh_from_db()
+        self.assertIsNone(task.calendar_event_id)
+
+    def test_a_recurring_task_keeps_its_deadline_after_completion(self):
+        """`status` is only recomputed on write, so last cycle's completion must not
+        erase this cycle's deadline."""
+        from apps.meridian.services import complete_task
+
+        task = self._task("Take the bins out", recurrence_rule="FREQ=WEEKLY")
+        complete_task(self.admin, task, person_id=self.person.id)
+
+        self.assertIn("Take the bins out", self._upcoming_titles())
+
+    def test_rejecting_a_completion_restores_the_deadline(self):
+        from apps.meridian.models import MeridianTaskCompletion
+        from apps.meridian.services import complete_task, reject_task_completion
+
+        task = self._task("Tidy the garage")
+        complete_task(self.admin, task, person_id=self.person.id)
+        self.assertNotIn("Tidy the garage", self._upcoming_titles())
+
+        completion = MeridianTaskCompletion.objects.get(task=task)
+        reject_task_completion(self.admin, completion, reason="Not done properly")
+
+        self.assertIn("Tidy the garage", self._upcoming_titles())

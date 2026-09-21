@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.40.4**
+> **Current version: 0.40.5**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,40 @@
 ---
 
 ## 0.40 — Faster everyday household coordination
+
+### 0.40.5 — 2026-09-21 — One workflow for every node
+
+- **Anything on the Dashboard can now be finished or dismissed where you see it.** Every Upcoming
+  row follows one contract: tap to open its record, use its completion action in place, or dismiss
+  it. To-dos, assignments, chores, maintenance, pet treatments and bills all go through the same
+  `POST /hub/upcoming/<id>/complete/` endpoint — no node gets a bespoke Dashboard path, and no more
+  opening an edit screen just to tick something off. Dismissal is per-user, reversible and never
+  touches the underlying record.
+- **The backend decides what each row can do.** `apps/hub/completions.py` is an explicit registry
+  mapping each record type to its owning node's existing service, and every row's payload carries
+  its own `complete_action` label. The client renders one uniform row with no per-node knowledge,
+  and each domain keeps its own word for finished — Money still says **Paid**, not "Done".
+  Permissions are the owning node's: Hub resolves the row through the same permission-filtered read
+  that produced it, and asks the same question the node's own screen asks (Meridian's `complete`
+  rather than `edit`, so children can still finish their own tasks).
+- **Completed work stops looking overdue.** Done/submitted assignments use one completion treatment
+  instead of keeping a red overdue badge, and completed one-off Meridian tasks now drop their
+  Calendar deadline — the same stale-projection bug Education had, found in Tasks while making the
+  nodes consistent. Recurring tasks deliberately keep theirs, since a task's status is only
+  recomputed on write and last cycle's completion must not erase this cycle's deadline. Deployment
+  migrations repair both sets of stale rows.
+- **Completing an assignment now has one outcome instead of two.** It previously depended on a
+  "Show completed" checkbox the reader never set: with it off the row vanished silently, with it on
+  — which a Dashboard deep link forced — the row stayed struck through and highlighted. That is the
+  inconsistent blue-highlight/strikethrough behaviour. The row now always stays in place with its
+  completed treatment and an Undo, and the deep-link focus ring clears as soon as you act on the
+  row so a selection highlight is never read as completion.
+- **Notifications stop contradicting completion.** Assignment notifications deep-link to the exact
+  assignment, and completing it resolves its unread notification through the shared
+  `mark_action_read` helper. Unread notification cards can be cleared from the Dashboard in place.
+- Added coverage for the cross-node completion contract (per-node transitions, advertised labels,
+  sensitivity and permission boundaries), the Meridian Calendar-sync rule including rejection, and
+  phone browser coverage for Dashboard actions and consistent assignment completion.
 
 ### 0.40.4 — 2026-09-14 — Mobile daily-use foundations
 

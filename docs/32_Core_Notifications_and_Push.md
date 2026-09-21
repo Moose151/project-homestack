@@ -158,6 +158,11 @@ filtering/push delivery. Do not silently reinterpret unclassified legacy notific
 
 `notify_person` and `notify_person_id` are the Person-to-User helpers.
 
+`mark_action_read` lets an owning domain resolve unread notifications using the same stable
+`(source_node, action_url)` deep link it supplied at creation. Education uses this when an
+assignment becomes Done/Submitted, so completion and notification state do not contradict each
+other. The Notification row remains as read history.
+
 Preferences are centralized inside Notifications rather than requiring each node to query preference
 models itself.
 

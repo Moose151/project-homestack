@@ -23,8 +23,9 @@ Hub is **not** Calendar, Notifications, Search or a second copy of any node's da
 
 ## 2. Ownership rule
 
-Hub stores only widget catalogue/configuration state. Widget content remains owned by the source
-domain/core service.
+Hub stores only widget catalogue/configuration and per-User presentation state. Widget content
+remains owned by the source domain/core service. A per-User Upcoming dismissal hides one Calendar
+projection from that User's Hub; it does not complete, edit or delete the Calendar/domain record.
 
 A Hub card must never become the only copy of a task, event, bill, reminder, workout, trip or other
 household fact.
@@ -158,6 +159,35 @@ Examples:
 
 Do not implement broad cross-domain write logic inside Hub merely for convenience.
 
+The shipped Upcoming interaction follows one consistent row contract, identical for every node:
+
+- tapping the row opens its owning record;
+- the row carries its own completion action when the owning domain has an unambiguous
+  transition, applied in place through `POST /hub/upcoming/<event_id>/complete/`;
+- every row can be dismissed from the current User's Hub, with Undo, without mutating its source.
+
+The **backend** decides which rows are actionable and what the action is called. Each row's
+payload carries a `complete_action` label (or `null`), so the client renders one uniform row and
+holds no per-node knowledge. `apps/hub/completions.py` is the bounded registry: one explicit entry
+per record type, each delegating to the owning node's own service so Calendar sync (D7), domain
+events and notifications behave exactly as they would from that node's own screen.
+
+Currently registered: Atlas to-dos, Education assessments, Meridian tasks, Homestead maintenance,
+Pet treatments (**Done**) and Money bills (**Paid**). One shared interaction does not mean one
+flattened vocabulary — each domain keeps its own word for "finished".
+
+Hub contributes exactly two things to the transition: it resolves the row through the same
+permission-filtered read that produced it, so Hub can never be a side door onto a hidden record;
+and it checks the permission action the owning node's own completion view gates on (Meridian uses
+`complete` rather than `edit` precisely so children can finish their own tasks, so Hub asks the
+same question, never a stricter one).
+
+A domain whose completion needs more than one input (which person, how much was paid) stays out of
+this registry and keeps its own screen. Adding an entry is a product decision, not a convenience —
+this is the bounded exception to "no broad cross-domain write logic in Hub", not a repeal of it.
+
+Notification-summary rows can be marked read in place through Notifications' own API.
+
 ## 12. Ambient / utility widgets
 
 Non-domain widgets can exist with `source_node = null` where they make the household dashboard more
@@ -227,13 +257,14 @@ Exact current route names are defined by Hub URLconfs/tests. Major API concepts 
 - kiosk-safe Hub payload;
 - household widget configuration;
 - per-User widget overrides/order/settings.
+- per-User Upcoming dismiss/restore.
 
 Do not maintain another obsolete endpoint inventory in this spec.
 
 ## 19. Data ownership
 
-Hub-owned persistent data is configuration/catalogue only. Domain payloads are computed/read from
-their owners.
+Hub-owned persistent data is configuration/catalogue plus per-User dismissal state only. Domain
+payloads are computed/read from their owners.
 
 That invariant allows a source record to be corrected once and immediately appear correctly in Hub,
 Calendar, Search, Corners and Notifications without synchronized copies.

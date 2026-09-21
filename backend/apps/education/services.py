@@ -126,7 +126,7 @@ def create_assessment(acting_user: User, **data) -> EducationAssessment:
         acting_user, list(obj.assigned_to_people.values_list("id", flat=True)),
         title="New assignment",
         message=f"{obj.get_assessment_type_display()}: {obj.title}",
-        action_url="/education",
+        action_url=f"/education?tab=assignments&assessment={obj.id}",
     )
     return obj
 
@@ -141,6 +141,11 @@ def update_assessment(acting_user: User, obj: EducationAssessment, **data) -> Ed
     obj.save()
     apply_assignees(obj, people)
     sync_event_for(obj)
+    if obj.is_complete:
+        notifications.mark_action_read(
+            source_node="education",
+            action_url=f"/education?tab=assignments&assessment={obj.id}",
+        )
     if obj.is_complete and not was_complete:
         events.assessment_completed(obj.id, obj.household_id)
     return obj

@@ -101,7 +101,17 @@ test('Reminder is offered only when creating, not when editing an existing event
 
   // ...but an existing calendar event cannot be turned into one: that would be a different
   // record in a different node, not an edit.
-  await page.getByText('Dentist').first().click()
-  await expect(page.getByLabel('Type')).toHaveValue('appointment')
+  // Calendar opens on Month (v0.40.4). Month renders a compact phone cell and a wider
+  // desktop cell and hides one of them, so the chip has to be picked by visibility rather
+  // than by document order.
+  const chip = page.getByText('Dentist').filter({ visible: true }).first()
+  await chip.click()
+  const typeField = page.getByLabel('Type')
+  // On a phone-width Month a day opens its own sheet first; wider viewports open the event
+  // editor straight from the grid.
+  if (await typeField.count() === 0) {
+    await page.getByRole('dialog').getByText('Dentist').filter({ visible: true }).first().click()
+  }
+  await expect(typeField).toHaveValue('appointment')
   await expect(page.getByLabel('Type').getByRole('option', { name: 'Reminder' })).toHaveCount(0)
 })

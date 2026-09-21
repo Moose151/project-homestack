@@ -15,7 +15,11 @@ from apps.hub.serializers import (
 )
 from apps.hub.services import (
     HubError,
+    HubPermissionError,
+    complete_upcoming_event,
+    dismiss_upcoming_event,
     get_hub_widgets,
+    restore_upcoming_event,
     set_household_widget,
     set_user_widget,
     set_user_widget_order,
@@ -64,6 +68,48 @@ class KioskHubView(APIView):
         return Response({"widgets": get_hub_widgets(
             request.user, kiosk_mode=True, sensitive_unlocked=False, solace_unlocked=False,
         )})
+
+
+class UpcomingDismissalView(APIView):
+    """Hide/restore one Calendar row on the caller's own Dashboard only."""
+
+    permission_classes = [_HubPerm]
+    permission_action = "view"
+
+    def post(self, request: Request, event_id: int) -> Response:
+        try:
+            dismiss_upcoming_event(
+                request.user,
+                event_id,
+                sensitive_unlocked=is_reauthed(request._request),
+            )
+        except HubError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"dismissed": True})
+
+    def delete(self, request: Request, event_id: int) -> Response:
+        restore_upcoming_event(request.user, event_id)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class UpcomingCompleteView(APIView):
+    """Apply the owning node's completion transition to one Upcoming row."""
+
+    permission_classes = [_HubPerm]
+    permission_action = "view"
+
+    def post(self, request: Request, event_id: int) -> Response:
+        try:
+            complete_upcoming_event(
+                request.user,
+                event_id,
+                sensitive_unlocked=is_reauthed(request._request),
+            )
+        except HubPermissionError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except HubError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"completed": True})
 
 
 class HubWidgetConfigView(APIView):

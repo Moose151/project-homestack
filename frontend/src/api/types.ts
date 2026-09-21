@@ -346,6 +346,12 @@ export interface CalendarEvent {
   calendar_source_name: string
   calendar_source_category: string
   is_range: boolean
+  /**
+   * Set only on Hub's Upcoming feed: the label for this row's source completion action
+   * ("Done", "Paid"), or null when its source has no unambiguous one. The backend decides,
+   * so the Dashboard row holds no per-node knowledge.
+   */
+  complete_action?: string | null
   created_at: string
   updated_at: string
 }

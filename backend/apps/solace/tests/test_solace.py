@@ -1971,14 +1971,20 @@ class CycleHistoryTests(TestCase):
         self.assertEqual(rows[0]["notes"], "Cycle from 2026-07-01")
 
     def test_each_cycle_reports_how_its_bills_went(self):
+        # Anchored to today on purpose. create_bill() only materialises occurrences from 90
+        # days back, so a hardcoded due date silently stops producing one once it ages out of
+        # that window — which is how this test went stale rather than failing on a real bug.
+        cycle_start = timezone.localdate() - timedelta(days=7)
         bill = create_bill(
             self.admin, name="Power", amount="100.00",
-            due_at=timezone.make_aware(datetime(2026, 6, 5, 9)),
+            due_at=timezone.make_aware(
+                datetime.combine(cycle_start + timedelta(days=4), datetime.min.time()).replace(hour=9)
+            ),
         )
         occurrence = BillOccurrence.objects.filter(bill=bill).order_by("due_at").first()
         occurrence.status = BillOccurrence.Status.PAID
         occurrence.save(update_fields=["status"])
-        self._closeout(date(2026, 6, 1))
+        self._closeout(cycle_start)
         row = self.client.get(reverse("solace-cycle-history")).json()[0]
         self.assertEqual(row["paid_count"], 1)
         self.assertEqual(row["paid_total"], "100.00")

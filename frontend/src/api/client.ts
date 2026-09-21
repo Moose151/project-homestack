@@ -505,6 +505,12 @@ export const api = {
     _fetch(`/hub/widgets/${key}/me/`, { method: 'PATCH', body: JSON.stringify(data) }),
   setUserWidgetOrder: (keys: string[]): Promise<{ widgets: HubWidgetConfig[] }> =>
     _fetch('/hub/widgets/me/order/', { method: 'PATCH', body: JSON.stringify({ keys }) }),
+  completeUpcomingItem: (eventId: number): Promise<{ completed: boolean }> =>
+    _fetch(`/hub/upcoming/${eventId}/complete/`, { method: 'POST' }),
+  dismissUpcomingItem: (eventId: number): Promise<{ dismissed: boolean }> =>
+    _fetch(`/hub/upcoming/${eventId}/dismiss/`, { method: 'POST' }),
+  restoreUpcomingItem: (eventId: number): Promise<void> =>
+    _fetch(`/hub/upcoming/${eventId}/dismiss/`, { method: 'DELETE' }),
 
   // --- Atlas lists ---
   getLists: (): Promise<AtlasList[]> => _fetch('/atlas/lists/'),

@@ -105,6 +105,21 @@ boundary where applicable.
 Completing an assessment preserves history and updates the owning Education record rather than
 creating a second completed-task database in Atlas/Calendar.
 
+Done and Submitted are both complete states. Complete assessments do not retain a Calendar
+deadline projection, do not appear overdue on Hub, and are rendered with the same completion
+treatment in the assignment list and detail sheet. The deployment migration repairs stale
+Calendar projections created before this invariant was enforced.
+
+Completing an assignment has exactly one outcome wherever it is done. In the assignment list the
+row stays in place with its completed treatment and an Undo, rather than vanishing or persisting
+depending on whether "Show completed" happens to be on — the visible result must not depend on
+state the reader did not set. Assignments can equally be completed from Hub without opening
+Education at all, through the shared Upcoming row contract in `23_Core_Hub.md` §11.
+
+The deep-link focus ring means "this is the row you arrived at" and nothing else. It is cleared as
+soon as the reader acts on or closes the assignment, so a temporary selection highlight is never
+mistaken for a completion state.
+
 ## 8. Classes / timetable — shipped
 
 Class/session/timetable records remain Education-owned and mirror to the shared Calendar through the
@@ -150,6 +165,10 @@ Typical useful summaries include upcoming assessments/exams, today's classes and
 Notifications use the shared in-app/Web Push infrastructure. Assignment/event creation/completion
 notifications remain source/Person/permission aware; Education does not implement a separate push
 channel.
+
+Assignment notifications deep-link to the exact assignment. When that assignment becomes complete,
+the matching unread assignment notification is marked read so Notifications does not continue to
+present already-resolved work.
 
 ## 11. Permissions
 

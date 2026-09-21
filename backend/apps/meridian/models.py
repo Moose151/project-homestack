@@ -174,7 +174,12 @@ class MeridianTask(CalendarSyncMixin, HouseholdBaseModel):
     # --- CalendarSyncMixin contract (D7) ---
 
     def get_calendar_data(self) -> dict | None:
-        if not self.due_at:
+        # A finished one-off task is history, not a deadline — keeping its projection is
+        # what made completed work keep showing up as overdue on the Dashboard. A
+        # recurring task keeps its projection because `status` is only recomputed on write
+        # (`_sync_task_from_latest_completion`), so last cycle's completion must not
+        # silently erase this cycle's deadline. Same rule Solace already uses for Bills.
+        if not self.due_at or (self.is_complete and not self.recurrence_rule):
             return None
         return {
             "title": self.title,

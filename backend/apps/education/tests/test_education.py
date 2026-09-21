@@ -250,6 +250,36 @@ class EducationCalendarSyncTests(TestCase):
         event = CalendarEvent.objects.get(pk=a.calendar_event_id)
         self.assertEqual(event.start_at, a.due_at)
 
+    def test_assignment_notification_deep_links_and_resolves_on_completion(self):
+        from apps.notifications.models import Notification
+        from apps.people.models import Person
+
+        student_user = _make_user("student", User.Role.USER)
+        student = Person.objects.create(
+            household=self.admin.household,
+            display_name="Student",
+            linked_user=student_user,
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+        assessment = create_assessment(
+            self.admin,
+            title="Research report",
+            due_at=_future(),
+            assigned_to_people=[student],
+        )
+        action_url = f"/education?tab=assignments&assessment={assessment.id}"
+        notification = Notification.objects.get(
+            recipient_user=student_user,
+            source_node="education",
+            action_url=action_url,
+        )
+        self.assertFalse(notification.is_read)
+
+        update_assessment(self.admin, assessment, status=EducationAssessment.Status.DONE)
+        notification.refresh_from_db()
+        self.assertTrue(notification.is_read)
+
     def test_class_session_creates_recurring_event(self):
         s = create_class_session(
             self.admin, title="Lecture", start_at=_future(2), end_at=_future(3),

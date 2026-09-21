@@ -312,6 +312,24 @@ Recommended order:
 6. add small operational/System Health visibility;
 7. add passkeys/2FA before any public remote-access plan.
 
+**Consistent completion workflow (owner-directed, started v0.40.5).** The owner's standing
+requirement is that every dated thing behaves the same way — bills, assignments, tasks, to-dos,
+appointments, maintenance — rather than each node inventing its own workflow. Hub's Upcoming feed
+is done: one row contract, one endpoint, a backend-advertised action per row, applied through the
+owning node's service (`docs/23_Core_Hub.md` §11, `apps/hub/completions.py`). Education's own
+assignment list now matches it (stays in place with a completed treatment plus Undo, rather than an
+outcome that depended on a "Show completed" checkbox).
+
+The remaining work is to bring each node's **own** screens to that same contract, and to keep new
+dated records to it by default. Two rules learned the hard way and worth applying before they bite
+again:
+
+- a record that is complete must not keep a Calendar deadline projection, or it reappears forever
+  as overdue (`get_calendar_data()` returning `None`; Bills, Education and Meridian all had this
+  bug independently, and recurring records are the deliberate exception);
+- a completion must have one visible outcome, never one that varies with filter/selection state
+  the reader did not set.
+
 After the reliability baseline: Home Assistant, Hearth, Travel finishing work and later Health.
 
 **Docker/network hardening status (v0.37.x):** complete. The actual inspected Nginx Proxy Manager

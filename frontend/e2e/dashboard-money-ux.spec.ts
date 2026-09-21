@@ -79,3 +79,48 @@ test('Dashboard bill links open the selected Money bill', async ({ page }) => {
     'href', '/solace?tab=bills&section=upcoming',
   )
 })
+
+test('Dashboard Upcoming finishes every node the same way, and dismisses any row in place', async ({ page }) => {
+  await mockAuthenticatedApi(page, {
+    '/api/v1/nodes/': [SOLACE_NODE],
+    '/api/v1/hub/': {
+      widgets: [{
+        key: 'upcoming',
+        name: 'Upcoming',
+        size: 'medium',
+        supports_kiosk: true,
+        meta: { horizons: [{ key: 'week', label: 'Next 7 days', until: plusDays(7).slice(0, 10) }] },
+        items: [
+          { id: 21, title: 'Assignment: Research report', start_at: plusDays(-2), is_all_day: true, source_node: 'education', source_record_type: 'EducationAssessment', source_record_id: 9, complete_action: 'Done' },
+          { id: 23, title: 'Electricity bill', start_at: plusDays(1), is_all_day: true, source_node: 'solace', source_record_type: 'Bill', source_record_id: 4, complete_action: 'Paid' },
+          { id: 22, title: 'Dentist appointment', start_at: plusDays(3), is_all_day: true, source_node: null, source_record_type: '', source_record_id: null, complete_action: null },
+        ],
+      }],
+    },
+  })
+
+  await page.goto('/hub')
+
+  // Every node finishes through the same Hub endpoint — only the label differs.
+  const doneRequest = page.waitForRequest(request => (
+    request.method() === 'POST' && request.url().endsWith('/api/v1/hub/upcoming/21/complete/')
+  ))
+  await page.getByRole('button', { name: 'Mark Assignment: Research report as done' }).click()
+  await doneRequest
+
+  const paidRequest = page.waitForRequest(request => (
+    request.method() === 'POST' && request.url().endsWith('/api/v1/hub/upcoming/23/complete/')
+  ))
+  await page.getByRole('button', { name: 'Mark Electricity bill as paid' }).click()
+  await paidRequest
+
+  // A row whose source has no unambiguous transition offers Dismiss only.
+  await expect(page.getByRole('button', { name: /^Mark Dentist appointment as/ })).toHaveCount(0)
+
+  const dismissRequest = page.waitForRequest(request => (
+    request.method() === 'POST' && request.url().endsWith('/api/v1/hub/upcoming/22/dismiss/')
+  ))
+  await page.getByRole('button', { name: 'Dismiss Dentist appointment from Upcoming' }).click()
+  await dismissRequest
+  await expect(page.getByText('Dismissed Dentist appointment')).toBeVisible()
+})

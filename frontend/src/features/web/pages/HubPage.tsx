@@ -38,6 +38,7 @@ import { InlineAlert, PageSkeleton } from '../../../components/PageState'
 import { openGlobalSearch } from '../../../lib/shellEvents'
 import { isPhoneViewport } from '../../../lib/viewport'
 import { MobileSummaryCard } from '../../../components/mobile'
+import { UndoToast } from '../../../components/UndoToast'
 
 // Spans are chosen so a board of same-size widgets tiles a row exactly and leaves no dead
 // column: at xl the grid is 4 columns, so 4 small / 2 medium / 1 large fills a row.
@@ -452,19 +453,49 @@ function UpcomingWidget({ items, horizons, onChanged }: { items: CalendarEvent[]
     () => localStorage.getItem(HORIZON_STORAGE_KEY) || ranges[0].key,
   )
   const active = ranges.find(r => r.key === horizonKey) ?? ranges[0]
-  const [paying, setPaying] = useState<Set<number>>(new Set())
-  const [payError, setPayError] = useState<string | null>(null)
+  const [acting, setActing] = useState<Set<number>>(new Set())
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [undoItem, setUndoItem] = useState<CalendarEvent | null>(null)
 
-  const markPaid = async (billId: number) => {
-    setPaying(prev => new Set(prev).add(billId))
-    setPayError(null)
+  // One action path for every node. The backend names the transition on each row
+  // (`complete_action`) and applies it through the owning domain's own service, so a bill,
+  // an assignment, a to-do and a chore are all finished the same way from here.
+  const complete = async (item: CalendarEvent) => {
+    setActing(prev => new Set(prev).add(item.id))
+    setActionError(null)
     try {
-      await api.markSolaceBillPaid(billId)
+      await api.completeUpcomingItem(item.id)
       onChanged()
     } catch {
-      setPayError('Could not mark as paid — please try again.')
+      setActionError(`Could not mark ${item.title} as ${(item.complete_action ?? 'done').toLowerCase()} — please try again.`)
     } finally {
-      setPaying(prev => { const next = new Set(prev); next.delete(billId); return next })
+      setActing(prev => { const next = new Set(prev); next.delete(item.id); return next })
+    }
+  }
+
+  const dismiss = async (item: CalendarEvent) => {
+    setActing(prev => new Set(prev).add(item.id))
+    setActionError(null)
+    try {
+      await api.dismissUpcomingItem(item.id)
+      setUndoItem(item)
+      onChanged()
+    } catch {
+      setActionError('Could not dismiss this item — please try again.')
+    } finally {
+      setActing(prev => { const next = new Set(prev); next.delete(item.id); return next })
+    }
+  }
+
+  const undoDismiss = async () => {
+    const item = undoItem
+    if (!item) return
+    setUndoItem(null)
+    try {
+      await api.restoreUpcomingItem(item.id)
+      onChanged()
+    } catch {
+      setActionError('Could not restore this item — please try again.')
     }
   }
 
@@ -508,7 +539,7 @@ function UpcomingWidget({ items, horizons, onChanged }: { items: CalendarEvent[]
         </div>
       )}
 
-      {payError && <p className="text-xs text-danger">{payError}</p>}
+      {actionError && <p className="text-xs text-danger">{actionError}</p>}
 
       {groups.length === 0 ? (
         <p className="text-sm text-muted">Nothing in this range — try a longer one.</p>
@@ -523,7 +554,8 @@ function UpcomingWidget({ items, horizons, onChanged }: { items: CalendarEvent[]
                 {group.items.map(item => {
                   const href = sourcePath(item) ?? calendarDayHref(item.start_at)
                   const when = upcomingRowLabel(item)
-                  const isBill = item.source_record_type === 'Bill' && item.source_record_id != null
+                  const completeLabel = item.complete_action
+                  const busy = acting.has(item.id)
                   return (
                     <li key={item.id} className="flex items-center gap-1">
                       <Link
@@ -541,17 +573,27 @@ function UpcomingWidget({ items, horizons, onChanged }: { items: CalendarEvent[]
                         </span>
                         {when && <span className="flex-shrink-0 text-xs tabular-nums text-muted">{when}</span>}
                       </Link>
-                      {isBill && (
+                      {completeLabel && (
                         <button
                           type="button"
-                          onClick={() => markPaid(item.source_record_id!)}
-                          disabled={paying.has(item.source_record_id!)}
-                          aria-label={`Mark ${item.title} as paid`}
-                          className="flex-shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-muted hover:bg-sunken hover:text-ink disabled:opacity-40 transition-colors"
+                          onClick={() => complete(item)}
+                          disabled={busy}
+                          aria-label={`Mark ${item.title} as ${completeLabel.toLowerCase()}`}
+                          className="min-h-11 flex-shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-primary hover:bg-primary-soft disabled:opacity-40 transition-colors"
                         >
-                          Paid
+                          {completeLabel}
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => dismiss(item)}
+                        disabled={busy}
+                        aria-label={`Dismiss ${item.title} from Upcoming`}
+                        title="Dismiss from Upcoming"
+                        className="min-h-11 flex-shrink-0 rounded-lg px-2 text-xs font-semibold text-muted hover:bg-sunken hover:text-ink disabled:opacity-40 transition-colors"
+                      >
+                        Dismiss
+                      </button>
                     </li>
                   )
                 })}
@@ -559,6 +601,13 @@ function UpcomingWidget({ items, horizons, onChanged }: { items: CalendarEvent[]
             </div>
           ))}
         </div>
+      )}
+      {undoItem && (
+        <UndoToast
+          message={`Dismissed ${undoItem.title}`}
+          onUndo={undoDismiss}
+          onDismiss={() => setUndoItem(null)}
+        />
       )}
     </div>
   )
@@ -761,12 +810,27 @@ const LEVEL_TONE: Record<string, string> = {
   danger: 'bg-danger-soft text-danger',
 }
 
-function NotificationsSummaryWidget({ items, unread }: { items: AppNotification[]; unread?: number }) {
+function NotificationsSummaryWidget({ items, unread, onChanged }: { items: AppNotification[]; unread?: number; onChanged: () => void }) {
+  const [reading, setReading] = useState<Set<number>>(new Set())
+  const [readError, setReadError] = useState(false)
+  const markRead = async (notification: AppNotification) => {
+    setReading(prev => new Set(prev).add(notification.id))
+    setReadError(false)
+    try {
+      await api.markNotificationRead(notification.id)
+      onChanged()
+    } catch {
+      setReadError(true)
+    } finally {
+      setReading(prev => { const next = new Set(prev); next.delete(notification.id); return next })
+    }
+  }
   if (!items.length) {
     return <p className="text-sm text-muted">{unread ? `${unread} unread` : 'You’re all caught up ✓'}</p>
   }
   return (
     <ul className="flex flex-col gap-2.5">
+      {readError && <li className="text-xs text-danger">Could not dismiss that notification.</li>}
       {items.slice(0, 5).map(n => {
         const dot = LEVEL_TONE[n.level] ?? LEVEL_TONE.info
         return (
@@ -776,6 +840,14 @@ function NotificationsSummaryWidget({ items, unread }: { items: AppNotification[
               <p className="truncate text-sm font-medium text-ink">{n.title}</p>
               {n.message && <p className="truncate text-xs text-muted">{n.message}</p>}
             </div>
+            <button
+              type="button"
+              onClick={() => markRead(n)}
+              disabled={reading.has(n.id)}
+              aria-label={`Dismiss notification: ${n.title}`}
+              title="Mark as read"
+              className="min-h-11 min-w-11 flex-shrink-0 rounded-lg text-base text-muted hover:bg-sunken hover:text-ink disabled:opacity-40"
+            >×</button>
           </li>
         )
       })}
@@ -1025,7 +1097,7 @@ function renderWidget(w: HubWidget, onChanged: () => void) {
     case 'countdown':
       return <CountdownWidget title={w.meta?.title} targetDate={w.meta?.target_date} targetTime={w.meta?.target_time} targetAt={w.meta?.target_at} />
     case 'notifications_summary':
-      return <NotificationsSummaryWidget items={w.items as AppNotification[]} unread={w.meta?.unread_count} />
+      return <NotificationsSummaryWidget items={w.items as AppNotification[]} unread={w.meta?.unread_count} onChanged={onChanged} />
     case 'quick_add':
       return <QuickAddWidget onAdded={onChanged} />
     case 'daily_quote':

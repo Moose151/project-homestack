@@ -11,7 +11,7 @@ from datetime import datetime, time, timedelta
 from django.db import transaction
 from django.utils import timezone
 
-from apps.hub.models import HouseholdHubWidget
+from apps.hub.models import HouseholdHubWidget, HubUpcomingDismissal
 
 # How far ahead the unified "Upcoming" widget fetches. The client clips this to the
 # horizon the reader picked, so one request serves every horizon without a round trip.
@@ -24,6 +24,7 @@ UPCOMING_OVERDUE_GRACE_DAYS = 30
 # so it survives past its date. Point-in-time records (appointments, classes, one-off
 # events) are history once they pass and are dropped instead.
 UPCOMING_DUE_RECORD_TYPES = frozenset({
+    "AtlasListItem",
     "AtlasReminder",
     "Bill",
     "BillOccurrence",
@@ -207,6 +208,26 @@ def get_hub_widgets(
     return widgets
 
 
+def _upcoming_events_for_user(user, *, sensitive_unlocked: bool):
+    """Return the permission-filtered Calendar rows eligible for Upcoming."""
+    from apps.scheduling.selectors import list_events
+
+    start_of_today = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
+    events = list_events(
+        user,
+        start=start_of_today - timedelta(days=UPCOMING_OVERDUE_GRACE_DAYS),
+        end=start_of_today + timedelta(days=UPCOMING_MAX_DAYS),
+        sensitive_unlocked=sensitive_unlocked,
+        surface="upcoming",
+    )
+    return [
+        event
+        for event in events
+        if event.start_at >= start_of_today
+        or event.source_record_type in UPCOMING_DUE_RECORD_TYPES
+    ]
+
+
 def _upcoming_widget_content(
     user, *, sensitive_unlocked: bool, solace_unlocked: bool | None = None,
 ) -> tuple[list, dict]:
@@ -220,25 +241,21 @@ def _upcoming_widget_content(
     Returns the full ``UPCOMING_MAX_DAYS`` window plus the horizon boundaries; the client
     clips to the horizon the reader chose, so switching horizon costs no round trip.
     """
-    from apps.scheduling.selectors import list_events
+    from apps.hub.completions import action_label
     from apps.scheduling.serializers import CalendarEventSerializer
 
     today = timezone.localdate()
-    start_of_today = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
-
-    events = list_events(
-        user,
-        start=start_of_today - timedelta(days=UPCOMING_OVERDUE_GRACE_DAYS),
-        end=start_of_today + timedelta(days=UPCOMING_MAX_DAYS),
-        sensitive_unlocked=sensitive_unlocked,
-        surface="upcoming",
+    relevant = _upcoming_events_for_user(user, sensitive_unlocked=sensitive_unlocked)
+    dismissed_ids = set(
+        HubUpcomingDismissal.objects.filter(user=user).values_list("event_id", flat=True)
     )
-    relevant = [
-        event
-        for event in events
-        if event.start_at >= start_of_today
-        or event.source_record_type in UPCOMING_DUE_RECORD_TYPES
-    ]
+    relevant = [event for event in relevant if event.id not in dismissed_ids]
+
+    # Every row carries its own action label, so the client renders one uniform row and
+    # holds no per-node knowledge about which sources can be finished from the Dashboard.
+    items = CalendarEventSerializer(relevant, many=True).data
+    for item, event in zip(items, relevant):
+        item["complete_action"] = action_label(event.source_record_type)
 
     meta = {
         # The "this pay cycle" horizon is Money's own figure, so it follows Money's lock, not
@@ -250,7 +267,7 @@ def _upcoming_widget_content(
         "default_horizon": "week",
         "window_days": UPCOMING_MAX_DAYS,
     }
-    return CalendarEventSerializer(relevant, many=True).data, meta
+    return items, meta
 
 
 def _upcoming_horizons(user, today, *, solace_unlocked: bool) -> list[dict]:
@@ -537,6 +554,69 @@ def _solace_bills_due_widget(user) -> tuple[list, dict]:
 
 class HubError(Exception):
     """Domain error for hub configuration (e.g. unknown widget key)."""
+
+
+class HubPermissionError(HubError):
+    """The caller can see an Upcoming row but may not perform its source action."""
+
+
+def _visible_upcoming_event(user, event_id: int, *, sensitive_unlocked: bool):
+    """The Upcoming row this User can currently see, or raise.
+
+    Acting on a row goes through the same permission-filtered read that produced it, so
+    Hub can never become a side door onto an event the reader is not allowed to see.
+    """
+    event = next(
+        (
+            row
+            for row in _upcoming_events_for_user(
+                user, sensitive_unlocked=sensitive_unlocked
+            )
+            if row.id == event_id
+        ),
+        None,
+    )
+    if event is None:
+        raise HubError("Upcoming item not found.")
+    return event
+
+
+def dismiss_upcoming_event(user, event_id: int, *, sensitive_unlocked: bool):
+    """Hide one currently visible Upcoming row for this User only."""
+    event = _visible_upcoming_event(user, event_id, sensitive_unlocked=sensitive_unlocked)
+    dismissal, _ = HubUpcomingDismissal.objects.get_or_create(user=user, event=event)
+    return dismissal
+
+
+def complete_upcoming_event(user, event_id: int, *, sensitive_unlocked: bool):
+    """Apply the owning node's completion transition to one Upcoming row.
+
+    Hub resolves the row and checks `edit` on the owning node; the transition itself is
+    the owning domain's service, so Calendar sync, events and notifications behave exactly
+    as they would from the node's own screen.
+    """
+    from apps.hub.completions import action_for
+    from apps.permissions.resolver import resolve_permission
+
+    event = _visible_upcoming_event(user, event_id, sensitive_unlocked=sensitive_unlocked)
+    action = action_for(event.source_record_type)
+    if action is None or event.source_record_id is None:
+        raise HubError("This item cannot be completed from here.")
+    if not resolve_permission(
+        user, action.action, action.resource, sensitive_unlocked=sensitive_unlocked
+    ):
+        raise HubPermissionError("You cannot complete this item.")
+    record = action.load(event.source_record_id)
+    if record is None:
+        raise HubError("Upcoming item not found.")
+    action.complete(user, record)
+    return record
+
+
+def restore_upcoming_event(user, event_id: int) -> bool:
+    """Undo this User's dismissal without changing the Calendar/domain record."""
+    deleted, _ = HubUpcomingDismissal.objects.filter(user=user, event_id=event_id).delete()
+    return bool(deleted)
 
 
 def _get_widget(key: str):

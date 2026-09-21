@@ -136,6 +136,21 @@ def mark_all_read(user, *, through_id: int | None = None) -> int:
     return qs.update(is_read=True)
 
 
+def mark_action_read(*, source_node: str, action_url: str) -> int:
+    """Resolve unread notifications for a source record once its work is complete.
+
+    Domain services call this with the same stable deep link they used when creating the
+    notification.  Keeping the lookup here means domains do not need to import Notification
+    or duplicate its recipient/read-state rules.
+    """
+    return Notification.objects.filter(
+        household=get_active_household(),
+        source_node=source_node,
+        action_url=action_url,
+        is_read=False,
+    ).update(is_read=True)
+
+
 def set_preference(
     user, *, category: str, in_app_enabled: bool, push_enabled: bool, mine_only: bool = False,
 ) -> NotificationPreference:

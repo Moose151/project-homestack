@@ -237,6 +237,9 @@ def _sync_task_from_latest_completion(task: MeridianTask) -> MeridianTask:
         "status", "completed_at", "completed_by_person", "approved_at", "approved_by",
         "rejection_reason", "updated_at",
     ])
+    # Every status change funnels through here, so this is the one place that has to keep
+    # the Calendar projection honest (D7) — submit, approve and reject all included.
+    sync_event_for(task)
     return task
 
 

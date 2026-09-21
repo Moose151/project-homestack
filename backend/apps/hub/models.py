@@ -76,3 +76,34 @@ class UserHubWidget(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user} — {self.widget}"
+
+
+class HubUpcomingDismissal(models.Model):
+    """A User choosing to hide one Calendar projection from their Upcoming feed.
+
+    This is presentation state only: the Calendar event and its owning domain record remain
+    untouched.  The event foreign key deliberately cascades so completion/deletion cannot leave
+    dismissal debris behind.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="hub_upcoming_dismissals",
+    )
+    event = models.ForeignKey(
+        "scheduling.CalendarEvent",
+        on_delete=models.CASCADE,
+        related_name="hub_dismissals",
+    )
+    dismissed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "event"], name="hub_unique_upcoming_dismissal"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user} dismissed event {self.event_id}"

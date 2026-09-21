@@ -138,6 +138,82 @@ test.describe('phone', () => {
     await expect(dialog.getByRole('heading', { name: 'Cryptography essay' })).toBeVisible()
   })
 
+  test('Education: completed assignments are not labelled overdue and closing clears deep-link focus', async ({ page }) => {
+    const overdue = new Date()
+    overdue.setDate(overdue.getDate() - 30)
+    await mockAuthenticatedApi(page, {
+      '/api/v1/nodes/': [enabledNode('education')],
+      '/api/v1/education/courses/': [],
+      '/api/v1/education/assessments/': [{
+        id: 8, title: 'Completed report', assessment_type: 'assignment', course_id: null, course_name: '',
+        course_code: '', assigned_to_person_ids: [], due_at: overdue.toISOString(), is_all_day: true,
+        status: 'done', priority: 'high', weight: '', description: '', is_complete: true,
+        calendar_event_id: null, visibility: 'household', sensitivity: 'normal', created_at: '', updated_at: '',
+      }],
+      '/api/v1/education/classes/': [],
+      '/api/v1/education/institutions/': [],
+      '/api/v1/education/assessments/8/notes/': [],
+      '/api/v1/education/assessments/8/files/': [],
+      '/api/v1/people/': [],
+    })
+
+    await page.goto('/education?tab=assignments&assessment=8')
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByText(/overdue/)).toHaveCount(0)
+    await expect(dialog.locator('span', { hasText: /^Done$/ })).toBeVisible()
+    await dialog.getByRole('button', { name: 'Close', exact: true }).last().click()
+    await expect(page).toHaveURL(/\/education\?tab=assignments$/)
+    await expect(page.locator('#education-assessment-8')).not.toHaveClass(/ring-2/)
+  })
+
+  test('Education: completing an assignment always does the same thing, with Undo', async ({ page }) => {
+    // Regression: completion used to depend on the "Show completed" checkbox — with it off
+    // the row vanished silently, with it on (which a Dashboard deep link forces) the row
+    // stayed struck through and ring-highlighted. One action must have one outcome.
+    const open = {
+      id: 8, title: 'Research report', assessment_type: 'assignment', course_id: null, course_name: '',
+      course_code: '', assigned_to_person_ids: [], due_at: new Date().toISOString(), is_all_day: true,
+      status: 'todo', priority: 'high', weight: '', description: '', is_complete: false,
+      calendar_event_id: 4, visibility: 'household', sensitivity: 'normal', created_at: '', updated_at: '',
+    }
+    await mockAuthenticatedApi(page, {
+      '/api/v1/nodes/': [enabledNode('education')],
+      '/api/v1/education/courses/': [],
+      '/api/v1/education/assessments/': [open],
+      '/api/v1/education/classes/': [],
+      '/api/v1/education/institutions/': [],
+      '/api/v1/people/': [],
+    })
+    // Registered after the blanket mock so it wins for this one write.
+    await page.route('**/api/v1/education/assessments/8/', async route => {
+      const body = JSON.parse(route.request().postData() || '{}')
+      const complete = body.status === 'done' || body.status === 'submitted'
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ...open, status: body.status, is_complete: complete }),
+      })
+    })
+
+    await page.goto('/education?tab=assignments')
+    const row = page.locator('#education-assessment-8')
+    await expect(row).toBeVisible()
+
+    await row.getByRole('button', { name: 'Mark done' }).click()
+
+    // The row stays put with the completed treatment instead of silently disappearing.
+    await expect(row).toBeVisible()
+    await expect(row.getByText('Research report')).toHaveClass(/line-through/)
+    await expect(row.getByText('Done', { exact: true }).first()).toBeVisible()
+    await expect(row.getByText(/overdue/)).toHaveCount(0)
+
+    // And it is reversible from where it happened.
+    await expect(page.getByText('Marked Research report as done')).toBeVisible()
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect(row.getByText('Research report')).not.toHaveClass(/line-through/)
+  })
+
   test('Education: an assignment can be edited without deleting and recreating it', async ({ page }) => {
     const assessment = {
       id: 9, title: 'Draft essay', assessment_type: 'assignment', course_id: null, course_name: '',
