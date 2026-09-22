@@ -473,7 +473,9 @@ function UpcomingWidget({ items, horizons, onChanged }: { items: CalendarEvent[]
     }
   }
 
-  const dismiss = async (item: CalendarEvent) => {
+  // Snooze, not hide-forever. Nothing in the product lists what you have hidden, so a
+  // permanent dismissal would be a one-way door guarded only by a few seconds of Undo.
+  const snooze = async (item: CalendarEvent) => {
     setActing(prev => new Set(prev).add(item.id))
     setActionError(null)
     try {
@@ -481,13 +483,13 @@ function UpcomingWidget({ items, horizons, onChanged }: { items: CalendarEvent[]
       setUndoItem(item)
       onChanged()
     } catch {
-      setActionError('Could not dismiss this item — please try again.')
+      setActionError('Could not snooze this item — please try again.')
     } finally {
       setActing(prev => { const next = new Set(prev); next.delete(item.id); return next })
     }
   }
 
-  const undoDismiss = async () => {
+  const undoSnooze = async () => {
     const item = undoItem
     if (!item) return
     setUndoItem(null)
@@ -586,13 +588,13 @@ function UpcomingWidget({ items, horizons, onChanged }: { items: CalendarEvent[]
                       )}
                       <button
                         type="button"
-                        onClick={() => dismiss(item)}
+                        onClick={() => snooze(item)}
                         disabled={busy}
-                        aria-label={`Dismiss ${item.title} from Upcoming`}
-                        title="Dismiss from Upcoming"
+                        aria-label={`Snooze ${item.title} until tomorrow`}
+                        title="Hide from Upcoming until tomorrow"
                         className="min-h-11 flex-shrink-0 rounded-lg px-2 text-xs font-semibold text-muted hover:bg-sunken hover:text-ink disabled:opacity-40 transition-colors"
                       >
-                        Dismiss
+                        Snooze
                       </button>
                     </li>
                   )
@@ -604,8 +606,8 @@ function UpcomingWidget({ items, horizons, onChanged }: { items: CalendarEvent[]
       )}
       {undoItem && (
         <UndoToast
-          message={`Dismissed ${undoItem.title}`}
-          onUndo={undoDismiss}
+          message={`Snoozed ${undoItem.title} until tomorrow`}
+          onUndo={undoSnooze}
           onDismiss={() => setUndoItem(null)}
         />
       )}

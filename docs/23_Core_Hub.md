@@ -24,8 +24,9 @@ Hub is **not** Calendar, Notifications, Search or a second copy of any node's da
 ## 2. Ownership rule
 
 Hub stores only widget catalogue/configuration and per-User presentation state. Widget content
-remains owned by the source domain/core service. A per-User Upcoming dismissal hides one Calendar
-projection from that User's Hub; it does not complete, edit or delete the Calendar/domain record.
+remains owned by the source domain/core service. A per-User Upcoming snooze hides one Calendar
+projection from that User's Hub until the next local midnight; it does not complete, edit or
+delete the Calendar/domain record.
 
 A Hub card must never become the only copy of a task, event, bill, reminder, workout, trip or other
 household fact.
@@ -164,7 +165,14 @@ The shipped Upcoming interaction follows one consistent row contract, identical 
 - tapping the row opens its owning record;
 - the row carries its own completion action when the owning domain has an unambiguous
   transition, applied in place through `POST /hub/upcoming/<event_id>/complete/`;
-- every row can be dismissed from the current User's Hub, with Undo, without mutating its source.
+- every row can be snoozed off the current User's Hub, with Undo, without mutating its source.
+
+Snoozes **expire** at the next local midnight rather than hiding a row permanently. Nothing in
+the product lists what a User has hidden, and the Undo toast lasts seconds, so a permanent hide
+would be a silent one-way door: one mistaken tap would remove something from a household
+member's Dashboard with no way back. Expiry makes the worst case "it returns tomorrow". The
+control is labelled **Snooze** because that is what it does — copy that promises permanence the
+backend does not deliver is its own bug.
 
 The **backend** decides which rows are actionable and what the action is called. Each row's
 payload carries a `complete_action` label (or `null`), so the client renders one uniform row and
@@ -257,13 +265,13 @@ Exact current route names are defined by Hub URLconfs/tests. Major API concepts 
 - kiosk-safe Hub payload;
 - household widget configuration;
 - per-User widget overrides/order/settings.
-- per-User Upcoming dismiss/restore.
+- per-User Upcoming snooze/restore.
 
 Do not maintain another obsolete endpoint inventory in this spec.
 
 ## 19. Data ownership
 
-Hub-owned persistent data is configuration/catalogue plus per-User dismissal state only. Domain
+Hub-owned persistent data is configuration/catalogue plus per-User snooze state only. Domain
 payloads are computed/read from their owners.
 
 That invariant allows a source record to be corrected once and immediately appear correctly in Hub,

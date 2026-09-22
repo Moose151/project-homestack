@@ -357,11 +357,15 @@ def _finish_product_item(acting_user: User, item: AtlasListItem, *, cache_image:
 
 def complete_list_item(acting_user: User, item: AtlasListItem) -> AtlasListItem:
     if not item.is_complete:
+        from apps.notifications.services import resolve_for_record
+
         item.completed_at = timezone.now()
         item.completed_by = acting_user
         item.updated_by = acting_user
         item.save()
         sync_event_for(item)
+        # An already-delivered "this is due" reminder must not outlive the work it is about.
+        resolve_for_record(item)
     return item
 
 

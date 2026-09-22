@@ -158,10 +158,20 @@ filtering/push delivery. Do not silently reinterpret unclassified legacy notific
 
 `notify_person` and `notify_person_id` are the Person-to-User helpers.
 
-`mark_action_read` lets an owning domain resolve unread notifications using the same stable
-`(source_node, action_url)` deep link it supplied at creation. Education uses this when an
-assignment becomes Done/Submitted, so completion and notification state do not contradict each
-other. The Notification row remains as read history.
+**A notification must not outlive the work it is about.** A Notification records the record it
+is *about* (`source_record_type` / `source_record_id`, set by passing `source_record=` to
+`create_notification` / `notify_bundled`), and `resolve_for_record(record)` marks every unread
+notification for that record read.
+
+Matching on the owning record rather than on the `action_url` string is deliberate: a caller
+cannot silently miss its own notifications by reformatting a deep link, and a domain does not
+have to reproduce the exact URL it used at creation time.
+
+Owning domains call `resolve_for_record` from their completion service, so this holds for every
+node rather than only the one where the contradiction was first reported: Atlas to-dos,
+Education assessments, Meridian tasks, Homestead maintenance, Pet treatments and Money bills.
+Resolution is household-wide, not per recipient — the work is done for everyone who was told
+about it. Rows remain as read history; nothing is deleted.
 
 Preferences are centralized inside Notifications rather than requiring each node to query preference
 models itself.

@@ -23,7 +23,7 @@ from apps.notifications.models import (
 def create_notification(
     recipient_user, *, title: str, message: str,
     level: str = Notification.Level.INFO, source_node: str = "", action_url: str = "",
-    category: str = "",
+    category: str = "", source_record=None,
 ) -> Notification | None:
     """Create the in-app notification, gated by the recipient's preference for `category`.
 
@@ -45,6 +45,7 @@ def create_notification(
         level=level,
         source_node=source_node,
         action_url=action_url,
+        **_record_fields(source_record),
     )
     note.save()
     if category:
@@ -63,7 +64,7 @@ def _in_app_enabled(recipient_user, category: str) -> bool:
 
 def notify_bundled(
     user, *, title: str, message: str, source_node: str, action_url: str,
-    category: str = "", window_minutes: int = 60,
+    category: str = "", window_minutes: int = 60, source_record=None,
 ) -> Notification | None:
     """Collapse a burst of the same kind of event into one evolving notification.
 
@@ -93,6 +94,7 @@ def notify_bundled(
     note = Notification.objects.create(
         household=get_active_household(), recipient_user=user, title=title,
         message=message, source_node=source_node, action_url=action_url,
+        **_record_fields(source_record),
     )
     if category:
         from apps.notifications import push
@@ -136,17 +138,33 @@ def mark_all_read(user, *, through_id: int | None = None) -> int:
     return qs.update(is_read=True)
 
 
-def mark_action_read(*, source_node: str, action_url: str) -> int:
-    """Resolve unread notifications for a source record once its work is complete.
+def _record_fields(source_record) -> dict:
+    """Map an owning record to the notification's source-record columns."""
+    if source_record is None or source_record.pk is None:
+        return {}
+    return {
+        "source_record_type": type(source_record).__name__,
+        "source_record_id": source_record.pk,
+    }
 
-    Domain services call this with the same stable deep link they used when creating the
-    notification.  Keeping the lookup here means domains do not need to import Notification
-    or duplicate its recipient/read-state rules.
+
+def resolve_for_record(source_record) -> int:
+    """Mark every unread notification *about* this record read, because it is finished.
+
+    A notification that says "this is due" must not outlive the work it is about — that
+    contradiction is what makes an app feel broken. Owning domains call this from their
+    completion service; matching on the record rather than on the action_url string means a
+    caller cannot silently miss its own notifications by reformatting a deep link.
+
+    Deliberately not scoped to one recipient: the work is done for everybody who was told
+    about it, so it is resolved for everybody. The rows remain as read history.
     """
+    if source_record is None or source_record.pk is None:
+        return 0
     return Notification.objects.filter(
         household=get_active_household(),
-        source_node=source_node,
-        action_url=action_url,
+        source_record_type=type(source_record).__name__,
+        source_record_id=source_record.pk,
         is_read=False,
     ).update(is_read=True)
 

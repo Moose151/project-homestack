@@ -1302,29 +1302,60 @@ class PartDayHolidayTests(TestCase):
             name="Queensland public holidays", kind="holidays", provider="au_holidays",
         )
 
+    def _synced_year(self) -> int:
+        """A year this sync actually emits.
+
+        Hardcoding 2026 made these tests quietly depend on the calendar: the provider only
+        publishes DATA_YEARS and only syncs "this year and next", so once the clock passed
+        2026 the lookup matched nothing and the failure looked like a code bug rather than
+        the data-expiry chore it really is.
+        """
+        from apps.scheduling.sources.au_holidays import _default_years
+        years = _default_years()
+        self.assertTrue(years, "No shipped holiday years cover the current date.")
+        return years[0]
+
     def test_christmas_eve_is_timed_not_all_day(self):
         sync_source(self.source, household=self.household)
         eve = CalendarEvent.objects.get(title="Christmas Eve (from 6pm)",
-                                        start_at__year=2026)
+                                        start_at__year=self._synced_year())
         self.assertFalse(eve.is_all_day)
         self.assertEqual(eve.start_at.astimezone(BRISBANE).hour, 18)
 
     def test_christmas_eve_runs_to_midnight_on_the_25th(self):
         """Queensland publishes "6pm to midnight". Midnight is 00:00 on the 25th, not 23:59."""
         sync_source(self.source, household=self.household)
-        eve = CalendarEvent.objects.get(title="Christmas Eve (from 6pm)", start_at__year=2026)
+        year = self._synced_year()
+        eve = CalendarEvent.objects.get(title="Christmas Eve (from 6pm)", start_at__year=year)
         local_start = eve.start_at.astimezone(BRISBANE)
         local_end = eve.end_at.astimezone(BRISBANE)
 
         self.assertEqual((local_start.date(), local_start.hour, local_start.minute),
-                         (date(2026, 12, 24), 18, 0))
+                         (date(year, 12, 24), 18, 0))
         self.assertEqual((local_end.date(), local_end.hour, local_end.minute),
-                         (date(2026, 12, 25), 0, 0))
+                         (date(year, 12, 25), 0, 0))
         # Exactly six hours, which is what "6pm to midnight" means.
         self.assertEqual((eve.end_at - eve.start_at).total_seconds(), 6 * 3600)
 
+    def test_shipped_holiday_data_has_not_run_out(self):
+        """Fail while there is still time to fix it, not after the calendar goes blank.
+
+        The provider deliberately produces nothing for an unpublished year, so when
+        DATA_YEARS runs out the household simply stops seeing public holidays with no error
+        anywhere. This turns that silent expiry into a visible chore: refresh DATA_YEARS from
+        qld.gov.au and update DATA_CHECKED_ON.
+        """
+        from apps.scheduling.sources.au_holidays import DATA_YEARS
+
+        self.assertGreaterEqual(
+            max(DATA_YEARS), timezone.localdate().year + 1,
+            "Shipped Queensland holiday data runs out within a year — refresh DATA_YEARS.",
+        )
+
     def test_the_part_day_interval_is_the_same_in_every_shipped_year(self):
-        for year in (2026, 2027):
+        from apps.scheduling.sources.au_holidays import DATA_YEARS
+
+        for year in DATA_YEARS:
             eve = next(h for h in au_holidays.holidays_for(year=year, state="QLD")
                        if h.is_part_day)
             self.assertEqual(eve.starts_at.hour, 18)
@@ -1341,5 +1372,5 @@ class PartDayHolidayTests(TestCase):
 
     def test_full_day_holidays_remain_all_day(self):
         sync_source(self.source, household=self.household)
-        christmas = CalendarEvent.objects.get(title="Christmas Day", start_at__year=2026)
+        christmas = CalendarEvent.objects.get(title="Christmas Day", start_at__year=self._synced_year())
         self.assertTrue(christmas.is_all_day)

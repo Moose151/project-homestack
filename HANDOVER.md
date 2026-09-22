@@ -328,7 +328,31 @@ again:
   as overdue (`get_calendar_data()` returning `None`; Bills, Education and Meridian all had this
   bug independently, and recurring records are the deliberate exception);
 - a completion must have one visible outcome, never one that varies with filter/selection state
-  the reader did not set.
+  the reader did not set;
+- a notification must not outlive the work it is about — completion services call
+  `notifications.resolve_for_record()` (v0.40.6);
+- anything that hides something from a User must expire or be listed somewhere. Nothing in the
+  product enumerates hidden items, so a permanent hide guarded only by a seconds-long Undo is a
+  silent one-way door.
+
+**Reversibility is the outstanding usability debt.** The codebase reaches for `confirmDialog`
+(ten-plus pages) far more than for `UndoToast` (three). Confirmation interrupts every time
+including the overwhelming majority of times the reader was right; undo interrupts nobody and
+rescues the rest. Converting routine deletes to undo is not a cosmetic change — it needs
+soft-delete/restore on each entity — so it belongs on the roadmap rather than in a passing
+commit, but it is the single biggest everyday-friction item left.
+
+**CI** (`.github/workflows/ci.yml`, v0.40.6) runs the backend suite on the pinned 3.12/5.0.6
+runtime, checks migration drift, type-checks and builds the frontend, runs the browser suite,
+and verifies `VERSION_HISTORY.md`, the generated manifest and `APP_VERSION` agree. Backend tests
+run **serially** on purpose: `--parallel` can fail to pickle a traceback back to the parent and
+render a real failure unreadable.
+
+**Finding time-dependent test rot:** run the suite under a future clock rather than waiting for
+it to break —
+`podman run --rm -v ./backend:/app:z -w /app -e DJANGO_SETTINGS_MODULE=config.settings.test <image> sh -c "faketime '2027-06-15 10:00:00' python manage.py test"`
+(the image needs `faketime` installed). Four tests were fixed this way in v0.40.6. Note that
+shipped Queensland holiday data expires after 2027 and a test now fails a year ahead to say so.
 
 After the reliability baseline: Home Assistant, Hearth, Travel finishing work and later Health.
 

@@ -29,7 +29,10 @@ from apps.notifications import services as notifications
 from apps.scheduling.helpers import delete_event_for, sync_event_for
 
 
-def _notify_assigned(acting_user: User, person_ids, *, title: str, message: str, action_url: str = "") -> None:
+def _notify_assigned(
+    acting_user: User, person_ids, *, title: str, message: str, action_url: str = "",
+    source_record=None,
+) -> None:
     """Notify everyone an item is assigned to, skipping the acting user (D12)."""
     linked = getattr(acting_user, "person_profile", None)
     for person_id in person_ids or []:
@@ -37,7 +40,7 @@ def _notify_assigned(acting_user: User, person_ids, *, title: str, message: str,
             continue  # don't notify yourself about your own item
         notifications.notify_person_id(
             person_id, title=title, message=message, source_node="education",
-            action_url=action_url, category="assigned_tasks",
+            action_url=action_url, category="assigned_tasks", source_record=source_record,
         )
 
 # ---------------------------------------------------------------------------
@@ -127,6 +130,7 @@ def create_assessment(acting_user: User, **data) -> EducationAssessment:
         title="New assignment",
         message=f"{obj.get_assessment_type_display()}: {obj.title}",
         action_url=f"/education?tab=assignments&assessment={obj.id}",
+        source_record=obj,
     )
     return obj
 
@@ -142,10 +146,7 @@ def update_assessment(acting_user: User, obj: EducationAssessment, **data) -> Ed
     apply_assignees(obj, people)
     sync_event_for(obj)
     if obj.is_complete:
-        notifications.mark_action_read(
-            source_node="education",
-            action_url=f"/education?tab=assignments&assessment={obj.id}",
-        )
+        notifications.resolve_for_record(obj)
     if obj.is_complete and not was_complete:
         events.assessment_completed(obj.id, obj.household_id)
     return obj
@@ -387,7 +388,8 @@ def create_event(acting_user: User, **data) -> EducationEvent:
         acting_user, list(obj.assigned_to_people.values_list("id", flat=True)),
         title="New education event",
         message=f"{obj.get_event_type_display()}: {obj.title}",
-        action_url="/education",
+        action_url=f"/education?tab=events&event={obj.id}",
+        source_record=obj,
     )
     return obj
 

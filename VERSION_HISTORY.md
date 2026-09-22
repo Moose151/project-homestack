@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.40.5**
+> **Current version: 0.40.6**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,32 @@
 ---
 
 ## 0.40 — Faster everyday household coordination
+
+### 0.40.6 — 2026-09-22 — Notifications that match reality, and a safety net under the suite
+
+- **A notification no longer outlives the work it is about — on every node.** Completing an
+  Atlas to-do, Education assignment, Meridian task, Homestead maintenance job, Pet treatment or
+  Money bill now resolves its unread notifications. A Notification records the record it is
+  *about*, and domains resolve by that record rather than by re-deriving the deep link they
+  used at creation, so a caller cannot silently miss its own notifications by reformatting a
+  URL. Rows stay as read history; nothing is deleted.
+- **Dashboard "Dismiss" is now "Snooze", and it expires overnight.** Hiding a row was a silent
+  one-way door: nothing in the product lists what you have hidden and the Undo toast lasts
+  seconds, so one mistaken tap removed something from your Dashboard for good. Snoozes now run
+  to the next local midnight, and the label promises what the backend actually does.
+- **Education event notifications deep-link to the event.** They previously dropped you on the
+  Education landing tab. The Events tab accepts `?event=`, shows past events when following
+  such a link (a notification can outlive its event), and its arrival highlight clears itself.
+- **CI now exists.** Backend tests on the pinned Python 3.12/Django 5.0.6 runtime, a
+  migration-drift check, frontend type-check/build, the browser suite, and a guard that
+  `VERSION_HISTORY.md`, the generated manifest and `APP_VERSION` agree. Backend tests run
+  serially on purpose: `--parallel` can fail to pickle a traceback back to the parent and turn
+  a real failure into an unreadable one.
+- **Fixed four tests that would have rotted with the calendar**, found by running the whole
+  suite under a future clock rather than by waiting for them to break. Three depended on
+  shipped Queensland holiday data; that data silently runs out after 2027 and takes the
+  household's public holidays with it, so there is now a test that fails a year ahead with an
+  actionable message instead of a blank calendar and a confusing `DoesNotExist`.
 
 ### 0.40.5 — 2026-09-21 — One workflow for every node
 

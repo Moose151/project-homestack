@@ -29,6 +29,12 @@ class Notification(HouseholdBaseModel):
     level = models.CharField(max_length=20, choices=Level.choices, default=Level.INFO)
     source_node = models.CharField(max_length=40, blank=True, default="")
     action_url = models.CharField(max_length=255, blank=True, default="")
+    # The record this notification is *about*, when there is one. Matching on the owning
+    # record — rather than on the action_url string — is what lets a domain resolve its own
+    # notifications when the work is finished, without every caller having to reproduce the
+    # exact deep link it used at creation time. Same convention as CalendarEvent/Bill.
+    source_record_type = models.CharField(max_length=100, blank=True, default="")
+    source_record_id = models.PositiveBigIntegerField(null=True, blank=True)
     is_read = models.BooleanField(default=False, db_index=True)
 
     objects = HouseholdManager()
@@ -37,6 +43,12 @@ class Notification(HouseholdBaseModel):
     class Meta:
         verbose_name = "notification"
         ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(
+                fields=["source_record_type", "source_record_id", "is_read"],
+                name="notif_source_record_idx",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.recipient_user_id}: {self.title}"

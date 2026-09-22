@@ -426,22 +426,31 @@ class SolaceCrudAndCalendarTests(TestCase):
         brisbane = ZoneInfo("Australia/Brisbane")
         self.admin.household.timezone = "Australia/Brisbane"
         self.admin.household.save(update_fields=["timezone"])
+        # Anchored to today rather than to fixed 2026 dates: create_bill() only materialises
+        # occurrences from 90 days back, so a hardcoded due date stops producing one as it
+        # ages out of that window. What this test is about is the local-midnight cycle
+        # boundary, not any particular calendar date.
         with timezone.override(brisbane):
+            cycle_start = timezone.localdate()
+            next_cycle_start = cycle_start + timedelta(days=14)
             bill = create_bill(
                 self.admin,
                 name="Next cycle electricity",
                 amount="60.00",
-                due_at=datetime(2026, 8, 12, 0, 0, tzinfo=brisbane),
+                due_at=datetime(
+                    next_cycle_start.year, next_cycle_start.month, next_cycle_start.day,
+                    0, 0, tzinfo=brisbane,
+                ),
             )
             current = list_bill_occurrences(
                 self.admin,
-                start=date(2026, 7, 29),
-                end=date(2026, 8, 11),
+                start=cycle_start,
+                end=next_cycle_start - timedelta(days=1),
             )
             next_cycle = list_bill_occurrences(
                 self.admin,
-                start=date(2026, 8, 12),
-                end=date(2026, 8, 25),
+                start=next_cycle_start,
+                end=next_cycle_start + timedelta(days=13),
             )
 
         self.assertNotIn(bill.id, [row.bill_id for row in current])

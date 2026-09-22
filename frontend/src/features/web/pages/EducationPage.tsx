@@ -1037,16 +1037,21 @@ function eventDateLabel(iso: string, allDay: boolean) {
   return `${date} · ${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`
 }
 
-function EventsTab({ courses, people, institutions, defaultAssignee, onError }: {
+function EventsTab({ courses, people, institutions, defaultAssignee, focusedEventId, onError }: {
   courses: EducationCourse[]
   people: Person[]
   institutions: EducationInstitution[]
   defaultAssignee: number[]
+  focusedEventId?: number
   onError: (m: string) => void
 }) {
   const [events, setEvents] = useState<EducationEvent[]>([])
   const [loading, setLoading] = useState(true)
-  const [showPast, setShowPast] = useState(false)
+  // An event notification can outlive the event, so a deep link has to be able to show a past
+  // one — otherwise following it lands on a list that does not contain what you tapped.
+  const [showPast, setShowPast] = useState(Boolean(focusedEventId))
+  // The ring is an arrival cue, not a state. It clears itself so it can never be read as one.
+  const [ringVisible, setRingVisible] = useState(Boolean(focusedEventId))
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [type, setType] = useState<EducationEventType>('school_event')
@@ -1064,6 +1069,17 @@ function EventsTab({ courses, people, institutions, defaultAssignee, onError }: 
     api.getEducationEvents(showPast ? undefined : { upcoming: true })
       .then(setEvents).catch(e => onError(errMsg(e))).finally(() => setLoading(false))
   }, [showPast, onError])
+
+  useEffect(() => {
+    if (loading || !focusedEventId) return
+    window.setTimeout(
+      () => document.getElementById(`education-event-${focusedEventId}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+      0,
+    )
+    const timer = window.setTimeout(() => setRingVisible(false), 2500)
+    return () => window.clearTimeout(timer)
+  }, [loading, focusedEventId])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1140,7 +1156,13 @@ function EventsTab({ courses, people, institutions, defaultAssignee, onError }: 
         <Card>
           <ul className="divide-y divide-line -mt-1">
             {events.map(ev => (
-              <li key={ev.id} className="flex items-start gap-3 py-3 group">
+              <li
+                key={ev.id}
+                id={`education-event-${ev.id}`}
+                className={`flex items-start gap-3 py-3 group rounded-xl transition-colors ${
+                  ringVisible && ev.id === focusedEventId ? 'bg-primary-soft px-2 ring-2 ring-primary' : ''
+                }`}
+              >
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-ink">{ev.title}</div>
                   <div className="flex flex-wrap items-center gap-1.5 mt-1">
@@ -1632,6 +1654,7 @@ export function EducationPage() {
   const { tab, setTab } = tabsState
   const [searchParams] = useSearchParams()
   const focusedAssessmentId = Number(searchParams.get('assessment') || 0)
+  const focusedEventId = Number(searchParams.get('event') || 0)
   const [courses, setCourses] = useState<EducationCourse[]>([])
   const [people, setPeople] = useState<Person[]>([])
   const [institutions, setInstitutions] = useState<EducationInstitution[]>([])
@@ -1699,7 +1722,7 @@ export function EducationPage() {
           {tab === 'assignments' && <AssignmentsTab courses={courses} people={people} defaultAssignee={defaultAssignee} focusedAssessmentId={focusedAssessmentId || undefined} onError={setError} onFocusCleared={() => navigate('/education?tab=assignments', { replace: true })} />}
           {tab === 'courses' && <CoursesTab courses={courses} reload={loadCourses} people={people} institutions={institutions} defaultAssignee={defaultAssignee} onAddInstitution={() => setTab('institutions')} onError={setError} />}
           {tab === 'timetable' && <TimetableTab courses={courses} onError={setError} />}
-          {tab === 'events' && <EventsTab courses={courses} people={people} institutions={institutions} defaultAssignee={defaultAssignee} onError={setError} />}
+          {tab === 'events' && <EventsTab courses={courses} people={people} institutions={institutions} defaultAssignee={defaultAssignee} focusedEventId={focusedEventId || undefined} onError={setError} />}
           {tab === 'institutions' && <InstitutionsTab institutions={institutions} onChange={setInstitutions} onError={setError} />}
         </>
       )}

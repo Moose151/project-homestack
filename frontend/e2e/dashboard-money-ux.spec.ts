@@ -80,7 +80,7 @@ test('Dashboard bill links open the selected Money bill', async ({ page }) => {
   )
 })
 
-test('Dashboard Upcoming finishes every node the same way, and dismisses any row in place', async ({ page }) => {
+test('Dashboard Upcoming finishes every node the same way, and snoozes any row in place', async ({ page }) => {
   await mockAuthenticatedApi(page, {
     '/api/v1/nodes/': [SOLACE_NODE],
     '/api/v1/hub/': {
@@ -114,13 +114,14 @@ test('Dashboard Upcoming finishes every node the same way, and dismisses any row
   await page.getByRole('button', { name: 'Mark Electricity bill as paid' }).click()
   await paidRequest
 
-  // A row whose source has no unambiguous transition offers Dismiss only.
+  // A row whose source has no unambiguous transition can only be snoozed.
   await expect(page.getByRole('button', { name: /^Mark Dentist appointment as/ })).toHaveCount(0)
 
-  const dismissRequest = page.waitForRequest(request => (
+  // Snooze, not hide-forever: the copy has to promise what the backend actually does.
+  const snoozeRequest = page.waitForRequest(request => (
     request.method() === 'POST' && request.url().endsWith('/api/v1/hub/upcoming/22/dismiss/')
   ))
-  await page.getByRole('button', { name: 'Dismiss Dentist appointment from Upcoming' }).click()
-  await dismissRequest
-  await expect(page.getByText('Dismissed Dentist appointment')).toBeVisible()
+  await page.getByRole('button', { name: 'Snooze Dentist appointment until tomorrow' }).click()
+  await snoozeRequest
+  await expect(page.getByText('Snoozed Dentist appointment until tomorrow')).toBeVisible()
 })

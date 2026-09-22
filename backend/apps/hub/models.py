@@ -79,11 +79,16 @@ class UserHubWidget(models.Model):
 
 
 class HubUpcomingDismissal(models.Model):
-    """A User choosing to hide one Calendar projection from their Upcoming feed.
+    """A User snoozing one Calendar projection out of their Upcoming feed.
 
     This is presentation state only: the Calendar event and its owning domain record remain
     untouched.  The event foreign key deliberately cascades so completion/deletion cannot leave
     dismissal debris behind.
+
+    Snoozes expire (``hidden_until``) rather than lasting forever. A permanent hide is a
+    one-way door: the Undo toast lasts seconds, and nothing else in the product lists what a
+    User has hidden, so an accidental tap would silently remove something from their Dashboard
+    with no way back. Expiry makes the worst case "it reappears tomorrow" instead.
     """
 
     user = models.ForeignKey(
@@ -97,6 +102,7 @@ class HubUpcomingDismissal(models.Model):
         related_name="hub_dismissals",
     )
     dismissed_at = models.DateTimeField(auto_now_add=True)
+    hidden_until = models.DateTimeField()
 
     class Meta:
         constraints = [
@@ -106,4 +112,4 @@ class HubUpcomingDismissal(models.Model):
         ]
 
     def __str__(self) -> str:
-        return f"{self.user} dismissed event {self.event_id}"
+        return f"{self.user} snoozed event {self.event_id} until {self.hidden_until}"

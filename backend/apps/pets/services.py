@@ -102,6 +102,8 @@ def complete_treatment(acting_user: User, obj: PetTreatment) -> PetTreatment:
     obj.save()
     sync_event_for(obj)
     events.treatment_completed(obj.id, obj.household_id)
+    from apps.notifications.services import resolve_for_record
+    resolve_for_record(obj)
     return obj
 
 

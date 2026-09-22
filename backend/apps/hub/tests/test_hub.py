@@ -214,6 +214,36 @@ class UpcomingWidgetTests(TestCase):
         create_reminder(self.admin, title="Doctor visit", due_at=_future(48))
         self.assertIn("Doctor visit", [i["title"] for i in self._upcoming()["items"]])
 
+    def test_a_snooze_expires_overnight_rather_than_hiding_forever(self):
+        """Nothing in the product lists what a User has hidden, so hiding must not be
+        permanent — an accidental tap would otherwise be a silent one-way door."""
+        from apps.hub.models import HubUpcomingDismissal
+
+        reminder = create_reminder(self.admin, title="Doctor visit", due_at=_future(48))
+        self.client.post(reverse("hub-upcoming-dismissal", args=[reminder.calendar_event_id]))
+        self.assertIsNone(self._upcoming())
+
+        dismissal = HubUpcomingDismissal.objects.get(user=self.admin)
+        # Snoozes run to the next local midnight, never further.
+        self.assertGreater(dismissal.hidden_until, timezone.now())
+        self.assertLess(dismissal.hidden_until, timezone.now() + timezone.timedelta(days=1, hours=1))
+
+        HubUpcomingDismissal.objects.update(hidden_until=timezone.now() - timezone.timedelta(minutes=1))
+        self.assertIn("Doctor visit", [i["title"] for i in self._upcoming()["items"]])
+
+    def test_re_snoozing_an_expired_item_hides_it_again(self):
+        from apps.hub.models import HubUpcomingDismissal
+
+        reminder = create_reminder(self.admin, title="Doctor visit", due_at=_future(48))
+        event_id = reminder.calendar_event_id
+        self.client.post(reverse("hub-upcoming-dismissal", args=[event_id]))
+        HubUpcomingDismissal.objects.update(hidden_until=timezone.now() - timezone.timedelta(minutes=1))
+        self.assertIn("Doctor visit", [i["title"] for i in self._upcoming()["items"]])
+
+        response = self.client.post(reverse("hub-upcoming-dismissal", args=[event_id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(self._upcoming())
+
     def test_user_can_dismiss_and_restore_an_upcoming_item(self):
         reminder = create_reminder(self.admin, title="Doctor visit", due_at=_future(48))
         event_id = reminder.calendar_event_id

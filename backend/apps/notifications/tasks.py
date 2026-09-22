@@ -267,6 +267,7 @@ def run_due_todo_offsets(*, now=None) -> int:
                     user, title=_offset_title(offset_minutes), message=item.title,
                     source_node="atlas", category=NotificationCategory.ASSIGNED_TASKS,
                     action_url=f"/atlas?tab=todos&list={item.atlas_list_id}&item={item.id}",
+                    source_record=item,
                 )
             _log_sent(
                 source_node="atlas", record_type="AtlasListItem", record_id=item.id, lead_kind=lead_kind,

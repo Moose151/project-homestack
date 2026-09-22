@@ -1073,3 +1073,162 @@ class CountdownDigestTests(TestCase):
         morning_now = timezone.make_aware(datetime.combine(timezone.now().date(), time(8, 0)))
         run_countdown_digest(now=morning_now)
         self.assertEqual(Notification.objects.filter(recipient_user=self.other, source_node="hub").count(), 0)
+
+
+class NotificationResolutionTests(TestCase):
+    """A notification must not outlive the work it is about (owner, 2026-09-21).
+
+    The reported symptom was an Education assignment that stayed "overdue" in Notifications
+    after being marked Done. Resolving by owning record — rather than by matching the
+    action_url string a caller happened to build — is what makes this hold for every node
+    instead of only the one that was reported.
+    """
+
+    def setUp(self):
+        self.user = _make_user("resolver")
+        self.person = _make_person("Alex", linked_user=self.user)
+        from apps.nodes.services import enable_node
+        from apps.permissions.services import grant_user_permission
+        for node in ("education", "atlas", "meridian", "homestead", "pets", "solace"):
+            enable_node(self.user, node)
+            grant_user_permission(self.user, f"{node}.view")
+
+    def _unread_for(self, record):
+        return Notification.objects.filter(
+            source_record_type=type(record).__name__,
+            source_record_id=record.pk,
+            is_read=False,
+        ).count()
+
+    def test_notification_records_the_record_it_is_about(self):
+        todo_list = create_atlas_list(self.user, title="Household", list_type="todo")
+        item = create_list_item(self.user, todo_list, title="Put the bins out")
+        services.create_notification(
+            self.user, title="Due soon", message=item.title,
+            source_node="atlas", source_record=item,
+        )
+        note = Notification.objects.get(source_record_id=item.pk)
+        self.assertEqual(note.source_record_type, "AtlasListItem")
+
+    def test_completing_a_todo_resolves_its_reminder(self):
+        from apps.atlas.services import complete_list_item
+
+        todo_list = create_atlas_list(self.user, title="Household", list_type="todo")
+        item = create_list_item(self.user, todo_list, title="Put the bins out")
+        services.create_notification(
+            self.user, title="Due soon", message=item.title,
+            source_node="atlas", source_record=item,
+        )
+        self.assertEqual(self._unread_for(item), 1)
+
+        complete_list_item(self.user, item)
+        self.assertEqual(self._unread_for(item), 0)
+
+    def test_completing_an_assignment_resolves_its_notification(self):
+        from apps.education.models import EducationAssessment
+        from apps.education.services import create_assessment, update_assessment
+
+        other = _make_user("classmate", User.Role.USER)
+        student = _make_person("Sam", linked_user=other)
+        assessment = create_assessment(
+            self.user, title="Research report",
+            due_at=timezone.now() + timedelta(days=1), assigned_to_people=[student],
+        )
+        self.assertEqual(self._unread_for(assessment), 1)
+
+        update_assessment(self.user, assessment, status=EducationAssessment.Status.DONE)
+        self.assertEqual(self._unread_for(assessment), 0)
+
+    def test_paying_a_bill_resolves_its_notification(self):
+        from apps.solace.services import create_bill, mark_bill_paid
+
+        bill = create_bill(
+            self.user, name="Internet", amount="89.00",
+            due_at=timezone.now() + timedelta(days=1),
+        )
+        services.create_notification(
+            self.user, title="Bill due", message=bill.name,
+            source_node="solace", source_record=bill,
+        )
+        self.assertEqual(self._unread_for(bill), 1)
+
+        mark_bill_paid(self.user, bill)
+        self.assertEqual(self._unread_for(bill), 0)
+
+    def test_completing_a_meridian_task_resolves_its_notification(self):
+        task = meridian.create_task(
+            self.user, title="Tidy the garage",
+            due_at=timezone.now() + timedelta(days=1), assigned_to_people=[self.person.id],
+        )
+        services.create_notification(
+            self.user, title="Task due", message=task.title,
+            source_node="meridian", source_record=task,
+        )
+        self.assertEqual(self._unread_for(task), 1)
+
+        meridian.complete_task(self.user, task, person_id=self.person.id)
+        self.assertEqual(self._unread_for(task), 0)
+
+    def test_completing_maintenance_resolves_its_notification(self):
+        from apps.homestead.services import complete_maintenance, create_maintenance
+
+        job = create_maintenance(
+            self.user, title="Service the boiler",
+            next_due_at=timezone.now() + timedelta(days=1),
+        )
+        services.create_notification(
+            self.user, title="Maintenance due", message=job.title,
+            source_node="homestead", source_record=job,
+        )
+        self.assertEqual(self._unread_for(job), 1)
+
+        complete_maintenance(self.user, job)
+        self.assertEqual(self._unread_for(job), 0)
+
+    def test_completing_a_pet_treatment_resolves_its_notification(self):
+        from apps.pets.services import complete_treatment, create_pet, create_treatment
+
+        pet = create_pet(self.user, name="Rosie", species="dog")
+        treatment = create_treatment(
+            self.user, pet=pet, treatment_type="flea",
+            next_due_at=timezone.now() + timedelta(days=1),
+        )
+        services.create_notification(
+            self.user, title="Treatment due", message=treatment.display_name,
+            source_node="pets", source_record=treatment,
+        )
+        self.assertEqual(self._unread_for(treatment), 1)
+
+        complete_treatment(self.user, treatment)
+        self.assertEqual(self._unread_for(treatment), 0)
+
+    def test_resolution_does_not_touch_other_records(self):
+        """Resolving one record's notifications must not sweep the whole node's."""
+        from apps.atlas.services import complete_list_item
+
+        todo_list = create_atlas_list(self.user, title="Household", list_type="todo")
+        done = create_list_item(self.user, todo_list, title="Put the bins out")
+        other = create_list_item(self.user, todo_list, title="Book the car service")
+        for item in (done, other):
+            services.create_notification(
+                self.user, title="Due soon", message=item.title,
+                source_node="atlas", source_record=item,
+            )
+
+        complete_list_item(self.user, done)
+        self.assertEqual(self._unread_for(done), 0)
+        self.assertEqual(self._unread_for(other), 1)
+
+    def test_read_history_is_kept_rather_than_deleted(self):
+        from apps.atlas.services import complete_list_item
+
+        todo_list = create_atlas_list(self.user, title="Household", list_type="todo")
+        item = create_list_item(self.user, todo_list, title="Put the bins out")
+        services.create_notification(
+            self.user, title="Due soon", message=item.title,
+            source_node="atlas", source_record=item,
+        )
+        complete_list_item(self.user, item)
+
+        note = Notification.objects.get(source_record_id=item.pk)
+        self.assertTrue(note.is_read)

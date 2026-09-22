@@ -327,6 +327,8 @@ def mark_bill_paid(acting_user: User, obj: Bill) -> Bill:
     obj.save()
     sync_event_for(obj)
     events.bill_paid(obj.id, obj.household_id)
+    from apps.notifications.services import resolve_for_record
+    resolve_for_record(obj)
     return obj
 
 
@@ -358,6 +360,11 @@ def mark_occurrence_paid(acting_user: User, obj: BillOccurrence) -> BillOccurren
         ensure_bill_occurrences(bill, today - timedelta(days=90), today + timedelta(days=550))
     sync_event_for(bill)
     events.bill_paid(obj.bill_id, obj.household_id)
+    # A recurring bill keeps notifying for its next occurrence; what is resolved here is the
+    # unread "this is due" for the occurrence just paid.
+    from apps.notifications.services import resolve_for_record
+    resolve_for_record(bill)
+    resolve_for_record(obj)
     return obj
 
 

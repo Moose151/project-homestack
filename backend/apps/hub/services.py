@@ -23,6 +23,11 @@ UPCOMING_OVERDUE_GRACE_DAYS = 30
 # Source record types that mean "this is due by then". A missed one still needs attention,
 # so it survives past its date. Point-in-time records (appointments, classes, one-off
 # events) are history once they pass and are dropped instead.
+#
+# "AtlasReminder" stays despite the object being retired in v0.40.1 (D19 §E): its HTTP write
+# verbs return 410, but existing reminder records still exist and still project to Calendar.
+# Dropping it here would silently hide genuinely outstanding legacy items from the household —
+# it looks like dead weight and is not. Remove it only once no AtlasReminder rows remain.
 UPCOMING_DUE_RECORD_TYPES = frozenset({
     "AtlasListItem",
     "AtlasReminder",
@@ -247,7 +252,9 @@ def _upcoming_widget_content(
     today = timezone.localdate()
     relevant = _upcoming_events_for_user(user, sensitive_unlocked=sensitive_unlocked)
     dismissed_ids = set(
-        HubUpcomingDismissal.objects.filter(user=user).values_list("event_id", flat=True)
+        HubUpcomingDismissal.objects.filter(
+            user=user, hidden_until__gt=timezone.now(),
+        ).values_list("event_id", flat=True)
     )
     relevant = [event for event in relevant if event.id not in dismissed_ids]
 
@@ -581,10 +588,25 @@ def _visible_upcoming_event(user, event_id: int, *, sensitive_unlocked: bool):
     return event
 
 
+def _next_local_midnight():
+    """Start of the next local day — when a snooze stops hiding its row."""
+    local_now = timezone.localtime()
+    tomorrow = (local_now + timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0,
+    )
+    return tomorrow
+
+
 def dismiss_upcoming_event(user, event_id: int, *, sensitive_unlocked: bool):
-    """Hide one currently visible Upcoming row for this User only."""
+    """Snooze one currently visible Upcoming row for this User until tomorrow."""
     event = _visible_upcoming_event(user, event_id, sensitive_unlocked=sensitive_unlocked)
-    dismissal, _ = HubUpcomingDismissal.objects.get_or_create(user=user, event=event)
+    dismissal, created = HubUpcomingDismissal.objects.get_or_create(
+        user=user, event=event, defaults={"hidden_until": _next_local_midnight()},
+    )
+    if not created:
+        # Re-snoozing an already-expired row must extend it, not silently do nothing.
+        dismissal.hidden_until = _next_local_midnight()
+        dismissal.save(update_fields=["hidden_until"])
     return dismissal
 
 
@@ -614,7 +636,7 @@ def complete_upcoming_event(user, event_id: int, *, sensitive_unlocked: bool):
 
 
 def restore_upcoming_event(user, event_id: int) -> bool:
-    """Undo this User's dismissal without changing the Calendar/domain record."""
+    """Undo this User's snooze without changing the Calendar/domain record."""
     deleted, _ = HubUpcomingDismissal.objects.filter(user=user, event_id=event_id).delete()
     return bool(deleted)
 

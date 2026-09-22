@@ -206,6 +206,8 @@ def complete_maintenance(acting_user: User, obj: MaintenanceTask) -> Maintenance
     _sync_maintenance_calendar(obj)
     events.maintenance_saved(obj, acting_user.id)
     events.maintenance_completed(obj.id, obj.household_id)
+    from apps.notifications.services import resolve_for_record
+    resolve_for_record(obj)
     return obj
 
 
