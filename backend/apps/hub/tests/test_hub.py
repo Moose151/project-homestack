@@ -1159,6 +1159,34 @@ class UpcomingCompletionContractTests(TestCase):
         treatment.refresh_from_db()
         self.assertIsNotNone(treatment.last_done_at)
 
+    def test_a_task_with_no_unambiguous_completer_offers_no_button(self):
+        """Meridian records work against a Person. With no linked Person on the reader and no
+        sole assignee there is no answer to "who did this", so the Dashboard must not offer a
+        button that is guaranteed to fail — this previously raised a 500 on tap."""
+        from apps.meridian.services import create_task
+
+        task = create_task(self.admin, title="Unassigned chore", due_at=_future(hours=-24))
+        self.assertIsNone(self._row_for("Unassigned chore")["complete_action"])
+
+        response = self._complete(task.calendar_event_id)
+        self.assertEqual(response.status_code, 404)
+
+    def test_a_domain_refusal_is_reported_not_a_server_error(self):
+        """A service declining a transition is a business outcome, not a crash."""
+        from apps.meridian.services import create_task
+
+        person = create_person(self.admin, display_name="Alex", linked_user_id=self.admin.id)
+        task = create_task(
+            self.admin, title="Archived chore", due_at=_future(hours=-24),
+            assigned_to_people=[person.id],
+        )
+        task.is_active = False
+        task.save(update_fields=["is_active"])
+
+        response = self._complete(task.calendar_event_id)
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("not active", response.json()["detail"].lower())
+
     # --- boundaries ---
 
     def test_a_row_with_no_source_action_cannot_be_completed(self):

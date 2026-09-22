@@ -246,7 +246,6 @@ def _upcoming_widget_content(
     Returns the full ``UPCOMING_MAX_DAYS`` window plus the horizon boundaries; the client
     clips to the horizon the reader chose, so switching horizon costs no round trip.
     """
-    from apps.hub.completions import action_label
     from apps.scheduling.serializers import CalendarEventSerializer
 
     today = timezone.localdate()
@@ -260,9 +259,11 @@ def _upcoming_widget_content(
 
     # Every row carries its own action label, so the client renders one uniform row and
     # holds no per-node knowledge about which sources can be finished from the Dashboard.
+    # The label is resolved against the actual record: a button that is guaranteed to fail
+    # on tap is worse than no button.
     items = CalendarEventSerializer(relevant, many=True).data
     for item, event in zip(items, relevant):
-        item["complete_action"] = action_label(event.source_record_type)
+        item["complete_action"] = _action_label_for(user, event)
 
     meta = {
         # The "this pay cycle" horizon is Money's own figure, so it follows Money's lock, not
@@ -567,6 +568,21 @@ class HubPermissionError(HubError):
     """The caller can see an Upcoming row but may not perform its source action."""
 
 
+def _action_label_for(user, event) -> str | None:
+    """The completion label this reader can actually use on this row, if any."""
+    from apps.hub.completions import action_for, action_label
+
+    action = action_for(event.source_record_type)
+    if action is None or event.source_record_id is None:
+        return None
+    if action.is_available is None:
+        return action.label
+    record = action.load(event.source_record_id)
+    if record is None:
+        return None
+    return action_label(event.source_record_type, acting_user=user, record=record)
+
+
 def _visible_upcoming_event(user, event_id: int, *, sensitive_unlocked: bool):
     """The Upcoming row this User can currently see, or raise.
 
@@ -617,7 +633,7 @@ def complete_upcoming_event(user, event_id: int, *, sensitive_unlocked: bool):
     the owning domain's service, so Calendar sync, events and notifications behave exactly
     as they would from the node's own screen.
     """
-    from apps.hub.completions import action_for
+    from apps.hub.completions import action_for, domain_errors
     from apps.permissions.resolver import resolve_permission
 
     event = _visible_upcoming_event(user, event_id, sensitive_unlocked=sensitive_unlocked)
@@ -631,7 +647,12 @@ def complete_upcoming_event(user, event_id: int, *, sensitive_unlocked: bool):
     record = action.load(event.source_record_id)
     if record is None:
         raise HubError("Upcoming item not found.")
-    action.complete(user, record)
+    try:
+        action.complete(user, record)
+    except domain_errors() as exc:
+        # The owning domain declined the transition — a business outcome the reader should
+        # see, not a server fault. Its own wording is better than anything Hub could invent.
+        raise HubError(str(exc)) from exc
     return record
 
 

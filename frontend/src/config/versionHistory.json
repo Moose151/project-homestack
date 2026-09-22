@@ -1,6 +1,6 @@
 {
   "current_version": "0.40.6",
-  "source_sha256": "c77fb5a54e5346ea0e7e803c61efd94dfe16dfa2bd9477eb946414cd94d9ff73",
+  "source_sha256": "2e9b2df49efe6bb68e4af60fe44a1f095c1e28b053f0551e7f35eafbc297f09a",
   "releases": [
     {
       "version": "0.40.6",
@@ -11,6 +11,7 @@
         "**Dashboard \"Dismiss\" is now \"Snooze\", and it expires overnight.** Hiding a row was a silent one-way door: nothing in the product lists what you have hidden and the Undo toast lasts seconds, so one mistaken tap removed something from your Dashboard for good. Snoozes now run to the next local midnight, and the label promises what the backend actually does.",
         "**Education event notifications deep-link to the event.** They previously dropped you on the Education landing tab. The Events tab accepts `?event=`, shows past events when following such a link (a notification can outlive its event), and its arrival highlight clears itself.",
         "**CI now exists.** Backend tests on the pinned Python 3.12/Django 5.0.6 runtime, a migration-drift check, frontend type-check/build, the browser suite, and a guard that `VERSION_HISTORY.md`, the generated manifest and `APP_VERSION` agree. Backend tests run serially on purpose: `--parallel` can fail to pickle a traceback back to the parent and turn a real failure into an unreadable one.",
+        "**Fixed a 500 on the new Dashboard completion action.** Meridian records work against a Person, so tapping **Done** on a task with no linked Person on the reader and no sole assignee crashed instead of completing. Such a row now offers no button at all — one that is guaranteed to fail is worse than none — and a service declining a transition is reported as a business outcome rather than surfacing as a server error.",
         "**Fixed four tests that would have rotted with the calendar**, found by running the whole suite under a future clock rather than by waiting for them to break. Three depended on shipped Queensland holiday data; that data silently runs out after 2027 and takes the household's public holidays with it, so there is now a test that fails a year ahead with an actionable message instead of a blank calendar and a confusing `DoesNotExist`."
       ]
     },

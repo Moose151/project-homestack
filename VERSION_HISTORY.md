@@ -31,6 +31,11 @@
   `VERSION_HISTORY.md`, the generated manifest and `APP_VERSION` agree. Backend tests run
   serially on purpose: `--parallel` can fail to pickle a traceback back to the parent and turn
   a real failure into an unreadable one.
+- **Fixed a 500 on the new Dashboard completion action.** Meridian records work against a
+  Person, so tapping **Done** on a task with no linked Person on the reader and no sole
+  assignee crashed instead of completing. Such a row now offers no button at all — one that is
+  guaranteed to fail is worse than none — and a service declining a transition is reported as a
+  business outcome rather than surfacing as a server error.
 - **Fixed four tests that would have rotted with the calendar**, found by running the whole
   suite under a future clock rather than by waiting for them to break. Three depended on
   shipped Queensland holiday data; that data silently runs out after 2027 and takes the

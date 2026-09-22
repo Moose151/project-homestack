@@ -31,6 +31,10 @@ class UpcomingAction:
     # has to ask the same question the node asks, or the Dashboard would be stricter than
     # the screen it mirrors.
     action: str = "edit"
+    # Optional (acting_user, record) -> bool. Some transitions need more than the record to
+    # be well-defined; offering a button that is guaranteed to fail is worse than offering
+    # none, so those actions answer for themselves rather than failing on tap.
+    is_available: Callable | None = None
 
 
 def _atlas_list_item():
@@ -63,11 +67,21 @@ def _meridian_task():
     from apps.meridian.models import MeridianTask
     from apps.meridian.services import complete_task
 
-    def _complete(user, task):
-        # Mirrors Meridian's own view: the person linked to the acting user is the natural
-        # "who did this", with the task's sole assignee as the service-level fallback.
+    def _person_id_for(user, task):
+        """Who the completion is recorded against — Meridian records work against a Person.
+
+        Mirrors Meridian's own view: the Person linked to the acting user, falling back to
+        the task's sole assignee. With neither, there is no unambiguous answer and the task
+        has to be completed from Meridian itself, where the completer can be chosen.
+        """
         person = getattr(user, "person_profile", None)
-        complete_task(user, task, person_id=person.id if person else None)
+        if person is not None:
+            return person.id
+        assignees = list(task.assigned_to_people.values_list("id", flat=True))
+        return assignees[0] if len(assignees) == 1 else None
+
+    def _complete(user, task):
+        complete_task(user, task, person_id=_person_id_for(user, task))
 
     return UpcomingAction(
         label="Done",
@@ -75,6 +89,7 @@ def _meridian_task():
         action="complete",
         load=lambda pk: MeridianTask.objects.filter(pk=pk).first(),
         complete=_complete,
+        is_available=lambda user, task: _person_id_for(user, task) is not None,
     )
 
 
@@ -132,7 +147,24 @@ def action_for(source_record_type: str) -> UpcomingAction | None:
     return builder() if builder else None
 
 
-def action_label(source_record_type: str) -> str | None:
-    """The label to advertise on an Upcoming row, or None when it has no source action."""
+def domain_errors() -> tuple[type[Exception], ...]:
+    """Error types the registered services raise to refuse a transition.
+
+    These mean "the domain declined", not "the server broke", so Hub answers 400 rather than
+    letting them surface as a 500. Deliberately an explicit tuple: catching bare Exception
+    here would quietly turn real bugs into polite error messages.
+    """
+    from apps.meridian.services import MeridianError
+
+    return (MeridianError, ValueError)
+
+
+def action_label(source_record_type: str, *, acting_user=None, record=None) -> str | None:
+    """The label to advertise on an Upcoming row, or None when it has no usable action."""
     action = action_for(source_record_type)
-    return action.label if action else None
+    if action is None:
+        return None
+    if action.is_available is not None and acting_user is not None and record is not None:
+        if not action.is_available(acting_user, record):
+            return None
+    return action.label
