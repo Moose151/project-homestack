@@ -70,6 +70,13 @@ than the permission model it was meant to reflect: managers are granted `people`
 and `homewiki.delete` by the seeds, yet every one of those controls was hidden from them
 (v0.40.8). Add a capability to the map rather than reintroducing a role comparison.
 
+**Undo is not a permission bypass.** `POST /api/v1/undo/restore/` restores a soft-deleted
+record from the bounded registry in `apps/core/undo.py`, gated on the owning node's own
+`delete` right — being allowed to delete a thing is exactly the right to put it back, and
+restoring is strictly less destructive than the delete it reverses, so it never needs a wider
+grant. The registry is deliberately not a general-purpose trash can: only record types whose
+delete is cleanly invertible belong in it.
+
 Being presentation state, `capabilities` is never the enforcement point — each endpoint still
 resolves the permission itself. A capability that is wrong makes a control invisible or
 pointlessly visible; it can never grant access.

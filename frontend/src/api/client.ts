@@ -507,6 +507,10 @@ export const api = {
     _fetch('/hub/widgets/me/order/', { method: 'PATCH', body: JSON.stringify({ keys }) }),
   completeUpcomingItem: (eventId: number): Promise<{ completed: boolean }> =>
     _fetch(`/hub/upcoming/${eventId}/complete/`, { method: 'POST' }),
+  /** Undo a soft delete. `recordType` must be in the backend's restore registry
+   *  (apps/core/undo.py) — routine single-item deletes only, never a whole list or a pet. */
+  restoreRecord: (recordType: string, recordId: number): Promise<{ restored: boolean; noun: string }> =>
+    _fetch('/undo/restore/', { method: 'POST', body: JSON.stringify({ record_type: recordType, record_id: recordId }) }),
   dismissUpcomingItem: (eventId: number): Promise<{ dismissed: boolean }> =>
     _fetch(`/hub/upcoming/${eventId}/dismiss/`, { method: 'POST' }),
   restoreUpcomingItem: (eventId: number): Promise<void> =>

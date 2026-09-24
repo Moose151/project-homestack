@@ -17,6 +17,7 @@ import { DeleteAction } from '../../..//components/RowActions'
 import { useAuth } from '../../auth/AuthContext'
 import { useUrlQueryState } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
+import { UndoToast } from '../../../components/UndoToast'
 import { sourcePath } from '../../../lib/sourceLinks'
 import { EventModal } from './CalendarPage'
 import { MobileListRow, MobileSection } from '../../../components/mobile'
@@ -179,12 +180,31 @@ function ListCard({ list, people, defaultAssignee, focusedItemId, onDeleted, onE
     }
   }
 
+  const [justDeleted, setJustDeleted] = useState<{ id: number; title: string } | null>(null)
+
   const handleToggle = (updated: AtlasListItem) => setItems(prev => prev.map(i => i.id === updated.id ? updated : i))
 
   const handleDelete = async (item: AtlasListItem) => {
     try {
       await api.deleteItem(list.id, item.id)
       setItems(prev => prev.filter(i => i.id !== item.id))
+      // Already frictionless — it never asked first — but until now it was also
+      // irreversible, which is the half of the bargain that was missing.
+      setJustDeleted({ id: item.id, title: item.title })
+    } catch (e) {
+      onError(errMsg(e))
+    }
+  }
+
+  const undoDelete = async () => {
+    const target = justDeleted
+    if (!target) return
+    setJustDeleted(null)
+    try {
+      await api.restoreRecord('AtlasListItem', target.id)
+      // Items come embedded in their list, so the list is the only place to read them back.
+      const lists = await api.getLists()
+      setItems(lists.find(row => row.id === list.id)?.items ?? [])
     } catch (e) {
       onError(errMsg(e))
     }
@@ -278,7 +298,15 @@ function ListCard({ list, people, defaultAssignee, focusedItemId, onDeleted, onE
           <Button type="submit" size="sm" loading={adding} disabled={!newTitle.trim()}>Add</Button>
         </div>
       </form>
-    </Card></div>
+    </Card>
+    {justDeleted && (
+      <UndoToast
+        message={`Deleted ${justDeleted.title}`}
+        onUndo={undoDelete}
+        onDismiss={() => setJustDeleted(null)}
+      />
+    )}
+    </div>
   )
 }
 

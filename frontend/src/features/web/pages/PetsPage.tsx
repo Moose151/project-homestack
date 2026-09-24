@@ -17,6 +17,7 @@ import { MobileListRow } from '../../../components/mobile'
 import { useAuth } from '../../auth/AuthContext'
 import { useUrlQueryState } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
+import { UndoToast } from '../../../components/UndoToast'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -168,10 +169,9 @@ function TreatmentRow({ t, onChange, onDelete, onError, onEdit }: {
     setBusy(true)
     try { onChange(await api.completePetTreatment(t.id)) } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
-  const remove = async () => {
-    if (!(await confirmDialog({ title: 'Delete this treatment?', confirmLabel: 'Delete' }))) return
-    try { await api.deletePetTreatment(t.id); onDelete(t.id) } catch (e) { onError(errMsg(e)) }
-  }
+  // Deleting one treatment is cheap, frequent and undoable, so it does not ask first.
+  // Deleting the whole pet still does — see PetDetailContent.
+  const remove = () => onDelete(t.id)
   return (
     <li className="flex items-center gap-1 py-2 group">
       <div className="flex-1 min-w-0">
@@ -192,21 +192,12 @@ function TreatmentRow({ t, onChange, onDelete, onError, onEdit }: {
   )
 }
 
-function AppointmentRow({ appointment, onDelete, onError, onEdit }: {
+function AppointmentRow({ appointment, onDelete, onEdit }: {
   appointment: PetAppointment
   onDelete: (id: number) => void
-  onError: (message: string) => void
   onEdit: (appointment: PetAppointment) => void
 }) {
-  const remove = async () => {
-    if (!(await confirmDialog({ title: `Delete "${appointment.display_title}"?`, confirmLabel: 'Delete' }))) return
-    try {
-      await api.deletePetAppointment(appointment.id)
-      onDelete(appointment.id)
-    } catch (e) {
-      onError(errMsg(e))
-    }
-  }
+  const remove = () => onDelete(appointment.id)
 
   return (
     <li className="flex items-center gap-1 py-2 text-sm">
@@ -265,6 +256,43 @@ function PetEditForm({ pet, onSaved, onCancel, onError }: {
 function PetDetailContent({ pet, onError }: { pet: Pet; onError: (m: string) => void }) {
   const [treatments, setTreatments] = useState<PetTreatment[] | null>(null)
   const [appointments, setAppointments] = useState<PetAppointment[] | null>(null)
+  // One undo slot shared by treatments and appointments — two toasts must never stack.
+  const [justDeleted, setJustDeleted] = useState<
+    { recordType: 'PetTreatment' | 'PetAppointment'; id: number; label: string } | null
+  >(null)
+
+  const deleteTreatment = async (id: number) => {
+    const target = (treatments ?? []).find(t => t.id === id)
+    try {
+      await api.deletePetTreatment(id)
+      setTreatments(prev => (prev ?? []).filter(t => t.id !== id))
+      if (target) setJustDeleted({ recordType: 'PetTreatment', id, label: target.display_name })
+    } catch (e) { onError(errMsg(e)) }
+  }
+
+  const deleteAppointment = async (id: number) => {
+    const target = (appointments ?? []).find(a => a.id === id)
+    try {
+      await api.deletePetAppointment(id)
+      setAppointments(prev => (prev ?? []).filter(a => a.id !== id))
+      if (target) setJustDeleted({ recordType: 'PetAppointment', id, label: target.display_title })
+    } catch (e) { onError(errMsg(e)) }
+  }
+
+  const undoDelete = async () => {
+    const target = justDeleted
+    if (!target) return
+    setJustDeleted(null)
+    try {
+      await api.restoreRecord(target.recordType, target.id)
+      const [nextTreatments, nextAppointments] = await Promise.all([
+        api.getPetTreatments({ pet: pet.id }),
+        api.getPetAppointments({ pet: pet.id }),
+      ])
+      setTreatments(nextTreatments)
+      setAppointments(nextAppointments)
+    } catch (e) { onError(errMsg(e)) }
+  }
   const [addingT, setAddingT] = useState(false)
   const [addingA, setAddingA] = useState(false)
   const [editingTreatment, setEditingTreatment] = useState<PetTreatment | null>(null)
@@ -336,7 +364,7 @@ function PetDetailContent({ pet, onError }: { pet: Pet; onError: (m: string) => 
           : <ul className="divide-y divide-line">{treatments.map(t => (
               <TreatmentRow key={t.id} t={t} onError={onError}
                 onChange={u => setTreatments(prev => prev!.map(x => x.id === u.id ? u : x))}
-                onDelete={id => setTreatments(prev => prev!.filter(x => x.id !== id))}
+                onDelete={deleteTreatment}
                 onEdit={setEditingTreatment} />
             ))}</ul>}
       </div>
@@ -349,11 +377,18 @@ function PetDetailContent({ pet, onError }: { pet: Pet; onError: (m: string) => 
         {appointments === null ? <p className="text-xs text-muted">Loading…</p>
           : appointments.length === 0 ? <p className="text-xs text-muted">No upcoming appointments.</p>
           : <ul className="divide-y divide-line">{appointments.map(a => (
-              <AppointmentRow key={a.id} appointment={a} onError={onError}
-                onDelete={id => setAppointments(prev => prev!.filter(item => item.id !== id))}
+              <AppointmentRow key={a.id} appointment={a}
+                onDelete={deleteAppointment}
                 onEdit={setEditingAppointment} />
             ))}</ul>}
       </div>
+      {justDeleted && (
+        <UndoToast
+          message={`Deleted ${justDeleted.label}`}
+          onUndo={undoDelete}
+          onDismiss={() => setJustDeleted(null)}
+        />
+      )}
     </div>
   )
 }

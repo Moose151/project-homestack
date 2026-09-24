@@ -7,9 +7,12 @@ Playwright coverage for `docs/36_Mobile_UX_Strategy_and_Implementation_Plan.md`.
 npm run test:e2e
 ```
 
-Requires the dev stack already running (`docker compose -f ../docker-compose.yml -f
-../docker-compose.dev.yml up -d`, or whatever is already up — the config points at
-`http://localhost:5173` and does not start its own server). Browsers are installed with
+Uses the dev stack when it is already running (`docker compose -f ../docker-compose.yml -f
+../docker-compose.dev.yml up -d`, or whatever is already up on `http://localhost:5173`). If
+nothing is listening there, the config starts its own Vite server and stops it afterwards —
+`reuseExistingServer` means the normal local flow is unchanged, while CI, which has no dev
+stack, still gets a server instead of 400-plus identical connection-refused failures.
+Browsers are installed with
 `npx playwright install chromium` (host-side; Playwright's bundled Chromium does not run on the
 frontend container's Alpine base, so tests run from the host, not `docker exec`).
 

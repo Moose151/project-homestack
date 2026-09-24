@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.40.9**
+> **Current version: 0.40.10**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,34 @@
 ---
 
 ## 0.40 — Faster everyday household coordination
+
+### 0.40.10 — 2026-09-24 — Undo instead of "Are you sure?"
+
+- **Routine deletion stops interrupting you.** Deleting an assignment, a to-do, a maintenance
+  job, a pet treatment or a pet appointment now just happens, and offers itself back. A
+  confirmation dialog interrupts every time — including the overwhelming majority of times you
+  were right — and cannot help the one time you were not, because a confirmed mistake is just
+  as gone. Undo interrupts nobody and rescues the rest.
+- **Deletes that genuinely cost something still ask.** A whole list, a pet, a person, a trip,
+  an appliance: there the pause is the point. The rule is cheap-frequent-single-record gets
+  undo; high-blast-radius keeps its confirmation.
+- **The infrastructure was almost entirely already there.** Every `HouseholdBaseModel` already
+  soft-deletes and already had `restore()`; only a path back was missing. `POST
+  /api/v1/undo/restore/` plus a bounded registry (`apps/core/undo.py`) is that path, gated on
+  the owning node's own `delete` right — being allowed to delete a thing is exactly the right
+  to put it back.
+- A restore puts the record back **everywhere**, not just in its own node: the Calendar
+  projection is re-synced (D7), and an undeleted Atlas item recovers its image and its price
+  watch. A half-restore would be a worse outcome than the delete it reverses.
+- Added backend restore tests including the permission boundary, double-undo and unregistered
+  types, plus browser coverage for the delete-then-undo flow verified to fail against the old
+  confirm-dialog behaviour.
+- **Fixed the CI browser job, which could never have passed.** `playwright.config.ts`
+  deliberately points at an already-running dev server and starts none of its own, but the CI
+  workflow added in 0.40.6 started no server either — so every test would have failed with
+  connection-refused, reporting a broken suite rather than a missing one. The config now starts
+  a server only when nothing is listening (`reuseExistingServer`), leaving the normal local
+  flow, which reuses the dev stack, exactly as it was.
 
 ### 0.40.9 — 2026-09-24 — No write fails silently
 

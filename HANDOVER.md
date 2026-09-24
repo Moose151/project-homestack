@@ -341,6 +341,9 @@ again:
   the reader did not set;
 - a notification must not outlive the work it is about — completion services call
   `notifications.resolve_for_record()` (v0.40.6);
+- **verify a suite's exit code without a pipe.** `cmd | tail` returns *tail's* status, not the
+  command's, so a failing suite reads as exit 0. This masked a completely broken browser run
+  more than once; the CI workflow runs both suites unpiped for the same reason;
 - a failed write must say so. Two of the worst offenders were a `try/finally` with no `catch`
   and a whole code path (Meridian's non-managing self-service view) that rendered no error
   surface at all — check both when auditing a node;
@@ -350,12 +353,22 @@ again:
   product enumerates hidden items, so a permanent hide guarded only by a seconds-long Undo is a
   silent one-way door.
 
-**Reversibility is the outstanding usability debt.** The codebase reaches for `confirmDialog`
-(ten-plus pages) far more than for `UndoToast` (three). Confirmation interrupts every time
-including the overwhelming majority of times the reader was right; undo interrupts nobody and
-rescues the rest. Converting routine deletes to undo is not a cosmetic change — it needs
-soft-delete/restore on each entity — so it belongs on the roadmap rather than in a passing
-commit, but it is the single biggest everyday-friction item left.
+**Reversibility (v0.40.10, in progress).** Routine deletion asks "Are you sure?" far more than
+it offers undo. Confirmation interrupts every time, including the overwhelming majority of times
+the reader was right, and cannot help the one time they were not — a confirmed mistake is just
+as gone. Undo inverts that.
+
+The infrastructure turned out to be nearly free: every `HouseholdBaseModel` already soft-deletes
+and already has `restore()`, and `all_objects` was already there for it. Only a restore *path*
+was missing. `POST /api/v1/undo/restore/` plus the bounded registry in `apps/core/undo.py` is
+that path; a restore handler must invert everything its node's delete did, which usually means
+re-syncing the Calendar projection (D7) so the record does not come back only half-restored.
+
+Converted so far: Education assignments, Atlas to-do items, Homestead maintenance, Pet
+treatments and appointments. The rule for what converts: **cheap, frequent, single-record
+deletes get undo; high-blast-radius deletes keep their confirmation** (a whole list, a pet, a
+person, a trip — there the pause is the point). Still to review: Books, Travel, Home Wiki,
+Atlas notes/contacts, Solace.
 
 **CI** (`.github/workflows/ci.yml`, v0.40.6) runs the backend suite on the pinned 3.12/5.0.6
 runtime, checks migration drift, type-checks and builds the frontend, runs the browser suite,

@@ -24,6 +24,7 @@ urlpatterns = [
     path("api/v1/corners/", include("apps.people.corner_urls")),
     path("api/v1/household/", include("apps.core.urls")),
     path("api/v1/nodes/", include("apps.nodes.urls")),
+    path("api/v1/undo/", include("apps.core.undo_urls")),
     path("api/v1/audit-logs/", include("apps.audit.urls")),
     path("api/v1/calendar/", include("apps.scheduling.urls")),
     path("api/v1/atlas/", include("apps.atlas.urls")),

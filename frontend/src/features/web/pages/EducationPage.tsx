@@ -383,10 +383,8 @@ function AssignmentDetailModal({ assessment, courses, people, onClose, onChange,
     try { onChange(await api.updateAssessment(assessment.id, { status })) }
     catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
-  const remove = async () => {
-    if (!(await confirmDialog({ title: 'Delete this assignment?', confirmLabel: 'Delete' }))) return
-    try { await api.deleteAssessment(assessment.id); onDelete(assessment.id) } catch (e) { onError(errMsg(e)) }
-  }
+  // No confirmation: deleting an assignment is cheap, frequent and now undoable.
+  const remove = () => onDelete(assessment.id)
   const save = async () => {
     if (!form.title.trim()) return
     setBusy(true)
@@ -526,10 +524,7 @@ function AssignmentRow({ a, courses, people, focused, onChange, onDelete, onErro
     }
     catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
-  const remove = async () => {
-    if (!(await confirmDialog({ title: 'Delete this assignment?', confirmLabel: 'Delete' }))) return
-    try { await api.deleteAssessment(a.id); onDelete(a.id) } catch (e) { onError(errMsg(e)) }
-  }
+  const remove = () => onDelete(a.id)
 
   return (
     <li id={`education-assessment-${a.id}`} className={`rounded-xl py-3 group ${focused ? 'bg-primary-soft px-2 ring-2 ring-primary' : ''}`}>
@@ -614,9 +609,33 @@ function AssignmentsTab({ courses, people, defaultAssignee, focusedAssessmentId,
   const [assessments, setAssessments] = useState<EducationAssessment[]>([])
   const [showDone, setShowDone] = useState(Boolean(focusedAssessmentId))
   const [loading, setLoading] = useState(true)
+  // One undo slot, whatever was just done — "marked done" and "deleted" must not be able to
+  // stack two competing toasts on top of each other.
   const [justCompleted, setJustCompleted] = useState<
     { id: number; title: string; previousStatus: AssessmentStatus } | null
   >(null)
+  const [justDeleted, setJustDeleted] = useState<{ id: number; title: string } | null>(null)
+
+  const removeAssessment = async (id: number) => {
+    const target = assessments.find(a => a.id === id)
+    setJustCompleted(null)
+    try {
+      await api.deleteAssessment(id)
+      setAssessments(prev => prev.filter(a => a.id !== id))
+      if (target) setJustDeleted({ id, title: target.title })
+    } catch (e) { onError(errMsg(e)) }
+  }
+
+  const undoDelete = async () => {
+    const target = justDeleted
+    if (!target) return
+    setJustDeleted(null)
+    try {
+      await api.restoreRecord('EducationAssessment', target.id)
+      const restored = await api.getAssessments(showDone ? undefined : { open: true })
+      setAssessments(restored)
+    } catch (e) { onError(errMsg(e)) }
+  }
 
   useEffect(() => {
     api.getAssessments(showDone ? undefined : { open: true })
@@ -634,6 +653,7 @@ function AssignmentsTab({ courses, people, defaultAssignee, focusedAssessmentId,
   const upsert = (a: EducationAssessment) => {
     const previous = assessments.find(x => x.id === a.id)
     if (previous && !previous.is_complete && a.is_complete) {
+      setJustDeleted(null)
       setJustCompleted({ id: a.id, title: a.title, previousStatus: previous.status })
     }
     setAssessments(prev => (
@@ -666,7 +686,7 @@ function AssignmentsTab({ courses, people, defaultAssignee, focusedAssessmentId,
         ) : (
           <ul className="divide-y divide-line">
             {assessments.map(a => (
-              <AssignmentRow key={a.id} a={a} courses={courses} people={people} focused={a.id === focusedAssessmentId} onChange={upsert} onDelete={id => setAssessments(prev => prev.filter(x => x.id !== id))} onError={onError} onFocusCleared={onFocusCleared} />
+              <AssignmentRow key={a.id} a={a} courses={courses} people={people} focused={a.id === focusedAssessmentId} onChange={upsert} onDelete={removeAssessment} onError={onError} onFocusCleared={onFocusCleared} />
             ))}
           </ul>
         )}
@@ -676,6 +696,13 @@ function AssignmentsTab({ courses, people, defaultAssignee, focusedAssessmentId,
           message={`Marked ${justCompleted.title} as done`}
           onUndo={undoComplete}
           onDismiss={() => setJustCompleted(null)}
+        />
+      )}
+      {justDeleted && (
+        <UndoToast
+          message={`Deleted ${justDeleted.title}`}
+          onUndo={undoDelete}
+          onDismiss={() => setJustDeleted(null)}
         />
       )}
     </div>

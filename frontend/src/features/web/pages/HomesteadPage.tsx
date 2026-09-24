@@ -30,6 +30,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { useStacks } from '../../stacks/StacksContext'
 import { useUrlAction, useUrlQueryState } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
+import { UndoToast } from '../../../components/UndoToast'
 import { HomeFloorPlan } from '../components/HomeFloorPlan'
 import { MobileListRow, MobileScreenHeader, MobileSection, MobileSummaryCard } from '../../../components/mobile'
 import { isPhoneViewport } from '../../../lib/viewport'
@@ -464,6 +465,7 @@ function MaintenanceTab({ people, defaultAssignee, onError, canUseMoney }: {
   // Rows completed in this sitting, so the list can confirm the change rather than just
   // quietly swapping a badge out.
   const [justDone, setJustDone] = useState<Set<number>>(new Set())
+  const [justDeleted, setJustDeleted] = useState<{ id: number; title: string } | null>(null)
   const [appliances, setAppliances] = useState<Appliance[]>([])
   const [providers, setProviders] = useState<ServiceProvider[]>([])
   const [loading, setLoading] = useState(true)
@@ -529,9 +531,24 @@ function MaintenanceTab({ people, defaultAssignee, onError, canUseMoney }: {
       setJustDone(prev => new Set(prev).add(updated.id))
     } catch (e) { onError(errMsg(e)) }
   }
+  // Cheap, frequent and undoable, so it does not ask first. Deleting an appliance or a room
+  // still does — those take their history with them.
   const remove = async (t: MaintenanceTask) => {
-    if (!(await confirmDialog({ title: `Delete "${t.title}"?`, confirmLabel: 'Delete' }))) return
-    try { await api.deleteMaintenance(t.id); load() } catch (e) { onError(errMsg(e)) }
+    try {
+      await api.deleteMaintenance(t.id)
+      setTasks(prev => prev.filter(row => row.id !== t.id))
+      setJustDeleted({ id: t.id, title: t.title })
+    } catch (e) { onError(errMsg(e)) }
+  }
+
+  const undoDelete = async () => {
+    const target = justDeleted
+    if (!target) return
+    setJustDeleted(null)
+    try {
+      await api.restoreRecord('MaintenanceTask', target.id)
+      load()
+    } catch (e) { onError(errMsg(e)) }
   }
   const startCost = (task: MaintenanceTask) => {
     setCostTask(task)
@@ -666,6 +683,13 @@ function MaintenanceTab({ people, defaultAssignee, onError, canUseMoney }: {
             )
           })}
         </div>
+      )}
+      {justDeleted && (
+        <UndoToast
+          message={`Deleted ${justDeleted.title}`}
+          onUndo={undoDelete}
+          onDismiss={() => setJustDeleted(null)}
+        />
       )}
       {costTask && (
         <Modal

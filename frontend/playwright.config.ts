@@ -29,6 +29,21 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
+  // Reuse the dev stack when it is already up — that is the normal local case and the reason
+  // this config never started its own server. Start one only when nothing is listening, which
+  // is what CI needs: with no server and no webServer block, every single test fails with
+  // ERR_CONNECTION_REFUSED rather than telling you the suite never ran.
+  //
+  // Safe either way: every spec mocks `/api/v1/**` at the browser level (see e2e/README.md), so
+  // a server started here reaches no real backend any more than the shared dev one does.
+  webServer: {
+    command: 'npm run dev -- --port 5173 --host 127.0.0.1',
+    url: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173',
+    reuseExistingServer: true,
+    timeout: 120_000,
+    stdout: 'ignore',
+    stderr: 'pipe',
+  },
   // Every project pins browserName to chromium: the iPhone device presets default to WebKit,
   // which needs host system libraries (libgstcodecparsers/libavif) not installable here without
   // sudo. Chromium with the iPhone viewport/UA/touch emulation is a fine stand-in for layout
