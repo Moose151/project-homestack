@@ -320,9 +320,15 @@ owning node's service (`docs/23_Core_Hub.md` §11, `apps/hub/completions.py`). E
 assignment list now matches it (stays in place with a completed treatment plus Undo, rather than an
 outcome that depended on a "Show completed" checkbox).
 
-Node-by-node progress: Atlas already had the reference implementation (optimistic in-place
-toggle that reverts on failure); Education (v0.40.5), Meridian, Pets and Homestead (v0.40.7) now
-match. Solace, Travel, Books and Fitness have not been reviewed against it.
+Node-by-node progress: **the completion-contract audit is complete.** Atlas already had the
+reference implementation (optimistic in-place toggle that reverts on failure); Education
+(v0.40.5), Meridian, Pets and Homestead (v0.40.7) were brought into line; Solace, Travel and
+Books were found already compliant; Fitness and two Dashboard widgets were fixed in v0.40.9.
+
+The silent-write class is empty as of v0.40.9. To re-check after adding a node, look for a
+component that calls an `api.create/update/delete/complete/add…` and has neither a `catch` nor
+an `onError`/`setError` — that heuristic found every remaining case, including two on the
+Dashboard itself.
 
 The remaining work is to bring each node's **own** screens to that same contract, and to keep new
 dated records to it by default. Two rules learned the hard way and worth applying before they bite

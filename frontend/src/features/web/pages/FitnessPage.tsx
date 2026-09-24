@@ -83,8 +83,9 @@ function Elapsed({ startedAt }: { startedAt: string }) {
   return <span className="font-mono text-2xl font-black text-primary">{formatDuration(Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)))}</span>
 }
 
-function SetEditor({ set, measurement, onSaved }: {
+function SetEditor({ set, measurement, onSaved, onError }: {
   set: FitnessSessionSet; measurement: FitnessMeasurement; onSaved: () => Promise<void>
+  onError: (message: string | null) => void
 }) {
   const [reps, setReps] = useState(set.reps?.toString() || '')
   const [weight, setWeight] = useState(set.weight || '')
@@ -93,6 +94,7 @@ function SetEditor({ set, measurement, onSaved }: {
   const [busy, setBusy] = useState(false)
   const save = async (complete = set.is_completed) => {
     setBusy(true)
+    onError(null)
     try {
       await api.updateFitnessSessionSet(set.id, {
         reps: reps ? Number(reps) : null, weight: weight || null,
@@ -100,6 +102,12 @@ function SetEditor({ set, measurement, onSaved }: {
         is_completed: complete,
       })
       await onSaved()
+    } catch (e) {
+      // This fires on blur of every reps/weight field. Without a catch a failed save was
+      // invisible: the typed value stayed on screen from local state, so the set looked
+      // logged and only disappeared on the next reload — losing work mid-workout, which is
+      // exactly when someone is least able to notice or redo it.
+      onError(errorText(e))
     } finally { setBusy(false) }
   }
   const small = `${input} !min-h-[42px] text-center`
@@ -187,7 +195,7 @@ function LiveSession({ session, sessions, exercises, reload, onDone }: {
               ) : <p className="mt-2 text-sm text-muted">No completed history for this exercise yet.</p>}
             </div>
           )}
-          <div className="space-y-2">{entry.sets.map(set => <SetEditor key={set.id} set={set} measurement={entry.exercise.measurement} onSaved={reload} />)}</div>
+          <div className="space-y-2">{entry.sets.map(set => <SetEditor key={set.id} set={set} measurement={entry.exercise.measurement} onSaved={reload} onError={setError} />)}</div>
           <Button size="sm" variant="secondary" className="mt-3" disabled={busy} onClick={() => change(() => api.addFitnessSessionSet(entry.id))}>+ Add set</Button>
         </Card>
       })}
@@ -275,7 +283,9 @@ function ProgramBuilder({ people, exercises, onSaved, onCancel }: { people: Pers
   )
 }
 
-function BasicExerciseLibrary({ exercises, reload }: { exercises: FitnessExercise[]; reload: () => Promise<void> }) {
+function BasicExerciseLibrary({ exercises, reload, onError }: {
+  exercises: FitnessExercise[]; reload: () => Promise<void>; onError: (message: string | null) => void
+}) {
   const [query, setQueryState] = useState('')
   const setQuery = (value: string | React.ChangeEvent<HTMLInputElement>) =>
     setQueryState(typeof value === 'string' ? value : value.target.value)
@@ -285,11 +295,20 @@ function BasicExerciseLibrary({ exercises, reload }: { exercises: FitnessExercis
   const [muscle, setMuscle] = useState('')
   const [measurement, setMeasurement] = useState<FitnessMeasurement>('reps_weight')
   const visible = exercises.filter(ex => `${ex.name} ${ex.muscle_group}`.toLowerCase().includes(query.toLowerCase()))
-  const save = async (e: FormEvent) => { e.preventDefault(); await api.createFitnessExercise({ name, exercise_type: type as FitnessExercise['exercise_type'], muscle_group: muscle, measurement }); setName(''); setAdding(false); await reload() }
+  const save = async (e: FormEvent) => {
+    e.preventDefault()
+    onError(null)
+    try {
+      await api.createFitnessExercise({ name, exercise_type: type as FitnessExercise['exercise_type'], muscle_group: muscle, measurement })
+      setName(''); setAdding(false); await reload()
+    } catch (e2) { onError(errorText(e2)) }
+  }
   return <div className="space-y-3"><div className="flex gap-2"><SearchField value={query} onChange={setQuery} placeholder="Search by exercise or muscle group…" className="flex-1" /><Button onClick={() => setAdding(v => !v)}>+ Exercise</Button></div>{adding && <Card><form onSubmit={save} className="grid gap-2 sm:grid-cols-4"><Field label="Name"><input required className={input} value={name} onChange={e => setName(e.target.value)} /></Field><Field label="Type"><select className={input} value={type} onChange={e => setType(e.target.value)}>{['strength','running','swimming','cycling','cardio','mobility','sport'].map(value => <option key={value}>{value}</option>)}</select></Field><Field label="Muscle group"><input className={input} value={muscle} onChange={e => setMuscle(e.target.value)} /></Field><Field label="Recorded as"><select className={input} value={measurement} onChange={e => setMeasurement(e.target.value as FitnessMeasurement)}><option value="reps_weight">Reps + weight</option><option value="reps_only">Reps</option><option value="duration">Time</option><option value="distance_time">Distance + time</option></select></Field><Button type="submit">Save exercise</Button></form></Card>}<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{visible.map(ex => <Card key={ex.id} contentClassName="p-3"><p className="font-bold text-ink">{ex.name}</p><p className="text-xs text-muted">{ex.exercise_type} · {ex.muscle_group || 'General'} · {ex.measurement.replace('_', ' ')}</p></Card>)}</div></div>
 }
 
-function ExerciseLibrary({ exercises, reload }: { exercises: FitnessExercise[]; reload: () => Promise<void> }) {
+function ExerciseLibrary({ exercises, reload, onError }: {
+  exercises: FitnessExercise[]; reload: () => Promise<void>; onError: (message: string | null) => void
+}) {
   const [editingId, setEditingId] = useState('')
   const selected = exercises.find(exercise => exercise.id === Number(editingId))
   const [name, setName] = useState('')
@@ -301,13 +320,16 @@ function ExerciseLibrary({ exercises, reload }: { exercises: FitnessExercise[]; 
   const save = async (event: FormEvent) => {
     event.preventDefault()
     if (!selected) return
-    await api.updateFitnessExercise(selected.id, { name, muscle_group: muscleGroup })
-    setEditingId('')
-    await reload()
+    onError(null)
+    try {
+      await api.updateFitnessExercise(selected.id, { name, muscle_group: muscleGroup })
+      setEditingId('')
+      await reload()
+    } catch (e) { onError(errorText(e)) }
   }
   return (
     <div className="space-y-3">
-      <BasicExerciseLibrary exercises={exercises} reload={reload} />
+      <BasicExerciseLibrary exercises={exercises} reload={reload} onError={onError} />
       <Card title="Modify an exercise">
         <form onSubmit={save} className="grid gap-2 sm:grid-cols-[2fr_2fr_2fr_auto]">
           <Field label="Exercise">
@@ -532,6 +554,6 @@ export function FitnessPage() {
     )}
     {tab === 'history' && <div className="space-y-3">{sessions.filter(session => session.status !== 'active').map(session => <div key={session.id} id={`fitness-session-${session.id}`} className={selectedSessionId === session.id ? 'rounded-2xl ring-2 ring-primary ring-offset-2 ring-offset-paper' : ''}><Card><details open={selectedSessionId === session.id}><summary className="cursor-pointer list-none"><div className="flex justify-between gap-3"><div><p className="font-bold text-ink">{session.person_name} · {session.name}</p><p className="text-xs text-muted" data-session-summary>{(() => { const run = runSummary(session); return run ? `${new Date(session.started_at).toLocaleString()} · ${run.distance} ${run.unit} · ${run.duration} · ${run.pace}` : `${new Date(session.started_at).toLocaleString()} · ${formatDuration(session.duration_seconds)} · ${session.total_reps} reps · ${Number(session.total_volume).toLocaleString()} kg volume` })()}</p></div><span className="text-sm font-bold text-primary">{session.personal_records.length ? `🏆 ${session.personal_records.length}` : 'Details ▾'}</span></div></summary><div className="mt-3 space-y-2 border-t border-line pt-3">{session.exercises.filter(entry => entry.status === 'active').map(entry => <div key={entry.id} className="rounded-xl bg-sunken p-3"><p className="font-bold text-ink">{entry.exercise.name}</p><p className="mt-1 text-xs text-muted">{entry.sets.filter(set => set.is_completed).map(set => set.weight && set.reps ? `${Number(set.weight)} ${entry.exercise.weight_unit} × ${set.reps}` : set.reps ? `${set.reps} reps` : Number(set.distance) ? `${Number(set.distance)} ${entry.exercise.distance_unit}${set.duration_seconds ? ` in ${formatDuration(set.duration_seconds)}` : ''}` : set.duration_seconds ? formatDuration(set.duration_seconds) : '').filter(Boolean).join(' · ') || 'No completed sets'}</p></div>)}</div></details></Card></div>)}</div>}
     {tab === 'records' && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{records.map(record => <Card key={record.id}><p className="text-xs font-bold uppercase tracking-wide text-muted">{record.person_name}</p><p className="mt-1 font-black text-ink">{record.exercise_name}</p><p className="mt-2 text-xl font-black text-primary">{recordLabel(record)}</p><p className="text-xs text-muted">{record.kind.replaceAll('_', ' ')} · {new Date(record.achieved_at).toLocaleDateString()}</p></Card>)}</div>}
-    {tab === 'exercises' && <ExerciseLibrary exercises={exercises} reload={load} />}
+    {tab === 'exercises' && <ExerciseLibrary exercises={exercises} reload={load} onError={setError} />}
   </div>
 }

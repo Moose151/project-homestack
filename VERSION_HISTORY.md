@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.40.8**
+> **Current version: 0.40.9**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,23 @@
 ---
 
 ## 0.40 — Faster everyday household coordination
+
+### 0.40.9 — 2026-09-24 — No write fails silently
+
+Completes the completion-contract audit across the remaining nodes. Solace, Travel and Books
+were already compliant and are unchanged; the work was elsewhere.
+
+- **Fitness lost mid-workout data without saying so.** Saving a set runs on blur of every
+  reps/weight field and had no error handling. A failed save left the typed number on screen
+  from local state, so the set looked logged and only disappeared on the next reload — losing
+  work at exactly the moment someone is least able to notice. Adding and editing exercises had
+  the same gap.
+- **The Dashboard silently dropped grocery ticks.** Adding a grocery item and ticking one off
+  were both `try/finally` with no `catch`, on the most-used screen in the product. Marking an
+  Education deadline done from its widget had the same problem. All three now report failure.
+- Swept every page for the underlying pattern — a component that writes but has no way to
+  report failure — and the class is now empty.
+- Added browser coverage for the Fitness failure path, verified to fail without the fix.
 
 ### 0.40.8 — 2026-09-24 — The client stops re-deriving permissions from `role`
 

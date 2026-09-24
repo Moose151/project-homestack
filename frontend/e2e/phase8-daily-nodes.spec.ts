@@ -373,6 +373,41 @@ test.describe('phone', () => {
     await expectNoHorizontalOverflow(page)
   })
 
+  test('Fitness: a failed set save says so instead of losing the reps', async ({ page }) => {
+    // SetEditor.save() runs on blur of every reps/weight field and had no catch. A failed save
+    // left the typed value on screen from local state, so the set looked logged and only
+    // vanished on the next reload — losing work mid-workout.
+    await mockAuthenticatedApi(page, {
+      '/api/v1/nodes/': [enabledNode('fitness')],
+      '/api/v1/people/': [{ id: 1, display_name: 'Test User', preferred_name: 'Test User', avatar: '', colour: '', profile_type: 'adult', linked_user_id: 1, date_of_birth: null }],
+      '/api/v1/fitness/exercises/': [],
+      '/api/v1/fitness/programs/': [],
+      '/api/v1/fitness/records/': [],
+      '/api/v1/fitness/sessions/': [{
+        id: 1, person_id: 1, person_name: 'Test User', program_id: null, program_name: '',
+        source_workout_id: null, name: 'Open workout', status: 'active', started_at: new Date().toISOString(),
+        finished_at: null, duration_seconds: null, total_reps: 0, total_volume: '0', notes: '',
+        visibility: 'household', created_at: '', updated_at: '',
+        exercises: [{
+          id: 10, status: 'active', position: 0,
+          exercise: { id: 7, name: 'Back squat', muscle_group: 'legs', exercise_type: 'strength', measurement: 'reps_weight' },
+          sets: [{ id: 99, position: 0, reps: null, weight: '', duration_seconds: null, distance: '0', is_completed: false }],
+        }],
+      }],
+    })
+    await page.route('**/api/v1/fitness/session-sets/99/', route => route.fulfill({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({ detail: 'That set could not be saved.' }),
+    }))
+
+    await page.goto('/fitness')
+    await expect(page.getByText('Back squat')).toBeVisible()
+    await page.getByRole('button', { name: 'Complete set' }).click()
+
+    await expect(page.getByText('That set could not be saved.')).toBeVisible()
+  })
+
   test('Fitness: defaults the trainer to the person linked to the current login', async ({ page }) => {
     await mockAuthenticatedApi(page, {
       '/api/v1/nodes/': [enabledNode('fitness')],

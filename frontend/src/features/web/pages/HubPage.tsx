@@ -216,21 +216,29 @@ function GroceryWidget({ items, remainingCount, onChanged }: { items: AtlasListI
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [ticking, setTicking] = useState<Set<number>>(new Set())
+  // Both paths were try/finally with no catch. On the Dashboard, of all places: an item that
+  // failed to add or tick off just sat there looking like it had worked.
+  const [error, setError] = useState<string | null>(null)
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     const title = text.trim()
     if (!title) return
     setBusy(true)
+    setError(null)
     try { await api.addGroceryItem({ title }); setText(''); onChanged() }
+    catch { setError('Could not add that item — please try again.') }
     finally { setBusy(false) }
   }
 
   const tick = async (item: AtlasListItem) => {
     setTicking(prev => new Set(prev).add(item.id))
+    setError(null)
     try {
       await api.completeItem(item.atlas_list_id, item.id)
       onChanged()
+    } catch {
+      setError(`Could not tick off ${item.title} — please try again.`)
     } finally {
       setTicking(prev => { const next = new Set(prev); next.delete(item.id); return next })
     }
@@ -244,6 +252,7 @@ function GroceryWidget({ items, remainingCount, onChanged }: { items: AtlasListI
         <Input value={text} onChange={e => setText(e.target.value)} placeholder="Add grocery item…" className="flex-1" aria-label="Add grocery item" />
         <Button type="submit" size="sm" loading={busy} disabled={!text.trim()}>Add</Button>
       </form>
+      {error && <p className="text-xs text-danger">{error}</p>}
       <p className="text-xs font-semibold text-muted-strong">{remainingCount} item{remainingCount === 1 ? '' : 's'} remaining</p>
       {pending.length === 0 ? <p className="text-sm text-muted">Grocery list is empty</p> : (
         <ul className="flex flex-col gap-2">
@@ -634,12 +643,16 @@ function CalendarUpcomingWidget({ items }: { items: CalendarEvent[] }) {
 
 function EducationDeadlinesWidget({ items, onChanged }: { items: EducationAssessment[]; onChanged: () => void }) {
   const [ticking, setTicking] = useState<Set<number>>(new Set())
+  const [error, setError] = useState<string | null>(null)
 
   const markDone = async (a: EducationAssessment) => {
     setTicking(prev => new Set(prev).add(a.id))
+    setError(null)
     try {
       await api.updateAssessment(a.id, { status: 'done' })
       onChanged()
+    } catch {
+      setError(`Could not mark ${a.title} as done — please try again.`)
     } finally {
       setTicking(prev => { const next = new Set(prev); next.delete(a.id); return next })
     }
@@ -648,6 +661,7 @@ function EducationDeadlinesWidget({ items, onChanged }: { items: EducationAssess
   if (items.length === 0) return <p className="text-sm text-muted">Nothing due</p>
   return (
     <ul className="flex flex-col gap-2">
+      {error && <li className="text-xs text-danger">{error}</li>}
       {items.slice(0, 6).map(a => {
         const label = a.due_at
           ? new Date(a.due_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
