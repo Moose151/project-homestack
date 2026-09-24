@@ -466,7 +466,7 @@ export function HomeWikiPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {results.map(p => (
               <PageCard
-                key={p.id} page={p} categories={visibleCategories} canDelete={user?.role === 'admin'}
+                key={p.id} page={p} categories={visibleCategories} canDelete={user?.capabilities?.delete_wiki_pages ?? user?.role === 'admin'}
                 onChange={u => setResults(prev => prev ? prev.map(x => x.id === u.id ? u : x) : prev)}
                 onDelete={id => setResults(prev => prev ? prev.filter(x => x.id !== id) : prev)}
                 onError={setError}
@@ -480,7 +480,7 @@ export function HomeWikiPage() {
       ) : (
         <>
           <CustomisableTabs state={tabsState} label="Home Guide" />
-          {tab === 'pages' && <PagesTab categories={visibleCategories} isAdmin={user?.role === 'admin'} onError={setError} openedPageId={openedPageId} onOpenPage={openPage} onClosePage={closePage} />}
+          {tab === 'pages' && <PagesTab categories={visibleCategories} isAdmin={user?.capabilities?.delete_wiki_pages ?? user?.role === 'admin'} onError={setError} openedPageId={openedPageId} onOpenPage={openPage} onClosePage={closePage} />}
           {tab === 'categories' && <CategoriesTab categories={categories} onChange={setCategories} isAdmin={isAdmin} onError={setError} />}
         </>
       )}

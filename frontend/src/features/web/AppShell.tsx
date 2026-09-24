@@ -539,12 +539,17 @@ export function AppShell() {
     .map(s => ({ key: s.key, label: s.navLabel, shortLabel: s.shortLabel, description: s.description, group: s.navGroup, route: s.route, icon: s.icon, colour: s.colour }))
   const stackNav: NavItem[] = [...coreNav, ...nodeNav]
 
-  const adminNav: NavItem[] = user?.role === 'admin'
-      ? [
-        { key: 'users', label: 'People & access', shortLabel: 'People', description: 'Profiles, roles and sign-in', group: 'manage', route: '/users', icon: '👥', colour: '#64748b' },
-        { key: 'settings', label: 'Manage HomeStack', shortLabel: 'Manage', description: 'Stacks and household settings', group: 'manage', route: '/settings', icon: '⚙️', colour: '#64748b' },
-      ]
-    : []
+  // Each entry appears when its own capability says so, rather than the pair being gated
+  // together on `role === 'admin'` — that hid People & access from managers, who are granted
+  // full people CRUD by the permission seeds.
+  const adminNav: NavItem[] = [
+    ...(user?.capabilities?.manage_people ?? user?.role === 'admin'
+      ? [{ key: 'users', label: 'People & access', shortLabel: 'People', description: 'Profiles, roles and sign-in', group: 'manage' as const, route: '/users', icon: '👥', colour: '#64748b' }]
+      : []),
+    ...(user?.capabilities?.manage_household ?? user?.role === 'admin'
+      ? [{ key: 'settings', label: 'Manage HomeStack', shortLabel: 'Manage', description: 'Stacks and household settings', group: 'manage' as const, route: '/settings', icon: '⚙️', colour: '#64748b' }]
+      : []),
+  ]
 
   // Mobile bottom bar: Home, Add and More are fixed; two remaining slots are configurable
   // shortcuts (docs/36 §4.2). Everything else lives behind the "More" sheet.

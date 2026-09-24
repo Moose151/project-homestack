@@ -1287,7 +1287,7 @@ export function HubPage() {
       {error && <InlineAlert message={error} onRetry={loadHub} onDismiss={() => setError(null)} />}
 
       {configuring && (
-        <HubConfig key={configVersion} isAdmin={user?.role === 'admin'} onChanged={loadHub} />
+        <HubConfig key={configVersion} isAdmin={user?.capabilities?.configure_hub ?? user?.role === 'admin'} onChanged={loadHub} />
       )}
 
       {!data ? <PageSkeleton /> : (

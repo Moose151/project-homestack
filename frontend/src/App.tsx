@@ -50,7 +50,7 @@ function NodeRoute({ nodeKey, children }: { nodeKey: string; children: React.Rea
   return enabledKeys.has(nodeKey) ? <>{children}</> : <Navigate to="/hub" replace />
 }
 
-function WebRoutes({ isAdmin }: { isAdmin: boolean }) {
+function WebRoutes({ canManagePeople, canManageHousehold }: { canManagePeople: boolean; canManageHousehold: boolean }) {
   return (
     <Routes>
       <Route element={<AppShell />}>
@@ -73,8 +73,10 @@ function WebRoutes({ isAdmin }: { isAdmin: boolean }) {
         <Route path="/solace" element={<NodeRoute nodeKey="solace"><Deferred><SolacePage /></Deferred></NodeRoute>} />
         <Route path="/fitness" element={<NodeRoute nodeKey="fitness"><Deferred><FitnessPage /></Deferred></NodeRoute>} />
         <Route path="/travel" element={<NodeRoute nodeKey="travel"><Deferred><TravelPage /></Deferred></NodeRoute>} />
-        {isAdmin && <Route path="/users" element={<Deferred><UsersPage /></Deferred>} />}
-        {isAdmin && <Route path="/settings" element={<Deferred><SettingsPage /></Deferred>} />}
+        {/* Managers hold full people CRUD in the permission seeds, so People & access is
+            theirs too; household settings need household.edit, which stays admin-only. */}
+        {canManagePeople && <Route path="/users" element={<Deferred><UsersPage /></Deferred>} />}
+        {canManageHousehold && <Route path="/settings" element={<Deferred><SettingsPage /></Deferred>} />}
         <Route path="/settings/guides/:nodeKey" element={<Deferred><NodeGuidePage /></Deferred>} />
         <Route path="/settings/version-history" element={<Deferred><VersionHistoryPage /></Deferred>} />
         {/* The stable Quick Launch contract (docs/39 §6). The server resolves the shortcut;
@@ -82,7 +84,7 @@ function WebRoutes({ isAdmin }: { isAdmin: boolean }) {
         <Route path="/launch/:shortcutId" element={<Deferred><LaunchPage /></Deferred>} />
         <Route path="/settings/quick-launch" element={<Deferred><QuickLaunchPage /></Deferred>} />
         <Route path="/settings/notifications" element={<Deferred><NotificationSettingsPage /></Deferred>} />
-        {isAdmin && <Route path="/settings/push-devices" element={<Deferred><PushDevicesPage /></Deferred>} />}
+        {canManageHousehold && <Route path="/settings/push-devices" element={<Deferred><PushDevicesPage /></Deferred>} />}
         <Route path="*" element={<Navigate to="/hub" replace />} />
       </Route>
     </Routes>
@@ -105,7 +107,10 @@ function WebApp() {
   return (
     <StacksProvider>
       <PreferencesProvider userId={user.id}>
-        <WebRoutes isAdmin={user.role === 'admin'} />
+        <WebRoutes
+          canManagePeople={user.capabilities?.manage_people ?? user.role === 'admin'}
+          canManageHousehold={user.capabilities?.manage_household ?? user.role === 'admin'}
+        />
       </PreferencesProvider>
     </StacksProvider>
   )

@@ -37,6 +37,18 @@ export interface AdminUser {
   solace_access: boolean
 }
 
+/** What the signed-in user may do, as answered by the backend's permission resolver.
+ *  Always prefer these over comparing `role` — role is not a capability, and the two drifted
+ *  apart once already (managers hold hub.edit / homewiki.delete / people CRUD, but the UI
+ *  hid all three behind a role === 'admin' check). Hiding a control is never authorization;
+ *  the server still enforces every one of these on the endpoint itself. */
+export interface UserCapabilities {
+  manage_people: boolean
+  manage_household: boolean
+  configure_hub: boolean
+  delete_wiki_pages: boolean
+}
+
 export interface AuthUser {
   id: number
   username: string
@@ -45,6 +57,7 @@ export interface AuthUser {
   is_child_account: boolean
   avatar: string
   colour: string
+  capabilities?: UserCapabilities
 }
 
 export interface GuideDismissal {

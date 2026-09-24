@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.40.7**
+> **Current version: 0.40.8**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,24 @@
 ---
 
 ## 0.40 — Faster everyday household coordination
+
+### 0.40.8 — 2026-09-24 — The client stops re-deriving permissions from `role`
+
+- **Household managers were being hidden from things they are explicitly allowed to do.** The
+  permission seeds grant managers full People CRUD, `hub.edit` (the seed migration's own
+  docstring says "admin + manager may configure household-level Hub widgets") and
+  `homewiki.delete` — but the client decided all three by comparing `role` to `"admin"`, so
+  every one was invisible to them. **People & access** was not merely unlinked: the route
+  itself did not exist for a manager, so even the URL redirected away.
+- **`GET /auth/me/` now returns a resolver-computed `capabilities` map** and the client reads
+  that instead of guessing. It asks the same central resolver the endpoints use, following the
+  existing `solace_access` pattern, so presentation can no longer drift away from the
+  permission model. This is presentation only — every endpoint still resolves its own
+  permission, and a wrong capability can hide or reveal a control but never grant access.
+- Household settings correctly stay admin-only: managers hold `household.view`, not
+  `household.edit`. That distinction is now asserted rather than incidental.
+- Added backend capability tests per role and browser coverage for manager routing, verified to
+  fail against the old role-comparison gating.
 
 ### 0.40.7 — 2026-09-24 — Completion feels the same in every node
 

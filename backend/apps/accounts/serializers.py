@@ -30,6 +30,8 @@ class GuideDismissalSerializer(serializers.Serializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    capabilities = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = [
@@ -44,8 +46,30 @@ class UserSerializer(serializers.ModelSerializer):
             "colour",
             "last_login",
             "created_at",
+            "capabilities",
         ]
         read_only_fields = fields
+
+    def get_capabilities(self, obj) -> dict:
+        """What this User may actually do, answered by the central resolver (D10).
+
+        The client previously decided several of these by comparing `role` to the string
+        "admin", which drifted from the permission model it was supposed to reflect: managers
+        are explicitly granted `hub.edit`, `homewiki.delete` and full `people` CRUD, yet the
+        UI hid all three from them. Role is not a capability — asking the resolver is the
+        only way the two stay in step, and it follows the existing `solace_access` pattern.
+
+        This is presentation only. Every one of these is still enforced server-side on the
+        endpoints themselves; hiding a control is not authorization.
+        """
+        from apps.permissions.resolver import resolve_permission
+
+        return {
+            "manage_people": resolve_permission(obj, "edit", "people"),
+            "manage_household": resolve_permission(obj, "edit", "household"),
+            "configure_hub": resolve_permission(obj, "edit", "hub"),
+            "delete_wiki_pages": resolve_permission(obj, "delete", "homewiki"),
+        }
 
 
 class UserAdminSerializer(serializers.ModelSerializer):

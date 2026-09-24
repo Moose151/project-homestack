@@ -397,3 +397,48 @@ class UserPreferenceTests(TestCase):
 
     def test_preferences_require_authentication(self):
         self.assertEqual(self.client.get(self.url).status_code, 403)
+
+
+class UserCapabilityTests(TestCase):
+    """The client must reflect the permission model, not re-guess it from `role`.
+
+    Managers are explicitly granted hub.edit, homewiki.delete and full people CRUD by the
+    permission seeds, but the UI decided those by comparing role to "admin" and so hid all
+    three from them. These assertions pin the capabilities to the resolver's answer.
+    """
+
+    def _capabilities(self, username, role):
+        user = User.objects.create_user(
+            username=username, display_name=username, role=role, password="pass123!"
+        )
+        user.set_pin("1234")
+        user.save()
+        client = self.client_class()
+        client.post(
+            reverse("auth-pin-login"),
+            {"username": username, "pin": "1234"},
+            content_type="application/json",
+        )
+        return client.get(reverse("auth-me")).json()["capabilities"]
+
+    def test_admin_has_every_capability(self):
+        caps = self._capabilities("cap-admin", User.Role.ADMIN)
+        self.assertTrue(all(caps.values()), caps)
+
+    def test_manager_may_manage_people_hub_and_wiki_deletion(self):
+        caps = self._capabilities("cap-manager", User.Role.MANAGER)
+        self.assertTrue(caps["manage_people"])
+        self.assertTrue(caps["configure_hub"])
+        self.assertTrue(caps["delete_wiki_pages"])
+
+    def test_manager_does_not_get_household_settings(self):
+        """Managers hold household.view, not household.edit — this one stays admin-only."""
+        caps = self._capabilities("cap-manager-2", User.Role.MANAGER)
+        self.assertFalse(caps["manage_household"])
+
+    def test_ordinary_member_manages_none_of_them(self):
+        caps = self._capabilities("cap-user", User.Role.USER)
+        self.assertFalse(caps["manage_people"])
+        self.assertFalse(caps["manage_household"])
+        self.assertFalse(caps["configure_hub"])
+        self.assertFalse(caps["delete_wiki_pages"])

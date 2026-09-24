@@ -63,6 +63,17 @@ Resolution considers the relevant combination of:
 List/search/aggregation surfaces must filter before serializing or producing snippets. New domain
 features write permission/security tests first where access boundaries are involved.
 
+**The client must never re-derive authorization from `role`.** Presentation gating reads the
+resolver-computed `capabilities` map on `GET /auth/me/`, which asks the same central resolver the
+endpoints use. Comparing `role` to `"admin"` in the client is how the UI silently drifted stricter
+than the permission model it was meant to reflect: managers are granted `people` CRUD, `hub.edit`
+and `homewiki.delete` by the seeds, yet every one of those controls was hidden from them
+(v0.40.8). Add a capability to the map rather than reintroducing a role comparison.
+
+Being presentation state, `capabilities` is never the enforcement point — each endpoint still
+resolves the permission itself. A capability that is wrong makes a control invisible or
+pointlessly visible; it can never grant access.
+
 ## 4. Users vs People (D12)
 
 - **User** = authentication/ownership/audit actor.
