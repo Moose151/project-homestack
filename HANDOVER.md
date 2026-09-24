@@ -320,6 +320,10 @@ owning node's service (`docs/23_Core_Hub.md` §11, `apps/hub/completions.py`). E
 assignment list now matches it (stays in place with a completed treatment plus Undo, rather than an
 outcome that depended on a "Show completed" checkbox).
 
+Node-by-node progress: Atlas already had the reference implementation (optimistic in-place
+toggle that reverts on failure); Education (v0.40.5), Meridian, Pets and Homestead (v0.40.7) now
+match. Solace, Travel, Books and Fitness have not been reviewed against it.
+
 The remaining work is to bring each node's **own** screens to that same contract, and to keep new
 dated records to it by default. Two rules learned the hard way and worth applying before they bite
 again:
@@ -331,6 +335,11 @@ again:
   the reader did not set;
 - a notification must not outlive the work it is about — completion services call
   `notifications.resolve_for_record()` (v0.40.6);
+- a failed write must say so. Two of the worst offenders were a `try/finally` with no `catch`
+  and a whole code path (Meridian's non-managing self-service view) that rendered no error
+  surface at all — check both when auditing a node;
+- prefer updating a row in place from the write's response over refetching the list: a reload
+  gives no confirmation that anything happened and can make the row vanish mid-blink;
 - anything that hides something from a User must expire or be listed somewhere. Nothing in the
   product enumerates hidden items, so a permanent hide guarded only by a seconds-long Undo is a
   silent one-way door.

@@ -8,6 +8,8 @@ import { AssigneeSelect, assigneeLabel } from '../../../../components/AssigneeSe
 import { useUrlAction } from '../../../../hooks/useUrlTab'
 import { confirmDialog, promptDialog } from '../../../../components/Dialogs'
 
+const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
+
 /** One wording for sending a submission back, on the phone keyboard rather than a system box. */
 const askRejectionReason = () => promptDialog({
   title: 'Send this back?', label: 'Reason (optional)',
@@ -137,8 +139,10 @@ export function TasksTab({ canManage, pointsLabel, searchQuery = '', focusedTask
     try {
       await work
       await reload()
-    } catch {
-      setFailure()
+    } catch (e) {
+      // The service explains *why* it refused ("This task is not active"). Replacing that
+      // with a generic line throws away the only part the reader can act on.
+      setError(errMsg(e))
     }
   }
 
@@ -151,6 +155,8 @@ export function TasksTab({ canManage, pointsLabel, searchQuery = '', focusedTask
         people={people}
         pointsLabel={pointsLabel}
         reload={reload}
+        error={error}
+        onError={setError}
       />
     )
   }
@@ -723,16 +729,24 @@ function NewTaskForm({ categories, people, onCreated, onError }: {
   )
 }
 
-function SelfServiceTasks({ tasks, people, pointsLabel, reload }: {
+function SelfServiceTasks({ tasks, people, pointsLabel, reload, error, onError }: {
   tasks: MeridianTask[]
   people: Person[]
   pointsLabel: string
   reload: () => void
+  error: string | null
+  onError: (message: string | null) => void
 }) {
   // Assignment is a set: name one person, or say how many share it.
   const peopleNames = (ids: number[]) => assigneeLabel(people, ids).replace('Whole family', '')
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    <div className="flex flex-col gap-4">
+      {error && (
+        <div className="rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">
+          {error}
+        </div>
+      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
       {tasks.map(task => (
         <Card key={task.id}>
           <div className="flex flex-col gap-3">
@@ -748,7 +762,7 @@ function SelfServiceTasks({ tasks, people, pointsLabel, reload }: {
             <div className="mt-auto">
               <p className="mb-2 text-sm font-bold text-primary">★ {task.award_value} {pointsLabel}</p>
               {task.status === 'available' ? (
-                <CompleteControls task={task} people={people} onDone={reload} />
+                <CompleteControls task={task} people={people} onDone={reload} onError={onError} />
               ) : (
                 <Button size="sm" variant="secondary" disabled className="w-full">Awaiting approval</Button>
               )}
@@ -756,20 +770,32 @@ function SelfServiceTasks({ tasks, people, pointsLabel, reload }: {
           </div>
         </Card>
       ))}
-      {tasks.length === 0 && <p className="text-sm text-muted text-center py-8 md:col-span-2 xl:col-span-3">No tasks available.</p>}
+        {tasks.length === 0 && <p className="text-sm text-muted text-center py-8 md:col-span-2 xl:col-span-3">No tasks available.</p>}
+      </div>
     </div>
   )
 }
 
-function CompleteControls({ task, people, onDone }: {
+function CompleteControls({ task, people, onDone, onError }: {
   task: MeridianTask
   people: Person[]
   onDone: () => void
+  onError: (message: string | null) => void
 }) {
   const [busy, setBusy] = useState(false)
   const complete = async (personId?: number) => {
     setBusy(true)
-    try { await api.completeMeridianTask(task.id, personId) } finally { setBusy(false); onDone() }
+    onError(null)
+    try {
+      await api.completeMeridianTask(task.id, personId)
+      onDone()
+    } catch (e) {
+      // Previously a try/finally with no catch: onDone() ran either way, so a refused
+      // completion was indistinguishable from a successful one.
+      onError(errMsg(e))
+    } finally {
+      setBusy(false)
+    }
   }
   // An unassigned task is open to anyone; an assigned one only to the people named on it.
   const candidates = task.assigned_to_person_ids.length > 0

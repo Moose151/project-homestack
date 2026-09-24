@@ -461,6 +461,9 @@ function MaintenanceTab({ people, defaultAssignee, onError, canUseMoney }: {
   canUseMoney: boolean
 }) {
   const [tasks, setTasks] = useState<MaintenanceTask[]>([])
+  // Rows completed in this sitting, so the list can confirm the change rather than just
+  // quietly swapping a badge out.
+  const [justDone, setJustDone] = useState<Set<number>>(new Set())
   const [appliances, setAppliances] = useState<Appliance[]>([])
   const [providers, setProviders] = useState<ServiceProvider[]>([])
   const [loading, setLoading] = useState(true)
@@ -517,7 +520,14 @@ function MaintenanceTab({ people, defaultAssignee, onError, canUseMoney }: {
   }
 
   const complete = async (t: MaintenanceTask) => {
-    try { await api.completeMaintenance(t.id); load() } catch (e) { onError(errMsg(e)) }
+    try {
+      // Update in place from the response rather than refetching: a full reload replaces the
+      // list under the reader with no confirmation that anything happened, and a one-off task
+      // simply loses its Done button mid-blink.
+      const updated = await api.completeMaintenance(t.id)
+      setTasks(prev => prev.map(row => (row.id === updated.id ? updated : row)))
+      setJustDone(prev => new Set(prev).add(updated.id))
+    } catch (e) { onError(errMsg(e)) }
   }
   const remove = async (t: MaintenanceTask) => {
     if (!(await confirmDialog({ title: `Delete "${t.title}"?`, confirmLabel: 'Delete' }))) return
@@ -629,7 +639,13 @@ function MaintenanceTab({ people, defaultAssignee, onError, canUseMoney }: {
                       </Link>
                     )}
                     {t.recurrence_rule && <Badge tone="primary">↻ {recurrenceLabel(t.recurrence_rule)}</Badge>}
-                    {due && <Badge tone={due.tone}>{due.text}</Badge>}
+                    {justDone.has(t.id) ? (
+                    <Badge tone="success">
+                      {t.next_due_at ? `Done · next ${dueLabel(t.next_due_at)?.text ?? ''}` : 'Done'}
+                    </Badge>
+                  ) : (
+                    due && <Badge tone={due.tone}>{due.text}</Badge>
+                  )}
                   </div>
                   {(assignee || t.last_done_at) && (
                     <p className="mt-0.5 text-xs text-muted">

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockAuthenticatedApi } from './fixtures/mockApi'
+import { FIXTURE_USER, mockAuthenticatedApi } from './fixtures/mockApi'
 import { expectNoHorizontalOverflow } from './fixtures/assertions'
 
 // docs/36 Phase 8: Atlas, Meridian, Education, Pets, Fitness, Corners. Each node keeps its
@@ -84,6 +84,40 @@ test.describe('phone', () => {
     await expect(page.getByRole('button', { name: 'Back' })).toBeVisible()
     await expect(page.getByRole('tab', { name: 'Routines' })).toBeVisible()
     await expectNoHorizontalOverflow(page)
+  })
+
+  test('Meridian: a refused completion says why instead of failing silently', async ({ page }) => {
+    // Regression: CompleteControls was a try/finally with no catch, and the non-managing
+    // self-service view — what an ordinary household member sees — rendered no error surface
+    // at all. A refused completion was indistinguishable from a successful one.
+    await mockAuthenticatedApi(page, {
+      // A plain member, not an admin: this is the self-service path.
+      '/api/v1/auth/me/': { ...FIXTURE_USER, role: 'user' },
+      '/api/v1/meridian/settings/': { points_label: 'points', group_goals_enabled: false, wishlist_requests_enabled: false, auto_end_streaks: false },
+      '/api/v1/meridian/reports/': { leaderboard: [], recent_activity: [] },
+      '/api/v1/meridian/categories/': [],
+      '/api/v1/meridian/tasks/': [{
+        id: 5, title: 'Tidy the garage', description: '', category_id: null, points: 10,
+        award_value: 10, assigned_to_person_ids: [], status: 'available', is_hot: false,
+        hot_bonus_points: 0, hot_label: '', is_active: true, is_archived: false,
+        completion_behavior: 'stay_active', completion_scope: 'per_person',
+        availability_window: 'always', due_at: null, recurrence_rule: '',
+        visibility: 'household', created_at: '', updated_at: '',
+      }],
+      '/api/v1/meridian/task-completions/': [],
+      '/api/v1/people/': [{ id: 3, display_name: 'Alex', preferred_name: 'Alex', linked_user_id: 1, profile_type: 'adult' }],
+    })
+    await page.route('**/api/v1/meridian/tasks/5/complete/', route => route.fulfill({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({ detail: 'This task is not active.' }),
+    }))
+
+    await page.goto('/meridian?tab=tasks')
+    await page.getByRole('button', { name: /Submit as complete|Alex/ }).first().click()
+
+    // The service's own wording, not a generic "something went wrong".
+    await expect(page.getByText('This task is not active.')).toBeVisible()
   })
 
   test('Education: lands on Today/Due soon, and an assignment opens in a detail sheet with notes', async ({ page }) => {

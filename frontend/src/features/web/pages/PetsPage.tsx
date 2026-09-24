@@ -563,12 +563,24 @@ function PetsTab({ pets, reload, isAdmin, onError, open, setOpen, focusedPetId }
 function RemindersTab({ onError, focusedTreatmentId }: { onError: (m: string) => void; focusedTreatmentId?: number }) {
   const [treatments, setTreatments] = useState<PetTreatment[]>([])
   const [loading, setLoading] = useState(true)
+  // Completing advances next_due_at, so a refetch would drop the row from this "due" list —
+  // the work would vanish behind a loading spinner with nothing confirming it happened.
+  // The row stays put showing its new state instead, and clears on the next visit.
+  const [justDone, setJustDone] = useState<Set<number>>(new Set())
 
   const load = () => {
     setLoading(true)
     api.getPetTreatments({ due: true }).then(setTreatments).catch(e => onError(errMsg(e))).finally(() => setLoading(false))
   }
   useEffect(load, [])
+
+  const complete = async (treatment: PetTreatment) => {
+    try {
+      const updated = await api.completePetTreatment(treatment.id)
+      setTreatments(prev => prev.map(row => (row.id === updated.id ? updated : row)))
+      setJustDone(prev => new Set(prev).add(updated.id))
+    } catch (e) { onError(errMsg(e)) }
+  }
 
   if (loading) return <Card><p className="text-sm text-muted">Loading…</p></Card>
   if (treatments.length === 0) return <EmptyState icon="✅" title="Nothing due" hint="Treatment reminders show up here as they come due." />
@@ -580,10 +592,20 @@ function RemindersTab({ onError, focusedTreatmentId }: { onError: (m: string) =>
           return (
             <li key={t.id} id={`pet-treatment-${t.id}`} className={`flex items-center gap-3 rounded-xl py-2.5 ${focusedTreatmentId === t.id ? 'bg-primary-soft px-2 ring-2 ring-primary' : ''}`}>
               <div className="flex-1 min-w-0">
-                <div className="text-sm text-ink truncate"><span className="text-muted">{t.pet_name}</span> · {t.display_name}</div>
-                {badge && <Link to={calendarDayHref(t.next_due_at)} className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.tone}`}>{badge.text}</Link>}
+                <div className={`text-sm truncate ${justDone.has(t.id) ? 'text-muted line-through' : 'text-ink'}`}>
+                  <span className="text-muted">{t.pet_name}</span> · {t.display_name}
+                </div>
+                {justDone.has(t.id) ? (
+                  <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-success-soft text-success">
+                    {t.next_due_at ? `Done · next ${new Date(t.next_due_at).toLocaleDateString()}` : 'Done'}
+                  </span>
+                ) : (
+                  badge && <Link to={calendarDayHref(t.next_due_at)} className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.tone}`}>{badge.text}</Link>
+                )}
               </div>
-              <Button size="sm" variant="secondary" onClick={async () => { try { await api.completePetTreatment(t.id); load() } catch (e) { onError(errMsg(e)) } }}>Done</Button>
+              {!justDone.has(t.id) && (
+                <Button size="sm" variant="secondary" onClick={() => complete(t)}>Done</Button>
+              )}
             </li>
           )
         })}

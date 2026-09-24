@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.40.6**
+> **Current version: 0.40.7**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,24 @@
 ---
 
 ## 0.40 — Faster everyday household coordination
+
+### 0.40.7 — 2026-09-24 — Completion feels the same in every node
+
+Continues the owner-directed consistency work from 0.40.5, moving from Hub's Upcoming feed into
+the nodes' own screens.
+
+- **Meridian no longer fails silently.** Completing a task was a `try/finally` with no `catch`:
+  the list reloaded either way, so a refused completion looked exactly like a successful one.
+  Worse, the self-service view — what an ordinary household member sees, as opposed to an
+  admin — rendered no error surface at all, so nothing could ever be reported there. Both are
+  fixed, and Meridian now shows the service's own explanation ("This task is not active")
+  rather than a generic "that change did not save".
+- **Completing something now visibly confirms itself in Pets and Homestead.** Both refetched the
+  whole list, so a completed pet treatment vanished behind a loading spinner and a one-off
+  maintenance task simply lost its Done button mid-blink. Both now update in place from the
+  response and show a completed state with the next due date, matching Atlas (which already did
+  this) and Education.
+- Added browser coverage for the Meridian failure path, verified to fail without the fix.
 
 ### 0.40.6 — 2026-09-22 — Notifications that match reality, and a safety net under the suite
 
