@@ -874,7 +874,9 @@ function NotificationsSummaryWidget({ items, unread, onChanged }: { items: AppNo
   )
 }
 
-function SolaceBillsWidget({ items, meta }: { items: SolaceBillOccurrence[]; meta?: HubWidget['meta'] }) {
+function SolaceBillsWidget({ items, meta, onChanged }: { items: SolaceBillOccurrence[]; meta?: HubWidget['meta']; onChanged: () => void }) {
+  const [payingId, setPayingId] = useState<number | null>(null)
+  const [error, setError] = useState('')
   if (meta?.locked) {
     return (
       <div className="space-y-3">
@@ -908,25 +910,41 @@ function SolaceBillsWidget({ items, meta }: { items: SolaceBillOccurrence[]; met
         <p className="text-sm text-muted">Nothing unpaid is due before payday.</p>
       ) : (
         <ul className="space-y-1.5">
-          {items.slice(0, 4).map(occurrence => {
+          {items.map(occurrence => {
             const params = new URLSearchParams({
               tab: 'bills', section: 'upcoming', bill: String(occurrence.bill_id),
               occurrence: String(occurrence.id),
             })
             return (
-              <li key={occurrence.id}>
-                <Link to={`/solace?${params.toString()}`} className="flex min-h-11 items-center justify-between gap-3 rounded-xl px-2 hover:bg-sunken">
+              <li key={occurrence.id} className="flex items-center gap-2 rounded-xl px-2 hover:bg-sunken">
+                <Link to={`/solace?${params.toString()}`} className="flex min-h-11 min-w-0 flex-1 items-center justify-between gap-3">
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-ink">{occurrence.bill_name}</span>
                     <span className={`block text-xs ${occurrence.is_overdue ? 'font-bold text-danger' : 'text-muted'}`}>{formatDue(occurrence.due_at)}</span>
                   </span>
                   <span className="shrink-0 text-sm font-semibold text-ink">{moneyLabel(occurrence.amount)}</span>
                 </Link>
+                <Button
+                  size="sm"
+                  loading={payingId === occurrence.id}
+                  disabled={payingId !== null}
+                  aria-label={`Mark ${occurrence.bill_name} as paid`}
+                  onClick={async () => {
+                    setPayingId(occurrence.id); setError('')
+                    try {
+                      await api.updateSolaceOccurrence(occurrence.id, 'paid')
+                      onChanged()
+                    } catch (reason) {
+                      setError(reason instanceof Error ? reason.message : 'Could not mark this bill paid.')
+                    } finally { setPayingId(null) }
+                  }}
+                >Paid</Button>
               </li>
             )
           })}
         </ul>
       )}
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       <Link to="/solace?tab=bills&section=upcoming" className="inline-flex min-h-11 w-full items-center justify-center rounded-xl text-sm font-bold text-primary hover:bg-primary-soft">View all upcoming bills →</Link>
     </div>
   )
@@ -1159,7 +1177,7 @@ function renderWidget(w: HubWidget, onChanged: () => void) {
     case 'homestead_improvements':
       return <HomesteadImprovementsWidget items={w.items as Improvement[]} />
     case 'solace_bills_due':
-      return <SolaceBillsWidget items={w.items as SolaceBillOccurrence[]} meta={w.meta} />
+      return <SolaceBillsWidget items={w.items as SolaceBillOccurrence[]} meta={w.meta} onChanged={onChanged} />
     case 'solace_subscriptions':
       return <SolaceSubscriptionsWidget items={w.items as SolaceBill[]} />
     case 'solace_planned_purchases':

@@ -84,6 +84,37 @@ test('manual bill payment remains available from the bills list', async ({ page 
   await expectNoHorizontalOverflow(page)
 })
 
+test('Money overview shows every bill left this pay cycle and marks one paid', async ({ page }) => {
+  let paid = false
+  await mockAuthenticatedApi(page, {
+    '/api/v1/nodes/': [SOLACE_ENABLED_NODE],
+    '/api/v1/solace/bootstrap/': bootstrapFixture([billFixture()]),
+    '/api/v1/solace/forecast/': bootstrapFixture().forecast,
+    '/api/v1/solace/bills/': [billFixture()],
+  })
+  await page.route('**/api/v1/solace/now/', async route => {
+    const fixture = nowFixture()
+    await route.fulfill({
+      json: paid
+        ? { ...fixture, due: [], due_total: '0.00', paid_this_cycle_count: 1, paid_this_cycle_total: '150.00' }
+        : fixture,
+    })
+  })
+  await page.route('**/api/v1/solace/occurrences/1/paid/', async route => {
+    paid = true
+    await route.fulfill({ json: { ...nowFixture().due[0], status: 'paid', paid_at: new Date().toISOString() } })
+  })
+
+  await page.goto('/solace')
+  await expect(page.getByRole('heading', { name: 'Bills left this pay cycle' })).toBeVisible()
+  await expect(page.getByText('1 bill remaining')).toBeVisible()
+  await expect(page.getByText('$150.00', { exact: true }).first()).toBeVisible()
+  await page.getByRole('button', { name: 'Mark Electricity as paid' }).click()
+  await expect(page.getByText('0 bills remaining')).toBeVisible()
+  await expect(page.getByText('All bills due before the next pay cycle are handled.', { exact: false })).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+})
+
 test('phone Money home opens the chronological unpaid occurrence list', async ({ page }) => {
   const atDay = (offset: number) => {
     const value = new Date()

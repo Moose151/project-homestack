@@ -2249,6 +2249,63 @@ function AnnualSummaryTab({ onError }: { onError: (message: string) => void }) {
   )
 }
 
+function PayCycleBills({ now, onAction, onViewAll }: {
+  now: SolaceNow | null
+  onAction: (id: number, action: 'paid' | 'unpaid' | 'skip') => Promise<SolaceBillOccurrence>
+  onViewAll: () => void
+}) {
+  const [payingId, setPayingId] = useState<number | null>(null)
+  if (!now) return <Card contentClassName="h-32 animate-pulse bg-sunken"><span className="sr-only">Loading bills for this pay cycle</span></Card>
+  const period = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+  return (
+    <Card contentClassName="p-4 space-y-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-bold text-ink">Bills left this pay cycle</h2>
+          <p className="text-sm text-muted">{period(now.cycle_start)}–{period(now.cycle_end)} · {now.days_until_cycle_end <= 0 ? 'ends today' : `${now.days_until_cycle_end} days left`}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-2xl font-extrabold text-ink">{money(now.due_total)}</p>
+          <p className="text-xs text-muted">{now.due.length} {now.due.length === 1 ? 'bill' : 'bills'} remaining</p>
+        </div>
+      </div>
+      {now.due.length === 0 ? (
+        <div className="rounded-xl bg-success-soft p-3 text-sm text-success">
+          All bills due before the next pay cycle are handled.
+          {now.paid_this_cycle_count > 0 && ` ${money(now.paid_this_cycle_total)} paid this cycle.`}
+        </div>
+      ) : (
+        <ul className="divide-y divide-line rounded-xl border border-line">
+          {now.due.map(occurrence => (
+            <li key={occurrence.id} className="flex flex-wrap items-center gap-3 p-3">
+              <Link className="min-w-0 flex-1" to={`/solace?tab=bills&section=upcoming&bill=${occurrence.bill_id}&occurrence=${occurrence.id}`}>
+                <span className="block font-semibold text-primary">{occurrence.bill_name}</span>
+                <span className={`block text-xs ${occurrence.is_overdue ? 'font-semibold text-danger' : 'text-muted'}`}>
+                  {occurrence.is_overdue ? 'Overdue · ' : ''}due {new Date(occurrence.due_at).toLocaleDateString()}
+                </span>
+              </Link>
+              <span className="font-bold text-ink">{money(occurrence.amount)}</span>
+              <Button
+                size="sm"
+                loading={payingId === occurrence.id}
+                disabled={payingId !== null}
+                aria-label={`Mark ${occurrence.bill_name} as paid`}
+                onClick={async () => {
+                  setPayingId(occurrence.id)
+                  try { await onAction(occurrence.id, 'paid') }
+                  finally { setPayingId(null) }
+                }}
+              >Paid</Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {now.paid_this_cycle_count > 0 && now.due.length > 0 && <p className="text-xs text-muted">{money(now.paid_this_cycle_total)} already paid across {now.paid_this_cycle_count} {now.paid_this_cycle_count === 1 ? 'bill' : 'bills'} this cycle.</p>}
+      <Button variant="ghost" className="w-full sm:w-auto" onClick={onViewAll}>Open all upcoming bills</Button>
+    </Card>
+  )
+}
+
 export function SolacePage() {
   const [unlocked, setUnlocked] = useState(false)
   const { nodes } = useStacks()
@@ -2257,7 +2314,7 @@ export function SolacePage() {
   const [billsSection, setBillsSection] = useUrlTab<BillsSection>('bills', BILLS_SECTIONS.map(row => row.key), 'section')
   const [planSection, setPlanSection] = useUrlTab<PlanSection>('payplan', PLAN_SECTIONS.map(row => row.key), 'section')
   const [insightsSection, setInsightsSection] = useUrlTab<InsightsSection>('forecast', INSIGHTS_SECTIONS.map(row => row.key), 'section')
-  const [, setNow] = useState<SolaceNow | null>(null)
+  const [now, setNow] = useState<SolaceNow | null>(null)
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -2417,7 +2474,7 @@ export function SolacePage() {
     setError('')
     try {
       const updated = await api.updateSolaceOccurrence(id, action)
-      setSchedule(previous => previous ? {
+      setSchedule(previous => previous?.occurrences ? {
         ...previous,
         occurrences: previous.occurrences.map(row => row.id === updated.id ? updated : row),
       } : previous)
@@ -2463,7 +2520,10 @@ export function SolacePage() {
         </Card>
       )}
       <Tabs<Tab> tabs={SOLACE_TABS} active={tab} onChange={setTab} />
-      {tab === 'now' && <MoneyOverview forecast={forecast} onOpen={() => goSection('insights', 'forecast')} onBalance={() => setShowBalance(true)} onAddBill={() => setShowBill(true)} onSetup={() => setTab('setup')} />}
+      {tab === 'now' && <div className="space-y-4">
+        {!q.trim() && <PayCycleBills now={now} onAction={updateOccurrence} onViewAll={() => goSection('bills', 'upcoming')} />}
+        <MoneyOverview forecast={forecast} onOpen={() => goSection('insights', 'forecast')} onBalance={() => setShowBalance(true)} onAddBill={() => setShowBill(true)} onSetup={() => setTab('setup')} />
+      </div>}
       {tab === 'setup' && <MoneySetup settings={settings} forecast={forecast} bills={bills} onBalance={() => setShowBalance(true)} onBills={() => goSection('bills', 'bills')} reload={load} onAdvanced={() => goSection('plan', 'buckets')} />}
 
       {tab === 'bills' && (

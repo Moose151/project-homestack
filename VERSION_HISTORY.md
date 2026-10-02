@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.40.12**
+> **Current version: 0.40.13**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,17 @@
 ---
 
 ## 0.40 — Faster everyday household coordination
+
+### 0.40.13 — 2026-10-02 — Pay a bill without leaving the overview
+
+- Money's overview and the Dashboard bills widget now show every bill left in the current pay
+  cycle (not just the first few) and can mark one paid in place, without opening the bill or the
+  full Bills list.
+- Fixed a crash: marking a bill paid could throw and blank the whole Money page if the day's
+  schedule hadn't finished loading yet. Paying a bill now always leaves the page usable.
+- Fixed a search regression: typing in Money's search box could show the same bill twice and
+  send a click to the wrong one, because the new "this pay cycle" list and the search results
+  both linked to it. The pay-cycle list now steps aside while a search is active.
 
 ### 0.40.12 — 2026-10-02 — Money that reads like a bank account
 

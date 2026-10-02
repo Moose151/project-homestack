@@ -80,6 +80,36 @@ test('Dashboard bill links open the selected Money bill', async ({ page }) => {
   )
 })
 
+test('Dashboard lists all bills before payday and marks one paid in place', async ({ page }) => {
+  const dueAt = plusDays(3)
+  const rows = [
+    { id: 70, bill_id: 7, bill_name: 'Electricity', bill_category: 'utilities', amount: '150.00', due_at: dueAt, status: 'upcoming', paid_at: null, notes: '', is_overdue: false, visibility: 'household', sensitivity: 'normal', created_at: plusDays(0), updated_at: plusDays(0) },
+    { id: 71, bill_id: 8, bill_name: 'Mortgage', bill_category: 'mortgage', amount: '1918.00', due_at: plusDays(5), status: 'upcoming', paid_at: null, notes: '', is_overdue: false, visibility: 'household', sensitivity: 'normal', created_at: plusDays(0), updated_at: plusDays(0) },
+  ]
+  let paid = false
+  await mockAuthenticatedApi(page, { '/api/v1/nodes/': [SOLACE_NODE] })
+  await page.route('**/api/v1/hub/', route => {
+    const items = paid ? rows.slice(1) : rows
+    return route.fulfill({ json: { widgets: [{
+      key: 'solace_bills_due', name: 'Due before next payday', size: 'small', supports_kiosk: false,
+      meta: { configured: true, next_payday: plusDays(7).slice(0, 10), bill_count: items.length, total: paid ? '1918.00' : '2068.00', overdue_count: 0 },
+      items,
+    }] } })
+  })
+  await page.route('**/api/v1/solace/occurrences/70/paid/', route => {
+    paid = true
+    return route.fulfill({ json: { ...rows[0], status: 'paid', paid_at: new Date().toISOString() } })
+  })
+
+  await page.goto('/hub')
+  await expect(page.getByText('2 bills')).toBeVisible()
+  await expect(page.getByText('Mortgage')).toBeVisible()
+  await page.getByRole('button', { name: 'Mark Electricity as paid' }).click()
+  await expect(page.getByText('1 bill', { exact: true })).toBeVisible()
+  await expect(page.getByText('Electricity')).toHaveCount(0)
+  await expect(page.getByText('Mortgage')).toBeVisible()
+})
+
 test('Dashboard Upcoming finishes every node the same way, and snoozes any row in place', async ({ page }) => {
   await mockAuthenticatedApi(page, {
     '/api/v1/nodes/': [SOLACE_NODE],

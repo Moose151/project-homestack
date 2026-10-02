@@ -1,7 +1,17 @@
 {
-  "current_version": "0.40.12",
-  "source_sha256": "83c8afb81918503a0116eb9d24683d5154b92d16a0858855b342233538e1190c",
+  "current_version": "0.40.13",
+  "source_sha256": "0a57dc4b41680f9765e75fbe87a6d082aab9c4828730bd5cff4db66879170b31",
   "releases": [
+    {
+      "version": "0.40.13",
+      "date": "2026-10-02",
+      "title": "Pay a bill without leaving the overview",
+      "changes": [
+        "Money's overview and the Dashboard bills widget now show every bill left in the current pay cycle (not just the first few) and can mark one paid in place, without opening the bill or the full Bills list.",
+        "Fixed a crash: marking a bill paid could throw and blank the whole Money page if the day's schedule hadn't finished loading yet. Paying a bill now always leaves the page usable.",
+        "Fixed a search regression: typing in Money's search box could show the same bill twice and send a click to the wrong one, because the new \"this pay cycle\" list and the search results both linked to it. The pay-cycle list now steps aside while a search is active."
+      ]
+    },
     {
       "version": "0.40.12",
       "date": "2026-10-02",
