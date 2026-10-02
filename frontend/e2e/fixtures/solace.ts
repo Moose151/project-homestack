@@ -9,7 +9,8 @@ export function billFixture() {
   return {
     id: 1, name: 'Electricity', category: 'utilities', provider: 'PowerCo', amount: '150.00',
     due_at: now, recurrence_rule: 'FREQ=MONTHLY', end_date: null, is_active: true,
-    is_autopay: false, include_in_set_aside: true, notes: '', source_node: null,
+    is_autopay: false, include_in_set_aside: true, paid_from_bills_account: true,
+    notes: '', source_node: null,
     is_paid: false, is_overdue: false, next_due_at: now, next_occurrence_id: 1,
     annual_amount: '1800.00', fortnightly_amount: '69.23',
     created_at: now, updated_at: now,
@@ -34,6 +35,7 @@ export function bootstrapFixture(bills: ReturnType<typeof billFixture>[] = []) {
     settings: {
       id: 1, currency_symbol: '$', budget_year: null, cycle_anchor_date: null,
       default_buffer_amount: '0.00', payday_bill_handling: 'new_cycle', show_help_tips: true,
+      forecast_funding_source: 'pay_plan',
       dashboard_reminders: true, due_soon_days: 7, created_at: now, updated_at: now,
     },
     categories: ['utilities'], balances: [],

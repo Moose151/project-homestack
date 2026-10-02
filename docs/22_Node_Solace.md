@@ -83,8 +83,10 @@ multiple overlapping occurrence rebuilds.
 
 ## 6. Bills-account forecast
 
-The forecast projects expected Bills-bucket transfers against bill occurrences over a 1–24 month
-window. **A bill leaves the bills account when `paid_from_bills_account` is true.** This is
+The forecast projects account deposits against bill occurrences over a 1–24 month window. A
+household can use direct scheduled account transfers for the straightforward workflow or its
+existing payday/bucket allocations for the advanced workflow; only the selected source is counted.
+**A bill leaves the bills account when `paid_from_bills_account` is true.** This is
 independent of `include_in_set_aside`, which only controls the saving target in pay-cycle planning.
 A mortgage paid by direct debit still counts even when set-aside planning is disabled.
 
@@ -95,9 +97,16 @@ history. The flag is included in bill editing and readable CSV/XLSX export/impor
 
 The forecast returns `bill_coverage` for every bill the reader can access: payment count and total,
 or a reason for exclusion (paid elsewhere, paused, missing date, or no payments in the window).
-Skipped occurrences are excluded, recurrence end dates are respected, and overdue unpaid
-occurrences are carried to the opening day if their due date precedes it. Marking an overdue
-payment as paid updates its treatment. No private bill names may leak through this explanation.
+Skipped occurrences are excluded and recurrence end dates are respected. Overdue manual
+payments are carried to the opening day if their due date precedes it. An automatic payment before
+a later recorded closing balance is already represented by that balance, so it is not deducted
+again or presented as an overdue task. No private bill names may leak through this explanation.
+
+An active recurring bill whose end date has passed, or whose end date equals its first payment,
+is a schedule issue. The UI previews the next three dates while editing and offers an explicit
+"Keep repeating" action. Existing end dates and payment history are never silently rewritten.
+While any included schedule needs review, the forecast labels itself partial and withholds the
+safe-to-withdraw amount even if the incomplete arithmetic remains above zero.
 
 Balance snapshots mean **end of the recorded day**. Projection starts the following day, including
 intervening cash flow when a snapshot is older than today. Without a snapshot it starts today and
@@ -115,19 +124,20 @@ are plans, not reconciled bank transactions; updating the balance accounts for o
 
 ### Everyday Money workflow
 
-- **Overview:** bills-account position, current-cycle payments, Add bill, Update account balance,
-  and setup shortcuts for income / bills / bills transfers.
-- **Bills:** due-date ordered bill register, upcoming unpaid payments and calendar. Search and
-  category/status filters affect the list; they do not change household planning totals.
-- **Payday plan:** transfers, savings/buckets, income, purchases and an accessible checklist on
-  both phone and desktop. Generating a checklist opens it directly. A phone section picker keeps
-  these destinations readable.
-- **Bills account:** forecast, interactive balance chart, coverage review with links to the bills,
-  dated cash flow, and existing closeout/history/annual reports. A closing balance can be recorded
-  here without a detour through settings; failed saves retain the entered values.
-- **Settings:** household finance preferences, categories, balance history and import/export.
+- **Overview:** account balance, forecast confidence, the next five dated movements and direct
+  actions to update the balance, add a bill or review setup.
+- **Bills:** compact bill register, upcoming manual payments and calendar. Schedule problems are
+  visible in the list. Provider, category and payday-planning fields stay under More options.
+- **Setup:** a three-step account workflow: closing bank balance, bills paid by the account and
+  scheduled deposits. A salary model is not required; the user can enter only the transfer that
+  reaches this account. The safety buffer is a minimum account balance, not another amount due
+  every payday.
+- **More tools:** optional payday allocations, buckets, purchases, closeout/history/annual reports,
+  categories and import/export retain their old deep links without crowding everyday navigation.
+- **Full forecast:** interactive chart, compact searchable coverage review and dated cash flow.
 
-Existing `tab`/`section` routes and global/Home search links continue to work. Search results are
+The primary navigation is Overview / Bills / Setup. Existing `tab`/`section` routes and global/Home
+search links continue to work. Search results are
 kept separate from the full household datasets, so searching does not change the forecast or the
 allocation rules used when creating/editing a bucket. The cycle-end label describes the cycle,
 rather than claiming it is the next actual payday.

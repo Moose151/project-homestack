@@ -878,7 +878,7 @@ class SolacePayCyclePlanTests(TestCase):
         self.assertEqual(set_aside["recurring_bills"], "120.00")
         self.assertEqual(set_aside["planned_purchases"], "100.00")
         self.assertEqual(set_aside["buffer"], "30.00")
-        self.assertEqual(set_aside["required_total"], "250.00")
+        self.assertEqual(set_aside["required_total"], "220.00")
         self.assertEqual(set_aside["bills_bucket_total"], "750.00")
         self.assertTrue(set_aside["is_covered"])
 

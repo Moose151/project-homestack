@@ -1451,6 +1451,9 @@ export type HomeBillingCycle =
   | 'half_yearly' | 'yearly' | 'variable' | 'other'
 
 export interface InsurancePolicy {
+  next_payment_at?: string | null
+  schedule_issue?: string | null
+  payment_status?: string
   id: number
   name: string
   policy_type: InsurancePolicyType
@@ -1478,6 +1481,9 @@ export type HouseholdCostType =
   | 'body_corporate' | 'waste' | 'internet' | 'other'
 
 export interface HouseholdCost {
+  next_payment_at?: string | null
+  schedule_issue?: string | null
+  payment_status?: string
   id: number
   name: string
   cost_type: HouseholdCostType
@@ -1583,6 +1589,7 @@ export interface HomesteadSearchResults {
 // ---------------------------------------------------------------------------
 
 export interface SolaceBill {
+  schedule?: SolaceBillSchedule
   id: number
   name: string
   category: string
@@ -1903,6 +1910,7 @@ export interface SolaceAnnualSummary {
 }
 
 export interface SolaceSettings {
+  forecast_funding_source: 'pay_plan' | 'transfers'
   id: number
   currency_symbol: string
   budget_year: number | null
@@ -1940,6 +1948,7 @@ export interface SolaceBalanceSnapshot {
 }
 
 export interface SolaceBalanceForecastItem {
+  occurrence_id?: number
   kind: 'bill' | 'contribution'
   name: string
   amount: string
@@ -1948,7 +1957,10 @@ export interface SolaceBalanceForecastItem {
 }
 
 export interface SolaceBalanceForecast {
-  bill_coverage: { bill_id: number; name: string; included: boolean; reason: string; payment_count: number; total: string }[]
+  funding_source?: 'pay_plan' | 'transfers'
+  needs_review?: boolean
+  schedule_issues?: { bill_id: number; name: string; message: string }[]
+  bill_coverage: { bill_id: number; name: string; included: boolean; reason: string; payment_count: number; total: string; schedule_issue?: string | null }[]
   warnings: string[]
   overdue_total: string
   first_shortfall_date: string | null
@@ -2337,4 +2349,21 @@ export interface BooksUser {
   username: string
   colour: string
   avatar: string
+}
+
+
+export interface SolaceBillSchedule {
+  status: string
+  issue: string | null
+  next_dates: string[]
+}
+
+export interface SolaceAccountTransfer {
+  id: number
+  name: string
+  amount: string
+  due_at: string
+  recurrence_rule: string
+  end_date: string | null
+  is_active: boolean
 }

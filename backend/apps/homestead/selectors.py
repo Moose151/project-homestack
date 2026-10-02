@@ -263,20 +263,35 @@ def room_summaries(user, rooms: list[RoomArea]) -> tuple[dict[int, dict], dict]:
 # Protected home finances
 # ---------------------------------------------------------------------------
 
+def _with_current_bill_payments(rows, user):
+    if user is None:
+        return rows
+    from apps.solace.selectors import bill_display_projection
+    projections = bill_display_projection(user, {row.solace_bill_ref for row in rows if row.solace_bill_ref})
+    visible = []
+    for row in rows:
+        if row.solace_bill_ref and row.solace_bill_ref not in projections:
+            continue
+        row.money_bill = projections.get(row.solace_bill_ref)
+        visible.append(row)
+    return visible
+
+
 def list_insurance_policies(user=None, *, active_only: bool = False):
     qs = InsurancePolicy.objects.order_by("next_renewal_at", "name")
     if active_only:
         qs = qs.filter(is_active=True)
     if user is not None:
         qs = apply_visibility(qs, user)
-    return list(qs)
+    return _with_current_bill_payments(list(qs), user)
 
 
 def get_insurance_policy(pk: int, user=None) -> InsurancePolicy | None:
     qs = InsurancePolicy.objects.filter(pk=pk)
     if user is not None:
         qs = apply_visibility(qs, user)
-    return qs.first()
+    rows = _with_current_bill_payments(list(qs[:1]), user)
+    return rows[0] if rows else None
 
 
 def list_household_costs(user=None, *, active_only: bool = False):
@@ -285,14 +300,15 @@ def list_household_costs(user=None, *, active_only: bool = False):
         qs = qs.filter(is_active=True)
     if user is not None:
         qs = apply_visibility(qs, user)
-    return list(qs)
+    return _with_current_bill_payments(list(qs), user)
 
 
 def get_household_cost(pk: int, user=None) -> HouseholdCost | None:
     qs = HouseholdCost.objects.filter(pk=pk)
     if user is not None:
         qs = apply_visibility(qs, user)
-    return qs.first()
+    rows = _with_current_bill_payments(list(qs[:1]), user)
+    return rows[0] if rows else None
 
 
 # ---------------------------------------------------------------------------

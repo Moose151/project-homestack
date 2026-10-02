@@ -1,7 +1,20 @@
 {
-  "current_version": "0.40.11",
-  "source_sha256": "35eaca277d8f8af50e0143fc8c1a151455a45a8f8731f908e506113da6e8a19f",
+  "current_version": "0.40.12",
+  "source_sha256": "83c8afb81918503a0116eb9d24683d5154b92d16a0858855b342233538e1190c",
   "releases": [
+    {
+      "version": "0.40.12",
+      "date": "2026-10-02",
+      "title": "Money that reads like a bank account",
+      "changes": [
+        "Reworked Money around three everyday destinations: **Overview, Bills and Setup**. The overview shows the next account movements; payday planning, buckets and reports remain available under More tools without competing with routine bill management.",
+        "Added a guided account setup with direct recurring deposits, so the forecast can model the amount actually transferred into the bills account without requiring a full salary and bucket plan. Direct deposits and advanced payday allocations are mutually exclusive forecast sources. Requires migration `solace.0013`; readable backups include the new transfer schedule.",
+        "Bill editing previews the next three payment dates. Ended repeating bills and the accidental first-date-equals-end-date case are clearly flagged, with an explicit Keep repeating action. Existing dates and paid history are preserved until the user saves a change.",
+        "Automatic debits before a recorded closing balance are no longer carried forward as missed manual payments. A partial forecast with a broken bill schedule cannot claim a safe withdrawal.",
+        "Home now reads current payment dates and schedule status from Money, so copied old dates no longer appear as overdue renewals. Insurance renewal details remain separate from premium dates.",
+        "Added regression coverage for ended mortgages, automatic debits, direct-transfer funding, permission and household boundaries, backup output, schedule preview, Home projections and the simplified responsive workflow."
+      ]
+    },
     {
       "version": "0.40.11",
       "date": "2026-10-02",

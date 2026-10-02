@@ -54,7 +54,7 @@ _CHECKLIST_FIELDS = {
     "is_complete", "completed_at", "notes", "visibility", "sensitivity",
 }
 _SETTINGS_FIELDS = {
-    "currency_symbol", "budget_year", "default_buffer_amount",
+    "currency_symbol", "budget_year", "default_buffer_amount", "forecast_funding_source",
     "cycle_anchor_date", "payday_bill_handling", "show_help_tips",
     "dashboard_reminders", "due_soon_days",
 }
@@ -691,3 +691,16 @@ def set_income_allocations(acting_user: User, payday: Payday, lines: list[dict])
             is_remainder=bool(line.get("is_remainder")), position=position,
         ))
     return created
+
+
+@transaction.atomic
+def save_account_transfer(acting_user, obj=None, **data):
+    from apps.solace.models import AccountTransfer
+
+    if obj is None:
+        obj = AccountTransfer(household=get_active_household(), created_by=acting_user)
+    for key in {"name", "amount", "due_at", "recurrence_rule", "end_date", "is_active"} & data.keys():
+        setattr(obj, key, data[key])
+    obj.updated_by = acting_user
+    obj.save()
+    return obj

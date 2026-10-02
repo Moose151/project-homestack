@@ -241,7 +241,27 @@ class RoomPlanItemSerializer(AssigneeSerializerMixin, serializers.ModelSerialize
         return _non_blank(value)
 
 
-class InsurancePolicySerializer(serializers.ModelSerializer):
+class CurrentBillPaymentMixin:
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        bill = getattr(instance, "money_bill", None)
+        if bill:
+            from apps.homestead.services import _billing_cycle
+            data.update({key: bill[key] for key in ["name", "provider", "is_active", "recurrence_rule"]})
+            data["billing_cycle"] = _billing_cycle(bill["recurrence_rule"])
+            data["premium_amount" if "premium_amount" in data else "amount"] = bill["amount"]
+            data["next_payment_at"] = bill["next_payment_at"]
+            data["payment_status"] = bill["payment_status"]
+            data["schedule_issue"] = bill["schedule_issue"]
+            if "next_due_at" in data:
+                data["next_due_at"] = bill["next_payment_at"]
+            if "next_renewal_at" in data:
+                # A premium payment is not a policy renewal date.
+                data["next_renewal_at"] = None
+        return data
+
+
+class InsurancePolicySerializer(CurrentBillPaymentMixin, serializers.ModelSerializer):
     class Meta:
         model = InsurancePolicy
         fields = [
@@ -261,7 +281,7 @@ class InsurancePolicySerializer(serializers.ModelSerializer):
         return _non_blank(value)
 
 
-class HouseholdCostSerializer(serializers.ModelSerializer):
+class HouseholdCostSerializer(CurrentBillPaymentMixin, serializers.ModelSerializer):
     class Meta:
         model = HouseholdCost
         fields = [

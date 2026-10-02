@@ -72,6 +72,8 @@ export function nodesWith(...extraKeys: string[]) {
 // Endpoints known-good shapes are provided for; every other /api/v1/** request gets a generic
 // empty 200 so unmocked pages render an empty state instead of hanging or crashing.
 const FIXTURES: Record<string, unknown> = {
+  '/api/v1/solace/bills/preview/': { status: 'Repeating', issue: null, next_dates: ['2028-08-10T12:00:00Z', '2028-08-24T12:00:00Z'] },
+  '/api/v1/solace/transfers/': [],
   '/api/v1/auth/me/': FIXTURE_USER,
   '/api/v1/nodes/': FIXTURE_NODES,
   '/api/v1/household/': FIXTURE_HOUSEHOLD,

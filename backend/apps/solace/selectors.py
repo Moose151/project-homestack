@@ -1,7 +1,7 @@
 """solace selectors — read-only finance queries (D9)."""
 from __future__ import annotations
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -316,7 +316,9 @@ def _get_pay_cycle_plan(user, *, as_of=None) -> dict:
         Decimal(settings_obj.default_buffer_amount)
         if settings_obj else Decimal("0.00")
     )
-    required = (recurring_average + purchase_average + buffer_amount).quantize(
+    # The buffer is a minimum balance to retain in the bank account, not an amount that must be
+    # transferred again every fortnight. The account forecast applies it to safe-to-withdraw.
+    required = (recurring_average + purchase_average).quantize(
         penny,
         rounding=ROUND_HALF_UP,
     )
@@ -528,3 +530,43 @@ def get_annual_summary(user, *, year_type: str = "calendar", as_of: date | None 
         "grand_paid": f"{grand_paid:.2f}",
         "grand_outstanding": f"{grand_total - grand_paid:.2f}",
     }
+
+
+def list_account_transfers(user):
+    from apps.solace.models import AccountTransfer
+    return list(apply_visibility(AccountTransfer.objects.filter(household=user.household), user))
+
+
+def get_account_transfer(user, pk):
+    from apps.solace.models import AccountTransfer
+    return apply_visibility(AccountTransfer.objects.filter(pk=pk, household=user.household), user).first()
+
+
+def bill_display_projection(user, bill_ids):
+    """Public read boundary for Home: current payment dates, never the recurrence anchor.
+
+    Owning-node model access and visibility filtering stay here. No history is mutated by a
+    Home read; missing future occurrences can be derived from the same schedule as Money.
+    """
+    from apps.solace.account_schedule import describe_schedule
+    from apps.solace.bill_schedule import occurrence_datetimes
+
+    today = timezone.localdate(timezone=_household_timezone(user))
+    result = {}
+    for bill in list_bills(user):
+        if bill.id not in bill_ids:
+            continue
+        rows = list(bill.occurrences.all())
+        candidates = [row.due_at for row in rows if row.status == BillOccurrence.Status.UPCOMING
+                      and (not bill.is_autopay or timezone.localdate(row.due_at, _household_timezone(user)) >= today)]
+        settled = {row.due_at for row in rows if row.status != BillOccurrence.Status.UPCOMING}
+        candidates += [value for value in occurrence_datetimes(bill, today, today + timedelta(days=730)) if value not in settled]
+        next_due = min(candidates) if candidates and bill.is_active else None
+        schedule = describe_schedule(bill, as_of=today)
+        result[bill.id] = {
+            "name": bill.name, "provider": bill.provider, "amount": str(bill.amount),
+            "recurrence_rule": bill.recurrence_rule, "is_active": bill.is_active,
+            "next_payment_at": next_due.isoformat() if next_due else None,
+            "payment_status": schedule["status"], "schedule_issue": schedule["issue"],
+        }
+    return result

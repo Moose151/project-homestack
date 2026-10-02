@@ -2044,7 +2044,7 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold text-ink">Insurance</h2>
-            <p className="text-sm text-muted">Money supplies premiums and renewals; policy details stay here.</p>
+            <p className="text-sm text-muted">Payment dates come from Money. Policy and claim details stay here.</p>
           </div>
         </div>
 
@@ -2073,7 +2073,7 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
         ) : (
           <div className="grid gap-3 lg:grid-cols-2">
             {shownPolicies.map(policy => {
-              const due = dueLabel(policy.next_renewal_at)
+              const due = policy.is_active ? dueLabel(policy.solace_bill_ref ? policy.next_payment_at ?? null : policy.next_renewal_at) : null
               return (
                 <Card key={policy.id} className={!policy.is_active ? 'opacity-65' : ''}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -2083,15 +2083,16 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
                         <Badge>{cap(policy.policy_type)}</Badge>
                         {!policy.is_active && <Badge tone="neutral">Inactive</Badge>}
                         {policy.solace_bill_ref && (
-                          <Link to={`/solace?tab=bills&q=${encodeURIComponent(policy.name)}`} aria-label={`Open ${policy.name} in Money`}>
+                          <Link to={`/solace?tab=bills&section=bills&bill=${policy.solace_bill_ref}`} aria-label={`Open ${policy.name} in Money`}>
                             <Badge tone="success">Managed in Money →</Badge>
                           </Link>
                         )}
                       </div>
                       <p className="mt-1 text-sm text-muted">{policy.provider || 'No insurer'} · {money(policy.premium_amount)} / {cap(policy.billing_cycle).toLowerCase()}</p>
+                      {policy.schedule_issue && <p className="mt-2 text-sm text-warning">{policy.schedule_issue}</p>}
                       {policy.policy_number && <p className="text-sm text-muted-strong">Policy {policy.policy_number}</p>}
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {due && <Badge tone={due.tone}>Renews {due.text.toLowerCase()}</Badge>}
+                        {due && <Badge tone={due.tone}>{policy.solace_bill_ref ? 'Payment' : 'Renews'} {due.text.toLowerCase()}</Badge>}
                         <Badge tone="neutral">Excess {money(policy.standard_excess)}</Badge>
                       </div>
                       {policy.additional_excesses && <p className="mt-2 whitespace-pre-wrap text-sm text-muted-strong">{policy.additional_excesses}</p>}
@@ -2140,7 +2141,7 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
         ) : (
           <div className="grid gap-3 lg:grid-cols-2">
             {shownCosts.map(cost => {
-              const due = dueLabel(cost.next_due_at)
+              const due = cost.is_active ? dueLabel(cost.next_due_at) : null
               return (
                 <Card key={cost.id} className={!cost.is_active ? 'opacity-65' : ''}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -2150,12 +2151,13 @@ function FinanceTab({ onError }: { onError: (m: string) => void }) {
                         <Badge>{cap(cost.cost_type)}</Badge>
                         {!cost.is_active && <Badge tone="neutral">Inactive</Badge>}
                         {cost.solace_bill_ref && (
-                          <Link to={`/solace?tab=bills&q=${encodeURIComponent(cost.name)}`} aria-label={`Open ${cost.name} in Money`}>
+                          <Link to={`/solace?tab=bills&section=bills&bill=${cost.solace_bill_ref}`} aria-label={`Open ${cost.name} in Money`}>
                             <Badge tone="success">Managed in Money →</Badge>
                           </Link>
                         )}
                       </div>
                       <p className="mt-1 text-sm text-muted">{cost.provider || cap(cost.cost_type)} · {money(cost.amount)} / {cap(cost.billing_cycle).toLowerCase()}</p>
+                      {cost.schedule_issue && <p className="mt-2 text-sm text-warning">{cost.schedule_issue}</p>}
                       {cost.account_number && <p className="text-sm text-muted-strong">Account {cost.account_number}</p>}
                       {due && <div className="mt-2"><Badge tone={due.tone}>Due {due.text.toLowerCase()}</Badge></div>}
                       {cost.notes && <p className="mt-2 whitespace-pre-wrap text-sm text-muted">{cost.notes}</p>}

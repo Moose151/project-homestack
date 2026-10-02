@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.40.11**
+> **Current version: 0.40.12**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,26 @@
 ---
 
 ## 0.40 — Faster everyday household coordination
+
+### 0.40.12 — 2026-10-02 — Money that reads like a bank account
+
+- Reworked Money around three everyday destinations: **Overview, Bills and Setup**. The overview
+  shows the next account movements; payday planning, buckets and reports remain available under
+  More tools without competing with routine bill management.
+- Added a guided account setup with direct recurring deposits, so the forecast can model the
+  amount actually transferred into the bills account without requiring a full salary and bucket
+  plan. Direct deposits and advanced payday allocations are mutually exclusive forecast sources.
+  Requires migration `solace.0013`; readable backups include the new transfer schedule.
+- Bill editing previews the next three payment dates. Ended repeating bills and the accidental
+  first-date-equals-end-date case are clearly flagged, with an explicit Keep repeating action.
+  Existing dates and paid history are preserved until the user saves a change.
+- Automatic debits before a recorded closing balance are no longer carried forward as missed
+  manual payments. A partial forecast with a broken bill schedule cannot claim a safe withdrawal.
+- Home now reads current payment dates and schedule status from Money, so copied old dates no
+  longer appear as overdue renewals. Insurance renewal details remain separate from premium dates.
+- Added regression coverage for ended mortgages, automatic debits, direct-transfer funding,
+  permission and household boundaries, backup output, schedule preview, Home projections and the
+  simplified responsive workflow.
 
 ### 0.40.11 — 2026-10-02 — Clearer Money and complete bills-account forecasts
 

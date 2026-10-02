@@ -1063,6 +1063,7 @@ class SolaceCsvExportView(SolaceAccessMixin, APIView):
             csv_bytes,
             income_rows,
             purchase_rows,
+            transfer_rows,
         )
 
         exports = {
@@ -1070,6 +1071,7 @@ class SolaceCsvExportView(SolaceAccessMixin, APIView):
             "purchases": ("solace-planned-purchases.csv", purchase_rows),
             "income": ("solace-income-sources.csv", income_rows),
             "buckets": ("solace-buckets.csv", bucket_rows),
+            "transfers": ("solace-account-transfers.csv", transfer_rows),
         }
         selected = exports.get(export_type)
         if selected is None:
@@ -1177,3 +1179,14 @@ class BillImportCancelView(SolaceAccessMixin, APIView):
     def post(self, request: Request) -> Response:
         request._request.session.pop("solace_bill_import_preview", None)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class BillSchedulePreviewView(SolaceAccessMixin, APIView):
+    def post(self, request):
+        from apps.solace.account_schedule import describe_schedule
+        from apps.solace.models import Bill
+        serializer = BillSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = {key: value for key, value in serializer.validated_data.items() if key != "home_destination"}
+        bill = Bill(household=request.user.household, **data)
+        return Response(describe_schedule(bill))

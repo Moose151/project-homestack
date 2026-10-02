@@ -31,23 +31,24 @@ test('Add bill opens as a full-height sheet, not an inline-expanding panel', asy
   await expect(dialog).not.toBeVisible()
 })
 
-test('phone Money home uses destination rows instead of the five-tab picker', async ({ page }) => {
+test('phone Money has three main destinations and optional advanced tools', async ({ page }) => {
   await mockAuthenticatedApi(page, {
     '/api/v1/nodes/': [SOLACE_ENABLED_NODE],
     '/api/v1/solace/bootstrap/': bootstrapFixture([billFixture()]),
     '/api/v1/solace/now/': nowFixture(),
   })
   await page.goto('/solace')
-  await expect(page.getByText('Current position')).toBeVisible()
-  await expect(page.getByRole('button', { name: /See and manage bills/ })).toBeVisible()
-  await expect(page.getByRole('button', { name: /Plan the next payday/ })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Overview', exact: true })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Bills', exact: true })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Setup', exact: true })).toBeVisible()
   await expect(page.getByLabel('Money section')).toBeHidden()
-  await page.getByRole('button', { name: /Manage savings and goals/ }).click()
-  await expect(page).toHaveURL(/tab=plan&section=buckets/)
+  await page.getByText('More tools', { exact: true }).click()
+  await page.getByRole('button', { name: 'Payday plan & savings' }).click()
+  await expect(page).toHaveURL(/tab=plan&section=payplan/)
   await expect(page.getByRole('button', { name: 'Back' })).toBeVisible()
 })
 
-test('phone Money home can mark an upcoming bill paid without opening the schedule', async ({ page }) => {
+test('manual bill payment remains available from the bills list', async ({ page }) => {
   let paid = false
   await mockAuthenticatedApi(page, {
     '/api/v1/nodes/': [SOLACE_ENABLED_NODE],
@@ -73,11 +74,12 @@ test('phone Money home can mark an upcoming bill paid without opening the schedu
     })
   })
 
-  await page.goto('/solace')
-  const payButton = page.getByRole('button', { name: 'Mark paid' })
+  await page.goto('/solace?tab=bills')
+  await page.getByText('Payment history & details', { exact: true }).click()
+  const payButton = page.getByRole('button', { name: 'Mark next paid' })
   await expect(payButton).toBeVisible()
   await payButton.click()
-  await expect(page.getByText('Nothing left to pay this cycle.')).toBeVisible()
+  await expect.poll(() => paid).toBe(true)
   await expect(page).not.toHaveURL(/section=schedule/)
   await expectNoHorizontalOverflow(page)
 })
@@ -106,7 +108,8 @@ test('phone Money home opens the chronological unpaid occurrence list', async ({
   })
 
   await page.goto('/solace')
-  await page.getByRole('button', { name: 'View all upcoming bills' }).click()
+  await page.getByRole('tab', { name: 'Bills', exact: true }).click()
+  await page.getByRole('tab', { name: 'Upcoming', exact: true }).click()
   await expect(page).toHaveURL(/tab=bills&section=upcoming/)
   await expect(page.getByRole('heading', { name: 'Overdue unpaid' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Today' })).toBeVisible()

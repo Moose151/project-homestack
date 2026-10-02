@@ -5,6 +5,7 @@ from apps.solace.views import (
     AccountBalanceListView,
     BalanceForecastView,
     BillDetailView,
+    BillSchedulePreviewView,
     BillListView,
     BillOccurrenceActionView,
     UpcomingBillOccurrenceListView,
@@ -44,7 +45,11 @@ from apps.solace.views import (
     SolaceXlsxExportView,
 )
 
+from apps.solace.transfer_views import AccountTransferListView, AccountTransferDetailView
+
 urlpatterns = [
+    path("transfers/", AccountTransferListView.as_view(), name="solace-transfer-list"),
+    path("transfers/<int:transfer_id>/", AccountTransferDetailView.as_view(), name="solace-transfer-detail"),
     path("bootstrap/", SolaceBootstrapView.as_view(), name="solace-bootstrap"),
     path("export/<str:export_type>.csv", SolaceCsvExportView.as_view(), name="solace-csv-export"),
     path("export/backup.xlsx", SolaceXlsxExportView.as_view(), name="solace-xlsx-export"),
@@ -68,6 +73,7 @@ urlpatterns = [
     path("occurrences/upcoming/", UpcomingBillOccurrenceListView.as_view(), name="solace-upcoming-occurrences"),
     path("plan/", PayCyclePlanView.as_view(), name="solace-plan"),
     path("plan/checklist/", PayCycleChecklistView.as_view(), name="solace-plan-checklist"),
+    path("bills/preview/", BillSchedulePreviewView.as_view(), name="solace-bill-preview"),
     path("bills/", BillListView.as_view(), name="solace-bill-list"),
     path("bills/<int:bill_id>/", BillDetailView.as_view(), name="solace-bill-detail"),
     path(

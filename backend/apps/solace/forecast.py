@@ -9,7 +9,8 @@ from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 
 from apps.solace import selectors
-from apps.solace.bill_schedule import ensure_bill_occurrences, household_timezone
+from apps.solace.bill_schedule import ensure_bill_occurrences, household_timezone, occurrence_datetimes
+from apps.solace.account_schedule import describe_schedule
 from apps.solace.budget_engine import build_pay_cycle_plan
 from apps.solace.models import BillOccurrence, BudgetBucket
 
@@ -119,11 +120,18 @@ def build_balance_forecast(
         else:
             if occurrence.bill_id not in included_bill_ids:
                 continue
-            event_date = max(due_date, start)
+            if occurrence.bill.is_autopay:
+                # Autopay is projected on schedule, never a claim that the bank confirmed it.
+                # An older scheduled debit is already part of a later opening bank balance.
+                if due_date < start:
+                    continue
+                event_date = due_date
+            else:
+                event_date = max(due_date, start)
         if event_date > through:
             continue
         amount = _money(occurrence.amount)
-        if occurrence.status == BillOccurrence.Status.UPCOMING and due_date < as_of:
+        if occurrence.status == BillOccurrence.Status.UPCOMING and not occurrence.bill.is_autopay and due_date < as_of:
             overdue_total += amount
         bill_totals[occurrence.bill_id] += amount
         bill_counts[occurrence.bill_id] += 1
@@ -134,55 +142,69 @@ def build_balance_forecast(
                 "name": occurrence.bill.name,
                 "amount": _money_string(amount),
                 "record_id": occurrence.bill_id,
-                "status": occurrence.status,
+                "status": "automatic" if occurrence.bill.is_autopay and occurrence.status == BillOccurrence.Status.UPCOMING else occurrence.status,
+                "occurrence_id": occurrence.id,
             }
         )
 
     settings_obj = selectors.get_settings()
-    paydays = selectors.list_paydays(user, active_only=True)
-    buckets = selectors.list_buckets(user, active_only=True)
-    cycle_anchor = settings_obj.cycle_anchor_date if settings_obj else None
+    funding_source = settings_obj.forecast_funding_source if settings_obj else "pay_plan"
+    if funding_source == "transfers":
+        for transfer in selectors.list_account_transfers(user):
+            for due_at in occurrence_datetimes(transfer, start, through):
+                transfer_date = timezone.localdate(due_at, tz)
+                amount = _money(transfer.amount)
+                days[transfer_date]["contributions"] += amount
+                days[transfer_date]["items"].append({
+                    "kind": "contribution", "name": transfer.name,
+                    "amount": _money_string(amount), "record_id": transfer.id,
+                    "status": "expected",
+                })
+    else:
+        paydays = selectors.list_paydays(user, active_only=True)
+        buckets = selectors.list_buckets(user, active_only=True)
+        cycle_anchor = settings_obj.cycle_anchor_date if settings_obj else None
 
-    def local_plan(on_date):
-        with timezone.override(tz):
-            return build_pay_cycle_plan(paydays, buckets, as_of=on_date, cycle_anchor=cycle_anchor)
+        def local_plan(on_date):
+            with timezone.override(tz):
+                return build_pay_cycle_plan(paydays, buckets, as_of=on_date, cycle_anchor=cycle_anchor)
 
-    cycle_plan = local_plan(start)
-    cycle_start = date.fromisoformat(cycle_plan["cycle_start"])
-    seen_cycles: set[date] = set()
-    while cycle_start <= through and cycle_start not in seen_cycles:
-        seen_cycles.add(cycle_start)
-        plan = local_plan(cycle_start)
-        for source in plan["sources"]:
-            all_pay_dates = [
-                timezone.localdate(datetime.fromisoformat(value), tz)
-                for value in source["pay_dates"]
-            ]
-            contribution = sum(
-                (
-                    _money(row["amount"])
-                    for row in source["allocations"]
-                    if _is_bills_bucket(row["purpose"])
-                ),
-                Decimal("0.00"),
-            )
-            for pay_date, amount in zip(
-                all_pay_dates,
-                _split_amount(contribution, len(all_pay_dates)),
-            ):
-                if not start <= pay_date <= through or amount <= 0:
-                    continue
-                days[pay_date]["contributions"] += amount
-                days[pay_date]["items"].append(
-                    {
-                        "kind": "contribution",
-                        "name": source["title"],
-                        "amount": _money_string(amount),
-                        "record_id": source["payday_id"],
-                        "status": "expected",
-                    }
+        cycle_plan = local_plan(start)
+        cycle_start = date.fromisoformat(cycle_plan["cycle_start"])
+        seen_cycles: set[date] = set()
+        while cycle_start <= through and cycle_start not in seen_cycles:
+            seen_cycles.add(cycle_start)
+            plan = local_plan(cycle_start)
+            for source in plan["sources"]:
+                all_pay_dates = [
+                    timezone.localdate(datetime.fromisoformat(value), tz)
+                    for value in source["pay_dates"]
+                ]
+                contribution = sum(
+                    (
+                        _money(row["amount"])
+                        for row in source["allocations"]
+                        if _is_bills_bucket(row["purpose"])
+                    ),
+                    Decimal("0.00"),
                 )
-        cycle_start += timedelta(days=14)
+                for pay_date, amount in zip(
+                    all_pay_dates,
+                    _split_amount(contribution, len(all_pay_dates)),
+                ):
+                    if not start <= pay_date <= through or amount <= 0:
+                        continue
+                    days[pay_date]["contributions"] += amount
+                    days[pay_date]["items"].append(
+                        {
+                            "kind": "contribution",
+                            "name": source["title"],
+                            "amount": _money_string(amount),
+                            "record_id": source["payday_id"],
+                            "status": "expected",
+                        }
+                    )
+            cycle_start += timedelta(days=14)
 
     running_change = Decimal("0.00")
     minimum_change = Decimal("0.00")
@@ -257,6 +279,11 @@ def build_balance_forecast(
         else None
     )
 
+    schedule_issues = [
+        {"bill_id": bill.id, "name": bill.name, "message": schedule["issue"]}
+        for bill in all_bills if bill.paid_from_bills_account
+        for schedule in [describe_schedule(bill, as_of=as_of)] if schedule["issue"]
+    ]
     coverage = []
     for bill in all_bills:
         reason = (
@@ -270,18 +297,22 @@ def build_balance_forecast(
             "bill_id": bill.id, "name": bill.name, "reason": reason,
             "included": bill_counts[bill.id] > 0,
             "payment_count": bill_counts[bill.id], "total": _money_string(bill_totals[bill.id]),
+            "schedule_issue": describe_schedule(bill, as_of=as_of)["issue"],
         })
-    warnings = []
+    warnings = [f"{row['name']}: {row['message']}" for row in schedule_issues]
     if latest_balance and (as_of - latest_balance.snapshot_date).days > 14:
         warnings.append("The balance is over 14 days old. Update it to check the projection against your bank.")
     if any(row["reason"] == "Missing due date" for row in coverage):
         warnings.append("Some bills have no due date and cannot be forecast. Review the bill coverage below.")
     if total_contributions == 0:
-        warnings.append("No transfers into the bills account are scheduled. Check Income and bills-purpose buckets in Payday plan.")
+        warnings.append("No money is scheduled to come into this account. Add incoming transfers in Setup.")
     if overdue_total:
         warnings.append("Unpaid overdue bills are included. Mark any already paid so they are not counted again.")
 
     return {
+        "funding_source": funding_source,
+        "needs_review": bool(schedule_issues),
+        "schedule_issues": schedule_issues,
         "as_of": as_of.isoformat(),
         "forecast_start": start.isoformat(),
         "through": through.isoformat(),
@@ -311,7 +342,7 @@ def build_balance_forecast(
         ),
         "safe_to_withdraw": (
             _money_string(safe_to_withdraw)
-            if safe_to_withdraw is not None else None
+            if safe_to_withdraw is not None and not schedule_issues else None
         ),
         "shortfall": _money_string(shortfall) if shortfall is not None else None,
         "is_covered": lowest_balance >= 0 if lowest_balance is not None else None,

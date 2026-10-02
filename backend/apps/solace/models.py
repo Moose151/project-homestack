@@ -472,6 +472,13 @@ class SolaceSettings(HouseholdBaseModel):
         NEW_CYCLE = "new_cycle", "New pay cycle"
         PREVIOUS_CYCLE = "previous_cycle", "Previous pay cycle"
 
+    class FundingSource(models.TextChoices):
+        PAY_PLAN = "pay_plan", "Payday allocations"
+        TRANSFERS = "transfers", "Scheduled account transfers"
+
+    forecast_funding_source = models.CharField(
+        max_length=20, choices=FundingSource.choices, default=FundingSource.PAY_PLAN,
+    )
     currency_symbol = models.CharField(max_length=8, default="$")
     budget_year = models.PositiveSmallIntegerField(null=True, blank=True)
     cycle_anchor_date = models.DateField(null=True, blank=True)
@@ -610,3 +617,21 @@ class CycleCloseout(HouseholdBaseModel):
 
     def __str__(self) -> str:
         return f"{self.cycle_start} — {self.status}"
+
+
+class AccountTransfer(HouseholdBaseModel):
+    """Expected deposits into the bills account, independent of salary/budget allocation."""
+    name = models.CharField(max_length=200)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    due_at = models.DateTimeField()
+    recurrence_rule = models.CharField(max_length=512, blank=True, default="")
+    end_date = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    visibility = models.CharField(max_length=20, choices=Visibility.choices, default=Visibility.SENSITIVE)
+    sensitivity = models.CharField(max_length=20, choices=Sensitivity.choices, default=Sensitivity.FINANCIAL)
+
+    objects = HouseholdManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        ordering = ["due_at", "name"]

@@ -822,6 +822,22 @@ class HomesteadFinanceSyncTests(TestCase):
         self.assertEqual(str(cost.amount), "275.00")
         self.assertEqual(cost.provider, "New Energy")
 
+        response = self.client.get(reverse("homestead-cost-list"))
+        self.assertEqual(response.status_code, 200)
+        linked = next(row for row in response.json() if row["id"] == cost.id)
+        self.assertEqual(linked["amount"], "275.00")
+        self.assertIsNotNone(linked["next_payment_at"])
+        self.assertEqual(linked["next_due_at"], linked["next_payment_at"])
+
+        bill.is_active = False
+        bill.save()
+        linked = next(
+            row for row in self.client.get(reverse("homestead-cost-list")).json()
+            if row["id"] == cost.id
+        )
+        self.assertEqual(linked["payment_status"], "Paused")
+        self.assertIsNone(linked["next_payment_at"])
+
     def test_homestead_maintenance_can_create_and_update_its_solace_cost(self):
         task = create_maintenance(
             self.admin,

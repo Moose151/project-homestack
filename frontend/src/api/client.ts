@@ -1,4 +1,5 @@
 import type {
+  SolaceAccountTransfer, SolaceBillSchedule,
   AcademicProfile, AcademicProfileResponse, AdminUser, Appliance, AssessmentFile,
   AssessmentNote, AtlasList, AtlasListItem, AtlasListSuggestion, AtlasNote, AtlasReminder, AtlasSearchResults,
   Backup, ClassRepeat,
@@ -1178,6 +1179,13 @@ export const api = {
   searchSolace: (q: string): Promise<SolaceSearchResults> =>
     _fetch(`/solace/search/?q=${encodeURIComponent(q)}`),
   getSolaceBootstrap: (): Promise<SolaceBootstrap> => _fetch('/solace/bootstrap/'),
+  previewSolaceBill: (data: Partial<SolaceBill>): Promise<SolaceBillSchedule> =>
+    _fetch('/solace/bills/preview/', { method: 'POST', body: JSON.stringify(data) }),
+  getSolaceTransfers: (): Promise<SolaceAccountTransfer[]> => _fetch('/solace/transfers/'),
+  createSolaceTransfer: (data: Partial<SolaceAccountTransfer>): Promise<SolaceAccountTransfer> =>
+    _fetch('/solace/transfers/', { method: 'POST', body: JSON.stringify(data) }),
+  updateSolaceTransfer: (id: number, data: Partial<SolaceAccountTransfer>): Promise<SolaceAccountTransfer> =>
+    _fetch(`/solace/transfers/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   getSolacePlan: (date?: string): Promise<SolacePayCyclePlan> =>
     _fetch(`/solace/plan/${date ? `?date=${encodeURIComponent(date)}` : ''}`),
   generateSolacePlanChecklist: (date?: string): Promise<SolaceChecklistItem[]> =>

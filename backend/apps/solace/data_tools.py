@@ -12,6 +12,7 @@ from django.utils.dateparse import parse_date, parse_datetime
 
 from apps.solace import selectors
 from apps.solace.serializers import (
+    AccountTransferSerializer,
     AccountBalanceSnapshotSerializer,
     BillOccurrenceSerializer,
     CycleCloseoutSerializer,
@@ -94,6 +95,13 @@ def bucket_rows(user) -> list[dict]:
     ]
 
 
+def transfer_rows(user) -> list[dict]:
+    """Human-readable account deposits used by the simple forecast setup."""
+    return [dict(row) for row in AccountTransferSerializer(
+        selectors.list_account_transfers(user), many=True
+    ).data]
+
+
 def export_sheets(user) -> list[tuple[str, list[dict]]]:
     bills = selectors.list_bills(user)
     occurrences = []
@@ -106,6 +114,7 @@ def export_sheets(user) -> list[tuple[str, list[dict]]]:
     return [
         ("Bills", bill_rows(user)),
         ("Bill Occurrences", list(BillOccurrenceSerializer(occurrences, many=True).data)),
+        ("Account Transfers", transfer_rows(user)),
         ("Planned Purchases", purchase_rows(user)),
         ("Income Sources", income_rows(user)),
         ("Buckets", bucket_rows(user)),

@@ -44,24 +44,38 @@ export function BalanceDialog({ asOf, onClose, onSaved }: { asOf?: string; onClo
   )
 }
 
-export function MoneyAccountSummary({ forecast, onOpen }: { forecast: SolaceBalanceForecast | null; onOpen: () => void }) {
+export function MoneyOverview({ forecast, onOpen, onBalance, onAddBill, onSetup }: { forecast: SolaceBalanceForecast | null; onOpen: () => void; onBalance: () => void; onAddBill: () => void; onSetup: () => void }) {
   if (!forecast) return <p className="text-sm text-muted">Loading bills-account forecast…</p>
   const risk = forecast.is_covered === false
+  const upcoming = forecast.timeline.filter(row => row.date >= forecast.as_of).slice(0, 5)
+  const nextTransfer = forecast.timeline.filter(row => row.date >= forecast.as_of).find(row => Number(row.contributions) > 0)
   return (
+    <div className="space-y-4">
+    <div className="flex flex-wrap gap-2"><Button onClick={onBalance}>Update bank balance</Button><Button variant="secondary" onClick={onAddBill}>Add bill</Button><Button variant="ghost" onClick={onSetup}>Review setup</Button></div>
     <Card contentClassName="p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-bold text-ink">Bills account</h2>
-        <Badge tone={risk ? 'danger' : 'neutral'}>{risk ? 'Top-up needed' : forecast.latest_balance ? 'Projected balance' : 'Add a balance to get started'}</Badge>
+        <Badge tone={risk ? 'danger' : 'neutral'}>{forecast.needs_review ? 'Check your bill schedules' : risk ? 'Top-up needed' : forecast.latest_balance ? 'Projected balance' : 'Add a balance to get started'}</Badge>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <div><p className="text-xs text-muted">Last recorded balance</p><p className="text-xl font-bold text-ink">{amount(forecast.opening_balance)}</p>{forecast.latest_balance && <p className="text-xs text-muted">{dateLabel(forecast.latest_balance.snapshot_date)}</p>}</div>
-        <div><p className="text-xs text-muted">Lowest projected balance</p><p className={`text-xl font-bold ${risk ? 'text-danger' : 'text-ink'}`}>{amount(forecast.lowest_balance)}</p><p className="text-xs text-muted">{forecast.lowest_balance_date && dateLabel(forecast.lowest_balance_date)}</p></div>
+        <div><p className="text-xs text-muted">{forecast.needs_review ? 'Partial forecast — needs review' : 'Lowest projected balance'}</p><p className={`text-xl font-bold ${risk ? 'text-danger' : 'text-ink'}`}>{amount(forecast.lowest_balance)}</p><p className="text-xs text-muted">{forecast.lowest_balance_date && dateLabel(forecast.lowest_balance_date)}</p></div>
         <div><p className="text-xs text-muted">Bills over {forecast.horizon_months} months</p><p className="text-xl font-bold text-ink">{money(forecast.total_bills)}</p></div>
       </div>
       {risk && <p className="mt-3 text-sm font-semibold text-danger">Top up by {money(forecast.shortfall || '0')} to cover the projected low point. First shortfall: {dateLabel(forecast.first_shortfall_date || forecast.lowest_balance_date)}.</p>}
-      {(forecast.warnings?.length ?? 0) > 0 && <p className="mt-3 text-sm text-warning">{forecast.warnings[0]}</p>}
+      {!forecast.needs_review && (forecast.warnings?.length ?? 0) > 0 && <p className="mt-3 text-sm text-warning">{forecast.warnings[0]}</p>}
+      {!!forecast.schedule_issues?.length && <div className="mt-3 rounded-xl bg-warning/10 p-3"><p className="font-semibold text-ink">Some bills may be missing. Fix these schedules before relying on this forecast.</p>{forecast.schedule_issues.map(issue => <Link className="flex min-h-11 items-center text-sm font-semibold text-primary" key={issue.bill_id} to={`/solace?tab=bills&section=bills&bill=${issue.bill_id}`}>Review {issue.name} →</Link>)}</div>}
+      <p className="mt-3 text-sm text-muted">{nextTransfer ? `Next money in: ${money(nextTransfer.contributions)} on ${dateLabel(nextTransfer.date)}.` : 'No incoming transfers are scheduled. Add the money you regularly put into this account in Setup.'}</p>
       <Button className="mt-4 w-full sm:w-auto" variant="secondary" onClick={onOpen}>Open bills-account forecast</Button>
     </Card>
+    <Card contentClassName="p-4">
+      <h2 className="font-bold text-ink">Coming up</h2>
+      <p className="mb-2 text-xs text-muted">The next five dates with account activity. Automatic payments are projected; they do not need a daily tick.</p>
+      {upcoming.map(row => <div key={row.date} className="border-t border-line py-3"><p className="mb-1 text-xs font-semibold text-muted">{dateLabel(row.date)}</p>{row.items.map((item, index) => <div key={`${item.record_id}-${index}`} className="flex items-start justify-between gap-3 py-1 text-sm"><span className="min-w-0 break-words">{item.kind === 'bill' ? <Link className="font-semibold text-primary" to={`/solace?tab=bills&section=bills&bill=${item.record_id}`}>{item.name}</Link> : item.name}<span className="block text-xs text-muted">{item.kind === 'contribution' ? 'Expected transfer in' : item.status === 'automatic' ? 'Automatic payment · projected' : item.status === 'paid' ? 'Recorded as paid' : 'Manual payment'}</span></span><span className="shrink-0 font-semibold text-ink">{item.kind === 'contribution' ? '+' : '−'}{money(item.amount)}</span></div>)}</div>)}
+      {!upcoming.length && <p className="py-3 text-sm text-muted">No scheduled activity. Start with your bills and regular transfers in Setup.</p>}
+      <Link className="flex min-h-11 items-center text-sm font-semibold text-primary" to="/solace?tab=bills&section=bills">See all bills →</Link>
+    </Card>
+    </div>
   )
 }
 
@@ -101,6 +115,7 @@ export function ForecastTab({ initial, onBalance, onTransfers }: { initial: Sola
   const [months, setMonths] = useState(initial?.horizon_months || 12)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [coverageSearch, setCoverageSearch] = useState('')
   const [coverageFilter, setCoverageFilter] = useState('all')
   const [showAll, setShowAll] = useState(false)
   const requestSeq = useRef(0)
@@ -138,27 +153,27 @@ export function ForecastTab({ initial, onBalance, onTransfers }: { initial: Sola
       {risk && <Card className="border-danger/30" contentClassName="p-4"><h3 className="font-bold text-danger">Top-up needed: {money(forecast.shortfall || '0')}</h3><p className="mt-1 text-sm text-muted">First projected shortfall on {dateLabel(forecast.first_shortfall_date || forecast.lowest_balance_date)}. The low point is {amount(forecast.lowest_balance)} on {dateLabel(forecast.lowest_balance_date)}.</p><Button variant="secondary" className="mt-3" onClick={onTransfers}>Review bills transfers</Button></Card>}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
-          ['Money coming in', `+${money(forecast.total_contributions)}`, 'Expected payday transfers into bills buckets'],
+          ['Money coming in', `+${money(forecast.total_contributions)}`, forecast.funding_source === 'transfers' ? 'Scheduled deposits into this account' : 'Expected transfers from your payday plan'],
           ['Bills going out', `−${money(forecast.total_bills)}`, `${includedCount} bills with payments in this projection`],
           ['Lowest balance', amount(forecast.lowest_balance), forecast.lowest_balance_date ? dateLabel(forecast.lowest_balance_date) : 'Add an account balance'],
           ['Balance at the end', amount(forecast.ending_balance), dateLabel(forecast.through)],
         ].map(([label, value, hint]) => <Card key={label} contentClassName="p-3"><p className="text-xs text-muted">{label}</p><p className="mt-1 break-words text-xl font-bold text-ink">{value}</p><p className="mt-1 text-xs text-muted">{hint}</p></Card>)}
       </div>
-      {forecast.latest_balance && <Card contentClassName="p-4"><BalanceChart forecast={forecast} /><p className="mt-3 text-sm text-muted">Projected headroom after keeping your buffer: <strong className="text-ink">{amount(forecast.safe_to_withdraw)}</strong>. This assumes all listed transfers arrive and scheduled costs are accurate; review the coverage below before moving money.</p></Card>}
+      {forecast.latest_balance && <Card contentClassName="p-4"><BalanceChart forecast={forecast} /><p className="mt-3 text-sm text-muted">{forecast.needs_review ? 'Safe-to-withdraw is unavailable until the flagged bill schedules are fixed.' : <>Projected headroom after keeping your buffer: <strong className="text-ink">{amount(forecast.safe_to_withdraw)}</strong>. This assumes all listed transfers arrive and scheduled costs are accurate; review the coverage below before moving money.</>}</p></Card>}
       <Card contentClassName="p-4 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-bold text-ink">Which bills are counted?</h3><Select aria-label="Forecast bill coverage" className="sm:!w-auto" value={coverageFilter} onChange={e => setCoverageFilter(e.target.value)}><option value="all">All bills ({coverage.length})</option><option value="included">Included ({includedCount})</option><option value="excluded">Not counted ({coverage.length - includedCount})</option></Select></div>
+        <details><summary className="min-h-11 cursor-pointer py-2 font-bold text-ink">Which bills are counted? · {includedCount} included, {coverage.length - includedCount} not counted</summary><div className="flex flex-wrap items-center justify-between gap-3"><Input aria-label="Find a bill in forecast" placeholder="Find a bill…" value={coverageSearch} onChange={e => setCoverageSearch(e.target.value)} /><Select aria-label="Forecast bill coverage" className="sm:!w-auto" value={coverageFilter} onChange={e => setCoverageFilter(e.target.value)}><option value="all">All bills ({coverage.length})</option><option value="included">Included ({includedCount})</option><option value="excluded">Not counted ({coverage.length - includedCount})</option></Select></div>
         <p className="text-sm text-muted">Bills paid from this account are counted even when set-aside planning is switched off. Open a bill to change its payment account or schedule.</p>
-        <ul className="divide-y divide-line">{coverage.filter(row => coverageFilter === 'all' || row.included === (coverageFilter === 'included')).map(row => <li key={row.bill_id}><Link className="flex min-h-14 items-center justify-between gap-3 py-3 text-sm" to={`/solace?tab=bills&section=bills&bill=${row.bill_id}`}><span className="min-w-0"><span className="block font-semibold text-primary">{row.name}</span><span className="text-xs text-muted">{row.included ? `${row.payment_count} payments` : row.reason}</span></span><span className="shrink-0 font-semibold text-ink">{row.included ? money(row.total) : '—'} →</span></Link></li>)}</ul>
-        {!coverage.length && <p className="text-sm text-muted">Add your bills to see what is included.</p>}
+        <ul className="divide-y divide-line">{coverage.filter(row => row.name.toLowerCase().includes(coverageSearch.toLowerCase()) && (coverageFilter === 'all' || row.included === (coverageFilter === 'included'))).sort((a, b) => a.name.localeCompare(b.name)).map(row => <li key={row.bill_id}><Link className="flex min-h-14 items-center justify-between gap-3 py-3 text-sm" to={`/solace?tab=bills&section=bills&bill=${row.bill_id}`}><span className="min-w-0"><span className="block font-semibold text-primary">{row.name}</span><span className="text-xs text-muted">{row.schedule_issue || (row.included ? `${row.payment_count} ${row.payment_count === 1 ? 'payment' : 'payments'}` : row.reason)}</span></span><span className="shrink-0 font-semibold text-ink">{row.included ? money(row.total) : '—'} →</span></Link></li>)}</ul>
+        {!coverage.length && <p className="text-sm text-muted">Add your bills to see what is included.</p>}</details>
       </Card>
       <Card contentClassName="p-4 space-y-3">
         <h3 className="font-bold text-ink">Money in and out by date</h3>
-        <p className="text-sm text-muted">Expected transfers and bill payments, with the balance after each day. Overdue unpaid bills before the opening date are carried into the first day. Paid bills use their payment date.</p>
+        <p className="text-sm text-muted">Expected transfers and bill payments, with the balance after each day. Overdue manual payments are carried into the first day. Automatic payments before your recorded closing balance are already included in that balance. Paid bills use their payment date.</p>
         {!rows.length && <p className="text-sm text-muted">No payments or transfers in this period.</p>}
-        <div className="divide-y divide-line">{rows.map(row => <details key={row.date} className="py-1"><summary className="flex min-h-14 cursor-pointer items-center justify-between gap-3 py-2"><span className="min-w-0"><span className="block text-sm font-semibold text-ink">{dateLabel(row.date)}</span><span className="block text-xs text-muted">{row.items.map(item => item.name).join(' · ')}</span><span className="block text-xs text-muted">In {money(row.contributions)} · Out {money(row.bills)}</span></span><strong className={`shrink-0 text-sm ${Number(row.projected_balance) < 0 ? 'text-danger' : 'text-ink'}`}>{amount(row.projected_balance)}</strong></summary><ul className="space-y-2 pb-3 pl-3 text-sm">{row.items.map((item, index) => <li key={`${item.kind}-${item.record_id}-${index}`} className="flex justify-between gap-3"><span className="text-muted">{item.kind === 'contribution' ? 'Transfer: ' : ''}{item.name}{item.status === 'paid' ? ' · Paid' : ''}</span><span className="shrink-0 font-medium text-ink">{item.kind === 'contribution' ? '+' : '−'}{money(item.amount)}</span></li>)}</ul></details>)}</div>
+        <div className="divide-y divide-line">{rows.map(row => <details key={row.date} className="py-1"><summary className="flex min-h-14 cursor-pointer items-center justify-between gap-3 py-2"><span className="min-w-0"><span className="block text-sm font-semibold text-ink">{dateLabel(row.date)}</span><span className="block text-xs text-muted">{row.items.map(item => item.name).join(' · ')}</span><span className="block text-xs text-muted">In {money(row.contributions)} · Out {money(row.bills)}</span></span><strong className={`shrink-0 text-sm ${Number(row.projected_balance) < 0 ? 'text-danger' : 'text-ink'}`}>{amount(row.projected_balance)}</strong></summary><ul className="space-y-2 pb-3 pl-3 text-sm">{row.items.map((item, index) => <li key={`${item.kind}-${item.record_id}-${index}`} className="flex justify-between gap-3"><span className="text-muted">{item.kind === 'contribution' ? 'Transfer: ' : ''}{item.name}{item.status === 'paid' ? ' · Paid' : item.status === 'automatic' ? ' · Automatic (projected)' : ''}</span><span className="shrink-0 font-medium text-ink">{item.kind === 'contribution' ? '+' : '−'}{money(item.amount)}</span></li>)}</ul></details>)}</div>
         {forecast.timeline.length > 20 && <Button variant="secondary" onClick={() => setShowAll(value => !value)}>{showAll ? 'Show fewer dates' : `Show all ${forecast.timeline.length} dates`}</Button>}
       </Card>
-      <p className="text-xs text-muted">This is a plan based on recorded balances, scheduled bills and payday allocations. Transfers are assumed to arrive before payments on the same day. Update the balance regularly to account for other bank activity.</p>
+      <p className="text-xs text-muted">This is a plan based on recorded balances, scheduled bills and expected account deposits. Transfers are assumed to arrive before payments on the same day. Update the balance regularly to account for other bank activity.</p>
     </div>
   )
 }

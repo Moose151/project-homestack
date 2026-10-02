@@ -13,21 +13,20 @@ import { Button } from '../../../components/Button'
 import { Field, Input, SearchField, Select, fieldClass } from '../../../components/Field'
 import { Modal } from '../../../components/Modal'
 import { Tabs } from '../../../components/Tabs'
-import { CustomisableTabs } from '../../../components/CustomisableTabs'
-import { useCustomisableTabs } from '../../../hooks/useCustomisableTabs'
 import { Badge, type BadgeTone } from '../../../components/Badge'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
 import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 import { UndoToast } from '../../../components/UndoToast'
-import { StatCard } from '../../../components/StatCard'
 import { SensitiveGate } from '../../../components/SensitiveGate'
-import { ForecastTab, MoneyAccountSummary, BalanceDialog } from './MoneyForecast'
-import { CloseoutTab, HealthPanel, ManagementTab } from './SolaceManagement'
+import { ForecastTab, MoneyOverview, BalanceDialog } from './MoneyForecast'
+import { MoneySetup } from './MoneySetup'
+import { BillScheduleFields } from './BillScheduleFields'
+import { CloseoutTab, ManagementTab } from './SolaceManagement'
 import { setSolaceCurrencySymbol, solaceMoney as money } from './solaceFormat'
 import { useStacks } from '../../stacks/StacksContext'
 import { confirmDialog } from '../../../components/Dialogs'
-import { MobileListRow, MobileScreenHeader, MobileSection, MobileSummaryCard } from '../../../components/mobile'
+import { MobileListRow, MobileScreenHeader } from '../../../components/mobile'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ')
@@ -69,15 +68,7 @@ const dayAfter = (dateValue: string) => {
   return dateKey(value.toISOString())
 }
 
-/**
- * Five destinations, not twelve.
- *
- * Money had a tab each for overview, forecast, schedule, closeout, pay plan, bills, buckets,
- * subscriptions, purchases, paydays, checklist and manage — a row nobody could scan, where the
- * common actions were as buried as the rare ones. They now group by the question being asked:
- * what do I owe now, what goes out, how is pay divided, how are we tracking, and setup.
- */
-type Tab = 'now' | 'bills' | 'plan' | 'insights' | 'manage'
+type Tab = 'now' | 'bills' | 'setup' | 'plan' | 'insights' | 'manage'
 type BillsSection = 'upcoming' | 'bills' | 'schedule'
 type PlanSection = 'payplan' | 'buckets' | 'paydays' | 'purchases' | 'checklist'
 type InsightsSection = 'forecast' | 'closeout' | 'history' | 'annual'
@@ -85,9 +76,7 @@ type InsightsSection = 'forecast' | 'closeout' | 'history' | 'annual'
 const SOLACE_TABS = [
   { key: 'now' as const, label: 'Overview' },
   { key: 'bills' as const, label: 'Bills' },
-  { key: 'plan' as const, label: 'Payday plan' },
-  { key: 'insights' as const, label: 'Bills account' },
-  { key: 'manage' as const, label: 'Settings' },
+  { key: 'setup' as const, label: 'Setup' },
 ]
 const BILLS_SECTIONS = [
   { key: 'upcoming' as const, label: 'Upcoming' },
@@ -327,24 +316,15 @@ function BillForm({ categories, initialCategory, categoryLocked = false, nameLab
       <p className="mb-4 text-sm text-muted">Enter the amount and due date, then choose how often it repeats. Bills paid from your bills account automatically appear in its forecast.</p>
       <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <Field label={nameLabel}><Input value={f.name} onChange={e => set('name', e.target.value)} placeholder={nameLabel === 'Subscription' ? 'Streaming service' : 'Electricity'} /></Field>
-        <Field label="Provider"><Input value={f.provider} onChange={e => set('provider', e.target.value)} /></Field>
+
         <Field label="Amount"><Input type="number" step="0.01" value={f.amount} onChange={e => set('amount', e.target.value)} /></Field>
-        <Field label="Category"><Select disabled={categoryLocked} value={f.category} onChange={e => setF(prev => ({ ...prev, category: e.target.value, home_destination: homeDestinationForCategory(e.target.value) }))}>{!categories.includes(f.category) && <option value={f.category}>{cap(f.category)}</option>}{categories.map(c => <option key={c} value={c}>{cap(c)}</option>)}</Select></Field>
-        <Field label="First due"><input type="date" className={fieldClass} value={f.due_at} onChange={e => set('due_at', e.target.value)} /></Field>
+
+        <Field label="Payment date" hint="A known payment date sets the repeating schedule."><input type="date" className={fieldClass} value={f.due_at} onChange={e => set('due_at', e.target.value)} /></Field>
         <Field label="Repeats"><Select value={f.recurrence_rule} onChange={e => set('recurrence_rule', e.target.value)}>{RECURRENCE.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}</Select></Field>
-        <Field label="Organise in Home" hint="Home becomes the place for home details; Money keeps the amount and payment schedule." className="sm:col-span-2 xl:col-span-3">
-          <Select value={f.home_destination} onChange={e => set('home_destination', e.target.value)}>
-            <option value="">No — finance only</option>
-            <option value="insurance_policy">Home insurance / cover</option>
-            <option value="household_cost">Rates, mortgage or home service</option>
-            <option value="maintenance">Paid home maintenance</option>
-          </Select>
-        </Field>
+
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 xl:items-end">
-        <Field label="Stop after (optional)">
-          <Input type="date" value={f.end_date} onChange={e => set('end_date', e.target.value)} />
-        </Field>
+        <div className="sm:col-span-2 xl:col-span-3"><BillScheduleFields values={f} onEndDate={value => set('end_date', value)} /></div>
         <label className="flex min-h-11 items-center gap-2 text-sm text-muted">
           <input type="checkbox" checked={f.is_autopay} onChange={e => set('is_autopay', e.target.checked)} />
           Autopay
@@ -353,7 +333,15 @@ function BillForm({ categories, initialCategory, categoryLocked = false, nameLab
           <input type="checkbox" checked={f.paid_from_bills_account} onChange={e => set('paid_from_bills_account', e.target.checked)} />
           Paid from bills account
         </label>
-        <label className="flex min-h-11 items-center gap-2 text-sm text-muted">
+        <details className="rounded-xl border border-line p-3 sm:col-span-2 xl:col-span-3"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-muted">More options</summary><div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Provider"><Input value={f.provider} onChange={e => set('provider', e.target.value)} /></Field>        <Field label="Category"><Select disabled={categoryLocked} value={f.category} onChange={e => setF(prev => ({ ...prev, category: e.target.value, home_destination: homeDestinationForCategory(e.target.value) }))}>{!categories.includes(f.category) && <option value={f.category}>{cap(f.category)}</option>}{categories.map(c => <option key={c} value={c}>{cap(c)}</option>)}</Select></Field>        <Field label="Organise in Home" hint="Home becomes the place for home details; Money keeps the amount and payment schedule." className="sm:col-span-2 xl:col-span-3">
+          <Select value={f.home_destination} onChange={e => set('home_destination', e.target.value)}>
+            <option value="">No — finance only</option>
+            <option value="insurance_policy">Home insurance / cover</option>
+            <option value="household_cost">Rates, mortgage or home service</option>
+            <option value="maintenance">Paid home maintenance</option>
+          </Select>
+        </Field></div>        <label className="flex min-h-11 items-center gap-2 text-sm text-muted">
           <input
             type="checkbox"
             checked={f.include_in_set_aside}
@@ -362,6 +350,7 @@ function BillForm({ categories, initialCategory, categoryLocked = false, nameLab
           Include in set-aside planning
         </label>
         <p className="text-xs text-muted sm:col-span-2 xl:col-span-3">Set-aside planning estimates how much to save each payday. It does not control which account pays this bill.</p>
+</details>
         <Button onClick={save} loading={saving} disabled={!f.name.trim()} className="w-full sm:col-span-2 xl:col-span-1 xl:w-auto">{submitLabel}</Button>
       </div>
     </Card>
@@ -429,7 +418,7 @@ function BillEditor({ bill, categories, reload, onError }: {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="mt-3 min-h-11 border-t border-line pt-3 text-left text-sm font-medium text-primary hover:underline"
+        className="min-h-11 px-2 text-sm font-semibold text-primary hover:underline"
       >
         Edit bill
       </button>
@@ -453,15 +442,9 @@ function BillEditor({ bill, categories, reload, onError }: {
         {saveError && <p role="alert" className="text-sm text-danger">{saveError}</p>}
         <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Name"><Input value={f.name} onChange={e => set('name', e.target.value)} /></Field>
-        <Field label="Provider"><Input value={f.provider} onChange={e => set('provider', e.target.value)} /></Field>
+
         <Field label="Amount"><Input type="number" min="0" step="0.01" value={f.amount} onChange={e => set('amount', e.target.value)} /></Field>
-        <Field label="Category">
-          <Select value={f.category} onChange={e => set('category', e.target.value)}>
-            {!categories.includes(f.category) && <option value={f.category}>{cap(f.category)}</option>}
-            {categories.map(category => <option key={category} value={category}>{cap(category)}</option>)}
-          </Select>
-        </Field>
-        <Field label="First due">
+        <Field label="Payment date" hint="A known payment date sets the repeating schedule.">
           <input type="date" className={fieldClass} value={f.due_at} onChange={e => set('due_at', e.target.value)} />
         </Field>
         <Field label="Repeats">
@@ -472,7 +455,33 @@ function BillEditor({ bill, categories, reload, onError }: {
             {RECURRENCE.map(rule => <option key={rule.value} value={rule.value}>{rule.label}</option>)}
           </Select>
         </Field>
-        <Field label="Stop after"><Input type="date" value={f.end_date} onChange={e => set('end_date', e.target.value)} /></Field>
+        <div className="sm:col-span-2"><BillScheduleFields values={f} onEndDate={value => set('end_date', value)} /></div>
+        </div>
+        <p className="text-xs text-muted">Automatic payments are projected on their due dates. Update your bank balance occasionally to keep the forecast accurate.</p>
+        <div className="flex flex-wrap gap-4 text-sm text-muted">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={f.is_active} onChange={e => set('is_active', e.target.checked)} />
+            Active
+          </label>
+          <label className="flex min-h-11 items-center gap-2">
+            <input type="checkbox" checked={f.paid_from_bills_account} onChange={e => set('paid_from_bills_account', e.target.checked)} />
+            Paid from bills account
+          </label>
+
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={f.is_autopay} onChange={e => set('is_autopay', e.target.checked)} />
+            Autopay
+          </label>
+        </div>
+        <details className="rounded-xl border border-line p-3">
+          <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-muted">More options</summary>
+          <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Provider"><Input value={f.provider} onChange={e => set('provider', e.target.value)} /></Field>        <Field label="Category">
+          <Select value={f.category} onChange={e => set('category', e.target.value)}>
+            {!categories.includes(f.category) && <option value={f.category}>{cap(f.category)}</option>}
+            {categories.map(category => <option key={category} value={category}>{cap(category)}</option>)}
+          </Select>
+        </Field>
         <Field label="Notes"><Input value={f.notes} onChange={e => set('notes', e.target.value)} /></Field>
         <Field label="Amount updates" hint="Schedule changes always rebuild every unpaid date; paid and skipped history is kept.">
           <Select value={f.occurrence_update_scope} onChange={e => set('occurrence_update_scope', e.target.value)}>
@@ -490,27 +499,13 @@ function BillEditor({ bill, categories, reload, onError }: {
             </Select>
           </Field>
         )}
-        </div>
-        <p className="text-xs text-muted">The payment account controls the forecast. Set-aside controls only how much you plan to save each payday.</p>
-        <p className="mt-2 text-xs text-muted">Paid history is always preserved. Use all unpaid only when correcting the bill rule for the whole budget year.</p>
-        <div className="flex flex-wrap gap-4 text-sm text-muted">
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={f.is_active} onChange={e => set('is_active', e.target.checked)} />
-            Active
-          </label>
-          <label className="flex min-h-11 items-center gap-2">
-            <input type="checkbox" checked={f.paid_from_bills_account} onChange={e => set('paid_from_bills_account', e.target.checked)} />
-            Paid from bills account
-          </label>
+          </div>
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={f.include_in_set_aside} onChange={e => set('include_in_set_aside', e.target.checked)} />
             Include in set-aside
           </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={f.is_autopay} onChange={e => set('is_autopay', e.target.checked)} />
-            Autopay
-          </label>
-        </div>
+          <p className="mt-2 text-xs text-muted">Set-aside is only used by the optional payday planner. Paid history is always preserved.</p>
+        </details>
       </div>
     </Modal>
   )
@@ -600,39 +595,24 @@ function BillCard({ bill, categories, reload, onError, onPay, paying, highlighte
       className={highlighted ? 'ring-2 ring-primary/70' : ''}
       contentClassName="p-4"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="font-semibold text-ink truncate">{bill.name}</h3>
-          <p className="text-sm text-muted">{bill.provider || cap(bill.category)} · {money(bill.amount)}</p>
-          {bill.is_active && bill.include_in_set_aside && (
-            <p className="text-xs text-muted">{money(bill.fortnightly_amount)}/fortnight · {money(bill.annual_amount)}/year</p>
-          )}
-          {bill.source_node === 'homestead' && <div className="mt-1"><Badge tone="success">Shown in Home</Badge></div>}
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-semibold text-ink break-words">{bill.name}</h3>
+          <p className="text-sm text-muted">{money(bill.amount)} · {RECURRENCE.find(row => row.value === bill.recurrence_rule)?.label || 'Custom schedule'}</p>
+          <p className="text-xs text-muted">{bill.paid_from_bills_account !== false ? 'Bills account' : 'Paid elsewhere'} · {bill.is_autopay ? 'Automatic payment' : 'Manual payment'}</p>
         </div>
-        <DueBadge iso={bill.next_due_at || bill.due_at} paid={bill.is_paid && !bill.recurrence_rule} />
+        {!bill.is_active ? <Badge tone="neutral">Paused</Badge> : bill.schedule?.issue ? <Badge tone="warning">Check schedule</Badge> : <DueBadge iso={bill.next_due_at} paid={bill.is_paid && !bill.recurrence_rule} />}
+        <BillEditor bill={bill} categories={categories} reload={reload} onError={onError} />
       </div>
-      <p className="mt-2 text-xs text-muted">{bill.paid_from_bills_account !== false ? 'Bills account · included in forecast when scheduled' : 'Paid elsewhere · excluded from bills-account forecast'}</p>
-      {bill.notes && <p className="mt-3 text-sm text-muted">{bill.notes}</p>}
-      <div className="mt-3 flex items-center gap-2">
-        {bill.recurrence_rule && <Badge tone="neutral">Recurring</Badge>}
-        {bill.is_autopay && <Badge tone="success">Autopay</Badge>}
-        {!bill.is_active && <Badge tone="neutral">Paused</Badge>}
-        {bill.next_occurrence_id && bill.is_active && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => onPay(bill)}
-            loading={paying === bill.next_occurrence_id}
-          >
-            Mark next paid
-          </Button>
-        )}
-      </div>
-      <BillDetails bill={bill} />
-      {bill.source_node === 'homestead' && (
-        <Link to={homeDestinationPath(bill.source_record_type)} className="mt-3 flex min-h-11 items-center justify-between gap-3 border-t border-line pt-3 text-sm font-semibold text-primary">View home details in Home <span aria-hidden>→</span></Link>
-      )}
-      <BillEditor bill={bill} categories={categories} reload={reload} onError={onError} />
+      {bill.schedule?.issue && <p className="mt-2 text-sm text-danger">{bill.schedule.issue}</p>}
+      <details className="mt-2">
+        <summary className="min-h-11 cursor-pointer py-2 text-xs font-semibold text-muted">Payment history & details</summary>
+        {bill.provider && <p className="text-sm text-muted">{bill.provider}</p>}
+        {bill.notes && <p className="text-sm text-muted">{bill.notes}</p>}
+        {bill.next_occurrence_id && bill.is_active && <Button size="sm" variant="secondary" onClick={() => onPay(bill)} loading={paying === bill.next_occurrence_id}>Mark next paid</Button>}
+        <BillDetails bill={bill} />
+        {bill.source_node === 'homestead' && <Link to={homeDestinationPath(bill.source_record_type)} className="flex min-h-11 items-center text-sm font-semibold text-primary">View home details in Home →</Link>}
+      </details>
     </Card>
   )
 }
@@ -716,11 +696,11 @@ function BillsTab({ bills, query, onClearQuery, categories, reload, onOccurrence
         {close => <BillForm categories={categories} onCreated={() => { reload(); close() }} onError={onError} />}
       </CreatePanel>
       {bills.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-3">
+        <details className="rounded-xl border border-line p-3"><summary className="min-h-11 cursor-pointer py-2 text-sm text-muted">{bills.filter(bill => bill.is_active).length} active bills · Cost estimates</summary><p className="mb-3 text-xs text-muted">Annualised estimates ignore start and end dates. The account forecast uses actual scheduled payments.</p><div className="grid gap-3 sm:grid-cols-3">
           <Card contentClassName="p-3"><p className="text-xl font-extrabold text-ink">{money(annualTotal)}</p><p className="text-xs text-muted">Annualised cost of all active bills</p></Card>
           <Card contentClassName="p-3"><p className="text-xl font-extrabold text-ink">{money(fortnightlyTotal)}</p><p className="text-xs text-muted">Set aside per fortnight</p></Card>
           <Card contentClassName="p-3"><p className="text-xl font-extrabold text-ink">{new Set(activeSetAside.map(bill => bill.category)).size}</p><p className="text-xs text-muted">Active categories</p></Card>
-        </div>
+        </div></details>
       )}
       {bills.length > 0 && (
         <Card contentClassName="p-3">
@@ -2041,19 +2021,19 @@ function PayPlan({ plan, generating, onGenerate, onSection, onError }: {
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-bold text-ink">Required fortnightly set-aside</h3>
+              <h3 className="font-bold text-ink">Planned fortnightly transfers</h3>
               <Badge tone={viewed.set_aside.is_covered ? 'success' : 'warning'}>
                 {viewed.set_aside.is_covered ? 'Covered' : `${money(viewed.set_aside.shortfall)} short`}
               </Badge>
             </div>
-            <p className="mt-1 text-sm text-muted">What needs to be reserved for bills, purchase goals and the safety buffer.</p>
+            <p className="mt-1 text-sm text-muted">What the optional payday planner reserves for bills and purchase goals.</p>
           </div>
           <p className="text-2xl font-extrabold text-ink">{money(viewed.set_aside.required_total)}</p>
         </div>
         <div className="mt-4 grid gap-2 border-t border-line pt-3 text-sm sm:grid-cols-4">
           <div><p className="text-muted">Recurring bills</p><p className="font-semibold text-ink">{money(viewed.set_aside.recurring_bills)}</p></div>
           <div><p className="text-muted">Planned purchases</p><p className="font-semibold text-ink">{money(viewed.set_aside.planned_purchases)}</p></div>
-          <div><p className="text-muted">Buffer</p><p className="font-semibold text-ink">{money(viewed.set_aside.buffer)}</p></div>
+          <div><p className="text-muted">Account minimum</p><p className="font-semibold text-ink">{money(viewed.set_aside.buffer)}</p><p className="text-xs text-muted">Kept in the account; not added every payday</p></div>
           <div><p className="text-muted">Bills buckets</p><p className="font-semibold text-ink">{money(viewed.set_aside.bills_bucket_total)}</p></div>
         </div>
       </Card>
@@ -2116,230 +2096,6 @@ function PayPlan({ plan, generating, onGenerate, onSection, onError }: {
  * meant guessing which of twelve tabs held the answer. This screen answers it directly and puts
  * Paid and Skip on the row itself.
  */
-function CycleStrip({ now }: { now: SolaceNow }) {
-  const dateLabel = (iso: string) =>
-    new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
-  const days = now.days_until_cycle_end
-  return (
-    <Card contentClassName="p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-muted">This pay cycle</p>
-          <p className="mt-0.5 text-lg font-black text-ink">
-            {dateLabel(now.cycle_start)} – {dateLabel(now.cycle_end)}
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-lg font-black text-ink">
-            {days <= 0 ? 'Today' : `${days} ${days === 1 ? 'day' : 'days'}`}
-          </p>
-          <p className="text-xs text-muted">{days <= 0 ? 'Cycle ends today' : 'until this cycle ends'}</p>
-        </div>
-      </div>
-    </Card>
-  )
-}
-
-function DueRow({ occurrence, onAction }: {
-  occurrence: SolaceBillOccurrence
-  onAction: (id: number, action: 'paid' | 'unpaid' | 'skip') => Promise<SolaceBillOccurrence>
-}) {
-  const [saving, setSaving] = useState<'paid' | 'skip' | null>(null)
-  const act = async (action: 'paid' | 'skip') => {
-    setSaving(action)
-    try { await onAction(occurrence.id, action) } finally { setSaving(null) }
-  }
-  return (
-    <li className={`rounded-xl border p-3 ${occurrence.is_overdue ? 'border-danger/40 bg-danger-soft/40' : 'border-line bg-sunken/50'}`}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-semibold text-ink">{occurrence.bill_name}</p>
-          <p className="mt-0.5 text-xs text-muted">
-            {occurrence.is_overdue ? 'Overdue — ' : ''}due {new Date(occurrence.due_at).toLocaleDateString()}
-            {occurrence.bill_category ? ` · ${occurrence.bill_category}` : ''}
-          </p>
-        </div>
-        <p className="text-lg font-black text-ink">{money(occurrence.amount)}</p>
-      </div>
-      {/* Full-width on a phone: this is the action the screen exists for. */}
-      <div className="mt-3 flex gap-2">
-        <Button size="sm" className="flex-1" loading={saving === 'paid'} disabled={saving !== null} onClick={() => act('paid')}>
-          Paid
-        </Button>
-        <Button size="sm" variant="ghost" className="flex-1 sm:flex-none" disabled={saving !== null} onClick={() => act('skip')}>
-          Skip
-        </Button>
-      </div>
-    </li>
-  )
-}
-
-function NowTab({ now, health, checklist, onAction, onTab, onSection }: {
-  now: SolaceNow | null
-  health: SolaceHealth | null
-  checklist: ReactNode
-  onAction: (id: number, action: 'paid' | 'unpaid' | 'skip') => Promise<SolaceBillOccurrence>
-  onTab: (tab: Tab) => void
-  onSection: (tab: Tab, section: string) => void
-}) {
-  if (!now) return <div className="h-64 animate-pulse rounded-2xl bg-sunken" />
-
-  const setAside = now.set_aside
-  return (
-    <div className="space-y-4">
-      {/* Only while something is still unconfigured — a healthy setup needs no banner. */}
-      {health && health.status !== 'healthy' && <HealthPanel health={health} onManage={() => onTab('manage')} />}
-      <CycleStrip now={now} />
-
-      <Card contentClassName="p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="font-black text-ink">Due this pay cycle</h2>
-            <p className="mt-0.5 text-xs text-muted">
-              {now.due.length === 0
-                ? 'Nothing left to pay this cycle'
-                : `${now.due.length} ${now.due.length === 1 ? 'bill' : 'bills'} still to pay`}
-              {now.overdue_count > 0 ? ` · ${now.overdue_count} overdue` : ''}
-            </p>
-          </div>
-          <p className="text-2xl font-black text-ink">{money(now.due_total)}</p>
-        </div>
-
-        {now.due.length === 0 ? (
-          <p className="mt-4 rounded-xl bg-success-soft px-3 py-2.5 text-sm text-success">
-            All clear. {now.paid_this_cycle_count > 0
-              ? `${money(now.paid_this_cycle_total)} paid so far this cycle.`
-              : 'Nothing is due before the next payday.'}
-          </p>
-        ) : (
-          <ul className="mt-4 space-y-2">
-            {now.due.map(occurrence => (
-              <DueRow key={occurrence.id} occurrence={occurrence} onAction={onAction} />
-            ))}
-          </ul>
-        )}
-
-        {now.paid_this_cycle_count > 0 && now.due.length > 0 && (
-          <p className="mt-3 text-xs text-muted">
-            {money(now.paid_this_cycle_total)} already paid this cycle across{' '}
-            {now.paid_this_cycle_count} {now.paid_this_cycle_count === 1 ? 'bill' : 'bills'}.
-          </p>
-        )}
-      </Card>
-
-      {setAside && (
-        <Card contentClassName="p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="font-black text-ink">Set aside</h2>
-              <p className="mt-0.5 text-xs text-muted">
-                {setAside.is_covered
-                  ? 'Your bills buckets cover what is coming'
-                  : `${money(setAside.shortfall)} short of what upcoming bills need`}
-              </p>
-            </div>
-            <p className="text-xl font-black text-ink">{money(now.bucket_total)}</p>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {([
-              ['Recurring bills', setAside.recurring_bills],
-              ['Planned purchases', setAside.planned_purchases],
-              ['Buffer', setAside.buffer],
-              ['Needed each pay', setAside.required_total],
-            ] as const).map(([label, value]) => (
-              <div key={label} className="rounded-xl bg-sunken px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</p>
-                <p className="text-sm font-bold text-ink">{money(value)}</p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={() => onSection('plan', 'buckets')}>
-              Open buckets
-            </Button>
-            <Button size="sm" variant="ghost" className="w-full sm:w-auto" onClick={() => onSection('plan', 'payplan')}>
-              Pay plan
-            </Button>
-          </div>
-        </Card>
-      )}
-
-      {checklist}
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Income this cycle" value={money(now.income_total)} onClick={() => onSection('plan', 'paydays')} />
-        <StatCard label="Set aside" value={money(now.bucket_total)} onClick={() => onSection('plan', 'buckets')} />
-        <StatCard label="Paid this cycle" value={money(now.paid_this_cycle_total)} onClick={() => onSection('bills', 'schedule')} />
-        <StatCard label="Forecast" value="Open" onClick={() => onTab('insights')} />
-      </div>
-    </div>
-  )
-}
-
-function MoneyMobileHome({ now, health, onTab, onSection, onAction }: {
-  now: SolaceNow | null
-  health: SolaceHealth | null
-  onTab: (tab: Tab) => void
-  onSection: (tab: Tab, section: string) => void
-  onAction: (id: number, action: 'paid' | 'unpaid' | 'skip') => Promise<SolaceBillOccurrence>
-}) {
-  const [payingId, setPayingId] = useState<number | null>(null)
-  if (!now) return <div className="h-64 animate-pulse rounded-2xl bg-sunken" />
-  const lines = [
-    now.due.length === 0
-      ? 'No bills left to pay this cycle'
-      : `${money(now.due_total)} left to pay this cycle`,
-    `${money(now.bucket_total)} reserved in your buckets`,
-    now.days_until_cycle_end <= 0 ? 'This pay cycle ends today' : `This pay cycle ends in ${now.days_until_cycle_end} days`,
-  ]
-  const nextDue = now.due.slice(0, 3)
-  return (
-    <div className="flex flex-col gap-4 sm:hidden">
-      {health && health.status !== 'healthy' && <HealthPanel health={health} onManage={() => onTab('manage')} />}
-      <MobileSummaryCard title="Current position" lines={lines} tone={now.overdue_count > 0 ? 'attention' : 'neutral'} />
-      <MobileSection title="Coming up">
-        {nextDue.length === 0 ? (
-          <p className="rounded-2xl border border-line bg-surface px-4 py-3 text-sm text-muted shadow-soft">Nothing left to pay this cycle.</p>
-        ) : nextDue.map(occurrence => (
-          <MobileListRow
-            key={occurrence.id}
-            icon="💸"
-            title={occurrence.bill_name}
-            subtitle={dateOnly(occurrence.due_at)}
-            chevron={false}
-            trailing={(
-              <div className="flex flex-col items-end gap-1">
-                <span className="font-semibold text-ink">{money(occurrence.amount)}</span>
-                <Button
-                  size="sm"
-                  loading={payingId === occurrence.id}
-                  onClick={async () => {
-                    setPayingId(occurrence.id)
-                    try { await onAction(occurrence.id, 'paid') }
-                    finally { setPayingId(null) }
-                  }}
-                >Mark paid</Button>
-              </div>
-            )}
-          />
-        ))}
-        <Button variant="secondary" className="w-full" onClick={() => onSection('bills', 'upcoming')}>View all upcoming bills</Button>
-      </MobileSection>
-      <MobileSection title="What would you like to do?">
-        <MobileListRow icon="🧾" title="See and manage bills" subtitle="What is due, what is paid, and your regular bills" onClick={() => onSection('bills', 'upcoming')} />
-        <MobileListRow icon="✅" title="Plan the next payday" subtitle="See what to transfer and what remains" onClick={() => onSection('plan', 'payplan')} />
-        <MobileListRow icon="☑️" title="Payday checklist" subtitle="Tick off transfers as you make them" onClick={() => onSection('plan', 'checklist')} />
-        <MobileListRow icon="🪣" title="Manage savings and goals" subtitle="Buckets and planned purchases" onClick={() => onSection('plan', 'buckets')} />
-      </MobileSection>
-      <MobileSection title="More">
-        <MobileListRow icon="📈" title="Bills account and reports" subtitle="Check the forecast, bill coverage and past pay cycles" onClick={() => onTab('insights')} />
-        <MobileListRow icon="⚙️" title="Money setup" subtitle="Income, accounts, categories and settings" onClick={() => onTab('manage')} />
-      </MobileSection>
-    </div>
-  )
-}
-
-/** Past pay cycles. These were being recorded at closeout and then never shown again. */
 function CycleHistoryTab({ onError }: { onError: (message: string) => void }) {
   const [rows, setRows] = useState<SolaceCycleHistoryRow[] | null>(null)
   useEffect(() => {
@@ -2497,12 +2253,11 @@ export function SolacePage() {
   const [unlocked, setUnlocked] = useState(false)
   const { nodes } = useStacks()
   const requiresPasswordUnlock = nodes.find(node => node.key === 'solace')?.requires_reauthentication ?? true
-  const tabsState = useCustomisableTabs<Tab>('solace', SOLACE_TABS)
-  const { tab, setTab } = tabsState
+  const [tab, setTab] = useUrlTab<Tab>('now', ['now', 'bills', 'setup', 'plan', 'insights', 'manage'])
   const [billsSection, setBillsSection] = useUrlTab<BillsSection>('bills', BILLS_SECTIONS.map(row => row.key), 'section')
   const [planSection, setPlanSection] = useUrlTab<PlanSection>('payplan', PLAN_SECTIONS.map(row => row.key), 'section')
   const [insightsSection, setInsightsSection] = useUrlTab<InsightsSection>('forecast', INSIGHTS_SECTIONS.map(row => row.key), 'section')
-  const [now, setNow] = useState<SolaceNow | null>(null)
+  const [, setNow] = useState<SolaceNow | null>(null)
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -2511,7 +2266,7 @@ export function SolacePage() {
     const params = new URLSearchParams(location.search)
     const requested = params.get('tab')
     const mapped = requested ? LEGACY_TABS[requested] : undefined
-    if (!mapped || SOLACE_TABS.some(row => row.key === requested)) return
+    if (!mapped || ['now', 'bills', 'setup', 'plan', 'insights', 'manage'].includes(requested || '')) return
     const [nextTab, section] = mapped
     if (nextTab === 'now') params.delete('tab')
     else params.set('tab', nextTab)
@@ -2688,7 +2443,7 @@ export function SolacePage() {
     <div className="flex flex-col gap-5">
       <PageHeader title="Money" icon="💸" actions={<Button variant="ghost" onClick={load} loading={loading}>Refresh Money</Button>} />
       {error && <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
-      <p className="text-sm text-muted">Your bills, account balance and next payday in one place.</p>
+      <p className="text-sm text-muted">See what is coming out, what is going in, and whether your bills account will cover it.</p>
       <SearchField value={q} onChange={e => setQ(e.target.value)} onClear={() => setQ('')} placeholder="Search Money…" />
       {q.trim() && (
         <Card contentClassName="p-4 space-y-3">
@@ -2707,52 +2462,9 @@ export function SolacePage() {
           )}
         </Card>
       )}
-      <div className="hidden sm:block">
-        <CustomisableTabs state={tabsState} label="Money" mobileSelectLabel="Money section" />
-      </div>
-      {tab === 'now' && (
-        <>
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => setShowBill(true)}>+ Add bill</Button>
-            <Button variant="secondary" onClick={() => setShowBalance(true)}>Update account balance</Button>
-            <Button variant="ghost" onClick={() => goSection('plan', 'payplan')}>Plan payday</Button>
-          </div>
-          <MoneyAccountSummary forecast={forecast} onOpen={() => goSection('insights', 'forecast')} />
-          {(!paydays.length || !bills.length || !buckets.some(bucket => bucket.is_active && bucket.purpose === 'bills')) && (
-            <Card contentClassName="p-4 space-y-2">
-              <h2 className="font-bold text-ink">Get your money plan ready</h2>
-              <p className="text-sm text-muted">Add what comes in, what goes out, and how much of each pay goes to bills.</p>
-              <div className="flex flex-wrap gap-2">
-                {!paydays.length && <Button variant="secondary" onClick={() => goSection('plan', 'paydays')}>1. Add income</Button>}
-                {!bills.length && <Button variant="secondary" onClick={() => setShowBill(true)}>2. Add bills</Button>}
-                {!buckets.some(bucket => bucket.is_active && bucket.purpose === 'bills') && <Button variant="secondary" onClick={() => goSection('plan', 'buckets')}>3. Set bills transfers</Button>}
-              </div>
-            </Card>
-          )}
-          <MoneyMobileHome now={now} health={health} onTab={setTab} onSection={goSection} onAction={updateOccurrence} />
-          <div className="hidden sm:block">
-            <NowTab
-              now={now}
-              health={health}
-              onAction={updateOccurrence}
-              onTab={setTab}
-              onSection={goSection}
-              checklist={
-                <ChecklistTab
-                  items={checklist}
-                  preferences={checklistPreferences}
-                  plan={plan}
-                  generating={generatingChecklist}
-                  reload={load}
-                  onGenerate={generateChecklist}
-                  onChange={setChecklist}
-                  onError={setError}
-                />
-              }
-            />
-          </div>
-        </>
-      )}
+      <Tabs<Tab> tabs={SOLACE_TABS} active={tab} onChange={setTab} />
+      {tab === 'now' && <MoneyOverview forecast={forecast} onOpen={() => goSection('insights', 'forecast')} onBalance={() => setShowBalance(true)} onAddBill={() => setShowBill(true)} onSetup={() => setTab('setup')} />}
+      {tab === 'setup' && <MoneySetup settings={settings} forecast={forecast} bills={bills} onBalance={() => setShowBalance(true)} onBills={() => goSection('bills', 'bills')} reload={load} onAdvanced={() => goSection('plan', 'buckets')} />}
 
       {tab === 'bills' && (
         <div className="flex flex-col gap-4">
@@ -2814,13 +2526,22 @@ export function SolacePage() {
         <div className="flex flex-col gap-4">
           <MobileScreenHeader className="sm:hidden" title="Bills account" showBack onBack={() => setTab('now')} />
           <Tabs tabs={INSIGHTS_SECTIONS} active={insightsSection} onChange={setInsightsSection} variant="secondary" />
-          {insightsSection === 'forecast' && <ForecastTab initial={forecast} onBalance={() => setShowBalance(true)} onTransfers={() => goSection('plan', 'buckets')} />}
+          {insightsSection === 'forecast' && <ForecastTab initial={forecast} onBalance={() => setShowBalance(true)} onTransfers={() => setTab('setup')} />}
           {insightsSection === 'closeout' && <CloseoutTab closeout={closeout} reload={load} onOccurrence={updateOccurrence} onError={setError} />}
           {insightsSection === 'history' && <CycleHistoryTab onError={setError} />}
           {insightsSection === 'annual' && <AnnualSummaryTab onError={setError} />}
         </div>
       )}
 
+      <details className="rounded-xl border border-line p-3">
+        <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-muted">More tools</summary>
+        <p className="mb-2 text-xs text-muted">Optional tools for dividing your pay, saving for purchases and reviewing past spending.</p>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => goSection('plan', 'payplan')}>Payday plan & savings</Button>
+          <Button variant="secondary" onClick={() => goSection('insights', 'annual')}>Reports & history</Button>
+          <Button variant="secondary" onClick={() => setTab('manage')}>Advanced settings</Button>
+        </div>
+      </details>
       {showBalance && <BalanceDialog asOf={forecast?.as_of} onClose={() => setShowBalance(false)} onSaved={() => { setShowBalance(false); void load() }} />}
       {showBill && <Modal title="Add bill" size="full" onClose={() => setShowBill(false)}><BillForm categories={billCategoryNames} onCreated={() => { setShowBill(false); void load() }} onError={setError} /></Modal>}
       {tab === 'manage' && (

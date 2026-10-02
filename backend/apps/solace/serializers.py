@@ -8,6 +8,7 @@ from rest_framework import serializers
 
 from apps.solace.models import (
     AccountBalanceSnapshot,
+    AccountTransfer,
     Bill,
     BillOccurrence,
     BucketEntry,
@@ -36,6 +37,7 @@ class BillSerializer(serializers.ModelSerializer):
         allow_blank=True,
         write_only=True,
     )
+    schedule = serializers.SerializerMethodField()
     is_overdue = serializers.SerializerMethodField()
     next_due_at = serializers.SerializerMethodField()
     next_occurrence_id = serializers.SerializerMethodField()
@@ -45,7 +47,7 @@ class BillSerializer(serializers.ModelSerializer):
     class Meta:
         model = Bill
         fields = [
-            "id", "name", "category", "provider", "amount", "due_at", "is_all_day",
+            "id", "name", "category", "provider", "amount", "due_at", "is_all_day", "schedule",
             "recurrence_rule", "end_date", "is_paid", "paid_at", "notes", "is_overdue",
             "is_active", "is_autopay", "include_in_set_aside", "paid_from_bills_account",
             "next_due_at", "next_occurrence_id",
@@ -64,15 +66,33 @@ class BillSerializer(serializers.ModelSerializer):
     def validate_name(self, value: str) -> str:
         return _non_blank(value)
 
+    def validate_recurrence_rule(self, value):
+        if value:
+            from dateutil.rrule import rrulestr
+            try:
+                rule = rrulestr(value)
+                if getattr(rule, "_interval", 1) < 1:
+                    raise ValueError("Invalid interval")
+            except (ValueError, TypeError, OverflowError):
+                raise serializers.ValidationError("Choose a valid repeating schedule.")
+        return value
+
     def validate(self, attrs):
         attrs = super().validate(attrs)
         due_at = attrs.get("due_at", getattr(self.instance, "due_at", None))
         end_date = attrs.get("end_date", getattr(self.instance, "end_date", None))
-        if due_at and end_date and timezone.localdate(due_at) > end_date:
+        from apps.core.models import get_active_household
+        from apps.solace.bill_schedule import household_timezone
+        household = self.instance.household if self.instance else get_active_household()
+        if due_at and end_date and timezone.localdate(due_at, household_timezone(household)) > end_date:
             raise serializers.ValidationError(
                 {"end_date": "Stop-after date must be on or after the first due date."}
             )
         return attrs
+
+    def get_schedule(self, obj):
+        from apps.solace.account_schedule import describe_schedule
+        return describe_schedule(obj)
 
     def get_next_due_at(self, obj):
         occurrence = self._next_occurrence(obj)
@@ -95,15 +115,14 @@ class BillSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def _next_occurrence(obj):
-        if hasattr(obj, "_solace_next_occurrence"):
-            return obj._solace_next_occurrence
+        if not obj.is_active:
+            return None
+        from apps.solace.bill_schedule import household_timezone
+        tz = household_timezone(obj.household)
+        today = timezone.localdate(timezone=tz)
         prefetched = getattr(obj, "upcoming_occurrences", None)
-        if prefetched is not None:
-            return prefetched[0] if prefetched else None
-        obj._solace_next_occurrence = obj.occurrences.filter(
-            status=BillOccurrence.Status.UPCOMING,
-        ).first()
-        return obj._solace_next_occurrence
+        rows = prefetched if prefetched is not None else obj.occurrences.filter(status=BillOccurrence.Status.UPCOMING).order_by("due_at")
+        return next((row for row in rows if not obj.is_autopay or timezone.localdate(row.due_at, tz) >= today), None)
 
     def get_annual_amount(self, obj):
         from apps.solace.bill_schedule import annual_cost
@@ -288,7 +307,7 @@ class SolaceSettingsSerializer(serializers.ModelSerializer):
         model = SolaceSettings
         fields = [
             "id", "currency_symbol", "budget_year", "cycle_anchor_date",
-            "default_buffer_amount",
+            "default_buffer_amount", "forecast_funding_source",
             "payday_bill_handling", "show_help_tips", "dashboard_reminders",
             "due_soon_days", "created_at", "updated_at",
         ]
@@ -433,3 +452,30 @@ class AnnualSummarySerializer(serializers.Serializer):
     grand_total = serializers.CharField()
     grand_paid = serializers.CharField()
     grand_outstanding = serializers.CharField()
+
+
+class AccountTransferSerializer(serializers.ModelSerializer):
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"))
+
+    class Meta:
+        model = AccountTransfer
+        fields = ["id", "name", "amount", "due_at", "recurrence_rule", "end_date", "is_active"]
+        read_only_fields = ["id"]
+
+    def validate_name(self, value):
+        return _non_blank(value)
+
+    def validate_recurrence_rule(self, value):
+        supported = {"", "FREQ=WEEKLY", "FREQ=WEEKLY;INTERVAL=2", "FREQ=MONTHLY", "FREQ=YEARLY"}
+        if value not in supported:
+            raise serializers.ValidationError("Choose once, weekly, fortnightly, monthly or yearly.")
+        return value
+
+    def validate(self, attrs):
+        from apps.solace.bill_schedule import household_timezone
+        due_at = attrs.get("due_at", getattr(self.instance, "due_at", None))
+        end_date = attrs.get("end_date", getattr(self.instance, "end_date", None))
+        user = self.context["request"].user
+        if due_at and end_date and timezone.localdate(due_at, household_timezone(user.household)) > end_date:
+            raise serializers.ValidationError({"end_date": "The end date must be on or after the first transfer."})
+        return attrs
