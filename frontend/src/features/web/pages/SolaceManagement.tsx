@@ -396,10 +396,10 @@ export function ManagementTab({ settings, categories, balances, report, health, 
 
         <Card className="p-4">
           <h2 className="font-bold text-ink">Account balance</h2>
-          <p className="mt-1 text-sm text-muted">Snapshots power the projected balance shown during cycle closeout.</p>
+          <p className="mt-1 text-sm text-muted">Enter the closing balance after all payments on the selected date. Forecasts start the following day.</p>
           <div className="mt-4 grid gap-2 sm:grid-cols-[0.8fr_0.8fr_auto]">
-            <Input type="date" value={balanceDate} onChange={event => setBalanceDate(event.target.value)} />
-            <Input type="number" step="0.01" value={balance} onChange={event => setBalance(event.target.value)} placeholder="Current balance" />
+            <Input aria-label="Balance date" type="date" value={balanceDate} onChange={event => setBalanceDate(event.target.value)} />
+            <Input type="number" step="0.01" value={balance} onChange={event => setBalance(event.target.value)} placeholder="Closing balance" />
             <Button onClick={addBalance} loading={saving === 'balance'} disabled={!balance}>Add snapshot</Button>
           </div>
           <div className="mt-4">

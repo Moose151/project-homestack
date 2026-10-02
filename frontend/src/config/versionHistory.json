@@ -1,7 +1,19 @@
 {
-  "current_version": "0.40.10",
-  "source_sha256": "f60907a87c3b8fe9aedc2290331bdd0adff963bc49a31c48b3c62df2e016b58a",
+  "current_version": "0.40.11",
+  "source_sha256": "35eaca277d8f8af50e0143fc8c1a151455a45a8f8731f908e506113da6e8a19f",
   "releases": [
+    {
+      "version": "0.40.11",
+      "date": "2026-10-02",
+      "title": "Clearer Money and complete bills-account forecasts",
+      "changes": [
+        "Fixed omitted mortgages and other bills: the forecast now uses an explicit **Paid from bills account** setting, independent of set-aside planning. Existing bills are included by default; payments from other accounts can be explicitly excluded. Requires migration `solace.0012`.",
+        "Forecasts show exactly which bills are counted, how many payments they contribute, and why any bill is excluded. Older balances include intervening cash flow, overdue unpaid bills are carried forward, early payments already in the balance are not charged twice, and payday dates use the household timezone. First shortfall and lowest balance dates are reported separately.",
+        "Money opens with the bills-account position and direct Add bill / Update balance actions. The forecast has an interactive balance chart, readable cash-flow dates, coverage links, inline balance entry and explicit assumptions. It remains useful before a balance has been recorded.",
+        "Clearer Overview / Bills / Payday plan / Bills account / Settings destinations, a phone payday section picker, and a dedicated checklist that opens after generation. Cycle-end labels no longer incorrectly promise a payday. Search results preserve account totals and allocation data.",
+        "Added calculation, permission-filtering and browser regressions for the forecast, payment-account editing, failed balance saves, forecast refresh, search links and mobile checklist access."
+      ]
+    },
     {
       "version": "0.40.10",
       "date": "2026-09-24",

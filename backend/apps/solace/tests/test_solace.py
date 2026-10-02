@@ -149,6 +149,14 @@ class SolaceCrudAndCalendarTests(TestCase):
         self.assertEqual(resp.json()["visibility"], "sensitive")
         self.assertEqual(resp.json()["sensitivity"], "financial")
         self.assertIsNotNone(resp.json()["calendar_event_id"])
+        self.assertTrue(resp.json()["paid_from_bills_account"])
+        edited = self.client.patch(
+            reverse("solace-bill-detail", kwargs={"bill_id": resp.json()["id"]}),
+            {"paid_from_bills_account": False}, content_type="application/json",
+        )
+        self.assertEqual(edited.status_code, 200)
+        self.assertFalse(edited.json()["paid_from_bills_account"])
+        self.assertTrue(edited.json()["include_in_set_aside"])
 
     def test_bill_rejects_unknown_homestead_destination(self):
         resp = self.client.post(
@@ -1281,8 +1289,8 @@ class SolaceManagementTests(TestCase):
         upload = SimpleUploadedFile(
             "bills.csv",
             (
-                b"name,amount,frequency,due_day,start_date,category,active\n"
-                b"Internet,89.50,Monthly,12,2026-01-01,Utilities,yes\n"
+                b"name,amount,frequency,due_day,start_date,category,active,paid_from_bills_account\n"
+                b"Internet,89.50,Monthly,12,2026-01-01,Utilities,yes,no\n"
                 b"Broken,0,Monthly,1,2026-01-01,Other,yes\n"
             ),
             content_type="text/csv",
@@ -1304,6 +1312,10 @@ class SolaceManagementTests(TestCase):
         self.assertEqual(bill.amount, Decimal("89.50"))
         self.assertEqual(bill.recurrence_rule, "FREQ=MONTHLY")
         self.assertTrue(bill.occurrences.exists())
+        self.assertFalse(bill.paid_from_bills_account)
+        from apps.solace.data_tools import bill_rows
+        exported = next(row for row in bill_rows(self.admin) if row["name"] == "Internet")
+        self.assertEqual(exported["paid_from_bills_account"], "no")
 
     def test_due_reminders_are_generic_and_idempotent(self):
         self.client.get(reverse("solace-settings"))

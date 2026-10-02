@@ -6,7 +6,7 @@ import type {
   SolaceBillOccurrence, SolaceBillTimeline, SolaceBucket, SolaceBucketEntry,
   SolaceBucketPurpose, SolaceCategory, SolaceCategoryReport, SolaceChecklistItem,
   SolaceChecklistPreference, SolaceCloseoutResponse, SolaceCycleHistoryRow, SolaceHealth,
-  SolaceNow, SolacePayCyclePlan, SolacePayday, SolacePurchase, SolaceSchedule, SolaceSettings
+  SolaceSearchResults, SolaceNow, SolacePayCyclePlan, SolacePayday, SolacePurchase, SolaceSchedule, SolaceSettings
 } from '../../../api/types'
 import { Card } from '../../../components/Card'
 import { Button } from '../../../components/Button'
@@ -22,6 +22,7 @@ import { useUrlQueryState, useUrlTab } from '../../../hooks/useUrlTab'
 import { UndoToast } from '../../../components/UndoToast'
 import { StatCard } from '../../../components/StatCard'
 import { SensitiveGate } from '../../../components/SensitiveGate'
+import { ForecastTab, MoneyAccountSummary, BalanceDialog } from './MoneyForecast'
 import { CloseoutTab, HealthPanel, ManagementTab } from './SolaceManagement'
 import { setSolaceCurrencySymbol, solaceMoney as money } from './solaceFormat'
 import { useStacks } from '../../stacks/StacksContext'
@@ -78,15 +79,15 @@ const dayAfter = (dateValue: string) => {
  */
 type Tab = 'now' | 'bills' | 'plan' | 'insights' | 'manage'
 type BillsSection = 'upcoming' | 'bills' | 'schedule'
-type PlanSection = 'payplan' | 'buckets' | 'paydays' | 'purchases'
+type PlanSection = 'payplan' | 'buckets' | 'paydays' | 'purchases' | 'checklist'
 type InsightsSection = 'forecast' | 'closeout' | 'history' | 'annual'
 
 const SOLACE_TABS = [
-  { key: 'now' as const, label: 'Now' },
+  { key: 'now' as const, label: 'Overview' },
   { key: 'bills' as const, label: 'Bills' },
-  { key: 'plan' as const, label: 'Plan' },
-  { key: 'insights' as const, label: 'Insights' },
-  { key: 'manage' as const, label: 'Manage' },
+  { key: 'plan' as const, label: 'Payday plan' },
+  { key: 'insights' as const, label: 'Bills account' },
+  { key: 'manage' as const, label: 'Settings' },
 ]
 const BILLS_SECTIONS = [
   { key: 'upcoming' as const, label: 'Upcoming' },
@@ -95,9 +96,10 @@ const BILLS_SECTIONS = [
 ]
 const PLAN_SECTIONS = [
   { key: 'payplan' as const, label: 'Pay plan' },
-  { key: 'buckets' as const, label: 'Buckets' },
+  { key: 'buckets' as const, label: 'Savings & buckets' },
   { key: 'paydays' as const, label: 'Income' },
   { key: 'purchases' as const, label: 'Purchases' },
+  { key: 'checklist' as const, label: 'Checklist' },
 ]
 const INSIGHTS_SECTIONS = [
   { key: 'forecast' as const, label: 'Forecast' },
@@ -108,7 +110,7 @@ const INSIGHTS_SECTIONS = [
 
 /** Links and bookmarks made before the regrouping still land in the right place. */
 const LEGACY_TABS: Record<string, [Tab, string | null]> = {
-  overview: ['now', null], checklist: ['now', null],
+  overview: ['now', null], checklist: ['plan', 'checklist'],
   bills: ['bills', 'bills'], subscriptions: ['bills', 'bills'], schedule: ['bills', 'schedule'],
   plan: ['plan', 'payplan'], buckets: ['plan', 'buckets'], paydays: ['plan', 'paydays'],
   purchases: ['plan', 'purchases'],
@@ -290,13 +292,15 @@ function BillForm({ categories, initialCategory, categoryLocked = false, nameLab
   const startingCategory = initialCategory || categories[0] || 'other'
   const [f, setF] = useState({
     name: '', category: startingCategory, provider: '', amount: '', due_at: '',
-    recurrence_rule: '', end_date: '', is_autopay: false, include_in_set_aside: true,
+    recurrence_rule: '', end_date: '', is_autopay: false, include_in_set_aside: true, paid_from_bills_account: true,
     home_destination: homeDestinationForCategory(startingCategory) as HomeDestination,
   })
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const set = (k: string, v: string | boolean) => setF(prev => ({ ...prev, [k]: v }))
   const save = async () => {
     setSaving(true)
+    setSaveError('')
     try {
       await api.createSolaceBill({
         ...f,
@@ -308,20 +312,19 @@ function BillForm({ categories, initialCategory, categoryLocked = false, nameLab
       })
       setF({
         name: '', category: startingCategory, provider: '', amount: '', due_at: '',
-        recurrence_rule: '', end_date: '', is_autopay: false, include_in_set_aside: true,
+        recurrence_rule: '', end_date: '', is_autopay: false, include_in_set_aside: true, paid_from_bills_account: true,
         home_destination: homeDestinationForCategory(startingCategory),
       })
       onCreated()
     } catch (error) {
+      setSaveError(errMsg(error))
       onError(errMsg(error))
     } finally { setSaving(false) }
   }
   return (
     <Card contentClassName="p-4">
-      <div className="mb-4 rounded-xl bg-primary-soft px-3 py-3 text-sm text-ink">
-        <p className="font-semibold">Enter home information once</p>
-        <p className="mt-0.5 text-muted-strong">Choose a Home destination below and this bill will appear in the right home workspace automatically.</p>
-      </div>
+      {saveError && <p role="alert" className="mb-3 text-sm text-danger">{saveError}</p>}
+      <p className="mb-4 text-sm text-muted">Enter the amount and due date, then choose how often it repeats. Bills paid from your bills account automatically appear in its forecast.</p>
       <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <Field label={nameLabel}><Input value={f.name} onChange={e => set('name', e.target.value)} placeholder={nameLabel === 'Subscription' ? 'Streaming service' : 'Electricity'} /></Field>
         <Field label="Provider"><Input value={f.provider} onChange={e => set('provider', e.target.value)} /></Field>
@@ -338,13 +341,17 @@ function BillForm({ categories, initialCategory, categoryLocked = false, nameLab
           </Select>
         </Field>
       </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_auto_auto_auto] xl:items-end">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 xl:items-end">
         <Field label="Stop after (optional)">
           <Input type="date" value={f.end_date} onChange={e => set('end_date', e.target.value)} />
         </Field>
         <label className="flex min-h-11 items-center gap-2 text-sm text-muted">
           <input type="checkbox" checked={f.is_autopay} onChange={e => set('is_autopay', e.target.checked)} />
           Autopay
+        </label>
+        <label className="flex min-h-11 items-center gap-2 text-sm text-muted">
+          <input type="checkbox" checked={f.paid_from_bills_account} onChange={e => set('paid_from_bills_account', e.target.checked)} />
+          Paid from bills account
         </label>
         <label className="flex min-h-11 items-center gap-2 text-sm text-muted">
           <input
@@ -354,6 +361,7 @@ function BillForm({ categories, initialCategory, categoryLocked = false, nameLab
           />
           Include in set-aside planning
         </label>
+        <p className="text-xs text-muted sm:col-span-2 xl:col-span-3">Set-aside planning estimates how much to save each payday. It does not control which account pays this bill.</p>
         <Button onClick={save} loading={saving} disabled={!f.name.trim()} className="w-full sm:col-span-2 xl:col-span-1 xl:w-auto">{submitLabel}</Button>
       </div>
     </Card>
@@ -375,14 +383,17 @@ function BillEditor({ bill, categories, reload, onError }: {
     is_active: bill.is_active,
     is_autopay: bill.is_autopay,
     include_in_set_aside: bill.include_in_set_aside,
+    paid_from_bills_account: bill.paid_from_bills_account ?? true,
     home_destination: '' as HomeDestination,
     notes: bill.notes,
     occurrence_update_scope: 'future_unpaid' as 'future_unpaid' | 'all_unpaid',
   })
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const set = (key: string, value: string | boolean) => setF(previous => ({ ...previous, [key]: value }))
   const save = async () => {
     setSaving(true)
+    setSaveError('')
     try {
       await api.updateSolaceBill(bill.id, {
         ...f,
@@ -391,7 +402,9 @@ function BillEditor({ bill, categories, reload, onError }: {
         amount: f.amount || '0.00',
       })
       reload()
+      setOpen(false)
     } catch (e) {
+      setSaveError(errMsg(e))
       onError(errMsg(e))
     } finally {
       setSaving(false)
@@ -400,10 +413,12 @@ function BillEditor({ bill, categories, reload, onError }: {
   const remove = async () => {
     if (!(await confirmDialog({ title: `Delete ${bill.name} and its occurrence history?`, confirmLabel: 'Delete' }))) return
     setSaving(true)
+    setSaveError('')
     try {
       await api.deleteSolaceBill(bill.id)
       reload()
     } catch (e) {
+      setSaveError(errMsg(e))
       onError(errMsg(e))
     } finally {
       setSaving(false)
@@ -435,6 +450,7 @@ function BillEditor({ bill, categories, reload, onError }: {
       }
     >
       <div className="flex flex-col gap-3">
+        {saveError && <p role="alert" className="text-sm text-danger">{saveError}</p>}
         <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Name"><Input value={f.name} onChange={e => set('name', e.target.value)} /></Field>
         <Field label="Provider"><Input value={f.provider} onChange={e => set('provider', e.target.value)} /></Field>
@@ -475,11 +491,16 @@ function BillEditor({ bill, categories, reload, onError }: {
           </Field>
         )}
         </div>
+        <p className="text-xs text-muted">The payment account controls the forecast. Set-aside controls only how much you plan to save each payday.</p>
         <p className="mt-2 text-xs text-muted">Paid history is always preserved. Use all unpaid only when correcting the bill rule for the whole budget year.</p>
         <div className="flex flex-wrap gap-4 text-sm text-muted">
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={f.is_active} onChange={e => set('is_active', e.target.checked)} />
             Active
+          </label>
+          <label className="flex min-h-11 items-center gap-2">
+            <input type="checkbox" checked={f.paid_from_bills_account} onChange={e => set('paid_from_bills_account', e.target.checked)} />
+            Paid from bills account
           </label>
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={f.include_in_set_aside} onChange={e => set('include_in_set_aside', e.target.checked)} />
@@ -590,6 +611,7 @@ function BillCard({ bill, categories, reload, onError, onPay, paying, highlighte
         </div>
         <DueBadge iso={bill.next_due_at || bill.due_at} paid={bill.is_paid && !bill.recurrence_rule} />
       </div>
+      <p className="mt-2 text-xs text-muted">{bill.paid_from_bills_account !== false ? 'Bills account · included in forecast when scheduled' : 'Paid elsewhere · excluded from bills-account forecast'}</p>
       {bill.notes && <p className="mt-3 text-sm text-muted">{bill.notes}</p>}
       <div className="mt-3 flex items-center gap-2">
         {bill.recurrence_rule && <Badge tone="neutral">Recurring</Badge>}
@@ -615,7 +637,9 @@ function BillCard({ bill, categories, reload, onError, onPay, paying, highlighte
   )
 }
 
-function BillsTab({ bills, categories, reload, onOccurrence, onError, focusedBillId, focusedOccurrenceId }: {
+function BillsTab({ bills, query, onClearQuery, categories, reload, onOccurrence, onError, focusedBillId, focusedOccurrenceId }: {
+  query: string
+  onClearQuery: () => void
   bills: SolaceBill[]
   categories: string[]
   reload: () => void
@@ -626,9 +650,10 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError, focusedBil
 }) {
   const [undoOccurrence, setUndoOccurrence] = useState<{ id: number; name: string } | null>(null)
   const [paying, setPaying] = useState<number | null>(null)
+  const q = query
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [billSort, setBillSort] = useState('name-asc')
+  const [billSort, setBillSort] = useState('due-asc')
   const pay = async (bill: SolaceBill) => {
     if (!bill.next_occurrence_id) return
     setPaying(bill.next_occurrence_id)
@@ -652,11 +677,12 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError, focusedBil
     }
   }
   const activeSetAside = bills.filter(bill => bill.is_active && bill.include_in_set_aside)
-  const annualTotal = activeSetAside.reduce((sum, bill) => sum + Number(bill.annual_amount), 0)
+  const annualTotal = bills.filter(bill => bill.is_active).reduce((sum, bill) => sum + Number(bill.annual_amount), 0)
   const fortnightlyTotal = activeSetAside.reduce((sum, bill) => sum + Number(bill.fortnightly_amount), 0)
   const visibleBills = useMemo(() => {
     const rows = bills.filter(bill => (
-      (categoryFilter === 'all' || bill.category === categoryFilter)
+      (`${bill.name} ${bill.provider} ${bill.category} ${bill.notes}`.toLowerCase().includes(q.trim().toLowerCase()))
+      && (categoryFilter === 'all' || bill.category === categoryFilter)
       && (statusFilter === 'all' || (statusFilter === 'active' ? bill.is_active : !bill.is_active))
     ))
     return [...rows].sort((left, right) => {
@@ -667,12 +693,13 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError, focusedBil
       if (billSort === 'category-asc') return left.category.localeCompare(right.category) || left.name.localeCompare(right.name)
       return left.name.localeCompare(right.name)
     })
-  }, [billSort, bills, categoryFilter, statusFilter])
+  }, [billSort, bills, categoryFilter, statusFilter, q])
   const highlightedBillId = focusedBillId
     ?? bills.find(bill => focusedOccurrenceId && bill.next_occurrence_id === focusedOccurrenceId)?.id
     ?? null
   useEffect(() => {
     if (!highlightedBillId) return
+    onClearQuery()
     setCategoryFilter('all')
     setStatusFilter('all')
     const id = window.setTimeout(() => {
@@ -690,24 +717,24 @@ function BillsTab({ bills, categories, reload, onOccurrence, onError, focusedBil
       </CreatePanel>
       {bills.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-3">
-          <Card contentClassName="p-3"><p className="text-xl font-extrabold text-ink">{money(annualTotal)}</p><p className="text-xs text-muted">Annual recurring cost</p></Card>
+          <Card contentClassName="p-3"><p className="text-xl font-extrabold text-ink">{money(annualTotal)}</p><p className="text-xs text-muted">Annualised cost of all active bills</p></Card>
           <Card contentClassName="p-3"><p className="text-xl font-extrabold text-ink">{money(fortnightlyTotal)}</p><p className="text-xs text-muted">Set aside per fortnight</p></Card>
           <Card contentClassName="p-3"><p className="text-xl font-extrabold text-ink">{new Set(activeSetAside.map(bill => bill.category)).size}</p><p className="text-xs text-muted">Active categories</p></Card>
         </div>
       )}
       {bills.length > 0 && (
         <Card contentClassName="p-3">
-          <div className="grid gap-2 sm:grid-cols-3">
-            <Select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)}>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <Select aria-label="Bill category" value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)}>
               <option value="all">All categories</option>
               {[...new Set(bills.map(bill => bill.category))].sort().map(category => <option key={category} value={category}>{cap(category)}</option>)}
             </Select>
-            <Select value={statusFilter} onChange={event => setStatusFilter(event.target.value)}>
+            <Select aria-label="Bill status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)}>
               <option value="all">Active and paused</option>
               <option value="active">Active only</option>
               <option value="paused">Paused only</option>
             </Select>
-            <Select value={billSort} onChange={event => setBillSort(event.target.value)}>
+            <Select aria-label="Sort bills" value={billSort} onChange={event => setBillSort(event.target.value)}>
               <option value="name-asc">Name A–Z</option>
               <option value="name-desc">Name Z–A</option>
               <option value="due-asc">Next due</option>
@@ -1107,7 +1134,8 @@ function BucketRuleEditor({ bucket, buckets, reload, onError }: {
   )
 }
 
-function BucketsTab({ buckets, reload, onError }: {
+function BucketsTab({ buckets, matchingIds, reload, onError }: {
+  matchingIds?: number[]
   buckets: SolaceBucket[]; reload: () => void; onError: (message: string) => void
 }) {
   return (
@@ -1117,7 +1145,7 @@ function BucketsTab({ buckets, reload, onError }: {
       </CreatePanel>
       {buckets.length === 0 ? <EmptyState icon="🪣" title="No buckets yet" hint="Create buckets for the purposes you regularly divide household income between." /> : (
         <div className="grid gap-3 lg:grid-cols-3">
-          {buckets.map(b => (
+          {buckets.filter(b => !matchingIds || matchingIds.includes(b.id)).map(b => (
             <Card key={b.id} contentClassName="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -1906,157 +1934,6 @@ function ScheduleTab({ schedule, month, loading, onMonth, onAction }: {
   )
 }
 
-function ForecastTab({ initial, onManage, onError }: {
-  initial: SolaceBalanceForecast | null
-  onManage: () => void
-  onError: (message: string) => void
-}) {
-  const [forecast, setForecast] = useState(initial)
-  const [months, setMonths] = useState(initial?.horizon_months || 12)
-  const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    setForecast(initial)
-    setMonths(initial?.horizon_months || 12)
-  }, [initial])
-
-  const refresh = async (nextMonths = months) => {
-    setLoading(true)
-    try {
-      setForecast(await api.getSolaceForecast(nextMonths))
-    } catch (error) {
-      onError(errMsg(error))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (!forecast) {
-    return <EmptyState icon="📈" title="Forecast is not available" hint="Refresh Money to calculate the bills-account forecast." />
-  }
-  if (!forecast.latest_balance) {
-    return (
-      <div className="space-y-4">
-        <EmptyState
-          icon="🏦"
-          title="Record the bills-account balance"
-          hint={`Money needs an opening balance to calculate what can be withdrawn. Based on scheduled cash flow, at least ${money(forecast.required_opening_balance)} is required through ${dateOnly(forecast.through)}.`}
-          action={<Button onClick={onManage}>Add balance</Button>}
-        />
-      </div>
-    )
-  }
-
-  const covered = forecast.is_covered === true
-  return (
-    <div className="space-y-4">
-      <Card contentClassName="p-4">
-        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold text-ink">Bills-account forecast</h2>
-              <Badge tone={covered ? 'success' : 'danger'}>{covered ? 'All covered' : 'Shortfall'}</Badge>
-            </div>
-            <p className="mt-1 text-sm text-muted">
-              From the {money(forecast.opening_balance || '0')} balance recorded {dateOnly(forecast.latest_balance.snapshot_date)} through {dateOnly(forecast.through)}.
-            </p>
-          </div>
-          <div className="flex items-end gap-2">
-            <Field label="Forecast period">
-              <Select
-                value={months}
-                onChange={event => {
-                  const value = Number(event.target.value)
-                  setMonths(value)
-                  void refresh(value)
-                }}
-              >
-                {[3, 6, 12, 18, 24].map(value => <option key={value} value={value}>{value} months</option>)}
-              </Select>
-            </Field>
-            <Button variant="ghost" onClick={() => refresh()} loading={loading}>Refresh</Button>
-          </div>
-        </div>
-      </Card>
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Card contentClassName="p-4">
-          <p className="text-sm font-medium text-muted">Available to withdraw</p>
-          <p className={`mt-1 text-3xl font-extrabold ${covered ? 'text-success' : 'text-danger'}`}>
-            {covered ? money(forecast.safe_to_withdraw || '0') : money('0')}
-          </p>
-          <p className="mt-1 text-xs text-muted">Keeps every listed bill covered plus the {money(forecast.buffer_amount)} safety buffer.</p>
-        </Card>
-        <Card contentClassName="p-4">
-          <p className="text-sm font-medium text-muted">Bills-only surplus</p>
-          <p className="mt-1 text-2xl font-extrabold text-ink">{money(forecast.bills_only_surplus || '0')}</p>
-          <p className="mt-1 text-xs text-muted">Maximum before preserving the safety buffer.</p>
-        </Card>
-        <Card contentClassName="p-4">
-          <p className="text-sm font-medium text-muted">Lowest forecast balance</p>
-          <p className={`mt-1 text-2xl font-extrabold ${Number(forecast.lowest_balance) < 0 ? 'text-danger' : 'text-ink'}`}>{money(forecast.lowest_balance || '0')}</p>
-          <p className="mt-1 text-xs text-muted">Reached {dateOnly(forecast.lowest_balance_date)}.</p>
-        </Card>
-        <Card contentClassName="p-4">
-          <p className="text-sm font-medium text-muted">Ending balance</p>
-          <p className="mt-1 text-2xl font-extrabold text-ink">{money(forecast.ending_balance || '0')}</p>
-          <p className="mt-1 text-xs text-muted">After expected transfers and bills.</p>
-        </Card>
-      </div>
-
-      {!covered && (
-        <Card className="border-danger/30 bg-danger/5" contentClassName="p-4">
-          <h3 className="font-bold text-danger">Projected shortfall of {money(forecast.shortfall || '0')}</h3>
-          <p className="mt-1 text-sm text-muted">
-            The account first reaches its lowest point on {dateOnly(forecast.lowest_balance_date)}. Increase Bills-bucket transfers or top up the account before then.
-          </p>
-        </Card>
-      )}
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Card contentClassName="p-3"><p className="text-lg font-bold text-success">+{money(forecast.total_contributions)}</p><p className="text-xs text-muted">Expected Bills-bucket transfers</p></Card>
-        <Card contentClassName="p-3"><p className="text-lg font-bold text-ink">−{money(forecast.total_bills)}</p><p className="text-xs text-muted">Included bills due</p></Card>
-        <Card contentClassName="p-3"><p className="text-lg font-bold text-ink">{money(forecast.required_opening_balance)}</p><p className="text-xs text-muted">Minimum opening balance required</p></Card>
-      </div>
-
-      <Card className="overflow-hidden">
-        <div className="border-b border-line px-4 py-3">
-          <h3 className="font-bold text-ink">Forecast timeline</h3>
-          <p className="text-sm text-muted">Transfers are added and bills are deducted on their scheduled dates.</p>
-        </div>
-        {forecast.timeline.length === 0 ? (
-          <p className="p-4 text-sm text-muted">No scheduled bills or Bills-bucket transfers in this period.</p>
-        ) : (
-          <div className="divide-y divide-line">
-            {forecast.timeline.map(row => (
-              <details key={row.date} className="px-4 py-3">
-                <summary className="grid cursor-pointer list-none grid-cols-[1fr_auto] items-center gap-3 sm:grid-cols-[1fr_auto_auto_auto]">
-                  <span className="font-semibold text-ink">{dateOnly(row.date)}</span>
-                  <span className="hidden text-sm text-success sm:block">+{money(row.contributions)}</span>
-                  <span className="hidden text-sm text-muted sm:block">−{money(row.bills)}</span>
-                  <span className={`font-bold ${Number(row.projected_balance) < 0 ? 'text-danger' : 'text-ink'}`}>{money(row.projected_balance || '0')}</span>
-                </summary>
-                <div className="mt-3 space-y-1 border-t border-line pt-2 text-sm">
-                  {row.items.map((item, index) => (
-                    <div key={`${item.kind}-${item.record_id}-${index}`} className="flex justify-between gap-3">
-                      <span className="text-muted">{item.kind === 'contribution' ? 'Transfer from' : 'Bill'} · {item.name}</span>
-                      <span className={item.kind === 'contribution' ? 'font-medium text-success' : 'font-medium text-ink'}>
-                        {item.kind === 'contribution' ? '+' : '−'}{money(item.amount)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </details>
-            ))}
-          </div>
-        )}
-      </Card>
-      <p className="text-xs text-muted">
-        Forecasts use expected income allocations and scheduled bill amounts; they are not bank transactions. Update the balance snapshot whenever the real account changes materially.
-      </p>
-    </div>
-  )
-}
 
 function PayPlan({ plan, generating, onGenerate, onSection, onError }: {
   plan: SolacePayCyclePlan | null
@@ -2193,7 +2070,7 @@ function PayPlan({ plan, generating, onGenerate, onSection, onError }: {
             <div key={bucket.bucket_id} className="flex items-center justify-between gap-3 px-4 py-3">
               <div>
                 <p className="font-semibold text-ink">{bucket.bucket_name}</p>
-                <p className="text-sm text-muted">{bucket.category || 'Set-aside'}</p>
+                <p className="text-sm text-muted">{BUCKET_PURPOSE_LABEL[bucket.purpose] || 'Other'}</p>
               </div>
               <p className="text-lg font-bold text-ink">{money(bucket.amount)}</p>
             </div>
@@ -2254,9 +2131,9 @@ function CycleStrip({ now }: { now: SolaceNow }) {
         </div>
         <div className="text-right">
           <p className="text-lg font-black text-ink">
-            {days <= 0 ? 'Payday' : `${days} ${days === 1 ? 'day' : 'days'}`}
+            {days <= 0 ? 'Today' : `${days} ${days === 1 ? 'day' : 'days'}`}
           </p>
-          <p className="text-xs text-muted">{days <= 0 ? 'Cycle ends today' : 'until next payday'}</p>
+          <p className="text-xs text-muted">{days <= 0 ? 'Cycle ends today' : 'until this cycle ends'}</p>
         </div>
       </div>
     </Card>
@@ -2317,7 +2194,7 @@ function NowTab({ now, health, checklist, onAction, onTab, onSection }: {
       <Card contentClassName="p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="font-black text-ink">Due before next payday</h2>
+            <h2 className="font-black text-ink">Due this pay cycle</h2>
             <p className="mt-0.5 text-xs text-muted">
               {now.due.length === 0
                 ? 'Nothing left to pay this cycle'
@@ -2410,10 +2287,10 @@ function MoneyMobileHome({ now, health, onTab, onSection, onAction }: {
   if (!now) return <div className="h-64 animate-pulse rounded-2xl bg-sunken" />
   const lines = [
     now.due.length === 0
-      ? 'No bills left to pay before payday'
-      : `${money(now.due_total)} left to pay before payday`,
+      ? 'No bills left to pay this cycle'
+      : `${money(now.due_total)} left to pay this cycle`,
     `${money(now.bucket_total)} reserved in your buckets`,
-    now.days_until_cycle_end <= 0 ? 'Payday is today' : `Next payday in ${now.days_until_cycle_end} days`,
+    now.days_until_cycle_end <= 0 ? 'This pay cycle ends today' : `This pay cycle ends in ${now.days_until_cycle_end} days`,
   ]
   const nextDue = now.due.slice(0, 3)
   return (
@@ -2451,10 +2328,11 @@ function MoneyMobileHome({ now, health, onTab, onSection, onAction }: {
       <MobileSection title="What would you like to do?">
         <MobileListRow icon="🧾" title="See and manage bills" subtitle="What is due, what is paid, and your regular bills" onClick={() => onSection('bills', 'upcoming')} />
         <MobileListRow icon="✅" title="Plan the next payday" subtitle="See what to transfer and what remains" onClick={() => onSection('plan', 'payplan')} />
+        <MobileListRow icon="☑️" title="Payday checklist" subtitle="Tick off transfers as you make them" onClick={() => onSection('plan', 'checklist')} />
         <MobileListRow icon="🪣" title="Manage savings and goals" subtitle="Buckets and planned purchases" onClick={() => onSection('plan', 'buckets')} />
       </MobileSection>
       <MobileSection title="More">
-        <MobileListRow icon="📈" title="Reports and forecasts" subtitle="Future balances and past pay cycles" onClick={() => onTab('insights')} />
+        <MobileListRow icon="📈" title="Bills account and reports" subtitle="Check the forecast, bill coverage and past pay cycles" onClick={() => onTab('insights')} />
         <MobileListRow icon="⚙️" title="Money setup" subtitle="Income, accounts, categories and settings" onClick={() => onTab('manage')} />
       </MobileSection>
     </div>
@@ -2650,6 +2528,8 @@ export function SolacePage() {
     const search = params.toString()
     navigate({ pathname: location.pathname, search: search ? `?${search}` : '' })
   }
+  const [showBalance, setShowBalance] = useState(false)
+  const [showBill, setShowBill] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [bills, setBills] = useState<SolaceBill[]>([])
@@ -2671,10 +2551,25 @@ export function SolacePage() {
   const [scheduleMonth, setScheduleMonth] = useState(currentMonthKey)
   const [scheduleLoading, setScheduleLoading] = useState(false)
   const [q, setQ] = useUrlQueryState()
+  const [searchResults, setSearchResults] = useState<SolaceSearchResults | null>(null)
+  const [searchLoading, setSearchLoading] = useState(false)
+  useEffect(() => {
+    if (!unlocked || !q.trim()) { setSearchResults(null); setSearchLoading(false); return }
+    let cancelled = false
+    setSearchLoading(true)
+    setSearchResults(null)
+    const timer = window.setTimeout(() => {
+      api.searchSolace(q.trim()).then(result => {
+        if (!cancelled) setSearchResults(result)
+      }).catch(e => { if (!cancelled) setError(errMsg(e)) })
+        .finally(() => { if (!cancelled) setSearchLoading(false) })
+    }, 300)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [q, unlocked])
   const loadSeq = useRef(0)
   const scheduleSeq = useRef(0)
-  const searchWasActive = useRef(false)
   const workspaceLoaded = useRef(false)
+  const loadAttempted = useRef(false)
   const deepLinkParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const focusedBillId = Number(deepLinkParams.get('bill')) || null
   const focusedOccurrenceId = Number(deepLinkParams.get('occurrence')) || null
@@ -2715,6 +2610,7 @@ export function SolacePage() {
 
   const load = useCallback(async () => {
     const requestId = ++loadSeq.current
+    loadAttempted.current = true
     setLoading(true); setError('')
     try {
       const { start, end } = monthBounds(scheduleMonth)
@@ -2731,42 +2627,19 @@ export function SolacePage() {
       setUnlocked(true)
     } catch (e) {
       setError(errMsg(e))
-      if (String(errMsg(e)).includes('re-authentication')) setUnlocked(false)
+      if (String(errMsg(e)).includes('re-authentication')) { loadAttempted.current = false; setUnlocked(false) }
     } finally {
       if (requestId === loadSeq.current) setLoading(false)
     }
   }, [applyBootstrap, scheduleMonth])
 
   useEffect(() => {
-    if (unlocked && !loading && !workspaceLoaded.current && !q.trim()) void load()
-  }, [unlocked, loading, q, load])
+    if (unlocked && !loading && !loadAttempted.current) void load()
+  }, [unlocked, loading, load])
 
   useEffect(() => {
     if (unlocked && workspaceLoaded.current) void loadSchedule(scheduleMonth)
   }, [scheduleMonth, unlocked, loadSchedule])
-
-  // Every other node searches as you type; Money asking for a button press was the odd one.
-  useEffect(() => {
-    if (!unlocked) return
-    const term = q.trim()
-    if (!term) {
-      if (searchWasActive.current) {
-        searchWasActive.current = false
-        void load()
-      }
-      return
-    }
-    const id = setTimeout(() => {
-      searchWasActive.current = true
-      api.searchSolace(term)
-        .then(r => {
-          setBills(r.bills); setPaydays(r.paydays); setPurchases(r.purchases)
-          setBuckets(r.buckets); setChecklist(r.checklist)
-        })
-        .catch(e => setError(errMsg(e)))
-    }, 300)
-    return () => clearTimeout(id)
-  }, [q, unlocked, load])
 
   const generateChecklist = async (date?: string) => {
     setGeneratingChecklist(true); setError('')
@@ -2777,7 +2650,7 @@ export function SolacePage() {
       ])
       setChecklist(items)
       setPlan(selectedPlan)
-      setTab('now')
+      goSection('plan', 'checklist')
     } catch (e) {
       setError(errMsg(e))
     } finally {
@@ -2813,22 +2686,49 @@ export function SolacePage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Money" icon="💸" />
+      <PageHeader title="Money" icon="💸" actions={<Button variant="ghost" onClick={load} loading={loading}>Refresh Money</Button>} />
       {error && <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <SearchField
-          value={q}
-          onChange={e => setQ(e.target.value)}
-          onClear={() => setQ('')}
-          placeholder="Search bills, plans and purchases…"
-        />
-        <Button variant="ghost" onClick={load} loading={loading} className="sm:flex-none">Refresh</Button>
-      </div>
+      <p className="text-sm text-muted">Your bills, account balance and next payday in one place.</p>
+      <SearchField value={q} onChange={e => setQ(e.target.value)} onClear={() => setQ('')} placeholder="Search Money…" />
+      {q.trim() && (
+        <Card contentClassName="p-4 space-y-3">
+          <h2 className="font-bold text-ink">Search results</h2>
+          {searchLoading ? <p className="text-sm text-muted">Searching…</p> : searchResults && (
+            <div className="space-y-2">
+              {searchResults.bills.map(bill => <Link key={bill.id} className="flex min-h-11 items-center justify-between gap-3 text-sm text-primary" to={`/solace?tab=bills&section=bills&bill=${bill.id}`}>{bill.name}<span>{money(bill.amount)} →</span></Link>)}
+              {([
+                ['Income', searchResults.paydays.length, 'plan', 'paydays'],
+                ['Savings & buckets', searchResults.buckets.length, 'plan', 'buckets'],
+                ['Purchases', searchResults.purchases.length, 'plan', 'purchases'],
+                ['Payday checklist', searchResults.checklist.length, 'plan', 'checklist'],
+              ] as const).filter(([, count]) => count > 0).map(([label, count, target, section]) => <Button key={label} variant="secondary" onClick={() => goSection(target, section)}>{label} · {count} matches</Button>)}
+              {!Object.values(searchResults).some(rows => rows.length > 0) && <p className="text-sm text-muted">No matches. Try a bill name, provider or category.</p>}
+            </div>
+          )}
+        </Card>
+      )}
       <div className="hidden sm:block">
         <CustomisableTabs state={tabsState} label="Money" mobileSelectLabel="Money section" />
       </div>
       {tab === 'now' && (
         <>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => setShowBill(true)}>+ Add bill</Button>
+            <Button variant="secondary" onClick={() => setShowBalance(true)}>Update account balance</Button>
+            <Button variant="ghost" onClick={() => goSection('plan', 'payplan')}>Plan payday</Button>
+          </div>
+          <MoneyAccountSummary forecast={forecast} onOpen={() => goSection('insights', 'forecast')} />
+          {(!paydays.length || !bills.length || !buckets.some(bucket => bucket.is_active && bucket.purpose === 'bills')) && (
+            <Card contentClassName="p-4 space-y-2">
+              <h2 className="font-bold text-ink">Get your money plan ready</h2>
+              <p className="text-sm text-muted">Add what comes in, what goes out, and how much of each pay goes to bills.</p>
+              <div className="flex flex-wrap gap-2">
+                {!paydays.length && <Button variant="secondary" onClick={() => goSection('plan', 'paydays')}>1. Add income</Button>}
+                {!bills.length && <Button variant="secondary" onClick={() => setShowBill(true)}>2. Add bills</Button>}
+                {!buckets.some(bucket => bucket.is_active && bucket.purpose === 'bills') && <Button variant="secondary" onClick={() => goSection('plan', 'buckets')}>3. Set bills transfers</Button>}
+              </div>
+            </Card>
+          )}
           <MoneyMobileHome now={now} health={health} onTab={setTab} onSection={goSection} onAction={updateOccurrence} />
           <div className="hidden sm:block">
             <NowTab
@@ -2867,6 +2767,8 @@ export function SolacePage() {
           )}
           {billsSection === 'bills' && (
             <BillsTab
+              query={q}
+              onClearQuery={() => setQ('')}
               bills={bills}
               categories={billCategoryNames}
               reload={load}
@@ -2891,13 +2793,15 @@ export function SolacePage() {
       {tab === 'plan' && (
         <div className="flex flex-col gap-4">
           <MobileScreenHeader className="sm:hidden" title={PLAN_SECTIONS.find(row => row.key === planSection)?.label ?? 'Pay plan'} showBack onBack={() => setTab('now')} />
-          <Tabs tabs={PLAN_SECTIONS} active={planSection} onChange={setPlanSection} variant="secondary" />
+          <Select className="sm:hidden" aria-label="Payday plan section" value={planSection} onChange={e => setPlanSection(e.target.value as PlanSection)}>{PLAN_SECTIONS.map(section => <option key={section.key} value={section.key}>{section.label}</option>)}</Select>
+          <div className="hidden sm:block"><Tabs tabs={PLAN_SECTIONS} active={planSection} onChange={setPlanSection} variant="secondary" /></div>
+          {planSection === 'checklist' && <ChecklistTab items={checklist} preferences={checklistPreferences} plan={plan} generating={generatingChecklist} reload={load} onGenerate={generateChecklist} onChange={setChecklist} onError={setError} />}
           {planSection === 'payplan' && <PayPlan plan={plan} generating={generatingChecklist} onGenerate={generateChecklist} onSection={goSection} onError={setError} />}
-          {planSection === 'buckets' && <BucketsTab buckets={buckets} reload={load} onError={setError} />}
-          {planSection === 'paydays' && <PaydaysTab paydays={paydays} buckets={buckets} reload={load} onError={setError} />}
+          {planSection === 'buckets' && <BucketsTab buckets={buckets} matchingIds={q.trim() && searchResults ? searchResults.buckets.map(row => row.id) : undefined} reload={load} onError={setError} />}
+          {planSection === 'paydays' && <PaydaysTab paydays={q.trim() && searchResults ? searchResults.paydays : paydays} buckets={buckets} reload={load} onError={setError} />}
           {planSection === 'purchases' && (
             <PurchasesTab
-              purchases={purchases}
+              purchases={q.trim() && searchResults ? searchResults.purchases : purchases}
               categories={categories.filter(category => category.is_active && ['purchase', 'both'].includes(category.category_type)).map(category => category.name)}
               reload={load}
               onError={setError}
@@ -2908,18 +2812,20 @@ export function SolacePage() {
 
       {tab === 'insights' && (
         <div className="flex flex-col gap-4">
-          <MobileScreenHeader className="sm:hidden" title="Insights" showBack onBack={() => setTab('now')} />
+          <MobileScreenHeader className="sm:hidden" title="Bills account" showBack onBack={() => setTab('now')} />
           <Tabs tabs={INSIGHTS_SECTIONS} active={insightsSection} onChange={setInsightsSection} variant="secondary" />
-          {insightsSection === 'forecast' && <ForecastTab initial={forecast} onManage={() => setTab('manage')} onError={setError} />}
+          {insightsSection === 'forecast' && <ForecastTab initial={forecast} onBalance={() => setShowBalance(true)} onTransfers={() => goSection('plan', 'buckets')} />}
           {insightsSection === 'closeout' && <CloseoutTab closeout={closeout} reload={load} onOccurrence={updateOccurrence} onError={setError} />}
           {insightsSection === 'history' && <CycleHistoryTab onError={setError} />}
           {insightsSection === 'annual' && <AnnualSummaryTab onError={setError} />}
         </div>
       )}
 
+      {showBalance && <BalanceDialog asOf={forecast?.as_of} onClose={() => setShowBalance(false)} onSaved={() => { setShowBalance(false); void load() }} />}
+      {showBill && <Modal title="Add bill" size="full" onClose={() => setShowBill(false)}><BillForm categories={billCategoryNames} onCreated={() => { setShowBill(false); void load() }} onError={setError} /></Modal>}
       {tab === 'manage' && (
         <div className="flex flex-col gap-4">
-          <MobileScreenHeader className="sm:hidden" title="Manage" showBack onBack={() => setTab('now')} />
+          <MobileScreenHeader className="sm:hidden" title="Money settings" showBack onBack={() => setTab('now')} />
           <ManagementTab
             settings={settings}
             categories={categories}

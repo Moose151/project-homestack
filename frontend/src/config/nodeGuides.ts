@@ -87,8 +87,8 @@ const details: Record<string, Pick<NodeGuide, 'purpose' | 'gettingStarted' | 'ca
   },
   solace: {
     purpose: 'Manage household money through bills, pay cycles, buckets and payment history.',
-    gettingStarted: ['Configure income and the current pay cycle.', 'Add bills, including subscriptions as a bill category.', 'Allocate available money without exceeding 100%.'],
-    capabilities: ['Bills and payment history', 'Pay-cycle planning', 'Buckets, auto-pay and due alerts'],
+    gettingStarted: ['Add your income under Payday plan → Income.', 'Add bills and choose whether they are paid from the bills account.', 'Create a bills-purpose bucket to plan payday transfers, then record your account’s closing balance.', 'Open Bills account to check the balance forecast and which bills are counted.'],
+    capabilities: ['Bills and payment history', 'Account forecast, shortfall dates and bill coverage', 'Payday plans and transfer checklists', 'Savings buckets, auto-pay and due alerts'],
     connections: ['Home-related costs can be viewed from Home without being managed twice.', 'Due information contributes to Dashboard and notifications.'],
   },
 }

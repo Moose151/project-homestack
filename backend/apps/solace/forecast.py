@@ -30,7 +30,7 @@ def _is_bills_bucket(purpose: str) -> bool:
     This reads `BudgetBucket.purpose` — the value the bucket form actually sets. It previously
     substring-matched a free-text `category` field the form never populated, so a household's
     projected pay came out as zero while their bills still counted, making the account look
-    permanently doomed. That field is gone (migration solace.0022).
+    permanently doomed. That field is gone (migration solace.0011).
     """
     return purpose == BudgetBucket.Purpose.BILLS
 
@@ -56,8 +56,9 @@ def build_balance_forecast(
 ) -> dict:
     """Project the bills account and calculate how much can safely be withdrawn.
 
-    A snapshot recorded on ``as_of`` is treated as an end-of-day value; an older snapshot is
-    the latest known current balance and receives a stale-data warning from Solace health.
+    Snapshots are end-of-day values. Project from the following day, including the intervening
+    cash flow for older snapshots. Unpaid overdue bills are carried forward; paid bills use
+    their payment date so an early payment already in the snapshot is never deducted twice.
     Without a snapshot, the forecast still reports the opening balance required to cover the
     projected low point.
 
@@ -71,8 +72,8 @@ def build_balance_forecast(
     through = as_of + relativedelta(months=horizon_months)
     latest_balance = selectors.get_latest_balance(user, as_of=as_of)
     start = (
-        as_of + timedelta(days=1)
-        if latest_balance and latest_balance.snapshot_date == as_of
+        latest_balance.snapshot_date + timedelta(days=1)
+        if latest_balance
         else as_of
     )
     opening_balance = _money(latest_balance.balance) if latest_balance else None
@@ -85,27 +86,47 @@ def build_balance_forecast(
         }
     )
 
+    all_bills = selectors.list_bills(user)
     bills = [
         bill
-        for bill in selectors.list_bills(user, active_only=True)
-        if bill.include_in_set_aside and bill.due_at
+        for bill in all_bills
+        if bill.is_active and bill.paid_from_bills_account and bill.due_at
     ]
     if reconcile_bills is not None:
         reconcile_bills(bills, start, through)
     else:
         for bill in bills:
             ensure_bill_occurrences(bill, start, through)
-    occurrences = selectors.list_bill_occurrences(user, start=start, end=through)
+    # Include overdue debts and early payments whose due date is outside the horizon.
+    occurrences = selectors.list_bill_occurrences(user, start=date.min, end=date.max)
     included_bill_ids = {bill.id for bill in bills}
+    account_bill_ids = {bill.id for bill in all_bills if bill.paid_from_bills_account}
+    bill_totals = defaultdict(lambda: Decimal("0.00"))
+    bill_counts = defaultdict(int)
+    overdue_total = Decimal("0.00")
     for occurrence in occurrences:
-        if (
-            occurrence.bill_id not in included_bill_ids
-            or occurrence.status == BillOccurrence.Status.SKIPPED
-        ):
+        if occurrence.status == BillOccurrence.Status.SKIPPED:
             continue
-        # A paid occurrence still reduced a balance snapshot that predates it.
-        event_date = timezone.localdate(occurrence.due_at, tz)
+        due_date = timezone.localdate(occurrence.due_at, tz)
+        if occurrence.status == BillOccurrence.Status.PAID:
+            # Pausing a schedule stops future bills, not payments already made since the
+            # opening balance. Those still belong in the catch-up projection.
+            if occurrence.bill_id not in account_bill_ids:
+                continue
+            event_date = timezone.localdate(occurrence.paid_at or occurrence.due_at, tz)
+            if event_date < start:
+                continue
+        else:
+            if occurrence.bill_id not in included_bill_ids:
+                continue
+            event_date = max(due_date, start)
+        if event_date > through:
+            continue
         amount = _money(occurrence.amount)
+        if occurrence.status == BillOccurrence.Status.UPCOMING and due_date < as_of:
+            overdue_total += amount
+        bill_totals[occurrence.bill_id] += amount
+        bill_counts[occurrence.bill_id] += 1
         days[event_date]["bills"] += amount
         days[event_date]["items"].append(
             {
@@ -121,25 +142,20 @@ def build_balance_forecast(
     paydays = selectors.list_paydays(user, active_only=True)
     buckets = selectors.list_buckets(user, active_only=True)
     cycle_anchor = settings_obj.cycle_anchor_date if settings_obj else None
-    cycle_plan = build_pay_cycle_plan(
-        paydays,
-        buckets,
-        as_of=start,
-        cycle_anchor=cycle_anchor,
-    )
+
+    def local_plan(on_date):
+        with timezone.override(tz):
+            return build_pay_cycle_plan(paydays, buckets, as_of=on_date, cycle_anchor=cycle_anchor)
+
+    cycle_plan = local_plan(start)
     cycle_start = date.fromisoformat(cycle_plan["cycle_start"])
     seen_cycles: set[date] = set()
     while cycle_start <= through and cycle_start not in seen_cycles:
         seen_cycles.add(cycle_start)
-        plan = build_pay_cycle_plan(
-            paydays,
-            buckets,
-            as_of=cycle_start,
-            cycle_anchor=cycle_anchor,
-        )
+        plan = local_plan(cycle_start)
         for source in plan["sources"]:
             all_pay_dates = [
-                datetime.fromisoformat(value).date()
+                timezone.localdate(datetime.fromisoformat(value), tz)
                 for value in source["pay_dates"]
             ]
             contribution = sum(
@@ -174,6 +190,7 @@ def build_balance_forecast(
     timeline = []
     total_bills = Decimal("0.00")
     total_contributions = Decimal("0.00")
+    first_shortfall_date = start if opening_balance is not None and opening_balance < 0 else None
     for event_date in sorted(days):
         row = days[event_date]
         contributions = _money(row["contributions"])
@@ -190,6 +207,8 @@ def build_balance_forecast(
             if opening_balance is not None
             else None
         )
+        if projected_balance is not None and projected_balance < 0 and first_shortfall_date is None:
+            first_shortfall_date = event_date
         timeline.append(
             {
                 "date": event_date.isoformat(),
@@ -238,11 +257,39 @@ def build_balance_forecast(
         else None
     )
 
+    coverage = []
+    for bill in all_bills:
+        reason = (
+            "Included" if bill_counts[bill.id]
+            else "Paused" if not bill.is_active
+            else "Paid from another account" if not bill.paid_from_bills_account
+            else "Missing due date" if not bill.due_at
+            else "No payments in this period (or already paid / skipped)"
+        )
+        coverage.append({
+            "bill_id": bill.id, "name": bill.name, "reason": reason,
+            "included": bill_counts[bill.id] > 0,
+            "payment_count": bill_counts[bill.id], "total": _money_string(bill_totals[bill.id]),
+        })
+    warnings = []
+    if latest_balance and (as_of - latest_balance.snapshot_date).days > 14:
+        warnings.append("The balance is over 14 days old. Update it to check the projection against your bank.")
+    if any(row["reason"] == "Missing due date" for row in coverage):
+        warnings.append("Some bills have no due date and cannot be forecast. Review the bill coverage below.")
+    if total_contributions == 0:
+        warnings.append("No transfers into the bills account are scheduled. Check Income and bills-purpose buckets in Payday plan.")
+    if overdue_total:
+        warnings.append("Unpaid overdue bills are included. Mark any already paid so they are not counted again.")
+
     return {
         "as_of": as_of.isoformat(),
         "forecast_start": start.isoformat(),
         "through": through.isoformat(),
         "horizon_months": horizon_months,
+        "bill_coverage": coverage,
+        "warnings": warnings,
+        "overdue_total": _money_string(overdue_total),
+        "first_shortfall_date": first_shortfall_date.isoformat() if first_shortfall_date else None,
         "latest_balance": latest_balance,
         "opening_balance": (
             _money_string(opening_balance) if opening_balance is not None else None

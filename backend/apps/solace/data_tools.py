@@ -38,6 +38,7 @@ def bill_rows(user) -> list[dict]:
             "active": _yes(row.is_active),
             "autopay": _yes(row.is_autopay),
             "include_in_set_aside": _yes(row.include_in_set_aside),
+            "paid_from_bills_account": _yes(row.paid_from_bills_account),
             "notes": row.notes,
         }
         for row in selectors.list_bills(user)
@@ -305,6 +306,7 @@ def parse_bill_import_rows(rows: list[dict]) -> tuple[list[dict], int]:
                     "include_in_set_aside": _bool(
                         _pick(row, "include_in_set_aside", "include", default="yes")
                     ),
+                    "paid_from_bills_account": _bool(_pick(row, "paid_from_bills_account", default="yes")),
                     "notes": str(_pick(row, "notes", default="")).strip(),
                 }
             )

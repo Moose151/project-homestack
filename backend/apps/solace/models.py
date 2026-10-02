@@ -52,6 +52,7 @@ class Bill(CalendarSyncMixin, HouseholdBaseModel):
     is_active = models.BooleanField(default=True)
     is_autopay = models.BooleanField(default=False)
     include_in_set_aside = models.BooleanField(default=True)
+    paid_from_bills_account = models.BooleanField(default=True)
     is_paid = models.BooleanField(default=False)
     paid_at = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True, default="")

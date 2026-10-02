@@ -31,7 +31,7 @@ from apps.solace.models import (
 
 _BILL_FIELDS = {
     "name", "category", "provider", "amount", "due_at", "is_all_day", "recurrence_rule",
-    "end_date", "is_active", "is_autopay", "include_in_set_aside", "is_paid", "paid_at", "notes",
+    "end_date", "is_active", "is_autopay", "include_in_set_aside", "paid_from_bills_account", "is_paid", "paid_at", "notes",
     "source_node", "source_record_type",
     "source_record_id", "visibility", "sensitivity",
 }

@@ -1595,6 +1595,7 @@ export interface SolaceBill {
   is_active: boolean
   is_autopay: boolean
   include_in_set_aside: boolean
+  paid_from_bills_account: boolean
   is_paid: boolean
   paid_at: string | null
   notes: string
@@ -1807,7 +1808,7 @@ export interface SolaceSearchResults {
 export interface SolacePlanAllocation {
   bucket_id: number
   bucket_name: string
-  category: string
+  purpose: SolaceBucketPurpose
   allocation_method: 'percentage' | 'fixed'
   allocation_value: string
   raw_amount: string
@@ -1831,7 +1832,7 @@ export interface SolacePlanSource {
 export interface SolacePlanBucket {
   bucket_id: number
   bucket_name: string
-  category: string
+  purpose: SolaceBucketPurpose
   amount: string
 }
 
@@ -1947,6 +1948,10 @@ export interface SolaceBalanceForecastItem {
 }
 
 export interface SolaceBalanceForecast {
+  bill_coverage: { bill_id: number; name: string; included: boolean; reason: string; payment_count: number; total: string }[]
+  warnings: string[]
+  overdue_total: string
+  first_shortfall_date: string | null
   as_of: string
   forecast_start: string
   through: string

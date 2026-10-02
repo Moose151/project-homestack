@@ -47,7 +47,7 @@ class BillSerializer(serializers.ModelSerializer):
         fields = [
             "id", "name", "category", "provider", "amount", "due_at", "is_all_day",
             "recurrence_rule", "end_date", "is_paid", "paid_at", "notes", "is_overdue",
-            "is_active", "is_autopay", "include_in_set_aside",
+            "is_active", "is_autopay", "include_in_set_aside", "paid_from_bills_account",
             "next_due_at", "next_occurrence_id",
             "annual_amount", "fortnightly_amount",
             "source_node", "source_record_type", "source_record_id",

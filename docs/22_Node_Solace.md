@@ -83,8 +83,54 @@ multiple overlapping occurrence rebuilds.
 
 ## 6. Bills-account forecast
 
-The forecast projects expected Bills-bucket transfers against included bill occurrences over the
-configured future window.
+The forecast projects expected Bills-bucket transfers against bill occurrences over a 1–24 month
+window. **A bill leaves the bills account when `paid_from_bills_account` is true.** This is
+independent of `include_in_set_aside`, which only controls the saving target in pay-cycle planning.
+A mortgage paid by direct debit still counts even when set-aside planning is disabled.
+
+Migration `solace.0012` adds the payment-account flag, defaulting existing and new bills to true.
+An old set-aside preference is not evidence that a bill is paid elsewhere. Households should mark
+bills paid from other accounts explicitly; nothing changes their set-aside preferences or payment
+history. The flag is included in bill editing and readable CSV/XLSX export/import.
+
+The forecast returns `bill_coverage` for every bill the reader can access: payment count and total,
+or a reason for exclusion (paid elsewhere, paused, missing date, or no payments in the window).
+Skipped occurrences are excluded, recurrence end dates are respected, and overdue unpaid
+occurrences are carried to the opening day if their due date precedes it. Marking an overdue
+payment as paid updates its treatment. No private bill names may leak through this explanation.
+
+Balance snapshots mean **end of the recorded day**. Projection starts the following day, including
+intervening cash flow when a snapshot is older than today. Without a snapshot it starts today and
+still shows bills, transfers and the required opening balance; unknown balances remain unknown.
+Paid occurrences use `paid_at` (due date for legacy rows with no payment timestamp). Payments
+already included in the opening balance are not deducted again, including early-paid bills with
+future due dates. Pausing a schedule stops future bills but does not erase payments made since
+the snapshot. Dates and transfer cycles use the household timezone.
+
+`first_shortfall_date` is separate from `lowest_balance_date`. The UI shows the top-up required,
+projected low point, and the assumptions behind any headroom. Same-day transfers are assumed to
+arrive before payments; the chart shows end-of-day balances. Missing due dates, overdue debts,
+no scheduled transfers and balances over 14 days old produce visible warnings. Expected transfers
+are plans, not reconciled bank transactions; updating the balance accounts for other bank activity.
+
+### Everyday Money workflow
+
+- **Overview:** bills-account position, current-cycle payments, Add bill, Update account balance,
+  and setup shortcuts for income / bills / bills transfers.
+- **Bills:** due-date ordered bill register, upcoming unpaid payments and calendar. Search and
+  category/status filters affect the list; they do not change household planning totals.
+- **Payday plan:** transfers, savings/buckets, income, purchases and an accessible checklist on
+  both phone and desktop. Generating a checklist opens it directly. A phone section picker keeps
+  these destinations readable.
+- **Bills account:** forecast, interactive balance chart, coverage review with links to the bills,
+  dated cash flow, and existing closeout/history/annual reports. A closing balance can be recorded
+  here without a detour through settings; failed saves retain the entered values.
+- **Settings:** household finance preferences, categories, balance history and import/export.
+
+Existing `tab`/`section` routes and global/Home search links continue to work. Search results are
+kept separate from the full household datasets, so searching does not change the forecast or the
+allocation rules used when creating/editing a bucket. The cycle-end label describes the cycle,
+rather than claiming it is the next actual payday.
 
 **A bucket funds the bills account when its `purpose` is `bills`** — the value the bucket form
 sets. Both the forecast and the pay-cycle plan's set-aside total previously decided this by looking

@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.40.10**
+> **Current version: 0.40.11**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,24 @@
 ---
 
 ## 0.40 — Faster everyday household coordination
+
+### 0.40.11 — 2026-10-02 — Clearer Money and complete bills-account forecasts
+
+- Fixed omitted mortgages and other bills: the forecast now uses an explicit **Paid from bills
+  account** setting, independent of set-aside planning. Existing bills are included by default;
+  payments from other accounts can be explicitly excluded. Requires migration `solace.0012`.
+- Forecasts show exactly which bills are counted, how many payments they contribute, and why any
+  bill is excluded. Older balances include intervening cash flow, overdue unpaid bills are carried
+  forward, early payments already in the balance are not charged twice, and payday dates use the
+  household timezone. First shortfall and lowest balance dates are reported separately.
+- Money opens with the bills-account position and direct Add bill / Update balance actions. The
+  forecast has an interactive balance chart, readable cash-flow dates, coverage links, inline
+  balance entry and explicit assumptions. It remains useful before a balance has been recorded.
+- Clearer Overview / Bills / Payday plan / Bills account / Settings destinations, a phone payday
+  section picker, and a dedicated checklist that opens after generation. Cycle-end labels no
+  longer incorrectly promise a payday. Search results preserve account totals and allocation data.
+- Added calculation, permission-filtering and browser regressions for the forecast, payment-account
+  editing, failed balance saves, forecast refresh, search links and mobile checklist access.
 
 ### 0.40.10 — 2026-09-24 — Undo instead of "Are you sure?"
 
