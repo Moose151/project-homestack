@@ -281,6 +281,99 @@ class CalendarEventCRUDTests(TestCase):
         event = next(e for e in resp.json() if e["title"] == "Standalone")
         self.assertIsNone(event["source_node"])
 
+
+class MultiDayEventRangeTests(TestCase):
+    """A multi-day event must come back for every window it overlaps, including one that
+
+    starts before the window and ends inside/after it — not just the window containing its
+    ``start_at``. Covers the Calendar month-view bug where "Nick US" (23 Oct -> 15 Nov) only
+    ever appeared on 23 October.
+    """
+
+    def setUp(self):
+        self.admin = _make_user("admin", User.Role.ADMIN)
+        self.list_url = reverse("calendar-event-list")
+        _login(self.client, "admin")
+
+    def _get(self, start: date, end: date):
+        resp = self.client.get(f"{self.list_url}?start={start.isoformat()}&end={end.isoformat()}")
+        self.assertEqual(resp.status_code, 200)
+        return [row["title"] for row in resp.json()]
+
+    def test_long_all_day_event_appears_in_a_later_month_it_overlaps(self):
+        # 23 Oct -> 15 Nov, all day. Viewing November must still surface it, even though it
+        # started in October.
+        create_event(
+            self.admin, title="Nick US", event_kind="event", is_all_day=True,
+            start_at="2026-10-23T00:00:00Z", end_at="2026-11-15T00:00:00Z",
+        )
+        november = self._get(date(2026, 11, 1), date(2026, 12, 1))
+        self.assertIn("Nick US", november)
+
+    def test_long_all_day_event_still_appears_in_its_starting_month(self):
+        create_event(
+            self.admin, title="Nick US", event_kind="event", is_all_day=True,
+            start_at="2026-10-23T00:00:00Z", end_at="2026-11-15T00:00:00Z",
+        )
+        october = self._get(date(2026, 10, 1), date(2026, 11, 1))
+        self.assertIn("Nick US", october)
+
+    def test_all_day_end_date_is_inclusive(self):
+        # Stored end_at for an all-day event is midnight of the *last included* day. A window
+        # starting on 15 Nov must still include it; a window starting on 16 Nov must not.
+        create_event(
+            self.admin, title="Nick US", event_kind="event", is_all_day=True,
+            start_at="2026-10-23T00:00:00Z", end_at="2026-11-15T00:00:00Z",
+        )
+        self.assertIn("Nick US", self._get(date(2026, 11, 15), date(2026, 11, 16)))
+        self.assertNotIn("Nick US", self._get(date(2026, 11, 16), date(2026, 11, 17)))
+
+    def test_event_ending_before_the_window_is_excluded(self):
+        create_event(
+            self.admin, title="Old trip", event_kind="event", is_all_day=True,
+            start_at="2026-09-01T00:00:00Z", end_at="2026-09-05T00:00:00Z",
+        )
+        self.assertNotIn("Old trip", self._get(date(2026, 10, 1), date(2026, 11, 1)))
+
+    def test_event_starting_after_the_window_is_excluded(self):
+        create_event(
+            self.admin, title="Later trip", event_kind="event", is_all_day=True,
+            start_at="2026-12-01T00:00:00Z", end_at="2026-12-05T00:00:00Z",
+        )
+        self.assertNotIn("Later trip", self._get(date(2026, 10, 1), date(2026, 11, 1)))
+
+    def test_single_day_event_unaffected(self):
+        create_event(self.admin, title="Dentist", event_kind="appointment", start_at="2026-10-05T09:00:00Z")
+        self.assertIn("Dentist", self._get(date(2026, 10, 1), date(2026, 11, 1)))
+        self.assertNotIn("Dentist", self._get(date(2026, 11, 1), date(2026, 12, 1)))
+
+    def test_cross_week_and_cross_month_boundaries_within_a_single_month_view(self):
+        # The same event must overlap every weekly window a month-view grid would query it
+        # against, including weeks that dip into the adjacent month.
+        create_event(
+            self.admin, title="Nick US", event_kind="event", is_all_day=True,
+            start_at="2026-10-23T00:00:00Z", end_at="2026-11-15T00:00:00Z",
+        )
+        for start, end in [
+            (date(2026, 10, 19), date(2026, 10, 26)),
+            (date(2026, 10, 26), date(2026, 11, 2)),
+            (date(2026, 11, 2), date(2026, 11, 9)),
+            (date(2026, 11, 9), date(2026, 11, 16)),
+        ]:
+            self.assertIn("Nick US", self._get(start, end), f"missing for week {start}..{end}")
+
+    def test_permissions_still_apply_to_overlapping_events(self):
+        from apps.scheduling.selectors import list_events
+        create_event(
+            self.admin, title="Private trip", event_kind="event", is_all_day=True,
+            start_at="2026-10-23T00:00:00Z", end_at="2026-11-15T00:00:00Z",
+            visibility="private",
+        )
+        other = _make_user("other", User.Role.USER)
+        results = list_events(other, start=timezone.make_aware(timezone.datetime(2026, 11, 1)),
+                               end=timezone.make_aware(timezone.datetime(2026, 12, 1)))
+        self.assertNotIn("Private trip", [e.title for e in results])
+
     def test_atlas_synced_event_exposes_source_node_and_respects_visibility(self):
         from apps.atlas.models import Visibility as AtlasVisibility
         from apps.atlas.services import create_reminder

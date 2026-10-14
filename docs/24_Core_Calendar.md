@@ -53,6 +53,45 @@ A Calendar event carries the implemented combination of:
 Standalone classification includes ordinary events and **appointments**. Derived types such as
 birthdays/tasks/holidays are classifications/projections, not independent editable copies.
 
+### 3.1 Multi-day spans (v0.41)
+
+A `CalendarEvent` is one row regardless of how many days it covers — there is no per-day
+duplication, in the database or in any API response. `end_at` is optional; when absent, the
+event is a single instant (a timed event) or a single day (all-day).
+
+**All-day inclusive end.** The date pickers (`DateTimeField`) store an all-day event's `end_at`
+as **midnight of its last included day** — picking "15 Nov" as the end of an all-day event
+stores `2026-11-15T00:00:00`, and 15 November is part of the event. This is the one place the
+date math needs care: every reader that turns `end_at` into an *exclusive* upper bound (a range
+query, a day-grid loop) must add one day to an all-day `end_at` first. `eventDayRange()`
+(frontend, `src/lib/calendarSpans.ts`) and `_EFFECTIVE_END` (backend,
+`apps/scheduling/selectors.py`) are the two canonical places this adjustment happens — nothing
+else should re-derive it.
+
+**Range queries must use overlap, not `start_at` membership.** `GET /calendar/events/?start=&end=`
+answers "what overlaps this window", not "what starts in this window": an event starting 23
+October and ending 15 November must still be returned when the window is November, because it is
+still happening then. The rule, applied in `selectors.list_events`:
+
+> the event starts before the window ends, **and**
+> the event has no end, or its (exclusive, inclusive-adjusted) end is after the window start.
+
+Querying `start_at >= window_start` alone — the bug this section exists to prevent — silently
+drops every event that began before the window but is still running inside it.
+
+**Rendering.** The frontend never asks the backend to pre-slice an event by day. It fetches the
+visible window once (as before) and derives per-day/per-week placement client-side:
+`eventDayRange()` turns an event into the inclusive calendar-day range it occupies;
+`buildWeekSegments()` clips that to one week at a time, producing one segment per week an event
+touches (flat-edged where it continues past that week, rounded where it actually starts/ends
+there); `assignLanes()` packs a week's segments into deterministic, non-overlapping rows, trying
+to keep a continuing event in the same lane from one week to the next. Month view renders these
+segments as continuous bars (date numbers on top, lanes underneath) rather than a truncated chip
+list per cell — see `MonthWeekRow` in `CalendarPage.tsx`. Week view shows the same segments as an
+all-day strip above the day columns, so a spanning event is not repeated in every day column it
+touches. Day view and Agenda read the same per-day index (`eventsByDay`, keyed by every day in
+range, not just the start day) and show a visible date range rather than one bare time per day.
+
 ## 4. Appointments — shipped
 
 Calendar-owned appointments support the current useful combination of date/time/all-day state,
@@ -80,7 +119,15 @@ Required UX rules:
 - selecting a day can reveal detail without losing month context;
 - filters/person/source context remain understandable;
 - date navigation handles month-end/timezone boundaries safely;
-- Calendar rows deep-link to the owning record where applicable.
+- Calendar rows deep-link to the owning record where applicable;
+- a multi-day event renders as one continuous bar across the days it spans (§3.1), not as a
+  separate truncated entry in every cell it touches — TimeTree's month view is the UX reference,
+  translated into HomeStack's own colours/components rather than copied;
+- overlapping events on the same day(s) are packed into deterministic lanes so none are visually
+  hidden behind another; when more events exist than the visible lanes allow, a "+N more"
+  affordance exposes the rest rather than silently clipping them;
+- rotating-schedule occurrences (§8) get their own indicator row/layer in Month view rather than
+  competing with ordinary events for a lane.
 
 ## 6. People, colour and visibility
 
@@ -176,6 +223,10 @@ Do not turn this spec into a field-by-field schema duplicate of the code.
 - Removing a rotation exception restores the underlying repeating plan.
 - Birthday ages remain correct without annual event-copy jobs.
 - Phone and desktop views remain usable and deep links return to the correct source.
+- A multi-day event appears on every applicable date — including a later month it merely
+  overlaps, not just the one it started in — as one record, never duplicated per day.
+- Clicking any week's segment of a multi-day event, in any view, opens the same underlying event;
+  editing or deleting it updates/removes the whole span.
 
 ## 17. Future possibilities
 

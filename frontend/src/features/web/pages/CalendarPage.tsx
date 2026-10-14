@@ -21,6 +21,10 @@ import { useUrlAction } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
 import { ColourPicker } from '../../../components/ColourPicker'
 import { isPhoneViewport } from '../../../lib/viewport'
+import {
+  assignLanes, buildWeekSegments, eventDayRange, hiddenCountForColumn,
+  type LanedSegment,
+} from '../../../lib/calendarSpans'
 
 // ---------------------------------------------------------------------------
 // Date helpers (no external deps)
@@ -64,6 +68,12 @@ function monthGrid(anchor: Date, weekStart: number): Date[] {
   const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
   const gridStart = startOfWeek(first, weekStart)
   return Array.from({ length: 42 }, (_, i) => addDays(gridStart, i))
+}
+
+/** The month grid as 6 weeks of 7 days — one row per week, oldest first. */
+function monthWeeks(anchor: Date, weekStart: number): Date[][] {
+  const grid = monthGrid(anchor, weekStart)
+  return Array.from({ length: 6 }, (_, i) => grid.slice(i * 7, i * 7 + 7))
 }
 
 function fmtTime(iso: string, time24: boolean) {
@@ -626,14 +636,17 @@ function RotationExceptionModal({ occurrence, schedule, onClose, onSaved, onErro
 // Agenda view
 // ---------------------------------------------------------------------------
 
-function AgendaView({ events, rotations, colourFor, time24, onOpen, onOpenRotation }: {
+function AgendaView({ events, rotations, colourFor, time24, spanLabel, onOpen, onOpenRotation }: {
   events: CalendarEvent[]
   rotations: RotatingScheduleOccurrence[]
   colourFor: (e: CalendarEvent) => string
   time24: boolean
+  spanLabel: (e: CalendarEvent) => string
   onOpen: (e: CalendarEvent) => void
   onOpenRotation?: (occurrence: RotatingScheduleOccurrence) => void
 }) {
+  // A multi-day event is grouped under its start date only — one agenda row with a visible
+  // date range, never one row per day it spans (a 3-week event must not read as a one-day one).
   const grouped = useMemo(() => {
     const m = new Map<string, { events: CalendarEvent[]; rotations: RotatingScheduleOccurrence[] }>()
     for (const e of events) {
@@ -666,6 +679,7 @@ function AgendaView({ events, rotations, colourFor, time24, onOpen, onOpenRotati
                 <div className="w-16 text-xs text-primary font-semibold tabular-nums flex-shrink-0">{e.is_all_day ? 'All day' : fmtTime(e.start_at, time24)}</div>
                 <div className="flex-1 min-w-0" style={{ borderLeft: `3px solid ${colourFor(e)}`, paddingLeft: 10 }}>
                   <p className="font-medium text-ink">{e.title}</p>
+                  {spanLabel(e) && <span className="block text-xs font-semibold text-muted-strong">{spanLabel(e)}</span>}
                   {e.source_node && <span className="text-xs text-muted capitalize">{e.source_node}</span>}
                 </div>
               </button>
@@ -682,18 +696,20 @@ function AgendaView({ events, rotations, colourFor, time24, onOpen, onOpenRotati
 // Week view's horizontal-day-strip-plus-agenda pattern (docs/36 §6.2) so the two never drift.
 // ---------------------------------------------------------------------------
 
-function DayAgendaList({ date, dayEvents, dayRotations, colourFor, time24, canEditCalendar, onOpen, onOpenRotation }: {
+function DayAgendaList({ date, dayEvents, dayRotations, colourFor, time24, spanLabel, canEditCalendar, onOpen, onOpenRotation }: {
   date: Date
   dayEvents: (d: Date) => CalendarEvent[]
   dayRotations: (d: Date) => RotatingScheduleOccurrence[]
   colourFor: (e: CalendarEvent) => string
   time24: boolean
+  spanLabel: (e: CalendarEvent) => string
   canEditCalendar: boolean
   onOpen: (e: CalendarEvent) => void
   onOpenRotation: (occurrence: RotatingScheduleOccurrence) => void
 }) {
   const events = dayEvents(date)
   const rotations = dayRotations(date)
+  const continuing = (e: CalendarEvent) => !sameDay(eventDayRange(e).start, date)
   return (
     <div className="flex flex-col gap-2">
       {rotations.map(occurrence => (
@@ -703,14 +719,178 @@ function DayAgendaList({ date, dayEvents, dayRotations, colourFor, time24, canEd
         <EmptyState icon="📅" title="No events scheduled" hint="Use the quick-add above, or “New event” for full details." />
       ) : events.map(e => (
         <button key={e.id} onClick={() => onOpen(e)} className="flex items-start gap-4 p-4 rounded-xl border border-line hover:bg-sunken text-left">
-          <div className="w-16 text-xs text-primary font-semibold tabular-nums flex-shrink-0">{e.is_all_day ? 'All day' : fmtTime(e.start_at, time24)}</div>
+          <div className="w-16 text-xs text-primary font-semibold tabular-nums flex-shrink-0">
+            {e.is_all_day ? 'All day' : fmtTime(e.start_at, time24)}
+          </div>
           <div className="flex-1 min-w-0" style={{ borderLeft: `3px solid ${colourFor(e)}`, paddingLeft: 10 }}>
             <p className="font-medium text-ink">{e.title}</p>
+            {spanLabel(e) && (
+              <span className="block text-xs font-semibold text-muted-strong">
+                {spanLabel(e)}{continuing(e) ? ' · ongoing' : ''}
+              </span>
+            )}
             {e.location && <p className="text-xs text-muted">{e.location}</p>}
             {e.source_node && <span className="text-xs text-muted capitalize">{e.source_node}</span>}
           </div>
         </button>
       ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Month view — one week at a time, TimeTree-style: date numbers on top, continuous event bars
+// underneath in deterministic lanes (not one truncated chip list per isolated cell). A
+// multi-day event is one bar per week it touches, flat-edged where it continues into the next
+// row and rounded where it actually starts/ends — the same component serves the compact phone
+// grid and the roomier desktop one via `compact`/`cap`.
+// ---------------------------------------------------------------------------
+
+function MonthWeekRow({
+  weekDays, monthAnchor, visibleEvents, laneMemory, cap, compact, selectedDay,
+  dayRotations, dayEventCount, colourFor, onSelectDay, onOpenEvent, onOpenRotation,
+  onAddEvent, canEditCalendar,
+}: {
+  weekDays: Date[]
+  monthAnchor: Date
+  visibleEvents: CalendarEvent[]
+  laneMemory: Map<number, number>
+  cap: number
+  compact: boolean
+  selectedDay: Date | null
+  dayRotations: (d: Date) => RotatingScheduleOccurrence[]
+  dayEventCount: (d: Date) => number
+  colourFor: (e: CalendarEvent) => string
+  onSelectDay: (d: Date) => void
+  onOpenEvent: (e: CalendarEvent) => void
+  onOpenRotation: (occurrence: RotatingScheduleOccurrence) => void
+  onAddEvent?: (d: Date) => void
+  canEditCalendar: boolean
+}) {
+  const segments = buildWeekSegments(visibleEvents, weekDays)
+  const laned = assignLanes(segments, laneMemory)
+  const maxLane = laned.reduce((m, s) => Math.max(m, s.lane), -1)
+  const laneRows = Math.min(cap, maxLane + 1)
+  const hasRotations = weekDays.some(d => dayRotations(d).length > 0)
+  const overflowCounts = weekDays.map((_, col) => hiddenCountForColumn(laned, col, cap))
+  const hasOverflow = overflowCounts.some(n => n > 0)
+
+  const barCls = compact
+    ? 'flex h-[17px] items-center px-1 text-[9px] font-bold leading-none text-white truncate'
+    : 'flex h-5 items-center px-1.5 text-[11px] font-semibold leading-none text-white truncate'
+
+  const barFor = (segment: LanedSegment<CalendarEvent>) => {
+    const { start, end } = eventDayRange(segment.event)
+    const multiDay = start.getTime() !== end.getTime()
+    const fmt: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
+    const rangeLabel = multiDay ? `, ${start.toLocaleDateString(undefined, fmt)} – ${end.toLocaleDateString(undefined, fmt)}` : ''
+    return (
+      <button
+        key={segment.key}
+        type="button"
+        onClick={() => onOpenEvent(segment.event)}
+        style={{
+          gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}`,
+          gridRow: 1,
+          backgroundColor: colourFor(segment.event),
+        }}
+        className={`${barCls} min-w-0 ${segment.continuesBefore ? 'rounded-l-none -ml-px' : 'rounded-l-md'} ${segment.continuesAfter ? 'rounded-r-none' : 'rounded-r-md'} hover:brightness-95`}
+        aria-label={`${segment.event.title}${rangeLabel}`}
+        title={`${segment.event.title}${rangeLabel}`}
+      >
+        {segment.continuesBefore && <span aria-hidden className="mr-0.5">‹</span>}
+        <span className="truncate">{segment.event.title}</span>
+        {segment.continuesAfter && <span aria-hidden className="ml-auto pl-0.5">›</span>}
+      </button>
+    )
+  }
+
+  return (
+    <div className={`border-b border-line ${compact ? 'py-0.5' : 'py-1'}`}>
+      {/* Date numbers */}
+      <div className="grid grid-cols-7">
+        {weekDays.map(day => {
+          const inMonth = day.getMonth() === monthAnchor.getMonth() && day.getFullYear() === monthAnchor.getFullYear()
+          const selected = !!selectedDay && sameDay(day, selectedDay)
+          const weekend = day.getDay() === 0 || day.getDay() === 6
+          const count = dayEventCount(day)
+          const occurrence = dayRotations(day)[0]
+          return (
+            <div key={day.toDateString()} className="group relative flex items-center justify-center py-0.5">
+              <button
+                type="button"
+                onClick={() => onSelectDay(day)}
+                aria-pressed={selected || undefined}
+                aria-label={`${day.toLocaleDateString()}${occurrence ? `, ${occurrence.label}` : ''}${count ? `, ${count} events` : ''}`}
+                className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold transition-colors ${
+                  isToday(day) ? 'bg-primary text-white'
+                    : selected ? 'bg-primary-soft text-primary ring-1 ring-primary'
+                      : inMonth ? (weekend ? 'text-muted-strong' : 'text-ink') : 'text-muted opacity-40'
+                }`}
+              >
+                {day.getDate()}
+              </button>
+              {canEditCalendar && onAddEvent && !compact && (
+                <button
+                  type="button"
+                  onClick={event => { event.stopPropagation(); onAddEvent(day) }}
+                  className="absolute right-0.5 grid h-5 w-5 flex-shrink-0 place-items-center rounded-lg text-xs font-bold text-muted opacity-0 transition-opacity hover:bg-primary-soft hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
+                  aria-label={`Add an event on ${day.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}`}
+                  title="Add an event on this day"
+                >
+                  +
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Rotating-schedule indicator — its own row, so it never competes with ordinary events
+          for a lane, and keeps reading as one continuous strip across the week. */}
+      {hasRotations && (
+        <div className="grid grid-cols-7 gap-px px-px">
+          {weekDays.map(day => {
+            const occurrence = dayRotations(day)[0]
+            return (
+              <button
+                key={day.toDateString()}
+                type="button"
+                disabled={!occurrence || !canEditCalendar}
+                onClick={() => occurrence && onOpenRotation(occurrence)}
+                className={`block h-[14px] truncate rounded-sm px-0.5 text-center text-[9px] font-bold leading-[14px] text-white ${occurrence ? '' : 'invisible'}`}
+                style={{ backgroundColor: occurrence?.colour }}
+                aria-label={occurrence ? `${occurrence.schedule_title}: ${occurrence.label}${occurrence.is_override ? ' (changed for this day)' : ''}` : undefined}
+              >
+                {occurrence?.label}
+                {occurrence?.is_override && <span aria-hidden> •</span>}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Event lanes: continuous bars, one row per lane, shared across the whole week. */}
+      {Array.from({ length: laneRows }, (_, lane) => (
+        <div key={lane} className="grid grid-cols-7 gap-px px-px" style={{ marginTop: 2 }}>
+          {laned.filter(s => s.lane === lane).map(barFor)}
+        </div>
+      ))}
+
+      {hasOverflow && (
+        <div className="mt-0.5 grid grid-cols-7 px-px">
+          {weekDays.map((day, col) => overflowCounts[col] > 0 ? (
+            <button
+              key={day.toDateString()}
+              type="button"
+              onClick={() => onSelectDay(day)}
+              className="text-center text-[9px] font-bold leading-4 text-muted hover:text-primary"
+            >
+              +{overflowCounts[col]} more
+            </button>
+          ) : <span key={day.toDateString()} />)}
+        </div>
+      )}
     </div>
   )
 }
@@ -892,16 +1072,33 @@ export function CalendarPage() {
     return familyColour
   }
 
+  // Indexed by every day an event's span touches (clipped to the fetched window), not just its
+  // start date — a multi-day event must show up on every applicable day, in Month, Week, Day
+  // and the mobile day-detail sheet alike.
   const eventsByDay = useMemo(() => {
     const m = new Map<string, CalendarEvent[]>()
+    const windowStart = startOfDay(new Date(winStart))
+    const windowEnd = startOfDay(new Date(winEnd))
     for (const e of visibleEvents) {
-      const k = new Date(e.start_at).toDateString()
-      if (!m.has(k)) m.set(k, [])
-      m.get(k)!.push(e)
+      const { start, end } = eventDayRange(e)
+      const from = start < windowStart ? windowStart : start
+      const to = end > windowEnd ? windowEnd : end
+      for (let d = from; d <= to; d = addDays(d, 1)) {
+        const k = d.toDateString()
+        if (!m.has(k)) m.set(k, [])
+        m.get(k)!.push(e)
+      }
     }
     return m
-  }, [visibleEvents])
+  }, [visibleEvents, winStart, winEnd])
   const dayEvents = (d: Date) => (eventsByDay.get(d.toDateString()) ?? [])
+  /** A short "23 Oct – 15 Nov" label for a multi-day event, or '' for a single day one. */
+  const spanLabel = (e: CalendarEvent) => {
+    const { start, end } = eventDayRange(e)
+    if (sameDay(start, end)) return ''
+    const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
+    return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, opts)}`
+  }
 
   const visibleRotations = useMemo(
     () => rotations.filter(occurrence => {
@@ -1028,6 +1225,13 @@ export function CalendarPage() {
     `flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium capitalize transition-colors ${
       on ? 'border-line-strong text-ink' : 'border-line text-muted line-through opacity-60'
     }`
+
+  // Lane assignment threads continuity across a month's weeks (so a multi-day event keeps the
+  // same row where possible) — a fresh map each render, mutated in place as MonthWeekRow renders
+  // week-by-week in order. Mobile and desktop grids are laid out independently.
+  const mobileLaneMemory = useMemo(() => new Map<number, number>(), [anchor, weekStart, visibleEvents])
+  const desktopLaneMemory = useMemo(() => new Map<number, number>(), [anchor, weekStart, visibleEvents])
+  const weekStripLaneMemory = useMemo(() => new Map<number, number>(), [anchor, weekStart, visibleEvents])
 
   const selectedSchedule = scheduleModal === 'new'
     ? null
@@ -1243,104 +1447,52 @@ export function CalendarPage() {
               <div className="grid grid-cols-7 bg-sunken">
                 {weekdayNames.map(day => <div key={day} className="px-1 py-2 text-center text-[10px] font-bold uppercase tracking-wide text-muted">{day.slice(0, 2)}</div>)}
               </div>
-              <div className="grid grid-cols-7">
-                {monthGrid(anchor, weekStart).map((day, index) => {
-                  const inMonth = day.getMonth() === anchor.getMonth()
-                  const occurrence = dayRotations(day)[0]
-                  const dayItems = dayEvents(day)
-                  const selected = sameDay(day, selectedMonthDay)
-                  return (
-                    <button
-                      key={index}
-                      type="button"
-                      onClick={() => {
-                        if (monthSwipeHandled.current) return
-                        selectMonthDay(day)
-                      }}
-                      className={`relative min-h-[94px] overflow-hidden border-b border-r border-line px-0.5 pb-1 pt-1.5 text-left align-top transition-colors ${selected ? 'z-[1] bg-primary-soft/55 ring-2 ring-inset ring-primary' : 'active:bg-sunken'} ${inMonth ? 'text-ink' : 'text-muted opacity-40'}`}
-                      aria-pressed={selected}
-                      aria-label={`${day.toLocaleDateString()}${occurrence ? `, ${occurrence.label}` : ''}${dayItems.length ? `, ${dayItems.length} events` : ''}`}
-                    >
-                      {occurrence && <span className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: occurrence.colour }} />}
-                      <span className={`mx-auto grid h-6 min-w-6 w-fit place-items-center rounded-full px-1 text-xs font-bold ${isToday(day) ? 'bg-primary text-white' : ''}`}>{day.getDate()}</span>
-                      {occurrence?.is_override && <span className="absolute right-1 top-2 text-[8px] font-black text-primary" aria-label="Changed day">S</span>}
-                      <span className="mt-1 flex min-w-0 flex-col gap-0.5" aria-hidden>
-                        {occurrence && (
-                          <span
-                            className="block truncate rounded-sm px-0.5 text-center text-[9px] font-bold leading-4 text-white"
-                            style={{ backgroundColor: occurrence.colour }}
-                          >
-                            {occurrence.label}
-                          </span>
-                        )}
-                        {dayItems.slice(0, occurrence ? 2 : 3).map(item => (
-                          <span
-                            key={item.id}
-                            className="block truncate rounded-sm px-0.5 text-center text-[9px] font-bold leading-4 text-white"
-                            style={{ backgroundColor: colourFor(item) }}
-                          >
-                            {item.title}
-                          </span>
-                        ))}
-                        {dayItems.length > (occurrence ? 2 : 3) && (
-                          <span className="block text-center text-[9px] font-bold leading-3 text-muted">
-                            +{dayItems.length - (occurrence ? 2 : 3)} more
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
+              {monthWeeks(anchor, weekStart).map((weekDays, i) => (
+                <MonthWeekRow
+                  key={i}
+                  weekDays={weekDays}
+                  monthAnchor={anchor}
+                  visibleEvents={visibleEvents}
+                  laneMemory={mobileLaneMemory}
+                  cap={2}
+                  compact
+                  selectedDay={selectedMonthDay}
+                  dayRotations={dayRotations}
+                  dayEventCount={d => dayEvents(d).length}
+                  colourFor={colourFor}
+                  onSelectDay={day => { if (!monthSwipeHandled.current) selectMonthDay(day) }}
+                  onOpenEvent={openEvent}
+                  onOpenRotation={openRotation}
+                  canEditCalendar={canEditCalendar}
+                />
+              ))}
             </div>
-            <p className="mt-2 px-1 text-[11px] text-muted">Tap a date for full details · swipe sideways to change month · <strong>S</strong> marks a changed rotation day.</p>
+            <p className="mt-2 px-1 text-[11px] text-muted">Tap a date for full details · tap an event to open it · swipe sideways to change month.</p>
           </div>
           <div data-calendar-grid className="hidden rounded-2xl border border-line overflow-hidden sm:block">
             <div className="grid grid-cols-7 bg-sunken">
               {weekdayNames.map(d => <div key={d} className="px-2 py-1.5 text-xs font-semibold text-muted text-center">{d}</div>)}
             </div>
-            <div className="grid grid-cols-7">
-              {monthGrid(anchor, weekStart).map((d, i) => {
-                const inMonth = d.getMonth() === anchor.getMonth()
-                const evs = dayEvents(d)
-                const rotationDays = dayRotations(d)
-                const occurrence = rotationDays[0]
-                return (
-                  <div key={i} onClick={() => { setAnchor(d); setView('day') }}
-                    style={occurrence ? { borderTop: `4px solid ${occurrence.colour}` } : undefined}
-                    className={`group relative min-h-[112px] border-b border-r border-line p-1 cursor-pointer hover:brightness-95 ${inMonth ? '' : 'opacity-45'}`}>
-                    <div className="mb-1 flex items-start justify-between gap-1">
-                      <div className={`text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full ${isToday(d) ? 'bg-primary text-white' : inMonth ? 'text-ink' : 'text-muted'}`}>
-                        {d.getDate()}
-                      </div>
-                      {/* Adding an event on a specific day previously meant opening that day
-                          first, or changing the date inside the modal. Kept faint until the cell
-                          is hovered or the button focused, so the grid still reads as a month. */}
-                      {canEditCalendar && (
-                        <button
-                          type="button"
-                          onClick={event => { event.stopPropagation(); openNew(d) }}
-                          className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-lg text-sm font-bold text-muted opacity-0 transition-opacity hover:bg-primary-soft hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
-                          aria-label={`Add an event on ${d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}`}
-                          title="Add an event on this day"
-                        >
-                          +
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      {occurrence?.is_override && <span className="px-1 text-[9px] font-bold text-primary">SWAP</span>}
-                      {evs.slice(0, 3).map(e => (
-                        <div key={e.id} onClick={ev => { ev.stopPropagation(); openEvent(e) }}>
-                          <EventChip event={e} colour={colourFor(e)} time24={time24} onClick={() => {}} />
-                        </div>
-                      ))}
-                      {evs.length > 3 && <span className="text-[10px] text-muted pl-1">+{evs.length - 3} more</span>}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+            {monthWeeks(anchor, weekStart).map((weekDays, i) => (
+              <MonthWeekRow
+                key={i}
+                weekDays={weekDays}
+                monthAnchor={anchor}
+                visibleEvents={visibleEvents}
+                laneMemory={desktopLaneMemory}
+                cap={3}
+                compact={false}
+                selectedDay={null}
+                dayRotations={dayRotations}
+                dayEventCount={d => dayEvents(d).length}
+                colourFor={colourFor}
+                onSelectDay={day => { setAnchor(day); setView('day') }}
+                onOpenEvent={openEvent}
+                onOpenRotation={openRotation}
+                onAddEvent={openNew}
+                canEditCalendar={canEditCalendar}
+              />
+            ))}
           </div>
         </>
       ) : view === 'week' ? (
@@ -1379,38 +1531,82 @@ export function CalendarPage() {
             </h2>
             <DayAgendaList
               date={anchor} dayEvents={dayEvents} dayRotations={dayRotations} colourFor={colourFor}
-              time24={time24} canEditCalendar={canEditCalendar} onOpen={openEvent} onOpenRotation={openRotation}
+              time24={time24} spanLabel={spanLabel} canEditCalendar={canEditCalendar} onOpen={openEvent} onOpenRotation={openRotation}
             />
           </div>
-          <div className="hidden grid-cols-7 gap-2 sm:grid">
-            {Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(anchor, weekStart), i)).map(d => (
-              <div
-                key={d.toDateString()}
-                className="rounded-xl border border-line p-2 min-h-[120px] text-left hover:bg-sunken/40"
-              >
-                <button type="button" onClick={() => openNew(d)} className={`mb-2 min-h-8 w-full text-left text-xs font-semibold ${isToday(d) ? 'text-primary' : 'text-muted-strong'}`}>
-                  {d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })}
-                </button>
-                <div className="flex flex-col gap-1">
-                  {dayRotations(d).map(occurrence => (
-                    <RotationBadge key={occurrence.id} occurrence={occurrence} compact onClick={canEditCalendar ? () => openRotation(occurrence) : undefined} />
+          <div className="hidden flex-col gap-1 sm:flex">
+            {/* A multi-day/all-day event spans its own strip across the days it touches, rather
+                than repeating as a separate chip in every one of its day columns below. */}
+            {(() => {
+              const weekDays = Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(anchor, weekStart), i))
+              const segments = buildWeekSegments(visibleEvents, weekDays)
+              if (segments.length === 0) return null
+              const laned = assignLanes(segments, weekStripLaneMemory)
+              const lanes = laned.reduce((m, s) => Math.max(m, s.lane), -1) + 1
+              return (
+                <div className="mb-1 rounded-xl border border-line bg-surface p-1.5">
+                  {Array.from({ length: lanes }, (_, lane) => (
+                    <div key={lane} className="grid grid-cols-7 gap-1" style={lane > 0 ? { marginTop: 4 } : undefined}>
+                      {laned.filter(s => s.lane === lane).map(segment => {
+                        const { start, end } = eventDayRange(segment.event)
+                        const fmt: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
+                        const rangeLabel = start.getTime() !== end.getTime() ? `, ${start.toLocaleDateString(undefined, fmt)} – ${end.toLocaleDateString(undefined, fmt)}` : ''
+                        return (
+                          <button
+                            key={segment.key}
+                            type="button"
+                            onClick={() => openEvent(segment.event)}
+                            style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}`, backgroundColor: colourFor(segment.event) }}
+                            className={`flex h-6 items-center px-2 text-xs font-semibold leading-none text-white truncate hover:brightness-95 ${segment.continuesBefore ? 'rounded-l-none' : 'rounded-l-md'} ${segment.continuesAfter ? 'rounded-r-none' : 'rounded-r-md'}`}
+                            aria-label={`${segment.event.title}${rangeLabel}`}
+                            title={`${segment.event.title}${rangeLabel}`}
+                          >
+                            {segment.continuesBefore && <span aria-hidden className="mr-1">‹</span>}
+                            <span className="truncate">{segment.event.title}</span>
+                            {segment.continuesAfter && <span aria-hidden className="ml-auto pl-1">›</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
                   ))}
-                  {dayEvents(d).map(e => <EventChip key={e.id} event={e} colour={colourFor(e)} time24={time24} onClick={() => openEvent(e)} />)}
                 </div>
-              </div>
-            ))}
+              )
+            })()}
+            <div className="grid grid-cols-7 gap-2">
+              {Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(anchor, weekStart), i)).map(d => (
+                <div
+                  key={d.toDateString()}
+                  className="rounded-xl border border-line p-2 min-h-[120px] text-left hover:bg-sunken/40"
+                >
+                  <button type="button" onClick={() => openNew(d)} className={`mb-2 min-h-8 w-full text-left text-xs font-semibold ${isToday(d) ? 'text-primary' : 'text-muted-strong'}`}>
+                    {d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })}
+                  </button>
+                  <div className="flex flex-col gap-1">
+                    {dayRotations(d).map(occurrence => (
+                      <RotationBadge key={occurrence.id} occurrence={occurrence} compact onClick={canEditCalendar ? () => openRotation(occurrence) : undefined} />
+                    ))}
+                    {/* Multi-day events already show in the strip above — only single-day events
+                        go in the day's own column, so nothing is shown twice. */}
+                    {dayEvents(d).filter(e => sameDay(eventDayRange(e).start, eventDayRange(e).end)).map(e => (
+                      <EventChip key={e.id} event={e} colour={colourFor(e)} time24={time24} onClick={() => openEvent(e)} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </>
       ) : view === 'day' ? (
         <DayAgendaList
           date={anchor} dayEvents={dayEvents} dayRotations={dayRotations} colourFor={colourFor}
-          time24={time24} canEditCalendar={canEditCalendar} onOpen={openEvent} onOpenRotation={openRotation}
+          time24={time24} spanLabel={spanLabel} canEditCalendar={canEditCalendar} onOpen={openEvent} onOpenRotation={openRotation}
         />
       ) : (
         <AgendaView
           events={visibleEvents}
           rotations={visibleRotations}
           colourFor={colourFor}
+          spanLabel={spanLabel}
           time24={time24}
           onOpen={openEvent}
           onOpenRotation={canEditCalendar ? openRotation : undefined}

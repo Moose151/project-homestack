@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.40.13**
+> **Current version: 0.41.0**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -8,6 +8,38 @@
 > **Rule:** bump the version and add a row here with every push to `main`.
 
 ---
+
+## 0.41 — Calendar month view: continuous multi-day bars
+
+### 0.41.0 — 2026-10-14 — A multi-day event now shows up everywhere it belongs
+
+- Fixed the core bug: a Calendar event with a start date and a later end date (e.g. 23 Oct → 15
+  Nov) used to appear only on its start date. The range query behind every Calendar view
+  (`GET /calendar/events/`) matched only `start_at` inside the requested window, so a long event
+  dropped out of sight the moment the view paged past the week it started in — most visibly, an
+  event that started last month would vanish from this month's view entirely. It now uses a
+  proper overlap test and is returned for every window it overlaps.
+- Month view now renders multi-day events as continuous horizontal bars spanning the days they
+  cover, breaking cleanly at week boundaries and continuing (flat-edged) into the next row —
+  TimeTree's month view was the UX reference, reimplemented with HomeStack's own colours,
+  components and integrations rather than copied. Overlapping events are packed into
+  deterministic lanes so none are hidden behind another, with a "+N more" affordance once a
+  day's lanes are full. Single-day events, appointments, reminders and every node-generated
+  calendar record (Education, Tasks, Pets, Money, birthdays, Calendar Sources) use the same bar
+  language. Rotating schedules (Kids/Us/Kevin-style) keep their own indicator row rather than
+  competing with ordinary events for a lane.
+- Week view gained a dedicated all-day/multi-day strip above the day columns, so a spanning event
+  shows once as a strip instead of repeating in every day it touches. Day view and Agenda now
+  show a visible date range for a multi-day event ("23 Oct – 15 Nov") instead of either hiding it
+  on later days or listing it as a run of near-identical single-day entries.
+- Clicking any week's bar segment, in any view, opens the same underlying event; editing or
+  deleting it updates/removes the whole span. The underlying record is still exactly one
+  `CalendarEvent` row — nothing here changed storage shape, only how a stored range is queried
+  and rendered.
+- Month view's own layout is calmer on both phone and desktop: date numbers sit above compact
+  event lanes rather than inside heavily bordered boxed cells, bars carry the visual weight
+  instead of cell borders, and weeks stay clearly separated. Verified in light and dark mode and
+  against the split-screen/half-sidebar desktop width class fixed in v0.40.10.
 
 ## 0.40 — Faster everyday household coordination
 

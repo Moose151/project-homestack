@@ -1,11 +1,31 @@
 """scheduling selectors — read-only queries (Coding Standards §6)."""
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.db import connection
-from django.db.models import Q
+from django.db.models import Case, DateTimeField, ExpressionWrapper, F, Q, When
 
 from apps.permissions.visibility import apply_visibility
 from apps.scheduling.models import CalendarEvent, RotatingSchedule, RotatingScheduleException
+
+# The *exclusive* end of the time the event occupies. A multi-day all-day event stores `end_at`
+# as midnight of its *last included* day (the date picker's own convention — see DateTimeField
+# on the frontend), so that date must still count as "within range": its exclusive end is one
+# day later. An event with no end is a single instant, nudged forward by a microsecond so the
+# general "starts before window end AND exclusive-end after window start" overlap test also
+# covers the simple point-in-time case without a separate code path.
+_EFFECTIVE_END = Case(
+    When(end_at__isnull=True, then=ExpressionWrapper(
+        F("start_at") + timedelta(microseconds=1), output_field=DateTimeField(),
+    )),
+    When(
+        is_all_day=True,
+        then=ExpressionWrapper(F("end_at") + timedelta(days=1), output_field=DateTimeField()),
+    ),
+    default=F("end_at"),
+    output_field=DateTimeField(),
+)
 
 
 def list_events(
@@ -23,16 +43,23 @@ def list_events(
 ) -> list[CalendarEvent]:
     """Events the user may see, optionally windowed and filtered (D10).
 
-    start/end: datetime window over ``start_at`` ([start, end)). node: source node key.
-    person: matches an event assigned to that person among any of its assignees.
-    Permission filter is applied last.
+    start/end: a half-open window ``[start, end)`` tested against the event's *whole span*, not
+    just its start — a multi-day event that began before ``start`` and overlaps the window must
+    still come back (e.g. viewing November must still return an event that started in October
+    and ends mid-November). The overlap rule: the event starts before the window ends, AND the
+    event has no end or ends on/after the window start (all-day ends are inclusive of their
+    stored date — see ``_EFFECTIVE_END``). node: source node key. person: matches an event
+    assigned to that person among any of its assignees. Permission filter is applied last.
     """
-    qs = CalendarEvent.objects.order_by("start_at")
+    qs = CalendarEvent.objects.annotate(_effective_end=_EFFECTIVE_END).order_by("start_at")
     if upcoming_only:
         from django.utils import timezone
-        qs = qs.filter(start_at__gte=timezone.now())
+        qs = qs.filter(_effective_end__gte=timezone.now())
     if start is not None:
-        qs = qs.filter(start_at__gte=start)
+        # Strict: an event whose effective end lands exactly on the window start has already
+        # finished by the time the window begins (an all-day event's effective end is already
+        # exclusive — midnight of the day *after* its last included day).
+        qs = qs.filter(_effective_end__gt=start)
     if end is not None:
         qs = qs.filter(start_at__lt=end)
     if node:
