@@ -9,6 +9,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
 
 export const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
 export const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x }
+export const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
 
 export type SpanLike = Pick<CalendarEvent, 'start_at' | 'end_at'>
 
@@ -44,6 +45,13 @@ export interface WeekSegment<E> {
   continuesBefore: boolean
   /** The event's overall span ends after this week (flat/continuing right edge). */
   continuesAfter: boolean
+  /**
+   * Lane-assignment priority — lower claims a lane first (and so survives a lane cap longest).
+   * Callers that care about presentation hierarchy (Month view) attach this after building
+   * segments; callers that don't (plain chronological lists) leave it unset, which `assignLanes`
+   * treats as one shared tier — today's start-time-only ordering, unchanged.
+   */
+  priority?: number
 }
 
 /**
@@ -80,17 +88,22 @@ export interface LanedSegment<E> extends WeekSegment<E> {
 }
 
 /**
- * Deterministic greedy interval-graph colouring: segments are placed left-to-right, each taking
- * the first lane whose last occupant finished before this one starts. `laneMemory` (event id ->
- * lane) is read and mutated in place, so calling this once per week of a month in order lets a
- * continuing multi-day event keep the same visual row across weeks wherever that lane is free.
+ * Deterministic greedy interval-graph colouring: segments are placed in priority order, each
+ * taking the first lane whose last occupant finished before this one starts. Processing
+ * higher-priority segments (lower `priority` number) first means they claim the low lane
+ * numbers — the ones kept when a lane cap forces lower-priority segments into "+N more".
+ * `laneMemory` (event id -> lane) is read and mutated in place, so calling this once per week of
+ * a month in order lets a continuing multi-day event keep the same visual row across weeks
+ * wherever that lane is free.
  */
 export function assignLanes<E extends { id: number }>(
   segments: WeekSegment<E>[],
   laneMemory: Map<number, number> = new Map(),
 ): LanedSegment<E>[] {
   const ordered = [...segments].sort((a, b) =>
-    a.startCol - b.startCol || (b.endCol - b.startCol) - (a.endCol - a.startCol))
+    (a.priority ?? 0) - (b.priority ?? 0)
+    || a.startCol - b.startCol
+    || (b.endCol - b.startCol) - (a.endCol - a.startCol))
   const laneLastCol: number[] = []
   const free = (lane: number, col: number) => (laneLastCol[lane] ?? -Infinity) < col
   const placed: LanedSegment<E>[] = []
@@ -106,6 +119,42 @@ export function assignLanes<E extends { id: number }>(
     placed.push({ ...segment, lane })
   }
   return placed
+}
+
+/**
+ * A single-day pin marking where a ranged event starts or ends, rather than the event's whole
+ * span — used for "milestone"-level presentation (e.g. a school term): the household sees "Term
+ * 4 starts" / "Term 4 ends" instead of a multi-week bar eating every lane in between. Shaped as
+ * a `WeekSegment` with `startCol === endCol` so it can be mixed into the same lane-assignment
+ * pass as ordinary bars.
+ */
+export function buildMilestoneMarkers<E extends SpanLike & { id: number }>(
+  events: E[],
+  weekDays: Date[],
+): WeekSegment<E>[] {
+  const weekStart = startOfDay(weekDays[0])
+  const weekEnd = startOfDay(weekDays[weekDays.length - 1])
+  const markers: WeekSegment<E>[] = []
+  for (const event of events) {
+    const { start, end } = eventDayRange(event)
+    const inWeek = (d: Date) => d.getTime() >= weekStart.getTime() && d.getTime() <= weekEnd.getTime()
+    const col = (d: Date) => Math.round((d.getTime() - weekStart.getTime()) / DAY_MS)
+    if (inWeek(start)) {
+      markers.push({
+        key: `${event.id}-start-${weekStart.toDateString()}`, event,
+        startCol: col(start), endCol: col(start),
+        continuesBefore: false, continuesAfter: false,
+      })
+    }
+    if (end.getTime() !== start.getTime() && inWeek(end)) {
+      markers.push({
+        key: `${event.id}-end-${weekStart.toDateString()}`, event,
+        startCol: col(end), endCol: col(end),
+        continuesBefore: false, continuesAfter: false,
+      })
+    }
+  }
+  return markers
 }
 
 /** How many segments are hidden (lane >= cap) over a given day column — drives "+N more". */

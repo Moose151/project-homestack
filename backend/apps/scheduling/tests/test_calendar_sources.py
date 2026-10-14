@@ -702,6 +702,17 @@ class SchoolCalendarTests(TestCase):
         self.assertEqual(len(terms), 4)
         self.assertTrue(all(row["is_range"] for row in terms))
 
+    def test_a_term_is_not_tagged_holiday_but_a_break_is(self):
+        """The Month view's presentation policy tells a term from a break by `event_kind`
+        alone — a term must stay untagged (the default "event") and a break must be "holiday",
+        with no title-string sniffing required on either end."""
+        entries = au_school.build_events(self._source(), household=self.household, years=(2026,))
+        terms = [row for row in entries if row["summary"].startswith("Term")]
+        breaks = [row for row in entries if not row["summary"].startswith("Term")]
+        self.assertTrue(terms and breaks)
+        self.assertTrue(all("event_kind" not in row for row in terms))
+        self.assertTrue(all(row.get("event_kind") == "holiday" for row in breaks))
+
     def test_queensland_holidays_match_the_published_vacation_ranges(self):
         self.assertEqual(
             [(v.start, v.end) for v in au_school.holidays_for("qld_state", 2026)],
@@ -803,6 +814,19 @@ class SchoolCalendarTests(TestCase):
             CalendarEvent.objects.filter(calendar_source=source, title="Term 3").count(), 1,
         )
 
+    def test_synced_term_and_break_carry_the_event_kind_the_presentation_policy_needs(self):
+        source = self._source()
+        entries = au_school.build_events(source, household=self.household, years=(2026,))
+        apply_events(source, entries, household_zone=BRISBANE)
+        term = CalendarEvent.objects.get(calendar_source=source, title="Term 3")
+        self.assertEqual(term.event_kind, "event")
+        breaks = CalendarEvent.objects.filter(calendar_source=source).exclude(title__startswith="Term")
+        self.assertTrue(breaks.exists())
+        self.assertTrue(all(row.event_kind == "holiday" for row in breaks))
+        # And the serializer exposes the source's kind, so the frontend never has to parse a
+        # title to know these came from a school source.
+        self.assertEqual(term.calendar_source.kind, "school")
+
 
 
 class HolidaySourceSyncTests(TestCase):
@@ -850,6 +874,14 @@ class HolidaySourceSyncTests(TestCase):
         self.assertTrue(event.is_all_day)
         # Not a task: notification wording (0.38.0) must never call a holiday "due".
         self.assertNotEqual(event.event_kind, "task")
+
+    def test_synced_public_holidays_are_tagged_holiday(self):
+        """So the Month view's presentation policy can classify them without reading titles."""
+        source = self._source()
+        sync_source(source, household=self.household)
+        events = CalendarEvent.objects.filter(calendar_source=source)
+        self.assertTrue(events.exists())
+        self.assertTrue(all(event.event_kind == "holiday" for event in events))
 
 
 # ---------------------------------------------------------------------------
@@ -1000,6 +1032,13 @@ class SourceVisibilityTests(TestCase):
 
         titles = self._titles(source_ids=[self.source.id])
         self.assertIn("Broncos vs Cowboys", titles)
+
+    def test_api_exposes_the_source_kind_for_presentation_without_the_internal_provider_name(self):
+        self.client.force_login(self.admin)
+        resp = self.client.get(reverse("calendar-event-list"))
+        row = next(r for r in resp.json() if r["title"] == "Broncos vs Cowboys")
+        self.assertEqual(row["calendar_source_kind"], "subscription")
+        self.assertNotIn("ics", str(row.values()))
 
 
 class SourceNotificationTests(TestCase):

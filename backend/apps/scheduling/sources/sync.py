@@ -78,6 +78,10 @@ def _payload(entry: dict, household_zone) -> dict:
         "end_at": end,
         "is_all_day": bool(entry.get("all_day")),
         "is_range": bool(entry.get("is_range")),
+        # A provider may classify its own entry (e.g. a school break or a public holiday is
+        # "holiday"; a school term is left as the default "event") — this is how the Month
+        # view's presentation policy tells a term from a break without guessing from its title.
+        "event_kind": entry.get("event_kind") or CalendarEvent.EventKind.EVENT,
         "recurrence_rule": (entry.get("recurrence_rule") or "")[:512],
         "external_sequence": entry.get("sequence"),
     }

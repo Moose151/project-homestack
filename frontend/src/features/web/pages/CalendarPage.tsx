@@ -22,9 +22,12 @@ import { confirmDialog } from '../../../components/Dialogs'
 import { ColourPicker } from '../../../components/ColourPicker'
 import { isPhoneViewport } from '../../../lib/viewport'
 import {
-  assignLanes, buildWeekSegments, eventDayRange, hiddenCountForColumn,
-  type LanedSegment,
+  assignLanes, buildMilestoneMarkers, buildWeekSegments, eventDayRange, hiddenCountForColumn,
+  type LanedSegment, type WeekSegment,
 } from '../../../lib/calendarSpans'
+import {
+  monthDisplayTitle, PRESENTATION_PRIORITY, presentationLevel, type PresentationLevel,
+} from '../../../lib/calendarPresentation'
 
 // ---------------------------------------------------------------------------
 // Date helpers (no external deps)
@@ -767,23 +770,63 @@ function MonthWeekRow({
   onAddEvent?: (d: Date) => void
   canEditCalendar: boolean
 }) {
-  const segments = buildWeekSegments(visibleEvents, weekDays)
-  const laned = assignLanes(segments, laneMemory)
+  // Presentation hierarchy (v0.41.1): a ranged event classified "milestone" (a school term)
+  // shows only its start/end as small pins, never a multi-week bar — every other event renders
+  // as a bar/strip as before, tagged with a lane-priority so prominent household events keep
+  // the visible lanes and quieter context/milestone entries are the first to collapse into
+  // "+N more". See lib/calendarPresentation.ts for the classification rules themselves.
+  const spanEvents = visibleEvents.filter(e => presentationLevel(e) !== 'milestone')
+  const milestoneEvents = visibleEvents.filter(e => presentationLevel(e) === 'milestone')
+  const rawSegments: WeekSegment<CalendarEvent>[] = [
+    ...buildWeekSegments(spanEvents, weekDays).map(s => ({ ...s, priority: PRESENTATION_PRIORITY[presentationLevel(s.event)] })),
+    ...buildMilestoneMarkers(milestoneEvents, weekDays).map(s => ({ ...s, priority: PRESENTATION_PRIORITY.milestone })),
+  ]
+  const laned = assignLanes(rawSegments, laneMemory)
   const maxLane = laned.reduce((m, s) => Math.max(m, s.lane), -1)
   const laneRows = Math.min(cap, maxLane + 1)
   const hasRotations = weekDays.some(d => dayRotations(d).length > 0)
   const overflowCounts = weekDays.map((_, col) => hiddenCountForColumn(laned, col, cap))
   const hasOverflow = overflowCounts.some(n => n > 0)
 
-  const barCls = compact
-    ? 'flex h-[17px] items-center px-1 text-[9px] font-bold leading-none text-white truncate'
-    : 'flex h-5 items-center px-1.5 text-[11px] font-semibold leading-none text-white truncate'
+  const barHeight: Record<PresentationLevel, string> = compact
+    ? { prominent: 'h-[17px]', compact: 'h-[14px]', context: 'h-[12px]', milestone: 'h-[12px]' }
+    : { prominent: 'h-5', compact: 'h-4', context: 'h-[14px]', milestone: 'h-[14px]' }
+  const barText: Record<PresentationLevel, string> = {
+    prominent: compact ? 'text-[9px] font-bold' : 'text-[11px] font-semibold',
+    compact: compact ? 'text-[9px] font-semibold' : 'text-[10.5px] font-medium',
+    context: compact ? 'text-[8.5px] font-medium' : 'text-[10px] font-medium',
+    milestone: compact ? 'text-[8.5px] font-medium' : 'text-[10px] font-medium',
+  }
 
   const barFor = (segment: LanedSegment<CalendarEvent>) => {
+    const level = presentationLevel(segment.event)
     const { start, end } = eventDayRange(segment.event)
     const multiDay = start.getTime() !== end.getTime()
     const fmt: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
     const rangeLabel = multiDay ? `, ${start.toLocaleDateString(undefined, fmt)} – ${end.toLocaleDateString(undefined, fmt)}` : ''
+    const label = monthDisplayTitle(segment.event)
+    const sizeCls = `flex ${barHeight[level]} items-center px-1 ${barText[level]} leading-none truncate`
+
+    if (level === 'milestone') {
+      const atEnd = sameDay(addDays(weekDays[0], segment.startCol), end)
+      const milestoneLabel = `${label} ${atEnd ? 'ends' : 'starts'}`
+      return (
+        <button
+          key={segment.key}
+          type="button"
+          onClick={() => onOpenEvent(segment.event)}
+          style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}`, gridRow: 1 }}
+          className={`${sizeCls} min-w-0 gap-1 rounded-sm text-muted-strong hover:bg-sunken`}
+          aria-label={`${label}${rangeLabel}, ${atEnd ? 'ends this day' : 'starts this day'}`}
+          title={`${label}${rangeLabel}`}
+        >
+          <span aria-hidden className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: colourFor(segment.event) }} />
+          <span className="truncate">{milestoneLabel}</span>
+        </button>
+      )
+    }
+
+    const contextStyle = level === 'context'
     return (
       <button
         key={segment.key}
@@ -792,14 +835,15 @@ function MonthWeekRow({
         style={{
           gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}`,
           gridRow: 1,
-          backgroundColor: colourFor(segment.event),
+          backgroundColor: contextStyle ? `${colourFor(segment.event)}26` : colourFor(segment.event),
+          borderLeft: contextStyle ? `2px solid ${colourFor(segment.event)}` : undefined,
         }}
-        className={`${barCls} min-w-0 ${segment.continuesBefore ? 'rounded-l-none -ml-px' : 'rounded-l-md'} ${segment.continuesAfter ? 'rounded-r-none' : 'rounded-r-md'} hover:brightness-95`}
-        aria-label={`${segment.event.title}${rangeLabel}`}
-        title={`${segment.event.title}${rangeLabel}`}
+        className={`${sizeCls} min-w-0 ${contextStyle ? 'text-ink' : 'text-white'} ${segment.continuesBefore ? 'rounded-l-none -ml-px' : 'rounded-l-md'} ${segment.continuesAfter ? 'rounded-r-none' : 'rounded-r-md'} hover:brightness-95`}
+        aria-label={`${label}${rangeLabel}`}
+        title={`${label}${rangeLabel}`}
       >
         {segment.continuesBefore && <span aria-hidden className="mr-0.5">‹</span>}
-        <span className="truncate">{segment.event.title}</span>
+        <span className="truncate">{label}</span>
         {segment.continuesAfter && <span aria-hidden className="ml-auto pl-0.5">›</span>}
       </button>
     )
@@ -1032,7 +1076,7 @@ export function CalendarPage() {
           sensitivity: 'normal', is_synced: true, created_at: '', updated_at: '',
           // Birthdays are derived locally from contacts, not mirrored from a calendar source.
           is_source_managed: false, calendar_source_id: null, calendar_source_name: '',
-          calendar_source_category: '', is_range: false,
+          calendar_source_category: '', calendar_source_kind: '', is_range: false,
         }))
         setEvents([...nextEvents, ...birthdayEvents])
         setRotatingSchedules(nextSchedules)
@@ -1539,30 +1583,61 @@ export function CalendarPage() {
                 than repeating as a separate chip in every one of its day columns below. */}
             {(() => {
               const weekDays = Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(anchor, weekStart), i))
-              const segments = buildWeekSegments(visibleEvents, weekDays)
-              if (segments.length === 0) return null
-              const laned = assignLanes(segments, weekStripLaneMemory)
+              const spanEvents = visibleEvents.filter(e => presentationLevel(e) !== 'milestone')
+              const milestoneEvents = visibleEvents.filter(e => presentationLevel(e) === 'milestone')
+              const rawSegments: WeekSegment<CalendarEvent>[] = [
+                ...buildWeekSegments(spanEvents, weekDays).map(s => ({ ...s, priority: PRESENTATION_PRIORITY[presentationLevel(s.event)] })),
+                ...buildMilestoneMarkers(milestoneEvents, weekDays).map(s => ({ ...s, priority: PRESENTATION_PRIORITY.milestone })),
+              ]
+              if (rawSegments.length === 0) return null
+              const laned = assignLanes(rawSegments, weekStripLaneMemory)
               const lanes = laned.reduce((m, s) => Math.max(m, s.lane), -1) + 1
               return (
                 <div className="mb-1 rounded-xl border border-line bg-surface p-1.5">
                   {Array.from({ length: lanes }, (_, lane) => (
                     <div key={lane} className="grid grid-cols-7 gap-1" style={lane > 0 ? { marginTop: 4 } : undefined}>
                       {laned.filter(s => s.lane === lane).map(segment => {
+                        const level = presentationLevel(segment.event)
                         const { start, end } = eventDayRange(segment.event)
                         const fmt: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
                         const rangeLabel = start.getTime() !== end.getTime() ? `, ${start.toLocaleDateString(undefined, fmt)} – ${end.toLocaleDateString(undefined, fmt)}` : ''
+                        const label = monthDisplayTitle(segment.event)
+
+                        if (level === 'milestone') {
+                          const atEnd = sameDay(addDays(weekDays[0], segment.startCol), end)
+                          return (
+                            <button
+                              key={segment.key}
+                              type="button"
+                              onClick={() => openEvent(segment.event)}
+                              style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}` }}
+                              className="flex h-6 min-w-0 items-center gap-1 rounded-sm px-1 text-xs font-medium leading-none text-muted-strong truncate hover:bg-sunken"
+                              aria-label={`${label}${rangeLabel}, ${atEnd ? 'ends this day' : 'starts this day'}`}
+                              title={`${label}${rangeLabel}`}
+                            >
+                              <span aria-hidden className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: colourFor(segment.event) }} />
+                              <span className="truncate">{label} {atEnd ? 'ends' : 'starts'}</span>
+                            </button>
+                          )
+                        }
+
+                        const contextStyle = level === 'context'
                         return (
                           <button
                             key={segment.key}
                             type="button"
                             onClick={() => openEvent(segment.event)}
-                            style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}`, backgroundColor: colourFor(segment.event) }}
-                            className={`flex h-6 items-center px-2 text-xs font-semibold leading-none text-white truncate hover:brightness-95 ${segment.continuesBefore ? 'rounded-l-none' : 'rounded-l-md'} ${segment.continuesAfter ? 'rounded-r-none' : 'rounded-r-md'}`}
-                            aria-label={`${segment.event.title}${rangeLabel}`}
-                            title={`${segment.event.title}${rangeLabel}`}
+                            style={{
+                              gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}`,
+                              backgroundColor: contextStyle ? `${colourFor(segment.event)}26` : colourFor(segment.event),
+                              borderLeft: contextStyle ? `2px solid ${colourFor(segment.event)}` : undefined,
+                            }}
+                            className={`flex min-w-0 items-center px-2 leading-none truncate hover:brightness-95 ${contextStyle ? 'h-5 text-xs font-medium text-ink' : level === 'compact' ? 'h-5 text-xs font-medium text-white' : 'h-6 text-xs font-semibold text-white'} ${segment.continuesBefore ? 'rounded-l-none' : 'rounded-l-md'} ${segment.continuesAfter ? 'rounded-r-none' : 'rounded-r-md'}`}
+                            aria-label={`${label}${rangeLabel}`}
+                            title={`${label}${rangeLabel}`}
                           >
                             {segment.continuesBefore && <span aria-hidden className="mr-1">‹</span>}
-                            <span className="truncate">{segment.event.title}</span>
+                            <span className="truncate">{label}</span>
                             {segment.continuesAfter && <span aria-hidden className="ml-auto pl-1">›</span>}
                           </button>
                         )

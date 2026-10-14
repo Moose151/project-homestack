@@ -358,6 +358,9 @@ export interface CalendarEvent {
   calendar_source_id: number | null
   calendar_source_name: string
   calendar_source_category: string
+  /** The source's fixed kind ('school' | 'holidays' | 'subscription' | 'import'), or '' for a
+   *  standalone/node-synced event — what the Month view's presentation policy keys off. */
+  calendar_source_kind: string
   is_range: boolean
   /**
    * Set only on Hub's Upcoming feed: the label for this row's source completion action

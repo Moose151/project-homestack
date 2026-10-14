@@ -188,6 +188,10 @@ def build_events(source, *, household, years: tuple[int, ...] = ()) -> list[dict
                     "end_date": term.end,
                     "all_day": True,
                     "is_range": True,
+                    # Left as the default "event" kind deliberately: a term is in-session
+                    # context, not a break. The Month view's presentation policy treats a
+                    # school-sourced range that is *not* tagged "holiday" as a term and shows
+                    # its start/end as milestones rather than a multi-week bar.
                     "cancelled": False,
                 })
 
@@ -202,6 +206,9 @@ def build_events(source, *, household, years: tuple[int, ...] = ()) -> list[dict
                     "end_date": vacation.end,
                     "all_day": True,
                     "is_range": True,
+                    # A break genuinely is a holiday — tagging it lets the Month view render it
+                    # as a quiet contextual range rather than competing with real events.
+                    "event_kind": "holiday",
                     "cancelled": False,
                 })
 

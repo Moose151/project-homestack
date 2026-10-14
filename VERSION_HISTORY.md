@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.41.0**
+> **Current version: 0.41.1**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,35 @@
 ---
 
 ## 0.41 — Calendar month view: continuous multi-day bars
+
+### 0.41.1 — 2026-10-14 — A visual hierarchy, so Month answers "what am I doing" first
+
+- Month view now classifies every event into one of four presentation levels — **prominent**
+  (a real household event/appointment), **compact** (bills, reminders, tasks, assessments,
+  birthdays, public holidays, generic subscriptions), **context** (a school holiday range) or
+  **milestone** (a school term) — based entirely on semantic fields the backend already exposes
+  (`event_kind`, `source_node`, the source's `calendar_source_kind`), never by matching a title.
+  A school term ("Term 4") no longer renders as a saturated bar spanning every week it covers;
+  it shows only small "Term 4 starts" / "Term 4 ends" markers on the two days that matter. A
+  school holiday range still renders as a range, but visibly quieter than a real event. A trip
+  like "Nick US" keeps the strongest, most readable bar on the grid.
+- Lane allocation is now priority-aware: when a week is busy, prominent household events keep
+  the visible lanes first, and lower-priority context/milestone entries are the first to
+  collapse into "+N more" — a school-term marker can no longer push a real event out of sight.
+- Bills ("Bill: Berrina Registration", "Bill: Disney", "Bill: ChatGPT") show their name without
+  the repetitive "Bill: " prefix in Month view's compact bars, since the bill's own colour and
+  position already say what it is. The stored title is untouched — the event editor, Agenda and
+  Day view still show the full original text.
+- `apps/scheduling/sources/{au_school,au_holidays}.py` now tag a published break or public
+  holiday `event_kind: "holiday"` (a term is left at the default "event" kind) — the one signal
+  the new presentation policy needs to tell a term from a break, using the model's own existing
+  `event_kind` field rather than inventing a new one. `CalendarEventSerializer` additionally
+  exposes a source's fixed `calendar_source_kind` (school/holidays/subscription/import) read-only,
+  so the frontend never has to parse a source's display name to classify its entries.
+- Rotating schedules are unaffected — they keep their own dedicated indicator row, outside this
+  lane system entirely, exactly as before.
+- No migration: both changes reuse existing model fields (`event_kind`'s already-defined
+  "holiday" choice was simply never populated by these two providers before).
 
 ### 0.41.0 — 2026-10-14 — A multi-day event now shows up everywhere it belongs
 

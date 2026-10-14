@@ -92,6 +92,56 @@ all-day strip above the day columns, so a spanning event is not repeated in ever
 touches. Day view and Agenda read the same per-day index (`eventsByDay`, keyed by every day in
 range, not just the start day) and show a visible date range rather than one bare time per day.
 
+### 3.2 Presentation hierarchy (v0.41.1)
+
+Month view mixes things of very different importance — a trip the household is taking, a bill
+reminder, a school term that only describes when school is in session. Rendering all of it with
+equal visual weight makes the grid read as noise rather than answering "what am I doing". Every
+event is classified into one of four presentation levels, computed in
+`src/lib/calendarPresentation.ts` (`presentationLevel()`) from fields the backend already
+exposes — **never** by pattern-matching a title, which would be both fragile (any provider's
+wording could change) and wrong (a household's own event could coincidentally use the same
+words):
+
+| Level | Meaning | Default applies to |
+|---|---|---|
+| `prominent` | Strongest bar, full saturation — the primary answer to "what am I doing" | Standalone HomeStack events/appointments; node-synced appointments (any node) |
+| `compact` | Smaller, lighter-weight bar — still a solid colour, still tappable | Bills/purchases (Solace), reminders/tasks (Atlas/Meridian), assessments (Education), treatments/appointments metadata, maintenance (Homestead), birthdays, public holidays, generic ICS subscriptions |
+| `context` | Thin, desaturated range — present but deliberately quiet | A school source's `holiday`-tagged entries (published vacation ranges) |
+| `milestone` | No bar at all — a small dot + "X starts" / "X ends" marker on the two boundary days only | A school source's ranged entries that are **not** tagged `holiday` (terms) |
+
+Classification keys off `event_kind`, `source_node`, `calendar_source_id` and the event's own
+`calendar_source_kind` (the source's fixed `CalendarSource.Kind` — "school" / "holidays" /
+"subscription" / "import" — exposed read-only by `CalendarEventSerializer` precisely so the
+frontend never has to guess it). A school **term** and a school **break** come from the very same
+provider and same `CalendarSource`; what tells them apart is `event_kind`: providers
+(`apps/scheduling/sources/au_school.py`, `au_holidays.py`) tag a break or a public holiday
+`event_kind: "holiday"` and leave a term at the model's own default ("event"). `sync.py`'s
+`_payload()` is what threads a provider's `event_kind` choice onto the stored `CalendarEvent` —
+no new field, no migration; `event_kind`'s existing "holiday" choice was simply never populated
+by these providers before.
+
+**Lane priority.** `assignLanes()` (in `calendarSpans.ts`) takes an optional per-segment
+`priority` (lower claims a lane first). Month view attaches each presentation level's priority
+(`prominent` < `compact` < `context` < `milestone`) before assigning lanes, so when a week is
+busy, prominent household events keep the visible lanes and context/milestone entries are the
+first pushed into "+N more" — a school-term marker can never displace a real event out of sight.
+
+**Milestones.** A term is never duplicated into a second database row to get this behaviour.
+`buildMilestoneMarkers()` derives up to two single-day markers (start/end) from the one
+`CalendarEvent`'s existing date range, purely at render time; the stored record — and its actual
+start/end dates — is untouched, and clicking either marker opens the same underlying event.
+
+**Display-text cleanup.** `monthDisplayTitle()` strips a known, backend-authored, purely
+redundant prefix — `"Bill: "`, added unconditionally by Solace for every bill
+(`apps/solace/models.py`) — from Month view's compact bar label when `source_node === 'solace'`
+already says the colour/position means "bill". This never touches the stored title: the event
+editor, Agenda and Day view always show the full original text.
+
+**Rotating schedules stay outside this system entirely** — they render in their own dedicated
+indicator row (§8), never competing for a lane with ordinary events, exactly as before this
+hierarchy was introduced.
+
 ## 4. Appointments — shipped
 
 Calendar-owned appointments support the current useful combination of date/time/all-day state,
@@ -123,11 +173,14 @@ Required UX rules:
 - a multi-day event renders as one continuous bar across the days it spans (§3.1), not as a
   separate truncated entry in every cell it touches — TimeTree's month view is the UX reference,
   translated into HomeStack's own colours/components rather than copied;
-- overlapping events on the same day(s) are packed into deterministic lanes so none are visually
-  hidden behind another; when more events exist than the visible lanes allow, a "+N more"
-  affordance exposes the rest rather than silently clipping them;
+- overlapping events on the same day(s) are packed into deterministic lanes, in presentation-
+  priority order (§3.2), so a real household event is never the one pushed into "+N more" by a
+  lower-priority context/milestone entry;
 - rotating-schedule occurrences (§8) get their own indicator row/layer in Month view rather than
-  competing with ordinary events for a lane.
+  competing with ordinary events for a lane;
+- context (e.g. school holidays) and milestone (e.g. school terms) entries read as quiet
+  background information, never as loud as a real household event (§3.2) — a school term in
+  particular shows only its start/end as small markers, never a multi-week saturated bar.
 
 ## 6. People, colour and visibility
 
@@ -227,6 +280,11 @@ Do not turn this spec into a field-by-field schema duplicate of the code.
   overlaps, not just the one it started in — as one record, never duplicated per day.
 - Clicking any week's segment of a multi-day event, in any view, opens the same underlying event;
   editing or deleting it updates/removes the whole span.
+- A school term never renders as a multi-week bar; a school holiday range still renders as a
+  range, but visibly quieter than a real household event (§3.2).
+- A presentation-policy change (§3.2) never mutates a stored title — Month view's compact label
+  may hide a redundant prefix, but the event editor, Agenda and Day view always show the full
+  original text.
 
 ## 17. Future possibilities
 

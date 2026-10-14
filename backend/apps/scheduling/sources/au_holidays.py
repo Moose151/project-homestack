@@ -195,6 +195,7 @@ def build_events(source, *, household, years: tuple[int, ...] = ()) -> list[dict
                 ),
                 "location": "",
                 "is_range": False,
+                "event_kind": "holiday",
                 "cancelled": False,
             }
             if holiday.is_part_day:

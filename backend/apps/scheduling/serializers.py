@@ -17,6 +17,11 @@ class CalendarEventSerializer(AssigneeSerializerMixin, serializers.ModelSerializ
     is_source_managed = serializers.BooleanField(read_only=True)
     calendar_source_name = serializers.SerializerMethodField()
     calendar_source_category = serializers.SerializerMethodField()
+    # The source's `kind` (e.g. "school", "holidays", "subscription") — distinct from the
+    # per-source `category` text, this is the fixed, finite classification the Month view's
+    # presentation policy keys off (apps.scheduling.models.CalendarSource.Kind), without
+    # exposing the source's internal provider name.
+    calendar_source_kind = serializers.SerializerMethodField()
     source_node = serializers.SerializerMethodField()
     hidden_from_user_ids = serializers.PrimaryKeyRelatedField(source="hidden_from_users", many=True, read_only=True)
 
@@ -39,6 +44,7 @@ class CalendarEventSerializer(AssigneeSerializerMixin, serializers.ModelSerializ
             "calendar_source_id",
             "calendar_source_name",
             "calendar_source_category",
+            "calendar_source_kind",
             "is_source_managed",
             "is_range",
             "assigned_to_person_ids",
@@ -70,6 +76,9 @@ class CalendarEventSerializer(AssigneeSerializerMixin, serializers.ModelSerializ
 
     def get_calendar_source_name(self, obj) -> str:
         return obj.calendar_source.name if obj.calendar_source_id else ""
+
+    def get_calendar_source_kind(self, obj) -> str:
+        return obj.calendar_source.kind if obj.calendar_source_id else ""
 
     def get_calendar_source_category(self, obj) -> str:
         return obj.calendar_source.category if obj.calendar_source_id else ""
