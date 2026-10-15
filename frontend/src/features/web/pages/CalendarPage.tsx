@@ -371,6 +371,17 @@ function QuickAddBar({ baseDate, time24, onAdd }: {
 // Event chip
 // ---------------------------------------------------------------------------
 
+// The timed single-day entry in a desktop Week day column. (Month reached the same end by
+// another route in 0.41.0, which replaced its chips with continuous bars; this is Week's alone.)
+//
+// That column is one of seven at every viewport, and the sidebar appears from `md` and takes
+// 272px, so a 768px tablet leaves each about 62px. A fixed-width time took ~31px of it and the
+// title — a truncating flex child, so free to shrink — collapsed to under 2px: an event you
+// could see the time of but not identify. The time therefore yields to the title until there is
+// room for both, the trade the phone Month cell had already made. `xl` rather than `lg` because
+// measurement, not instinct, set the threshold: at 1024 the time still left the title 36px,
+// narrower than the 768 cell gets with the time hidden. Nothing is lost — the time is still on
+// the event itself, and in Day, Week-phone and Agenda views.
 function EventChip({ event, colour, time24, onClick }: { event: CalendarEvent; colour: string; time24: boolean; onClick: () => void }) {
   return (
     <button
@@ -378,10 +389,30 @@ function EventChip({ event, colour, time24, onClick }: { event: CalendarEvent; c
       className="w-full text-left flex items-center gap-1.5 px-1.5 py-0.5 rounded-md hover:bg-sunken text-xs truncate"
       style={{ borderLeft: `3px solid ${colour}` }}
     >
-      {!event.is_all_day && <span className="text-muted tabular-nums flex-shrink-0">{fmtTime(event.start_at, time24)}</span>}
-      <span className="truncate text-ink">{event.title}</span>
+      {!event.is_all_day && <span className="hidden text-muted tabular-nums flex-shrink-0 xl:inline">{fmtTime(event.start_at, time24)}</span>}
+      <span className="min-w-0 flex-1 truncate text-ink">{event.title}</span>
     </button>
   )
+}
+
+/**
+ * Which half of the desktop Week layout an event belongs to.
+ *
+ * The spanning strip and the day columns below it must partition the week exactly. They did not:
+ * the strip took every non-milestone event while the columns took every single-day one, so an
+ * ordinary single-day timed event rendered in both — the precise thing the strip's own note says
+ * it exists to prevent. Both halves now ask this one question, so neither can drift from the
+ * other again.
+ *
+ * The strip is for entries that occupy whole days — all-day, or spanning more than one — plus
+ * milestone markers, which are drawn as span endpoints rather than chips. Everything else is a
+ * timed entry that belongs in its own day's column, where its time can be read.
+ */
+function belongsInWeekStrip(event: CalendarEvent): boolean {
+  if (presentationLevel(event) === 'milestone') return true
+  if (event.is_all_day) return true
+  const { start, end } = eventDayRange(event)
+  return !sameDay(start, end)
 }
 
 // ---------------------------------------------------------------------------
@@ -1583,7 +1614,7 @@ export function CalendarPage() {
                 than repeating as a separate chip in every one of its day columns below. */}
             {(() => {
               const weekDays = Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(anchor, weekStart), i))
-              const spanEvents = visibleEvents.filter(e => presentationLevel(e) !== 'milestone')
+              const spanEvents = visibleEvents.filter(e => presentationLevel(e) !== 'milestone' && belongsInWeekStrip(e))
               const milestoneEvents = visibleEvents.filter(e => presentationLevel(e) === 'milestone')
               const rawSegments: WeekSegment<CalendarEvent>[] = [
                 ...buildWeekSegments(spanEvents, weekDays).map(s => ({ ...s, priority: PRESENTATION_PRIORITY[presentationLevel(s.event)] })),
@@ -1660,9 +1691,9 @@ export function CalendarPage() {
                     {dayRotations(d).map(occurrence => (
                       <RotationBadge key={occurrence.id} occurrence={occurrence} compact onClick={canEditCalendar ? () => openRotation(occurrence) : undefined} />
                     ))}
-                    {/* Multi-day events already show in the strip above — only single-day events
-                        go in the day's own column, so nothing is shown twice. */}
-                    {dayEvents(d).filter(e => sameDay(eventDayRange(e).start, eventDayRange(e).end)).map(e => (
+                    {/* Whatever the strip above renders is excluded here, by the same predicate
+                        the strip uses, so nothing is shown twice. */}
+                    {dayEvents(d).filter(e => !belongsInWeekStrip(e)).map(e => (
                       <EventChip key={e.id} event={e} colour={colourFor(e)} time24={time24} onClick={() => openEvent(e)} />
                     ))}
                   </div>

@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.41.1**
+> **Current version: 0.41.2**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -9,7 +9,34 @@
 
 ---
 
-## 0.41 — Calendar month view: continuous multi-day bars
+## 0.41 — A readable month view, and undo across every node
+
+### 0.41.2 — 2026-10-15 — A week event shown once, and named
+
+- **A timed event was drawn twice in desktop Week.** The spanning strip and the day columns below
+  it are meant to partition the week, and the strip's own note says so, but the strip took every
+  non-milestone event while the columns took every single-day one — so an ordinary appointment
+  rendered as a bar *and* as a chip. Both halves now ask one shared predicate, `belongsInWeekStrip`,
+  so neither can drift from the other again. Caught by a count: a visibility assertion passes
+  perfectly well on a duplicated element.
+- **The Week chip showed the time of an event but not its name.** That column is one of seven at
+  every viewport, and the sidebar takes 272px from 768px, so each came out about 62px; the chip's
+  fixed-width time took half of it and the truncating title collapsed to under 2px. The time now
+  yields to the title until there is room for both, the trade the phone Month cell had already
+  made. Month reached the same end by another route in 0.41.0, which replaced its chips with
+  continuous bars, so `EventChip` is Week's alone now.
+- **The threshold came from measuring, not instinct.** At 1024px the time still left the title
+  36px — narrower than a 768px cell gets with the time hidden — so the time returns at `xl`
+  rather than `lg`.
+- **This is the test failure that had been blocking CI.** It had looked like a flake: the
+  collapsed title was 1.9px locally, which Playwright calls visible, and exactly 0 on CI's
+  slightly wider fonts, which it does not. So the suite was right and only its reasons were
+  invisible. The assertion is now a proportion rather than a pixel count — the chip exists to
+  identify the event, so its title must hold most of it — and it names the width, the chip and
+  the pixels when it fails.
+- **A failed browser job now keeps its evidence.** The workflow uploaded `playwright-report`,
+  which a list-only run never creates, so every CI failure discarded its own trace and
+  screenshot. CI now writes the HTML report as well and uploads `test-results` beside it.
 
 ### 0.41.1 — 2026-10-14 — A visual hierarchy, so Month answers "what am I doing" first
 

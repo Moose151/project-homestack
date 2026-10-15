@@ -262,3 +262,76 @@ test.describe('calendar toolbar at desktop widths', () => {
     })
   })
 })
+
+// Desktop Week: an event renders once, and its chip names it at every width.
+//
+// Two defects meet in this block, both invisible to a passing suite.
+//
+// 1. The spanning strip and the day columns below it are supposed to partition the week. They
+//    did not: the strip took every non-milestone event and the columns took every single-day
+//    one, so an ordinary timed event drew twice — once as a bar, once as a chip. A count, not a
+//    visibility check, is what catches that; `toBeVisible()` on a duplicated element passes.
+//
+// 2. The chip's fixed-width time crowded out the title. A Week column is one of seven at every
+//    viewport and the sidebar takes 272px from `md`, so at 768px each is about 62px; the time
+//    took ~31px and the truncating title collapsed to 1.9px — a time with no name. It survived
+//    because 1.9px is not 0: Playwright calls that visible, so it passed locally and failed only
+//    on CI, whose slightly wider fonts took it to exactly 0. A layout that close to the edge is
+//    broken for the reader either way, so the assertion is a proportion rather than a pixel
+//    count — the chip exists to identify the event, so the title must hold most of it at any
+//    width, resolution or locale.
+//
+// The event here is timed and single-day deliberately: that is exactly the class that belongs in
+// a day column rather than the strip, so it is both the duplicate's victim and the chip's only
+// remaining caller.
+test.describe('desktop Week renders a timed event once, and names it', () => {
+  const EVENT_START = (() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 0).toISOString()
+  })()
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'tablet-768', 'viewport is swept inside the test')
+    await mockAuthenticatedApi(page, {
+      ...CALENDAR_FIXTURES,
+      '/api/v1/calendar/events/': [{
+        id: 1, title: 'Dentist', event_kind: 'appointment', description: '',
+        start_at: EVENT_START, end_at: null, is_all_day: false, timezone: '',
+        recurrence_rule: '', source_node: null, source_record_type: '', source_record_id: null,
+        assigned_to_person_ids: [], colour: '', location: '', provider: '', contact: '',
+        visibility: 'household', sensitivity: 'normal', is_synced: false,
+        created_at: EVENT_START, updated_at: EVENT_START,
+      }],
+    })
+  })
+
+  test('a timed single-day event is not drawn twice', async ({ page }) => {
+    await page.goto('/calendar')
+    await page.getByRole('button', { name: 'week', exact: true }).click()
+    await expect(page.locator('button', { hasText: 'Dentist' }).filter({ visible: true }))
+      .toHaveCount(1)
+  })
+
+  // Swept in one test rather than a `test.use` block per width: these are readings of one
+  // continuous layout, and the value is in the whole range, including both sides of the `xl`
+  // breakpoint where the time rejoins the chip.
+  test('the title keeps most of the chip at every desktop width', async ({ page }) => {
+    await page.goto('/calendar')
+    await page.getByRole('button', { name: 'week', exact: true }).click()
+
+    for (const width of [768, 900, 1024, 1280, 1536]) {
+      await page.setViewportSize({ width, height: 900 })
+      const chip = page.locator('button', { hasText: 'Dentist' }).filter({ visible: true })
+      await expect(chip).toHaveCount(1)
+      // The title is the chip's last span; the optional time precedes it.
+      const title = chip.locator('span').last()
+      const chipBox = (await chip.boundingBox())!
+      const titleBox = (await title.boundingBox())!
+      expect(
+        titleBox.width / chipBox.width,
+        `at ${width}px the week chip is ${Math.round(chipBox.width)}px wide and gives its `
+        + `title only ${Math.round(titleBox.width)}px`,
+      ).toBeGreaterThan(0.5)
+    }
+  })
+})

@@ -23,7 +23,12 @@ export default defineConfig({
   // the same never-mutated mocked state is a legitimate fix, not a mask.
   retries: 1,
   workers: process.env.CI ? 2 : 4,
-  reporter: [['list']],
+  // `list` is what a person reads while the suite runs. CI additionally writes the HTML report
+  // and keeps `test-results/`, because a failure there is the one failure nobody can reproduce
+  // by re-running it locally — the CI job that found the tablet-width chip collapse uploaded
+  // nothing at all, since a list-only run never creates the report directory the workflow asked
+  // for, and its trace and screenshot died with the runner.
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173',
     trace: 'retain-on-failure',

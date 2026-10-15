@@ -344,6 +344,12 @@ again:
 - **verify a suite's exit code without a pipe.** `cmd | tail` returns *tail's* status, not the
   command's, so a failing suite reads as exit 0. This masked a completely broken browser run
   more than once; the CI workflow runs both suites unpiped for the same reason;
+- **a browser test that only fails on CI is usually a real layout bug measured at a threshold.**
+  Playwright calls a 1.9px element visible and a 0px element invisible, so a collapsed flex
+  child can pass on one machine's fonts and fail on another's (v0.41.2, Calendar's week chip).
+  Assert a proportion — how much of its container the content holds — rather than a pixel count
+  or mere visibility, and keep the CI artifacts: a list-only Playwright run writes no report
+  directory, so before v0.41.2 every failed CI browser job discarded its own trace;
 - a failed write must say so. Two of the worst offenders were a `try/finally` with no `catch`
   and a whole code path (Meridian's non-managing self-service view) that rendered no error
   surface at all — check both when auditing a node;
