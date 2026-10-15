@@ -114,6 +114,32 @@
       min-height: 44px;
     }
 
+    /* The Month grid is the one place this floor cannot apply. A week row stacks a date, a
+       rotation strip and up to two event lanes, each of them a button, so a 44px floor turned
+       a 6-week month into ~850px of grid — two phone screens to read one month, with every
+       height in MonthWeekRow's compact mode silently overridden. The grid opts out by marking
+       itself `data-dense-tap`, and pays for the exemption rather than taking it for free: the
+       date control fills its whole column instead of being a 24px circle, and every bar
+       extends its touch area past its paint with `.dense-tap-target` below. Nothing else in
+       the app is exempt. */
+    [data-dense-tap] button,
+    [data-dense-tap] [role="button"] {
+      min-height: 0;
+    }
+
+    /* Restores the touch area a dense bar gives up in height, without giving it back in
+       layout: the ::after is out of flow, so a 16px bar answers to a 24px touch. The inset is
+       half the 4px lane gap plus a little, so neighbouring lanes stay unambiguous. */
+    [data-dense-tap] .dense-tap-target {
+      position: relative;
+    }
+
+    [data-dense-tap] .dense-tap-target::after {
+      content: "";
+      position: absolute;
+      inset: -4px 0;
+    }
+
     /* iOS Safari zooms the whole page in when you focus a control smaller than 16px, and it
        does not zoom back out — which is why filling in any form on a phone left the app
        oversized and needing a pinch. Touch devices get 16px controls; the desktop scale is

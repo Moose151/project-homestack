@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.41.3**
+> **Current version: 0.41.4**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,34 @@
 ---
 
 ## 0.41 — A readable month view, and undo across every node
+
+### 0.41.4 — 2026-10-15 — A month you can take in at a glance
+
+- **Phone Month was twice as tall as it was written to be, and nothing said so.** `index.css`
+  puts a 44px `min-height` on every button under `(pointer: coarse)` — right nearly everywhere,
+  and fatal in a Month grid, where a week row stacks a date, a rotation strip and up to two event
+  lanes and every one of them is a button. So every size in `MonthWeekRow`'s compact mode was
+  dead code on a phone: bars declared at 12–17px rendered at 44px, a week row measured 143px
+  against the ~63px it was written for, and a busy six-week month came to 847px of grid in a
+  1322px page — two phone screens to read one month. The grid now opts out as `data-dense-tap`.
+- **It pays for the exemption rather than taking it for free.** The date control fills its whole
+  column (a ~55×26 target with the circle as paint inside) instead of being a 24px circle, and
+  every bar and rotation chip extends its touch area past its paint with an out-of-flow `::after`,
+  so a 16px bar still answers to a 24px touch. Nothing else in the app is exempt.
+- **The chrome above the grid came down from 318px to 260px.** On phone the toolbar and the
+  rotation legend drop the card around them — 20px of padding, a border and a shadow wrapped
+  around controls that already read as a group — and the page stack tightens from `gap-4` to
+  `gap-2`. Every control keeps its own 44px target; only the packaging went. Desktop is untouched.
+- **Measured, not eyeballed:** on a 390×664 phone the busy October fixture goes 1322px → 799px
+  (1.99 → 1.20 screens) and its grid 847px → 403px; a week row with a rotation and two event
+  lanes goes 143px → 63px. A month without a heavy event load now fits in exactly one screen.
+- Multi-day behaviour is deliberately unchanged — spanning, lane assignment, week-boundary
+  breaks, cross-month continuation and "one record behind every segment" are all as 0.41.0 left
+  them, and the existing suite covered them throughout, which is precisely why the height
+  regression was invisible. The new coverage is therefore bounding boxes: ceilings on the week
+  row, the grid, the chrome and the page, plus bottom-nav clearance and a check that a compact
+  bar still opens the single event behind it. They fail against the pre-fix layout by more than
+  double (187px rows, 821px grid, 1217px page), so they cannot pass vacuously.
 
 ### 0.41.3 — 2026-10-15 — Undo reaches the last five nodes
 

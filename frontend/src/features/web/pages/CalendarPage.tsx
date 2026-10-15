@@ -819,8 +819,12 @@ function MonthWeekRow({
   const overflowCounts = weekDays.map((_, col) => hiddenCountForColumn(laned, col, cap))
   const hasOverflow = overflowCounts.some(n => n > 0)
 
+  // Phone sizes are deliberately small and now actually apply: until the Month grid opted out
+  // of the global 44px touch floor (see index.css `[data-dense-tap]`), every one of these was
+  // overridden to 44px and a week row came out at 143px. The touch area a bar gives up here it
+  // takes back out of flow, via `.dense-tap-target`.
   const barHeight: Record<PresentationLevel, string> = compact
-    ? { prominent: 'h-[17px]', compact: 'h-[14px]', context: 'h-[12px]', milestone: 'h-[12px]' }
+    ? { prominent: 'h-4', compact: 'h-[15px]', context: 'h-[13px]', milestone: 'h-[13px]' }
     : { prominent: 'h-5', compact: 'h-4', context: 'h-[14px]', milestone: 'h-[14px]' }
   const barText: Record<PresentationLevel, string> = {
     prominent: compact ? 'text-[9px] font-bold' : 'text-[11px] font-semibold',
@@ -836,7 +840,7 @@ function MonthWeekRow({
     const fmt: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
     const rangeLabel = multiDay ? `, ${start.toLocaleDateString(undefined, fmt)} – ${end.toLocaleDateString(undefined, fmt)}` : ''
     const label = monthDisplayTitle(segment.event)
-    const sizeCls = `flex ${barHeight[level]} items-center px-1 ${barText[level]} leading-none truncate`
+    const sizeCls = `flex ${barHeight[level]} items-center px-1 ${barText[level]} leading-none truncate${compact ? ' dense-tap-target' : ''}`
 
     if (level === 'milestone') {
       const atEnd = sameDay(addDays(weekDays[0], segment.startCol), end)
@@ -891,19 +895,30 @@ function MonthWeekRow({
           const count = dayEventCount(day)
           const occurrence = dayRotations(day)[0]
           return (
-            <div key={day.toDateString()} className="group relative flex items-center justify-center py-0.5">
+            <div key={day.toDateString()} className={`group relative flex items-center justify-center ${compact ? '' : 'py-0.5'}`}>
+              {/* On phone the button spans its whole column rather than being a 24px circle:
+                  the circle is paint inside a ~55x26 target, so dropping the 44px floor costs
+                  no reachability here. The marker keeps its own fixed size so a two-digit date
+                  and the Today pill stay the same shape. */}
               <button
                 type="button"
                 onClick={() => onSelectDay(day)}
                 aria-pressed={selected || undefined}
                 aria-label={`${day.toLocaleDateString()}${occurrence ? `, ${occurrence.label}` : ''}${count ? `, ${count} events` : ''}`}
-                className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold transition-colors ${
-                  isToday(day) ? 'bg-primary text-white'
-                    : selected ? 'bg-primary-soft text-primary ring-1 ring-primary'
-                      : inMonth ? (weekend ? 'text-muted-strong' : 'text-ink') : 'text-muted opacity-40'
-                }`}
+                className={compact
+                  ? 'flex h-[26px] w-full items-center justify-center'
+                  : 'grid h-6 w-6 place-items-center rounded-full text-xs font-bold transition-colors ' + (
+                    isToday(day) ? 'bg-primary text-white'
+                      : selected ? 'bg-primary-soft text-primary ring-1 ring-primary'
+                        : inMonth ? (weekend ? 'text-muted-strong' : 'text-ink') : 'text-muted opacity-40')}
               >
-                {day.getDate()}
+                {compact ? (
+                  <span className={`grid h-[21px] w-[21px] place-items-center rounded-full text-[11px] font-bold transition-colors ${
+                    isToday(day) ? 'bg-primary text-white'
+                      : selected ? 'bg-primary-soft text-primary ring-1 ring-primary'
+                        : inMonth ? (weekend ? 'text-muted-strong' : 'text-ink') : 'text-muted opacity-40'
+                  }`}>{day.getDate()}</span>
+                ) : day.getDate()}
               </button>
               {canEditCalendar && onAddEvent && !compact && (
                 <button
@@ -933,7 +948,7 @@ function MonthWeekRow({
                 type="button"
                 disabled={!occurrence || !canEditCalendar}
                 onClick={() => occurrence && onOpenRotation(occurrence)}
-                className={`block h-[14px] truncate rounded-sm px-0.5 text-center text-[9px] font-bold leading-[14px] text-white ${occurrence ? '' : 'invisible'}`}
+                className={`block ${compact ? 'dense-tap-target h-[13px] leading-[13px]' : 'h-[14px] leading-[14px]'} truncate rounded-sm px-0.5 text-center text-[9px] font-bold text-white ${occurrence ? '' : 'invisible'}`}
                 style={{ backgroundColor: occurrence?.colour }}
                 aria-label={occurrence ? `${occurrence.schedule_title}: ${occurrence.label}${occurrence.is_override ? ' (changed for this day)' : ''}` : undefined}
               >
@@ -947,7 +962,7 @@ function MonthWeekRow({
 
       {/* Event lanes: continuous bars, one row per lane, shared across the whole week. */}
       {Array.from({ length: laneRows }, (_, lane) => (
-        <div key={lane} className="grid grid-cols-7 gap-px px-px" style={{ marginTop: 2 }}>
+        <div key={lane} className="grid grid-cols-7 gap-px px-px" style={{ marginTop: compact ? 3 : 2 }}>
           {laned.filter(s => s.lane === lane).map(barFor)}
         </div>
       ))}
@@ -959,7 +974,7 @@ function MonthWeekRow({
               key={day.toDateString()}
               type="button"
               onClick={() => onSelectDay(day)}
-              className="text-center text-[9px] font-bold leading-4 text-muted hover:text-primary"
+              className={`text-center text-[9px] font-bold text-muted hover:text-primary ${compact ? 'dense-tap-target leading-[13px]' : 'leading-4'}`}
             >
               +{overflowCounts[col]} more
             </button>
@@ -1322,7 +1337,7 @@ export function CalendarPage() {
   ) : null
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-2 sm:gap-4">
       <div className="hidden sm:block">
         <PageHeader title="Calendar" icon="📅" actions={calendarActions} />
       </div>
@@ -1337,7 +1352,7 @@ export function CalendarPage() {
           exactly as before. */}
       <div
         data-calendar-toolbar
-        className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-2.5 shadow-soft sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3"
+        className="flex flex-col gap-1.5 sm:gap-2 sm:rounded-2xl sm:border sm:border-line sm:bg-surface sm:p-2.5 sm:shadow-soft sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3"
       >
         <div className="flex min-w-0 items-center gap-1 sm:flex-1 sm:basis-80">
           {/* Agenda always shows "today + 60 days" regardless of anchor, so Previous/Next/Today
@@ -1491,7 +1506,7 @@ export function CalendarPage() {
       {/* The legend explains the colours; the forecasting hint explains the arrows. They were
           sharing one row, so the row did two unrelated jobs and read as one sentence. */}
       {view === 'month' && rotatingSchedules.some(schedule => schedule.is_active) && (
-        <div className="flex flex-col gap-1.5 rounded-xl border border-line bg-surface px-3 py-2 text-xs text-muted">
+        <div className="flex flex-col gap-1.5 px-0.5 text-xs text-muted sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:px-3 sm:py-2">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             {rotatingSchedules.filter(schedule => schedule.is_active).map(schedule => (
               <div key={`month-legend-${schedule.id}`} className="flex flex-wrap items-center gap-3">
@@ -1511,6 +1526,7 @@ export function CalendarPage() {
         <>
           <div className="sm:hidden">
             <div
+              data-dense-tap
               className="-mx-4 touch-pan-y overflow-hidden border-y border-line bg-surface shadow-soft"
               onTouchStart={event => {
                 const touch = event.touches[0]
@@ -1520,7 +1536,7 @@ export function CalendarPage() {
               onTouchCancel={() => { monthSwipeStart.current = null }}
             >
               <div className="grid grid-cols-7 bg-sunken">
-                {weekdayNames.map(day => <div key={day} className="px-1 py-2 text-center text-[10px] font-bold uppercase tracking-wide text-muted">{day.slice(0, 2)}</div>)}
+                {weekdayNames.map(day => <div key={day} className="px-1 py-1 text-center text-[10px] font-bold uppercase tracking-wide text-muted">{day.slice(0, 2)}</div>)}
               </div>
               {monthWeeks(anchor, weekStart).map((weekDays, i) => (
                 <MonthWeekRow
@@ -1542,7 +1558,7 @@ export function CalendarPage() {
                 />
               ))}
             </div>
-            <p className="mt-2 px-1 text-[11px] text-muted">Tap a date for full details · tap an event to open it · swipe sideways to change month.</p>
+            <p className="mt-1.5 px-1 text-[10px] leading-snug text-muted/80">Tap a date for details · an event to open it · swipe to change month.</p>
           </div>
           <div data-calendar-grid className="hidden rounded-2xl border border-line overflow-hidden sm:block">
             <div className="grid grid-cols-7 bg-sunken">
