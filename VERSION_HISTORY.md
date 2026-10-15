@@ -1,6 +1,6 @@
 # HomeStack — Version History
 
-> **Current version: 0.41.2**
+> **Current version: 0.41.3**
 >
 > Versioning: `0.X` bumps mark major milestones (new node, significant new capability).
 > `0.X.Y` bumps mark smaller additions within a milestone.
@@ -10,6 +10,38 @@
 ---
 
 ## 0.41 — A readable month view, and undo across every node
+
+### 0.41.3 — 2026-10-15 — Undo reaches the last five nodes
+
+Finishes the reversibility work 0.40.10 started. Eleven more routine deletes stop asking "Are
+you sure?" and offer themselves back instead; the eight that genuinely cost something keep
+their confirmation.
+
+- **Now undoable:** an Atlas note or birthday person, a Home Guide page, a travel idea, booking
+  or plan, a book off your own shelf, and — in Money — a planned purchase, an income source, a
+  bucket entry or a balance snapshot.
+- **Still asks, deliberately:** a whole list, a trip, a wiki category, a bill and its occurrence
+  history, a bucket, a finance category, a book club member, and a club's copy of a book. Each
+  takes other records with it or moves them somewhere else, and there the pause is the point.
+  The reasons are written down in `apps/core/undo.py` rather than left to be re-derived.
+- **A restore puts back everything the delete took.** A booking's "book by" deadline is not
+  soft-deleted but destroyed, so undoing a booking rebuilds it through the node's own service
+  rather than a guess at what it looked like. Undoing a bucket entry moves the money back into
+  the bucket under the same row lock the delete used — restoring the row alone would leave a
+  bucket disagreeing with its own history.
+- **Undo is no longer a way into Money that skips Money's lock.** Solace's own views sit behind
+  re-authentication and audit every request that passes it; the central restore endpoint reached
+  those records without doing either. It now applies the same gate, and a locked session is
+  refused. Asserted by a test that fails against the ungated version.
+- **Two deletes that could never have reported a failure.** Travel's booking and idea deletes
+  awaited the API with no `catch` anywhere — a refused delete surfaced as an unhandled rejection
+  and an unchanged screen. Both now report, because they go through the shared path.
+- **One implementation, not five.** `useUndoableDelete` holds the delete-then-offer-back
+  behaviour that five pages were about to grow five slightly different copies of.
+- Added backend restore tests for every new type, including the Money lock and the deliberate
+  refusal of a club book, plus browser coverage for deleting from a detail sheet that closes on
+  the way out — the shape most able to regress silently, since nothing looks broken when the
+  offer simply never appears.
 
 ### 0.41.2 — 2026-10-15 — A week event shown once, and named
 

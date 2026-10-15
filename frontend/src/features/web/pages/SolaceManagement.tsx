@@ -17,6 +17,7 @@ import { Field, Input, Select } from '../../../components/Field'
 import { solaceMoney as money } from './solaceFormat'
 import { useStacks } from '../../stacks/StacksContext'
 import { confirmDialog } from '../../../components/Dialogs'
+import { useUndoableDelete, type UndoableDelete } from '../../../components/useUndoableDelete'
 
 const cap = (value: string) => value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, ' ')
 const errMsg = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong.'
@@ -118,10 +119,11 @@ function CategoryEditor({ category, reload, onError }: {
   )
 }
 
-function BalanceEditor({ row, reload, onError }: {
+function BalanceEditor({ row, reload, onError, undoDelete }: {
   row: SolaceBalanceSnapshot
   reload: () => void
   onError: (message: string) => void
+  undoDelete: UndoableDelete
 }) {
   const [balance, setBalance] = useState(row.balance)
   const [date, setDate] = useState(row.snapshot_date)
@@ -138,18 +140,13 @@ function BalanceEditor({ row, reload, onError }: {
       setSaving(false)
     }
   }
-  const remove = async () => {
-    if (!(await confirmDialog({ title: 'Delete this balance snapshot?', confirmLabel: 'Delete' }))) return
-    setSaving(true)
-    try {
-      await api.deleteSolaceBalance(row.id)
-      reload()
-    } catch (error) {
-      onError(errMsg(error))
-    } finally {
-      setSaving(false)
-    }
-  }
+  // The row goes with the reload, taking this editor with it, so the tab owns the offer to
+  // put it back. A category keeps its confirmation: deleting one moves every record using it.
+  const remove = () => undoDelete({
+    recordType: 'AccountBalanceSnapshot', id: row.id, label: 'that balance snapshot',
+    run: async () => { await api.deleteSolaceBalance(row.id); reload() },
+    onRestored: reload,
+  })
   return (
     <details className="border-t border-line pt-2">
       <summary className="cursor-pointer py-1 text-sm text-ink">
@@ -180,6 +177,7 @@ export function ManagementTab({ settings, categories, balances, report, health, 
 }) {
   const { nodes, refresh: refreshStacks } = useStacks()
   const solaceNode = nodes.find(node => node.key === 'solace')
+  const { remove: undoDelete, toast: undoToast } = useUndoableDelete(onError)
   const [settingsForm, setSettingsForm] = useState({
     currency_symbol: '$',
     budget_year: '',
@@ -404,7 +402,7 @@ export function ManagementTab({ settings, categories, balances, report, health, 
           </div>
           <div className="mt-4">
             {balances.length === 0 ? <p className="text-sm text-muted">No balance history yet.</p> : balances.slice(0, 8).map(row => (
-              <BalanceEditor key={row.id} row={row} reload={reload} onError={onError} />
+              <BalanceEditor key={row.id} row={row} reload={reload} onError={onError} undoDelete={undoDelete} />
             ))}
           </div>
         </Card>
@@ -591,6 +589,7 @@ export function ManagementTab({ settings, categories, balances, report, health, 
           )}
         </div>
       </Card>
+      {undoToast}
     </div>
   )
 }

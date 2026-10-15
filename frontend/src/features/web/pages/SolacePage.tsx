@@ -26,6 +26,7 @@ import { CloseoutTab, ManagementTab } from './SolaceManagement'
 import { setSolaceCurrencySymbol, solaceMoney as money } from './solaceFormat'
 import { useStacks } from '../../stacks/StacksContext'
 import { confirmDialog } from '../../../components/Dialogs'
+import { useUndoableDelete, type UndoableDelete } from '../../../components/useUndoableDelete'
 import { MobileListRow, MobileScreenHeader } from '../../../components/mobile'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
@@ -902,8 +903,9 @@ const BUCKET_PURPOSE_HINT: Record<string, string> = {
  * had no history and no explanation. Adding and spending are now the bucket's primary actions
  * and each one is recorded.
  */
-function BucketMoney({ bucket, reload, onError }: {
+function BucketMoney({ bucket, reload, onError, undoDelete }: {
   bucket: SolaceBucket; reload: () => void; onError: (message: string) => void
+  undoDelete: UndoableDelete
 }) {
   const [open, setOpen] = useState(false)
   const [entries, setEntries] = useState<SolaceBucketEntry[]>([])
@@ -978,18 +980,17 @@ function BucketMoney({ bucket, reload, onError }: {
                 </div>
                 <button
                   type="button"
-                  onClick={async () => {
-                    if (!(await confirmDialog({
-                      title: 'Remove this entry?',
-                      message: 'The bucket balance goes back to what it was before it.',
-                      confirmLabel: 'Remove',
-                    }))) return
-                    try {
+                  onClick={() => undoDelete({
+                    recordType: 'BucketEntry', id: entry.id, label: 'that entry',
+                    run: async () => {
                       await api.deleteSolaceBucketEntry(bucket.id, entry.id)
                       await loadEntries()
                       reload()
-                    } catch (e) { onError(errMsg(e)) }
-                  }}
+                    },
+                    // Restoring puts the money back in the bucket as well as the row in its
+                    // history, so both have to be re-read or the two disagree on screen.
+                    onRestored: async () => { await loadEntries(); reload() },
+                  })}
                   className="grid min-h-10 min-w-10 place-items-center rounded-lg text-muted hover:text-danger"
                   aria-label="Remove entry"
                 >×</button>
@@ -1114,9 +1115,10 @@ function BucketRuleEditor({ bucket, buckets, reload, onError }: {
   )
 }
 
-function BucketsTab({ buckets, matchingIds, reload, onError }: {
+function BucketsTab({ buckets, matchingIds, reload, onError, undoDelete }: {
   matchingIds?: number[]
   buckets: SolaceBucket[]; reload: () => void; onError: (message: string) => void
+  undoDelete: UndoableDelete
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -1162,7 +1164,7 @@ function BucketsTab({ buckets, matchingIds, reload, onError }: {
               {b.is_active && b.cap_to_remaining && (
                 <p className="mt-1 text-xs text-muted">Also takes whatever is left over each pay.</p>
               )}
-              <BucketMoney bucket={b} reload={reload} onError={onError} />
+              <BucketMoney bucket={b} reload={reload} onError={onError} undoDelete={undoDelete} />
               <BucketRuleEditor bucket={b} buckets={buckets} reload={reload} onError={onError} />
             </Card>
           ))}
@@ -1203,8 +1205,9 @@ function PurchaseForm({ categories, onCreated, onError }: {
   )
 }
 
-function PurchaseEditor({ purchase, categories, reload, onError }: {
-  purchase: SolacePurchase; categories: string[]; reload: () => void; onError: (message: string) => void
+function PurchaseEditor({ purchase, categories, reload, onError, undoDelete }: {
+  purchase: SolacePurchase; categories: string[]; reload: () => void
+  onError: (message: string) => void; undoDelete: UndoableDelete
 }) {
   const [f, setF] = useState({
     name: purchase.name,
@@ -1235,18 +1238,13 @@ function PurchaseEditor({ purchase, categories, reload, onError }: {
       setSaving(false)
     }
   }
-  const remove = async () => {
-    if (!(await confirmDialog({ title: `Delete ${purchase.name}?`, confirmLabel: 'Delete' }))) return
-    setSaving(true)
-    try {
-      await api.deleteSolacePurchase(purchase.id)
-      reload()
-    } catch (error) {
-      onError(errMsg(error))
-    } finally {
-      setSaving(false)
-    }
-  }
+  // No confirmation, and the offer to put it back is rendered by the tab: this editor goes
+  // with the purchase the moment the list reloads without it.
+  const remove = () => undoDelete({
+    recordType: 'PlannedPurchase', id: purchase.id, label: purchase.name,
+    run: async () => { await api.deleteSolacePurchase(purchase.id); reload() },
+    onRestored: reload,
+  })
   return (
     <details className="mt-3 border-t border-line pt-3">
       <summary className="cursor-pointer text-sm font-medium text-primary">Edit purchase</summary>
@@ -1269,8 +1267,9 @@ function PurchaseEditor({ purchase, categories, reload, onError }: {
   )
 }
 
-function PurchasesTab({ purchases, categories, reload, onError }: {
-  purchases: SolacePurchase[]; categories: string[]; reload: () => void; onError: (message: string) => void
+function PurchasesTab({ purchases, categories, reload, onError, undoDelete }: {
+  purchases: SolacePurchase[]; categories: string[]; reload: () => void
+  onError: (message: string) => void; undoDelete: UndoableDelete
 }) {
   const QuickSave = ({ purchase }: { purchase: SolacePurchase }) => {
     const [amount, setAmount] = useState('')
@@ -1320,7 +1319,7 @@ function PurchasesTab({ purchases, categories, reload, onError }: {
             <p className="mt-2 text-sm text-muted">{money(p.remaining_amount)} left · {dateOnly(p.target_date)}</p>
             <div className="mt-2"><Badge tone={p.status === 'bought' ? 'success' : p.status === 'cancelled' ? 'neutral' : 'primary'}>{cap(p.status)}</Badge></div>
             <QuickSave purchase={p} />
-            <PurchaseEditor purchase={p} categories={categories} reload={reload} onError={onError} />
+            <PurchaseEditor purchase={p} categories={categories} reload={reload} onError={onError} undoDelete={undoDelete} />
           </Card>
         ))}
       </div>
@@ -1458,8 +1457,9 @@ function IncomeSplitEditor({ payday, buckets, onError }: {
   )
 }
 
-function PaydaysTab({ paydays, buckets, reload, onError }: {
-  paydays: SolacePayday[]; buckets: SolaceBucket[]; reload: () => void; onError: (message: string) => void
+function PaydaysTab({ paydays, buckets, reload, onError, undoDelete }: {
+  paydays: SolacePayday[]; buckets: SolaceBucket[]; reload: () => void
+  onError: (message: string) => void; undoDelete: UndoableDelete
 }) {
   const toggle = async (payday: SolacePayday) => {
     try {
@@ -1501,18 +1501,11 @@ function PaydaysTab({ paydays, buckets, reload, onError }: {
         setSaving(false)
       }
     }
-    const remove = async () => {
-      if (!(await confirmDialog({ title: `Delete ${payday.title}?`, confirmLabel: 'Delete' }))) return
-      setSaving(true)
-      try {
-        await api.deleteSolacePayday(payday.id)
-        reload()
-      } catch (error) {
-        onError(errMsg(error))
-      } finally {
-        setSaving(false)
-      }
-    }
+    const remove = () => undoDelete({
+      recordType: 'Payday', id: payday.id, label: payday.title,
+      run: async () => { await api.deleteSolacePayday(payday.id); reload() },
+      onRestored: reload,
+    })
     return (
       <details className="mt-3 border-t border-line pt-3">
         <summary className="cursor-pointer text-sm font-medium text-primary">Edit income source</summary>
@@ -2343,6 +2336,10 @@ export function SolacePage() {
   const [showBalance, setShowBalance] = useState(false)
   const [showBill, setShowBill] = useState(false)
   const [error, setError] = useState('')
+  // Held here rather than in each editor: a purchase, payday or bucket entry takes its own
+  // editor off the screen when it goes, and a toast rendered by a component that is
+  // unmounting is a toast nobody sees.
+  const { remove: undoDelete, toast: undoToast } = useUndoableDelete(setError)
   const [loading, setLoading] = useState(false)
   const [bills, setBills] = useState<SolaceBill[]>([])
   const [paydays, setPaydays] = useState<SolacePayday[]>([])
@@ -2569,14 +2566,15 @@ export function SolacePage() {
           <div className="hidden sm:block"><Tabs tabs={PLAN_SECTIONS} active={planSection} onChange={setPlanSection} variant="secondary" /></div>
           {planSection === 'checklist' && <ChecklistTab items={checklist} preferences={checklistPreferences} plan={plan} generating={generatingChecklist} reload={load} onGenerate={generateChecklist} onChange={setChecklist} onError={setError} />}
           {planSection === 'payplan' && <PayPlan plan={plan} generating={generatingChecklist} onGenerate={generateChecklist} onSection={goSection} onError={setError} />}
-          {planSection === 'buckets' && <BucketsTab buckets={buckets} matchingIds={q.trim() && searchResults ? searchResults.buckets.map(row => row.id) : undefined} reload={load} onError={setError} />}
-          {planSection === 'paydays' && <PaydaysTab paydays={q.trim() && searchResults ? searchResults.paydays : paydays} buckets={buckets} reload={load} onError={setError} />}
+          {planSection === 'buckets' && <BucketsTab buckets={buckets} matchingIds={q.trim() && searchResults ? searchResults.buckets.map(row => row.id) : undefined} reload={load} onError={setError} undoDelete={undoDelete} />}
+          {planSection === 'paydays' && <PaydaysTab paydays={q.trim() && searchResults ? searchResults.paydays : paydays} buckets={buckets} reload={load} onError={setError} undoDelete={undoDelete} />}
           {planSection === 'purchases' && (
             <PurchasesTab
               purchases={q.trim() && searchResults ? searchResults.purchases : purchases}
               categories={categories.filter(category => category.is_active && ['purchase', 'both'].includes(category.category_type)).map(category => category.name)}
               reload={load}
               onError={setError}
+              undoDelete={undoDelete}
             />
           )}
         </div>
@@ -2618,6 +2616,7 @@ export function SolacePage() {
           />
         </div>
       )}
+      {undoToast}
     </div>
   )
 }

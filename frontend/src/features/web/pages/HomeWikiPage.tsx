@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type { WikiCategory, WikiPage } from '../../../api/types'
@@ -15,6 +15,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { useUrlQueryState } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
 import { ColourPicker } from '../../../components/ColourPicker'
+import { useUndoableDelete } from '../../../components/useUndoableDelete'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.')
 
@@ -129,7 +130,7 @@ function PageDetailModal({ page, categories, onChange, onDelete, onError, onClos
   page: WikiPage
   categories: WikiCategory[]
   onChange: (p: WikiPage) => void
-  onDelete: (id: number) => void
+  onDelete: (page: WikiPage) => void
   onError: (m: string) => void
   onClose: () => void
   canDelete: boolean
@@ -149,10 +150,10 @@ function PageDetailModal({ page, categories, onChange, onDelete, onError, onClos
       onChange(updated); setEditing(false)
     } catch (e) { onError(errMsg(e)) } finally { setBusy(false) }
   }
-  const remove = async () => {
-    if (!(await confirmDialog({ title: `Delete "${page.title}"?`, confirmLabel: 'Delete' }))) return
-    try { await api.deleteWikiPage(page.id); onDelete(page.id); onClose() } catch (e) { onError(errMsg(e)) }
-  }
+  // No confirmation and no delete call here: the list that owns this page deletes it and
+  // offers it back, because this sheet closes on the way out and a toast rendered from a
+  // component that is about to unmount would never be seen.
+  const remove = () => { onDelete(page); onClose() }
   const toggleFavourite = async () => {
     try { onChange(await api.updateWikiPage(page.id, { is_favourite: !page.is_favourite })) }
     catch (e) { onError(errMsg(e)) }
@@ -186,7 +187,7 @@ function PageCard({ page, categories, onChange, onDelete, onError, canDelete, op
   page: WikiPage
   categories: WikiCategory[]
   onChange: (p: WikiPage) => void
-  onDelete: (id: number) => void
+  onDelete: (page: WikiPage) => void
   onError: (m: string) => void
   canDelete: boolean
   open?: boolean
@@ -245,6 +246,7 @@ function PagesTab({ categories, isAdmin, onError, openedPageId, onOpenPage, onCl
   const [categoryId, setCategoryId] = useState('')
   const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState(false)
+  const { remove: removePage, toast: undoToast } = useUndoableDelete(onError)
 
   const load = () => {
     setLoading(true)
@@ -315,7 +317,14 @@ function PagesTab({ categories, isAdmin, onError, openedPageId, onOpenPage, onCl
             <PageCard
               key={p.id} page={p} categories={categories} canDelete={isAdmin}
               onChange={u => setPages(prev => prev.map(x => x.id === u.id ? u : x))}
-              onDelete={id => setPages(prev => prev.filter(x => x.id !== id))}
+              onDelete={target => removePage({
+                recordType: 'WikiPage', id: target.id, label: `"${target.title}"`,
+                run: async () => {
+                  await api.deleteWikiPage(target.id)
+                  setPages(prev => prev.filter(x => x.id !== target.id))
+                },
+                onRestored: load,
+              })}
               onError={onError}
               open={openedPageId === p.id}
               onOpen={() => onOpenPage(p.id)}
@@ -324,6 +333,7 @@ function PagesTab({ categories, isAdmin, onError, openedPageId, onOpenPage, onCl
           ))}
         </div>
       )}
+      {undoToast}
     </div>
   )
 }
@@ -426,12 +436,23 @@ export function HomeWikiPage() {
 
   useEffect(() => { api.getWikiCategories(isAdmin).then(setCategories).catch(e => setError(errMsg(e))) }, [isAdmin])
 
-  useEffect(() => {
+  // Named rather than inline, because undoing a delete from a result has to re-run the same
+  // search — a restored page that stayed missing from the results it was deleted from would
+  // look like the undo had failed.
+  const runSearch = useCallback(async () => {
     const q = query.trim()
     if (q.length < 2) { setResults(null); return }
-    const id = setTimeout(() => { api.searchWiki(q).then(r => setResults(r.pages)).catch(e => setError(errMsg(e))) }, 300)
-    return () => clearTimeout(id)
+    try { setResults((await api.searchWiki(q)).pages) }
+    catch (e) { setError(errMsg(e)) }
   }, [query])
+
+  useEffect(() => {
+    if (query.trim().length < 2) { setResults(null); return }
+    const id = setTimeout(runSearch, 300)
+    return () => clearTimeout(id)
+  }, [query, runSearch])
+
+  const { remove: removeResult, toast: searchUndoToast } = useUndoableDelete(setError)
 
   const visibleCategories = useMemo(() => categories.filter(c => isAdmin || !c.is_hidden), [categories, isAdmin])
   const openPage = (id: number) => {
@@ -468,7 +489,14 @@ export function HomeWikiPage() {
               <PageCard
                 key={p.id} page={p} categories={visibleCategories} canDelete={user?.capabilities?.delete_wiki_pages ?? user?.role === 'admin'}
                 onChange={u => setResults(prev => prev ? prev.map(x => x.id === u.id ? u : x) : prev)}
-                onDelete={id => setResults(prev => prev ? prev.filter(x => x.id !== id) : prev)}
+                onDelete={target => removeResult({
+                  recordType: 'WikiPage', id: target.id, label: `"${target.title}"`,
+                  run: async () => {
+                    await api.deleteWikiPage(target.id)
+                    setResults(prev => prev ? prev.filter(x => x.id !== target.id) : prev)
+                  },
+                  onRestored: runSearch,
+                })}
                 onError={setError}
                 open={openedPageId === p.id}
                 onOpen={() => openPage(p.id)}
@@ -484,6 +512,7 @@ export function HomeWikiPage() {
           {tab === 'categories' && <CategoriesTab categories={categories} onChange={setCategories} isAdmin={isAdmin} onError={setError} />}
         </>
       )}
+      {searchUndoToast}
     </div>
   )
 }

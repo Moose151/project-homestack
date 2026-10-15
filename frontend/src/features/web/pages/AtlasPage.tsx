@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../../../api/client'
 import type { AtlasContact, AtlasList, AtlasListItem, AtlasNote, AtlasSearchResults, CalendarEvent, Person } from '../../../api/types'
@@ -17,6 +17,7 @@ import { DeleteAction } from '../../..//components/RowActions'
 import { useAuth } from '../../auth/AuthContext'
 import { useUrlQueryState } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
+import { useUndoableDelete } from '../../../components/useUndoableDelete'
 import { UndoToast } from '../../../components/UndoToast'
 import { sourcePath } from '../../../lib/sourceLinks'
 import { EventModal } from './CalendarPage'
@@ -317,7 +318,7 @@ function ListCard({ list, people, defaultAssignee, focusedItemId, onDeleted, onE
 function NoteCard({ note, onSaved, onDeleted, onError }: {
   note: AtlasNote
   onSaved: (n: AtlasNote) => void
-  onDeleted: (id: number) => void
+  onDeleted: (note: AtlasNote) => void
   onError: (m: string) => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -336,10 +337,9 @@ function NoteCard({ note, onSaved, onDeleted, onError }: {
     } catch (e) { onError(errMsg(e)) } finally { setSaving(false) }
   }
 
-  const remove = async () => {
-    if (!(await confirmDialog({ title: `Delete "${note.title}"?`, confirmLabel: 'Delete' }))) return
-    try { await api.deleteNote(note.id); onDeleted(note.id) } catch (e) { onError(errMsg(e)) }
-  }
+  // The card unmounts the moment the note leaves the list, so the delete and its Undo offer
+  // belong to the list, not here.
+  const remove = () => onDeleted(note)
 
   if (editing) {
     return (
@@ -400,8 +400,13 @@ function ListsAndNotesTab({ checklistLists, people, defaultAssignee, focusedList
   const [creating, setCreating] = useState<'checklist' | 'note' | null>(null)
   const [title, setTitle] = useState('')
   const [busy, setBusy] = useState(false)
+  const { remove: removeNote, toast: undoToast } = useUndoableDelete(onError)
 
-  useEffect(() => { api.getNotes().then(setNotes).catch(e => onError(errMsg(e))) }, [onError])
+  const loadNotes = useCallback(
+    () => api.getNotes().then(setNotes).catch(e => onError(errMsg(e))),
+    [onError],
+  )
+  useEffect(() => { void loadNotes() }, [loadNotes])
 
   const createChecklist = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -497,12 +502,20 @@ function ListsAndNotesTab({ checklistLists, people, defaultAssignee, focusedList
             {notes.map(n => (
               <NoteCard key={n.id} note={n}
                 onSaved={u => setNotes(prev => (prev ?? []).map(x => x.id === u.id ? u : x))}
-                onDeleted={id => setNotes(prev => (prev ?? []).filter(x => x.id !== id))}
+                onDeleted={target => removeNote({
+                  recordType: 'AtlasNote', id: target.id, label: `"${target.title}"`,
+                  run: async () => {
+                    await api.deleteNote(target.id)
+                    setNotes(prev => (prev ?? []).filter(x => x.id !== target.id))
+                  },
+                  onRestored: loadNotes,
+                })}
                 onError={onError} />
             ))}
           </div>
         )}
       </div>
+      {undoToast}
     </div>
   )
 }
@@ -1208,17 +1221,23 @@ function PeopleBirthdaysTab({ people, onError }: { people: Person[]; onError: (m
   const [name, setName] = useState(''); const [dob, setDob] = useState(''); const [relationship, setRelationship] = useState('')
   const load = () => api.getAtlasContacts().then(setContacts).catch(e => onError(errMsg(e)))
   useEffect(() => { void load() }, [onError])
+  const { remove: removeContact, toast: undoToast } = useUndoableDelete(onError)
   const save = async (event: React.FormEvent) => { event.preventDefault(); if (!name.trim() || !dob) return
     try { await api.createAtlasContact({ name: name.trim(), date_of_birth: dob, relationship, visibility: 'household' }); setName(''); setDob(''); setRelationship(''); setOpen(false); load() }
     catch (e) { onError(errMsg(e)) }
   }
-  const remove = async (contact: AtlasContact) => { if (!(await confirmDialog({ title: `Delete ${contact.name}?`, confirmLabel: 'Delete' }))) return; try { await api.deleteAtlasContact(contact.id); load() } catch (e) { onError(errMsg(e)) } }
+  const remove = (contact: AtlasContact) => removeContact({
+    recordType: 'AtlasContact', id: contact.id, label: contact.name,
+    run: async () => { await api.deleteAtlasContact(contact.id); await load() },
+    onRestored: load,
+  })
   const rows = [...people.filter(p => p.date_of_birth).map(p => ({ id: `p-${p.id}`, name: p.display_name, dob: p.date_of_birth!, relationship: 'Household member', contact: null as AtlasContact | null })),
     ...contacts.filter(c => !c.linked_person_id).map(c => ({ id: `c-${c.id}`, name: c.name, dob: c.date_of_birth, relationship: c.relationship, contact: c }))]
   return <div className="flex flex-col gap-4">
     {open ? <Card title="Add a person"><form onSubmit={save} className="grid gap-3 sm:grid-cols-3"><Field label="Name"><Input value={name} onChange={e => setName(e.target.value)} autoFocus /></Field><Field label="Date of birth"><Input type="date" value={dob} onChange={e => setDob(e.target.value)} /></Field><Field label="Relationship"><Input value={relationship} onChange={e => setRelationship(e.target.value)} placeholder="Friend, aunt…" /></Field><div className="flex gap-2 sm:col-span-3 sm:justify-end"><Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" disabled={!name.trim() || !dob}>Save person</Button></div></form></Card>
       : <Button size="sm" className="self-start" onClick={() => setOpen(true)}>+ Add person</Button>}
     {!rows.length ? <EmptyState icon="🎂" title="No birthdays yet" hint="Add friends and relatives here, or add a household member's birth date in user management. Pet birthdays appear automatically on the Calendar." /> : <div className="grid gap-3 lg:grid-cols-2">{rows.map(row => <Card key={row.id}><div className="flex items-center justify-between gap-3"><div><h3 className="font-bold text-ink">{row.name}</h3><p className="text-sm text-muted">🎂 {new Date(`${row.dob}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}{row.relationship ? ` · ${row.relationship}` : ''}</p></div>{row.contact && <DeleteAction onClick={() => remove(row.contact!)} label={row.name} />}</div></Card>)}</div>}
+    {undoToast}
   </div>
 }
 

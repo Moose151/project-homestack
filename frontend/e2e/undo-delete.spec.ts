@@ -77,3 +77,66 @@ test('deleting an assignment does not interrupt, and can be undone', async ({ pa
   expect((await restore).postDataJSON()).toEqual({ record_type: 'EducationAssessment', record_id: 8 })
   await expect(page.locator('#education-assessment-8')).toBeVisible()
 })
+
+// The same contract, reached through a different shape of screen. Home Wiki deletes its page
+// from inside a detail sheet that closes on the way out, so the offer to put it back has to be
+// made by the list — a toast rendered by the sheet would unmount before anyone saw it. This is
+// the part of the v0.40.11 conversion most able to regress silently: nothing would look broken,
+// the undo would simply never appear.
+const WIKI_PAGE = {
+  id: 12, title: 'Bin night', body: 'Thursdays, green bin fortnightly.',
+  category_id: null, category_name: '', category_colour: '', tags: '', tag_list: [],
+  is_favourite: false, is_emergency: false, is_kiosk_safe: false,
+  visibility: 'household', sensitivity: 'normal', created_at: '', updated_at: '',
+}
+
+test('deleting a wiki page offers it back from the list the sheet closed onto', async ({ page }) => {
+  let deleted = false
+  await mockAuthenticatedApi(page, {
+    '/api/v1/nodes/': [enabledNode('home_wiki')],
+    '/api/v1/wiki/categories/': [],
+  })
+  await page.route(
+    url => url.pathname.startsWith('/api/v1/wiki/pages'),
+    route => {
+      const { pathname } = new URL(route.request().url())
+      if (/\/pages\/\d+\/$/.test(pathname)) {
+        if (route.request().method() === 'DELETE') {
+          deleted = true
+          return route.fulfill({ status: 204, body: '' })
+        }
+        return route.fulfill({
+          status: 200, contentType: 'application/json', body: JSON.stringify(WIKI_PAGE),
+        })
+      }
+      return route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify(deleted ? [] : [WIKI_PAGE]),
+      })
+    },
+  )
+
+  const restore = page.waitForRequest(request => (
+    request.method() === 'POST' && request.url().endsWith('/api/v1/undo/restore/')
+  ))
+  await page.route('**/api/v1/undo/restore/', route => {
+    deleted = false
+    return route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ restored: true, noun: 'page' }),
+    })
+  })
+
+  await page.goto('/wiki?tab=pages&page=12')
+  const sheet = page.getByRole('dialog')
+  await expect(sheet).toBeVisible()
+  await sheet.getByRole('button', { name: 'Delete', exact: true }).click()
+
+  // The sheet closes, the page leaves the list, and the offer survives both.
+  await expect(sheet).toHaveCount(0)
+  await expect(page.getByText('Deleted "Bin night"')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Undo' }).click()
+  expect((await restore).postDataJSON()).toEqual({ record_type: 'WikiPage', record_id: 12 })
+  await expect(page.getByText('Bin night')).toBeVisible()
+})

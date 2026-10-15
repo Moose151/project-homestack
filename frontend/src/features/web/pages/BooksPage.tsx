@@ -13,6 +13,7 @@ import { Tabs } from '../../../components/Tabs'
 import { RemoveAction } from '../../..//components/RowActions'
 import { useUrlAction, useUrlQueryState } from '../../../hooks/useUrlTab'
 import { confirmDialog } from '../../../components/Dialogs'
+import { useUndoableDelete } from '../../../components/useUndoableDelete'
 import { ColourPicker } from '../../../components/ColourPicker'
 
 type Surface = 'personal' | 'club'
@@ -698,6 +699,11 @@ export function BooksPage() {
     }
   }
 
+  // Taking a book off your own shelf is the routine, single-record delete here. Removing a
+  // book from a club, or a member from one, keeps its confirmation: both reach into what
+  // other people see, and a club book's queue rows do not survive to be restored.
+  const { remove: removeBook, toast: undoToast } = useUndoableDelete(setError)
+
   useEffect(() => { loadCore() }, [showClubItems])
   useEffect(() => { loadClub(selectedClub?.id) }, [selectedClub?.id])
 
@@ -832,10 +838,12 @@ export function BooksPage() {
                     clubs={clubs}
                     onRefresh={reloadAll}
                     onMove={status => act(async () => { await api.updatePersonalBook(entry.id, { status }); await reloadAll() })}
-                    onDelete={async () => {
-                      if (!(await confirmDialog({ title: `Remove "${entry.book.title}" from your books?`, confirmLabel: 'Remove' }))) return
-                      return act(async () => { await api.deletePersonalBook(entry.id); await reloadAll() })
-                    }}
+                    onDelete={() => removeBook({
+                      recordType: 'PersonalBookEntry', id: entry.id,
+                      label: `"${entry.book.title}"`,
+                      run: async () => { await api.deletePersonalBook(entry.id); await reloadAll() },
+                      onRestored: reloadAll,
+                    })}
                     onAddToClub={clubId => act(async () => { await api.createClubBook(clubId, { book_id: entry.book_id, status: 'backlog', position: 0 }); await reloadAll() })}
                   />
                 ))}
@@ -938,6 +946,7 @@ export function BooksPage() {
       ) : (
         <Card><p className="text-muted">Create a book club to share a reading list.</p></Card>
       )}
+      {undoToast}
     </div>
   )
 }

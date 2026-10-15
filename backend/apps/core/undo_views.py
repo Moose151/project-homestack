@@ -1,6 +1,7 @@
 """Restore a record the caller just deleted (see apps/core/undo.py for the why)."""
 from __future__ import annotations
 
+from django.db import transaction
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -8,7 +9,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.services import is_reauthed
+from apps.audit.helpers import log_audit
 from apps.core.undo import restorable_for
+from apps.nodes.access import node_requires_reauth
 from apps.permissions.resolver import resolve_permission
 
 
@@ -31,14 +34,24 @@ class RestoreRecordView(APIView):
                 {"detail": "That item cannot be restored."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        reauthed = is_reauthed(request._request)
         if not resolve_permission(
-            request.user, "delete", entry.resource,
-            sensitive_unlocked=is_reauthed(request._request),
+            request.user, "delete", entry.resource, sensitive_unlocked=reauthed,
         ):
             return Response(
                 {"detail": "You cannot restore this item."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        # A sensitive node's own views sit behind a lock and audit every request that passes it
+        # (apps/nodes/access.py). This endpoint reaches into those nodes too, so it applies the
+        # same gate rather than becoming the one way in that neither locks nor records.
+        if entry.sensitive_node:
+            if node_requires_reauth(entry.sensitive_node) and not reauthed:
+                return Response(
+                    {"detail": "Unlock this area before restoring."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            self._audit_sensitive_access(request, entry, record_type)
         try:
             record = entry.load(int(record_id))
         except (TypeError, ValueError):
@@ -50,5 +63,26 @@ class RestoreRecordView(APIView):
                 {"detail": "That item is no longer available to restore."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        entry.restore(request.user, record)
+        # A restore is several writes — the row, its Calendar projection, a bucket balance —
+        # and a partial one is worse than the delete it reverses.
+        with transaction.atomic():
+            entry.restore(request.user, record)
         return Response({"restored": True, "noun": entry.noun})
+
+    @staticmethod
+    def _audit_sensitive_access(request: Request, entry, record_type: str) -> None:
+        from apps.nodes.models import Node
+
+        log_audit(
+            "sensitive_node_accessed",
+            user=request.user,
+            target_node=Node.objects.filter(key=entry.sensitive_node).first(),
+            request=request._request,
+            metadata={
+                "node": entry.sensitive_node,
+                "surface": "undo_restore",
+                "record_type": record_type,
+                "path": request.path,
+                "method": request.method,
+            },
+        )

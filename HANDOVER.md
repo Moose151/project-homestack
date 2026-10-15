@@ -359,10 +359,10 @@ again:
   product enumerates hidden items, so a permanent hide guarded only by a seconds-long Undo is a
   silent one-way door.
 
-**Reversibility (v0.40.10, in progress).** Routine deletion asks "Are you sure?" far more than
-it offers undo. Confirmation interrupts every time, including the overwhelming majority of times
-the reader was right, and cannot help the one time they were not — a confirmed mistake is just
-as gone. Undo inverts that.
+**Reversibility (v0.40.10 and v0.41.3, complete for the current nodes).** Routine deletion asked
+"Are you sure?" far more often than it offered undo. Confirmation interrupts every time,
+including the overwhelming majority of times the reader was right, and cannot help the one time
+they were not — a confirmed mistake is just as gone. Undo inverts that.
 
 The infrastructure turned out to be nearly free: every `HouseholdBaseModel` already soft-deletes
 and already has `restore()`, and `all_objects` was already there for it. Only a restore *path*
@@ -370,11 +370,20 @@ was missing. `POST /api/v1/undo/restore/` plus the bounded registry in `apps/cor
 that path; a restore handler must invert everything its node's delete did, which usually means
 re-syncing the Calendar projection (D7) so the record does not come back only half-restored.
 
-Converted so far: Education assignments, Atlas to-do items, Homestead maintenance, Pet
-treatments and appointments. The rule for what converts: **cheap, frequent, single-record
-deletes get undo; high-blast-radius deletes keep their confirmation** (a whole list, a pet, a
-person, a trip — there the pause is the point). Still to review: Books, Travel, Home Wiki,
-Atlas notes/contacts, Solace.
+The rule for what converts: **cheap, frequent, single-record deletes get undo; high-blast-radius
+deletes keep their confirmation** (a whole list, a pet, a person, a trip — there the pause is the
+point). Sixteen record types are registered across Education, Atlas, Homestead, Pets, Home Wiki,
+Travel, Books and Solace; the deletes deliberately left on confirmation are listed, with reasons,
+in the `apps/core/undo.py` docstring. Apply the same rule to any new dated record rather than
+reaching for a confirm dialog, and put the delete-and-offer-back on the component that *survives*
+the deletion — the frontend hook is `useUndoableDelete`, and a toast rendered by the row or sheet
+that is about to unmount is never seen.
+
+Two things a new registry entry must get right: it inverts **everything** its node's delete did
+(a hard-deleted child row has to be rebuilt through the node's own service, not guessed at; a
+balance the delete moved has to move back under the same lock), and it carries `sensitive_node`
+if the owning node gates access behind re-authentication — otherwise the central restore
+endpoint becomes the one door into that node that neither locks nor audits.
 
 **CI** (`.github/workflows/ci.yml`, v0.40.6) runs the backend suite on the pinned 3.12/5.0.6
 runtime, checks migration drift, type-checks and builds the frontend, runs the browser suite,

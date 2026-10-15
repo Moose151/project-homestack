@@ -15,6 +15,7 @@ import { DeleteAction, EditAction, RowActions } from '../../../components/RowAct
 import { ColourPicker } from '../../../components/ColourPicker'
 import { Tabs } from '../../../components/Tabs'
 import { confirmDialog } from '../../../components/Dialogs'
+import { useUndoableDelete } from '../../../components/useUndoableDelete'
 import { TimePicker } from '../../../components/TimePicker'
 
 const errMsg = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong.'
@@ -178,13 +179,9 @@ function ItineraryForm({ trip, existing, onCancel, onSaved, onError }: {
   </form></Modal>
 }
 
-function ItineraryRow({ item, onEdit, onDeleted, onError }: {
-  item: TravelItineraryItem; onEdit: () => void; onDeleted: () => void; onError: (m: string) => void
+function ItineraryRow({ item, onEdit, onDeleted }: {
+  item: TravelItineraryItem; onEdit: () => void; onDeleted: () => void
 }) {
-  const remove = async () => {
-    if (!(await confirmDialog({ title: `Remove ${item.title}?`, confirmLabel: 'Remove' }))) return
-    try { await api.deleteItineraryItem(item.id); onDeleted() } catch (error) { onError(errMsg(error)) }
-  }
   return <div className="flex items-start gap-3 rounded-xl border border-line p-3">
     <div className="min-w-0 flex-1">
       <p className="font-bold text-ink">{item.title}</p>
@@ -195,7 +192,7 @@ function ItineraryRow({ item, onEdit, onDeleted, onError }: {
       {item.notes && <p className="mt-1 text-xs text-muted-strong">{item.notes}</p>}
     </div>
     <EditAction label={item.title} onClick={onEdit} />
-    <DeleteAction label={item.title} onClick={remove} />
+    <DeleteAction label={item.title} onClick={onDeleted} />
   </div>
 }
 
@@ -203,6 +200,9 @@ function TripDetail({ trip, people, onBack, onDeleted, reload, onError }: { trip
   const [editing, setEditing] = useState(false); const [deleting, setDeleting] = useState(false); const [bookingKind, setBookingKind] = useState<TravelBooking['kind'] | null>(null); const [editingBooking, setEditingBooking] = useState<TravelBooking | null>(null)
   const [addingItinerary, setAddingItinerary] = useState(false); const [editingItineraryItem, setEditingItineraryItem] = useState<TravelItineraryItem | null>(null)
   const requiredDone = trip.booking_progress.required_types.every(kind => trip.booking_progress.booked_required_types.includes(kind))
+  // One offer for both of this screen's routine deletes. The trip itself keeps its
+  // confirmation below: it takes its bookings, deadlines and Calendar entries with it.
+  const { remove: removeRecord, toast: undoToast } = useUndoableDelete(onError)
   const setBooked = async (booking: TravelBooking) => { try { await api.updateTravelBooking(booking.id, { status: booking.status === 'booked' ? 'planned' : 'booked', booked_amount: booking.booked_amount || booking.quoted_amount }); reload() } catch (error) { onError(errMsg(error)) } }
   const deleteTrip = async () => {
     if (!(await confirmDialog({ title: `Delete ${trip.title}?`, message: 'This removes the trip, its bookings, deadlines and Calendar entries.', confirmLabel: 'Delete trip' }))) return
@@ -218,7 +218,7 @@ function TripDetail({ trip, people, onBack, onDeleted, reload, onError }: { trip
     <div className="grid gap-3 sm:grid-cols-3"><Card><p className="text-xs font-bold uppercase text-muted">Bookings</p><p className="mt-1 text-2xl font-black">{trip.booking_progress.booked_count}/{trip.booking_progress.component_count}</p><p className="text-xs text-muted">{requiredDone ? 'Required travel covered' : 'Still needs booking'}</p></Card>{trip.cost_summary.map(row => <Card key={row.currency}><p className="text-xs font-bold uppercase text-muted">Expected · {row.currency}</p><p className="mt-1 text-2xl font-black">{money(row.quoted, row.currency)}</p><p className="text-xs text-muted">{money(row.booked, row.currency)} booked</p></Card>)}</div>
     {(bookingKind || editingBooking) && <BookingForm trip={trip} initialKind={bookingKind || editingBooking!.kind} existing={editingBooking} onCancel={() => { setBookingKind(null); setEditingBooking(null) }} onSaved={() => { setBookingKind(null); setEditingBooking(null); reload() }} onError={onError} />}
     <Card title="Travel & stays"><div className="mb-3 flex flex-wrap gap-2">{trip.flights_required && <Button size="sm" variant="secondary" onClick={() => setBookingKind('flight')}>+ Flight</Button>}{trip.accommodation_required && <Button size="sm" variant="secondary" onClick={() => setBookingKind('accommodation')}>+ Accommodation</Button>}<Button size="sm" variant="ghost" onClick={() => setBookingKind('activity')}>+ Other booking</Button></div>
-      {!trip.bookings.length ? <p className="text-sm text-muted">No booking options yet.</p> : <div className="space-y-2">{trip.bookings.map(booking => <div key={booking.id} className="rounded-xl border border-line p-3"><div className="flex items-start gap-3"><button onClick={() => setBooked(booking)} className={`mt-0.5 grid h-6 w-6 place-items-center rounded-full border-2 ${booking.status === 'booked' ? 'border-success bg-success text-white' : 'border-line-strong'}`}>{booking.status === 'booked' ? '✓' : ''}</button><div className="min-w-0 flex-1"><p className="font-bold text-ink">{booking.title}</p><p className="text-xs text-muted">{booking.kind} · {booking.provider || 'Provider not set'} · {money(booking.booked_amount || booking.quoted_amount, booking.currency)}</p>{booking.book_by && booking.status !== 'booked' && <p className="mt-1 text-xs font-semibold text-warning">Book by {dateLabel(booking.book_by)} · shown in Agenda and Calendar</p>}{booking.start_at && <p className="mt-1 text-xs text-muted">{new Date(booking.start_at).toLocaleString()}{booking.end_at ? ` → ${new Date(booking.end_at).toLocaleString()}` : ''}</p>}</div><EditAction label={booking.title} onClick={() => { setBookingKind(null); setEditingBooking(booking) }} /><DeleteAction label={booking.title} onClick={async () => { if (await confirmDialog({ title: `Delete ${booking.title}?`, confirmLabel: 'Delete' })) { await api.deleteTravelBooking(booking.id); reload() } }} /></div></div>)}</div>}
+      {!trip.bookings.length ? <p className="text-sm text-muted">No booking options yet.</p> : <div className="space-y-2">{trip.bookings.map(booking => <div key={booking.id} className="rounded-xl border border-line p-3"><div className="flex items-start gap-3"><button onClick={() => setBooked(booking)} className={`mt-0.5 grid h-6 w-6 place-items-center rounded-full border-2 ${booking.status === 'booked' ? 'border-success bg-success text-white' : 'border-line-strong'}`}>{booking.status === 'booked' ? '✓' : ''}</button><div className="min-w-0 flex-1"><p className="font-bold text-ink">{booking.title}</p><p className="text-xs text-muted">{booking.kind} · {booking.provider || 'Provider not set'} · {money(booking.booked_amount || booking.quoted_amount, booking.currency)}</p>{booking.book_by && booking.status !== 'booked' && <p className="mt-1 text-xs font-semibold text-warning">Book by {dateLabel(booking.book_by)} · shown in Agenda and Calendar</p>}{booking.start_at && <p className="mt-1 text-xs text-muted">{new Date(booking.start_at).toLocaleString()}{booking.end_at ? ` → ${new Date(booking.end_at).toLocaleString()}` : ''}</p>}</div><EditAction label={booking.title} onClick={() => { setBookingKind(null); setEditingBooking(booking) }} /><DeleteAction label={booking.title} onClick={() => removeRecord({ recordType: 'TravelBooking', id: booking.id, label: booking.title, run: () => api.deleteTravelBooking(booking.id).then(reload), onRestored: reload })} /></div></div>)}</div>}
     </Card>
     {(addingItinerary || editingItineraryItem) && <ItineraryForm trip={trip} existing={editingItineraryItem} onCancel={() => { setAddingItinerary(false); setEditingItineraryItem(null) }} onSaved={() => { setAddingItinerary(false); setEditingItineraryItem(null); reload() }} onError={onError} />}
     <Card title="Things to do">
@@ -231,7 +231,11 @@ function TripDetail({ trip, people, onBack, onDeleted, reload, onError }: { trip
         const unscheduled = trip.itinerary_items.filter(item => !item.scheduled_date)
         const group = (label: string, items: TravelItineraryItem[]) => !items.length ? null : (
           <div key={label}><p className="mb-2 text-xs font-bold uppercase text-muted">{label}</p><div className="space-y-2">
-            {items.map(item => <ItineraryRow key={item.id} item={item} onEdit={() => setEditingItineraryItem(item)} onDeleted={reload} onError={onError} />)}
+            {items.map(item => <ItineraryRow key={item.id} item={item} onEdit={() => setEditingItineraryItem(item)} onDeleted={() => removeRecord({
+              recordType: 'TravelItineraryItem', id: item.id, label: item.title,
+              run: () => api.deleteItineraryItem(item.id).then(reload),
+              onRestored: reload,
+            })} />)}
           </div></div>
         )
         return <div className="space-y-4">
@@ -241,6 +245,7 @@ function TripDetail({ trip, people, onBack, onDeleted, reload, onError }: { trip
         </div>
       })()}
     </Card>
+    {undoToast}
   </div>
 }
 
@@ -251,6 +256,7 @@ export function TravelPage() {
   useEffect(() => { void load() }, [])
   useEffect(() => { if (selectedIdeaId && ideas.length) setEditingIdea(ideas.find(row => row.id === selectedIdeaId) ?? null) }, [selectedIdeaId, ideas])
   const selected = trips.find(row => row.id === selectedId)
+  const { remove: removeIdea, toast: ideaUndoToast } = useUndoableDelete(setError)
   const setTab = (next: string) => { setParams(next === 'ideas' ? { tab: 'ideas' } : {}); setCreating(false); setEditingIdea(null) }
   if (selected) return <TripDetail trip={selected} people={people} onBack={() => setParams({})} onDeleted={async () => { setParams({}); await load() }} reload={load} onError={setError} />
   return <div className="flex flex-col gap-4"><PageHeader title="Travel" icon="✈️" subtitle="From somewhere you would love to go through to fully booked." actions={<Button size="sm" onClick={() => setCreating(true)}>+ {tab === 'ideas' ? 'Destination' : 'Trip'}</Button>} />
@@ -258,6 +264,7 @@ export function TravelPage() {
     {error && <div className="rounded-xl bg-danger-soft p-3 text-sm text-danger">{error}</div>}
     {(creating || editingIdea) && <PlanForm kind={tab === 'ideas' ? 'idea' : 'trip'} people={people} existing={editingIdea} onCancel={() => { setCreating(false); setEditingIdea(null) }} onSaved={(trip) => { setCreating(false); setEditingIdea(null); void load(); if (trip) setParams({ trip: String(trip.id) }) }} onError={setError} />}
     {loading ? <div className="h-40 animate-pulse rounded-2xl bg-sunken" /> : tab === 'trips' ? (!trips.length ? <EmptyState icon="✈️" title="No trips planned" hint="Create a trip, or promote an idea from To go when you are ready." /> : <div className="grid gap-4 lg:grid-cols-2">{trips.map(trip => <button key={trip.id} onClick={() => setParams({ trip: String(trip.id) })} className="overflow-hidden rounded-2xl border border-line bg-surface text-left transition hover:-translate-y-0.5 hover:shadow-sm">{trip.images[0] && <img src={trip.images[0].image_url} alt="" className="h-36 w-full object-cover" />}<div className="p-4"><div className="flex items-center gap-2"><span className="h-3 w-3 rounded-full" style={{ backgroundColor: trip.colour }} /><h2 className="font-black text-ink">{trip.title}</h2><Badge tone={trip.status === 'booked' ? 'success' : 'neutral'}>{trip.status.replace(/_/g, ' ')}</Badge>{trip.trip_type === 'day_trip' && <Badge tone="primary">Day trip</Badge>}</div><p className="mt-1 text-sm text-muted">{trip.destination} · {dateLabel(trip.start_date)}</p><p className="mt-3 text-xs text-muted">{trip.booking_progress.booked_count}/{trip.booking_progress.component_count} booked{trip.cost_summary[0] ? ` · ${money(trip.cost_summary[0].quoted, trip.cost_summary[0].currency)} expected` : ''}</p></div></button>)}</div>)
-      : (!ideas.filter(row => row.status !== 'archived').length ? <EmptyState icon="🗺️" title="Nowhere on the list yet" hint="Add places the household would love to visit without planning everything today." /> : <div className="grid gap-4 lg:grid-cols-2">{ideas.filter(row => row.status !== 'archived').map(idea => <Card key={idea.id}>{idea.images[0] && <img src={idea.images[0].image_url} alt="" className="-mx-5 -mt-3 mb-3 h-36 w-[calc(100%+2.5rem)] rounded-t-2xl object-cover" />}<h2 className="font-black text-ink">{idea.title}</h2><p className="text-sm text-muted">{idea.destination}{idea.rough_cost ? ` · roughly ${money(idea.rough_cost, idea.currency)}` : ''}</p><div className="mt-3 flex gap-2">{idea.status === 'active' ? <Button size="sm" onClick={async () => { try { const trip = await api.convertTravelIdea(idea.id); await load(); setParams({ trip: String(trip.id) }) } catch (e) { setError(errMsg(e)) } }}>Plan this trip →</Button> : <Badge tone="success">Converted</Badge>}<EditAction label={idea.title} onClick={() => { setCreating(false); setEditingIdea(idea) }} /><DeleteAction label={idea.title} onClick={async () => { if (await confirmDialog({ title: `Remove ${idea.title}?`, confirmLabel: 'Remove' })) { await api.deleteTravelIdea(idea.id); load() } }} /></div></Card>)}</div>)}
+      : (!ideas.filter(row => row.status !== 'archived').length ? <EmptyState icon="🗺️" title="Nowhere on the list yet" hint="Add places the household would love to visit without planning everything today." /> : <div className="grid gap-4 lg:grid-cols-2">{ideas.filter(row => row.status !== 'archived').map(idea => <Card key={idea.id}>{idea.images[0] && <img src={idea.images[0].image_url} alt="" className="-mx-5 -mt-3 mb-3 h-36 w-[calc(100%+2.5rem)] rounded-t-2xl object-cover" />}<h2 className="font-black text-ink">{idea.title}</h2><p className="text-sm text-muted">{idea.destination}{idea.rough_cost ? ` · roughly ${money(idea.rough_cost, idea.currency)}` : ''}</p><div className="mt-3 flex gap-2">{idea.status === 'active' ? <Button size="sm" onClick={async () => { try { const trip = await api.convertTravelIdea(idea.id); await load(); setParams({ trip: String(trip.id) }) } catch (e) { setError(errMsg(e)) } }}>Plan this trip →</Button> : <Badge tone="success">Converted</Badge>}<EditAction label={idea.title} onClick={() => { setCreating(false); setEditingIdea(idea) }} /><DeleteAction label={idea.title} onClick={() => removeIdea({ recordType: 'TravelIdea', id: idea.id, label: idea.title, run: () => api.deleteTravelIdea(idea.id).then(load), onRestored: load })} /></div></Card>)}</div>)}
+    {ideaUndoToast}
   </div>
 }
